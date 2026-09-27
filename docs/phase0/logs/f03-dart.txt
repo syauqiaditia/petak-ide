@@ -1,0 +1,57 @@
+Running LSP smoke test (dart only)
+
+=== dart ===
+cmd: /Users/uqi/SDK/flutter_2.10.5/bin/cache/dart-sdk/bin/dart language-server --protocol=lsp
+rootDir: /Users/uqi/petak/spike/fixtures/dart
+version: Dart SDK version: 2.16.2 (stable) (Tue Mar 22 13:15:13 2022 +0100) on "macos_x64"
+  initialize sent (rootUri: file:///Users/uqi/petak/spike/fixtures/dart)
+  initialized OK (server capabilities received)
+  didOpen sent: file:///Users/uqi/petak/spike/fixtures/dart/lib/main.dart
+  empty diagnostics notification (waiting for non-empty...)
+  diagnostics received! (1 items, 1884ms)
+    - A value of type 'String' can't be assigned to a variable of type 'int'.
+Try changing the type of the variable, or castin
+finish: diagnostics received
+
+
+========== SUMMARY ==========
+
+dart:
+  version: Dart SDK version: 2.16.2 (stable) (Tue Mar 22 13:15:13 2022 +0100) on "macos_x64"
+  started: true
+  diagnostics: true
+  first diagnostic: A value of type 'String' can't be assigned to a variable of type 'int'.
+Try changing the type of the
+  time to diagnostics: 1884ms
+  peak RSS: 143.2 MB
+
+
+========== JSON ==========
+[
+  {
+    "name": "dart",
+    "cmd": "/Users/uqi/SDK/flutter_2.10.5/bin/cache/dart-sdk/bin/dart language-server --protocol=lsp",
+    "version": "Dart SDK version: 2.16.2 (stable) (Tue Mar 22 13:15:13 2022 +0100) on \"macos_x64\"",
+    "started": true,
+    "diagnosticsReceived": true,
+    "diagnostics": [
+      {
+        "message": "A value of type 'String' can't be assigned to a variable of type 'int'.\nTry changing the type of the variable, or casting the right-hand type to 'int'.",
+        "severity": 1,
+        "range": {
+          "start": {
+            "line": 2,
+            "character": 14
+          },
+          "end": {
+            "line": 2,
+            "character": 21
+          }
+        }
+      }
+    ],
+    "diagnosticsTimeMs": 1884,
+    "peakRSSKB": 146684,
+    "error": null
+  }
+]

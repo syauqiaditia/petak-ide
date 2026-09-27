@@ -133,6 +133,9 @@ async function testLSP({ name, cmd, args, env, rootDir, fileUri, fileContent, la
       setTimeout(() => resolveP(result), 2000);
     }
 
+    // Suppress EPIPE on stdin after process dies
+    proc.stdin.on('error', () => {});
+
     // Poll RSS every 1s
     rssInterval = setInterval(() => {
       if (proc.pid) {
@@ -234,6 +237,8 @@ async function testLSP({ name, cmd, args, env, rootDir, fileUri, fileContent, la
 async function main() {
   const fixturesDir = resolve(__dirname, 'fixtures');
   const results = [];
+  const onlyServer = process.argv[2]; // optional: 'dart', 'swift', 'kotlin'
+  console.log(`Running LSP smoke test${onlyServer ? ` (${onlyServer} only)` : ' (all)'}`);
 
   // --- Dart ---
   const dartPaths = [
@@ -246,7 +251,7 @@ async function main() {
     // fallback: search PATH
     try { dartBin = execSync('which dart 2>/dev/null', { encoding: 'utf8' }).trim(); } catch {}
   }
-  if (dartBin) {
+  if (dartBin && (!onlyServer || onlyServer === 'dart')) {
     const dartRoot = resolve(fixturesDir, 'dart');
     const dartFile = resolve(dartRoot, 'lib/main.dart');
     const dartContent = readFileSync(dartFile, 'utf8');
@@ -263,7 +268,7 @@ async function main() {
   }
 
   // --- Swift ---
-  {
+  if (!onlyServer || onlyServer === 'swift') {
     const swiftRoot = resolve(fixturesDir, 'swift');
     const swiftFile = resolve(swiftRoot, 'Sources/x/main.swift');
     const swiftContent = readFileSync(swiftFile, 'utf8');
@@ -277,9 +282,9 @@ async function main() {
   }
 
   // --- Kotlin LSP ---
-  {
-    const kotlinLspDir = `${process.env.HOME}/petak-tools/kotlin-lsp`;
-    const kotlinLspBin = `${kotlinLspDir}/kotlin-lsp.sh`;
+  if (!onlyServer || onlyServer === 'kotlin') {
+    const kotlinLspDir = `${process.env.HOME}/petak-tools/kotlin-lsp/kotlin-server-263.4702.0`;
+    const kotlinLspBin = `${kotlinLspDir}/bin/intellij-server`;
     const kotlinRoot = resolve(fixturesDir, 'kotlin');
     const kotlinFile = resolve(kotlinRoot, 'src/main/kotlin/Main.kt');
     const kotlinContent = readFileSync(kotlinFile, 'utf8');
@@ -310,13 +315,13 @@ async function main() {
     if (!existsSync(kotlinLspBin)) {
       console.log(`\nSKIP kotlin-lsp: ${kotlinLspBin} not found (need to download)`);
       results.push({ name: 'kotlin-lsp', error: `${kotlinLspBin} not found`, started: false });
-    } else if (!javaHome) {
-      console.log('\nSKIP kotlin-lsp: no JDK 17+ found');
-      results.push({ name: 'kotlin-lsp', error: 'no JDK 17+ found', started: false });
     } else {
+      // kotlin-lsp bundles its own JBR, but we can set JAVA_HOME to override if needed
+      const envVars = {};
+      if (javaHome) envVars.JAVA_HOME = javaHome;
       const r = await testLSP({
-        name: 'kotlin-lsp', cmd: kotlinLspBin, args: [],
-        env: { JAVA_HOME: javaHome },
+        name: 'kotlin-lsp', cmd: kotlinLspBin, args: ['--stdio'],
+        env: envVars,
         rootDir: kotlinRoot,
         fileUri: `file://${kotlinFile}`, fileContent: kotlinContent,
         languageId: 'kotlin', timeoutSec: 300
@@ -334,7 +339,7 @@ async function main() {
       realProjects.push(...found);
     } catch {}
 
-    if (realProjects.length > 0 && existsSync(kotlinLspBin) && javaHome) {
+    if (realProjects.length > 0 && existsSync(kotlinLspBin)) {
       const projRoot = dirname(realProjects[0]);
       console.log(`\n--- kotlin-lsp (real project: ${projRoot}) ---`);
       // Find a .kt file in the project
@@ -346,8 +351,8 @@ async function main() {
       if (ktFile) {
         const ktContent = readFileSync(ktFile, 'utf8');
         const r = await testLSP({
-          name: 'kotlin-lsp (real-project)', cmd: kotlinLspBin, args: [],
-          env: { JAVA_HOME: javaHome },
+          name: 'kotlin-lsp (real-project)', cmd: kotlinLspBin, args: ['--stdio'],
+          env: javaHome ? { JAVA_HOME: javaHome } : {},
           rootDir: projRoot,
           fileUri: `file://${ktFile}`, fileContent: ktContent,
           languageId: 'kotlin', timeoutSec: 300

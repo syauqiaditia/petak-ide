@@ -1,0 +1,138 @@
+
+Trying npx: @anthropic-ai/claude-code-acp
+
+=== ACP: claude-code-acp (@anthropic-ai/claude-code-acp) ===
+cmd: /Users/uqi/.local/bin/npx -y @anthropic-ai/claude-code-acp
+  sent initialize
+  stderr: npm error code E404
+  stderr: npm error 404 Not Found - GET https://registry.npmjs.org/@anthropic-ai%2fclaude-code-acp - Not found
+  stderr: npm error 404
+  stderr: npm error 404  The requested resource '@anthropic-ai/claude-code-acp@*' could not be found or you do not have permission to access it.
+  stderr: npm error 404
+  stderr: npm error 404 Note that you can also install from a
+  stderr: npm error A complete log of this run can be found in: /Users/uqi/.npm/_logs/2026-09-27T17_05_30_832Z-debug-0.log
+  finish: early exit
+
+Trying npx: @anthropics/claude-code-acp
+
+=== ACP: claude-code-acp (@anthropics/claude-code-acp) ===
+cmd: /Users/uqi/.local/bin/npx -y @anthropics/claude-code-acp
+  sent initialize
+  stderr: npm error code E404
+  stderr: npm error 404 Not Found - GET https://registry.npmjs.org/@anthropics%2fclaude-code-acp - Not found
+  stderr: npm error 404
+  stderr: npm error 404  The requested resource '@anthropics/claude-code-acp@*' could not be found or you do not have permission to access it.
+  stderr: npm error 404
+  stderr: npm error 404 Note that you can also install from a
+  stderr: npm error 404 tarball, folder, http url, or git url.
+  stderr: npm error A complete log of this run can be found in: /Users/uqi/.npm/_logs/2026-09-27T17_05_32_387Z-debug-0.log
+  finish: early exit
+
+Trying npx: @zed-industries/claude-code-acp
+
+=== ACP: claude-code-acp (@zed-industries/claude-code-acp) ===
+cmd: /Users/uqi/.local/bin/npx -y @zed-industries/claude-code-acp
+  sent initialize
+  recv: {"jsonrpc":"2.0","id":3,"result":{"protocolVersion":1,"agentCapabilities":{"promptCapabilities":{"image":true,"embeddedContext":true},"mcpCapabilities":{"http":true,"sse":true},"loadSession":true,"sessionCapabilities":{"fork":{},"list":{},"resume":{}}},"agentInfo":{"name":"@zed-industries/claude-cod
+  handshake OK, capabilities: {"promptCapabilities":{"image":true,"embeddedContext":true},"mcpCapabilities":{"http":true,"sse":true},"loadSession":true,"sessionCapabilities":{"fork":{},"list":{},"resume":{}}}
+  authMethods: [{"description":"Run `claude /login` in the terminal","name":"Log in with Claude Code","id":"claude-login"}]
+  sent session/new (cwd: /Users/uqi/petak/spike/fixtures/dart)
+  recv: {"jsonrpc":"2.0","id":4,"result":{"sessionId":"a63dfe9f-c872-4944-8092-b8bada6287f0","models":{"availableModels":[{"modelId":"default","name":"Default (recommended)","description":"Use the default model (currently Sonnet 4.5) · $3/$15 per Mtok"},{"modelId":"opus","name":"Opus","description":"Opus 4.
+  sessionId: a63dfe9f-c872-4944-8092-b8bada6287f0
+  finish: session created
+
+opencode: not installed, skipping
+
+
+========== ACP SUMMARY ==========
+
+claude-code-acp (@anthropic-ai/claude-code-acp):
+  handshake: false
+  sessionId: n/a
+  auth: n/a
+  peak RSS: n/a
+  error: process exited early with code 1
+
+claude-code-acp (@anthropics/claude-code-acp):
+  handshake: false
+  sessionId: n/a
+  auth: n/a
+  peak RSS: n/a
+  error: process exited early with code 1
+
+claude-code-acp (@zed-industries/claude-code-acp):
+  handshake: true
+  sessionId: a63dfe9f-c872-4944-8092-b8bada6287f0
+  auth: ok (session created)
+  peak RSS: 186.5 MB
+
+opencode acp:
+  handshake: false
+  sessionId: n/a
+  auth: n/a
+  peak RSS: n/a
+  error: not installed
+
+
+========== JSON ==========
+[
+  {
+    "name": "claude-code-acp (@anthropic-ai/claude-code-acp)",
+    "cmd": "/Users/uqi/.local/bin/npx -y @anthropic-ai/claude-code-acp",
+    "handshake": false,
+    "sessionId": null,
+    "agentCapabilities": null,
+    "authMethods": null,
+    "auth": null,
+    "peakRSSKB": 0,
+    "error": "process exited early with code 1"
+  },
+  {
+    "name": "claude-code-acp (@anthropics/claude-code-acp)",
+    "cmd": "/Users/uqi/.local/bin/npx -y @anthropics/claude-code-acp",
+    "handshake": false,
+    "sessionId": null,
+    "agentCapabilities": null,
+    "authMethods": null,
+    "auth": null,
+    "peakRSSKB": 0,
+    "error": "process exited early with code 1"
+  },
+  {
+    "name": "claude-code-acp (@zed-industries/claude-code-acp)",
+    "cmd": "/Users/uqi/.local/bin/npx -y @zed-industries/claude-code-acp",
+    "handshake": true,
+    "sessionId": "a63dfe9f-c872-4944-8092-b8bada6287f0",
+    "agentCapabilities": {
+      "promptCapabilities": {
+        "image": true,
+        "embeddedContext": true
+      },
+      "mcpCapabilities": {
+        "http": true,
+        "sse": true
+      },
+      "loadSession": true,
+      "sessionCapabilities": {
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "authMethods": [
+      {
+        "description": "Run `claude /login` in the terminal",
+        "name": "Log in with Claude Code",
+        "id": "claude-login"
+      }
+    ],
+    "auth": "ok (session created)",
+    "peakRSSKB": 190960,
+    "error": null
+  },
+  {
+    "name": "opencode acp",
+    "error": "not installed",
+    "handshake": false
+  }
+]

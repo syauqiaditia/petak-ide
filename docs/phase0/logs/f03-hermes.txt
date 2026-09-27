@@ -1,0 +1,99 @@
+=== Hermes ACP test ===
+hermes: /home/uqi/.local/bin/hermes
+version: 0.21.2
+  sent initialize
+  stderr: 2026-09-27 17:06:16 [INFO] acp_adapter.entry: Loaded env from /home/uqi/.hermes/profiles/senior/.env
+  stderr: 2026-09-27 17:06:16 [INFO] acp_adapter.entry: Starting hermes-agent ACP adapter
+  stderr: 2026-09-27 17:06:16 [INFO] hermes_cli.plugins: Plugin 'browser-browser-use' registered browser provider: browser-use
+  stderr: 2026-09-27 17:06:16 [INFO] hermes_cli.plugins: Plugin 'browser-browserbase' registered browser provider: browserbase
+  stderr: 2026-09-27 17:06:16 [INFO] hermes_cli.plugins: Plugin 'browser-firecrawl' registered browser provider: firecrawl
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'deepinfra' registered image_gen provider: deepinfra
+  stderr: 2026-09-27 17:06:17 [INFO] acp_adapter.server: ACP client connected
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'fal' registered image_gen provider: fal
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'krea' registered image_gen provider: krea
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'meta-ai-image-gen' registered image_gen provider: meta-ai
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'openai' registered image_gen provider: openai
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'openai-codex' registered image_gen provider: openai-codex
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'openrouter' registered image_gen provider: openrouter
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'openrouter' registered image_gen provider: nous
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'xai' registered image_gen provider: xai
+  stderr: 2026-09-27 17:06:17 [INFO] acp_adapter.server: Initialize from petak-spike (protocol v1)
+  recv: {"jsonrpc":"2.0","id":1,"result":{"agentCapabilities":{"loadSession":true,"promptCapabilities":{"image":true},"sessionCapabilities":{"fork":{},"list":{},"resume":{}}},"agentInfo":{"name":"hermes-agent","version":"0.21.2"},"authMethods":[{"description":"Authenticate Hermes using the currently configu
+  handshake OK
+  sent session/new
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'deepinfra' registered video_gen provider: deepinfra
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'fal' registered video_gen provider: fal
+  stderr: 2026-09-27 17:06:17 [INFO] run_agent: Loaded environment variables from /home/uqi/.hermes/profiles/senior/.env
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'openrouter' registered video_gen provider: openrouter
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'xai' registered video_gen provider: xai
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-brave-free' registered web provider: brave-free
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-ddgs' registered web provider: ddgs
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-exa' registered web provider: exa
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-firecrawl' registered web provider: firecrawl
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-keenable' registered web provider: keenable
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-parallel' registered web provider: parallel
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-perplexity' registered web provider: perplexity
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-searxng' registered web provider: searxng
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-tavily' registered web provider: tavily
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin 'web-xai' registered web provider: xai
+  stderr: 2026-09-27 17:06:17 [INFO] hermes_cli.plugins: Plugin discovery complete: 58 found, 52 enabled
+  stderr: 2026-09-27 17:06:17 [WARNING] hermes_state: state.db: linked SQLite 3.45.1 (interpreter /home/uqi/.hermes/hermes-agent/venv/bin/python) is vulnerable to the WAL-reset corruption bug (https://sqlite.or
+  stderr: 2026-09-27 17:06:17 [WARNING] acp_adapter.session: Background MCP discovery previously exited with no connected servers; retrying discovery thread
+  stderr: 2026-09-27 17:06:18 [INFO] run_agent: OpenAI client created (agent_init, shared=True) thread=MainThread:137163135635584 provider=custom base_url=http://127.0.0.1:20128/v1 model=ag/claude-opus-4-6-thin
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_back_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn _browser_cdp_check returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_click_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn _browser_dialog_check returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_navigate_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_press_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_scroll_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_snapshot_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_type_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn check_browser_vision_requirements returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [WARNING] tools.registry: check_fn _connectors_available returned False; dependent tools will be unavailable this turn
+  stderr: 2026-09-27 17:06:18 [INFO] agent.auxiliary_client: Vision auto-detect: using main provider antigravity (ag/claude-opus-4-6-thinking)
+  stderr: 2026-09-27 17:06:18 [INFO] tools.tool_search: tool_search activated (tier 1): 20 core/visible tools kept, 3 deferred (~1476 tokens), listing full (budget ~4000 tokens)
+  stderr: 2026-09-27 17:06:18 [INFO] acp_adapter.session: Created ACP session 0cce11b0-462a-48cd-82b8-3ad224fe6e65 (cwd=/mnt/storage/uqi-projects/petak)
+  stderr: 2026-09-27 17:06:18 [INFO] acp_adapter.server: New session 0cce11b0-462a-48cd-82b8-3ad224fe6e65 (cwd=/mnt/storage/uqi-projects/petak)
+  recv: {"jsonrpc":"2.0","id":2,"result":{"models":{"availableModels":[{"description":"Provider: Anthropic","modelId":"anthropic:claude-fable-5.1","name":"Anthropic · claude-fable-5.1"},{"description":"Provider: Anthropic","modelId":"anthropic:claude-fable-5","name":"Anthropic · claude-fable-5"},{"descripti
+  sessionId: 0cce11b0-462a-48cd-82b8-3ad224fe6e65
+  finish: session created
+
+=== RESULT ===
+{
+  "name": "hermes acp",
+  "cmd": "/home/uqi/.local/bin/hermes acp",
+  "handshake": true,
+  "sessionId": "0cce11b0-462a-48cd-82b8-3ad224fe6e65",
+  "agentCapabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": true
+    },
+    "sessionCapabilities": {
+      "fork": {},
+      "list": {},
+      "resume": {}
+    }
+  },
+  "authMethods": [
+    {
+      "description": "Authenticate Hermes using the currently configured custom runtime credentials.",
+      "id": "custom",
+      "name": "custom runtime credentials"
+    },
+    {
+      "args": [
+        "--setup"
+      ],
+      "description": "Open Hermes' interactive model/provider setup in a terminal. Use this when Hermes has not been configured on this machine yet.",
+      "id": "hermes-setup",
+      "name": "Configure Hermes provider",
+      "type": "terminal"
+    }
+  ],
+  "auth": "ok (session created)",
+  "peakRSSKB": 163716,
+  "error": null
+}
