@@ -333,7 +333,7 @@ async function main() {
     const realProjects = [];
     try {
       const found = execSync(
-        'find ~/Documents ~/Projects ~/StudioProjects -maxdepth 4 -name "settings.gradle*" 2>/dev/null',
+        'find ~/Documents ~/Projects ~/StudioProjects -maxdepth 4 -name "settings.gradle*" 2>/dev/null; true',
         { encoding: 'utf8' }
       ).trim().split('\n').filter(Boolean);
       realProjects.push(...found);

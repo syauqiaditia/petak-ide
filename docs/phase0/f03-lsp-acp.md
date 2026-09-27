@@ -1,67 +1,57 @@
-# F0.3 — Smoke Test LSP + ACP Handshake
+# F0.3 — Smoke test LSP + ACP handshake
 
-Spike fase 0 bagian 3. Tes server LSP (Dart, Swift, Kotlin) nyala dan ngirim diagnostics + ACP handshake ke coding agent, semua di Mac M2 UQi.
+Spike fase 0 bagian 3. Semua angka di bawah diambil dari log mentah di `docs/phase0/logs/`. LSP + ACP Claude jalan di Mac M2 UQi; Hermes ACP jalan di server (uqiflutter1).
 
-## Lingkungan
+Script (Node murni, tanpa dependency npm):
+- `spike/lsp-smoke.mjs [dart|swift|kotlin]` — Content-Length JSON-RPC: spawn → initialize → initialized → didOpen → tunggu `publishDiagnostics` non-kosong → shutdown/exit. RSS = `ps -o rss=` proses + anak + cucu (`pgrep -P`), dipoll tiap 1 detik.
+- `spike/acp-smoke.mjs` — ACP newline-delimited JSON-RPC: initialize (protocolVersion 1, fs read/write false) → session/new (cwd fixture, mcpServers []).
+- `spike/hermes-acp-smoke.mjs` — handshake yang sama ke `hermes acp`, jalan di server.
+- Fixture `spike/fixtures/{dart,swift,kotlin}`, masing-masing punya 1 error tipe yang disengaja (`int/Int = "hello"`).
 
-- Mac M2 (MuhammadAditiaSyauqi-DBPDiv3), macOS
-- Node v26.8.2 (`~/.local/bin/node`)
-- Disk awal: ~7 GB, akhir: ~5.1 GB (kotlin-lsp 1.1 GB)
-- Script: `spike/lsp-smoke.mjs` (LSP), `spike/acp-smoke.mjs` (ACP di Mac), `spike/hermes-acp-smoke.mjs` (Hermes ACP di server)
+Env Mac: Node v26.8.2, disk bebas ~6.9 GB di awal → 5.1 GB di akhir.
 
-## LSP Results
+## LSP
 
-| Server | Versi | Nyala? | Diagnostics masuk? | Contoh pesan | Waktu ke diagnostics | RSS puncak | Catatan |
-|--------|-------|--------|--------------------|--------------|---------------------|------------|---------|
-| Dart analysis server | Dart SDK 2.16.2 (Flutter 2.10.5) | ✅ | ✅ | "A value of type 'String' can't be assigned to a variable of type 'int'." | 1871 ms | 143.9 MB | Versi lama (2022) tapi LSP jalan sempurna. Pakai `dart language-server --protocol=lsp`. |
-| sourcekit-lsp (Swift) | Swift 6.3.1 (Xcode terbaru) | ✅ | ✅ | "Cannot convert value of type 'String' to specified type 'Int'" | 2778 ms | 63.3 MB | Paling ringan. `xcrun sourcekit-lsp`, built-in, zero setup. |
-| Kotlin/kotlin-lsp (JetBrains) | v263.4702.0 (IntelliJ-based) | ✅ (initialized) | ❌ (timeout 300s) | — | >300 s | 481.8 MB | Berat. Download Gradle 9.7.0 di run pertama. Run kedua (Gradle cached) tetap timeout — indexing IntelliJ lambat. Ukuran install 1.1 GB + ~15 GB .gradle cache. Butuh `--stdio` flag. |
+| Server | Versi | Nyala? | Diagnostics masuk? (contoh) | Waktu ke diagnostics pertama | RSS puncak | Catatan |
+|---|---|---|---|---|---|---|
+| Dart (`dart language-server --protocol=lsp`) | Dart SDK 2.16.2 (Flutter 2.10.5, `~/SDK/flutter_2.10.5`), binary x64 via Rosetta | ✅ | ✅ "A value of type 'String' can't be assigned to a variable of type 'int'." | 1884 ms | 143.2 MB | SDK 2022, LSP tetap jalan normal. Ada juga Flutter 3.16/3.19/3.35 di `~/SDK`. |
+| Swift (`xcrun sourcekit-lsp`) | Apple Swift 6.3.1 (Xcode) | ✅ | ✅ "Cannot convert value of type 'String' to specified type 'Int'" | 2864 ms | 137.4 MB | Bawaan Xcode, tanpa install. |
+| Kotlin (`kotlin-lsp`, `bin/intellij-server --stdio`) | Kotlin/kotlin-lsp v263.4702.0 (standalone aarch64, JBR sudah dibundel) | ✅ (initialize OK) | ❌ cuma dapat 2x `publishDiagnostics` kosong, habis timeout 300 dtk | >300 dtk (timeout) | 481.8 MB | Lihat catatan di bawah. |
 
-### Catatan per server
+### Catatan Kotlin
+- Install: zip 343 MB → **1.1 GB** setelah diekstrak di `~/petak-tools/kotlin-lsp/`. Zip-nya sudah dihapus.
+- Wajib pakai flag `--stdio`. Tanpa flag itu, server listen di socket 127.0.0.1:9999 dan tidak merespons stdio. Run pertama sudah dicoba tanpa `--stdio` dan kena timeout; RSS-nya 270 MB. `kotlin-lsp.sh` sekarang deprecated dan diganti `bin/intellij-server`.
+- Run pertama yang pakai `--stdio` sempat download Gradle 9.7.0 (163 MB, ke `~/.gradle/wrapper/dists`). Run berikutnya, dengan Gradle sudah di-cache, **tetap timeout** 300 dtk: server cuma kirim diagnostics kosong. Yang dicatat di log adalah run terakhir itu.
+- Dugaan (belum dibuktikan): Gradle import atau indexing IntelliJ belum kelar dalam 5 menit, atau error baru dikirim setelah import selesai. Log internal server ada di `/var/folders/.../idea-system*/system/log/intellij-server.log`, tapi folder temp itu sudah hilang setelah proses exit. Kalau mau diselidiki lebih lanjut: pakai `--system-path` biar log-nya tetap tersimpan, atau coba pull diagnostics (`textDocument/diagnostic`).
+- Tes di project Android asli: **N/A**. Satu-satunya hasil `find ~/Documents ~/Projects ~/StudioProjects -maxdepth 4 -name 'settings.gradle*'` adalah `~/Documents/Coding/Mobile Flutter/indorack-android`, dan isinya 0 file `.kt` (project Java). Selain itu ada perubahan UQi yang belum di-commit, jadi sengaja tidak disentuh.
 
-**Dart**: analysis server dari Dart SDK bawaan Flutter 2.10.5. Meskipun versi lama, LSP protocol-nya lengkap dan diagnostics muncul cepat (< 2 detik). Path: `~/SDK/flutter_2.10.5/bin/cache/dart-sdk/bin/dart`.
-
-**Swift**: sourcekit-lsp built-in macOS, zero install, paling ringan (63 MB). Diagnostics muncul dalam ~3 detik.
-
-**Kotlin LSP (JetBrains)**: ini server baru berbasis IntelliJ Platform, standalone. Download dari [Kotlin/kotlin-lsp releases](https://github.com/Kotlin/kotlin-lsp/releases/tag/kotlin-lsp/v263.4702.0). Perlu `bin/intellij-server --stdio`. Server berhasil initialize + terima didOpen, tapi tidak kirim non-empty diagnostics dalam 300 detik. Kemungkinan: Gradle sync + IntelliJ indexing sangat lambat untuk project kecil pun. RSS puncak 481 MB — jauh lebih berat dari Dart/Swift. Bundled JBR sudah termasuk (ga perlu install JDK terpisah), tapi JDK 19 dari Mac juga terdeteksi.
-
-> Alternatif: [fwcd/kotlin-language-server](https://github.com/fwcd/kotlin-language-server) v1.3.13 — community, lebih ringan, tapi juga butuh Gradle sync.
-
-**Real project test** (indorack-android di `~/Documents/Coding/Mobile Flutter/`): belum dijalankan karena kotlin-lsp fixture sudah timeout 300s — diprediksi lebih lama lagi dengan project besar.
-
-## ACP Results
+## ACP
 
 | Agent | Handshake? | sessionId? | Auth | RSS puncak | Catatan |
-|-------|-----------|------------|------|------------|---------|
-| `@zed-industries/claude-code-acp` (npx) | ✅ | ✅ `001be519-...` | OK (session langsung jadi, login Claude Code sudah ada) | 237.7 MB | Package deprecated, renamed ke `@agentclientprotocol/claude-agent-acp`. Supports image, embeddedContext, MCP http+sse, session fork/list/resume. |
-| `@anthropic-ai/claude-code-acp` (npx) | ❌ | — | — | — | Package 404 — tidak ada di npm. |
-| `@anthropics/claude-code-acp` (npx) | ❌ | — | — | — | Package 404 — tidak ada di npm. |
-| opencode acp | ❌ | — | — | — | opencode tidak terinstall di Mac. |
-| Hermes ACP (`hermes acp`, di server) | ✅ | ✅ `0cce11b0-...` | OK (pakai custom runtime credentials yang sudah terkonfigurasi) | 159.9 MB | v0.21.2. Supports image, session fork/list/resume. Auth via configured provider. Model list lengkap (Anthropic, OpenAI, dll). |
+|---|---|---|---|---|---|
+| `npx -y @zed-industries/claude-code-acp` (Mac) | ✅ | ✅ `a63dfe9f-c872-4944-8092-b8bada6287f0` | Tidak perlu login baru; authMethods `claude-login` ("Run `claude /login`"). session/new langsung jalan pakai login Claude Code yang sudah ada. | 186.5 MB (termasuk wrapper npx) | v0.16.2, **deprecated** → sekarang `@agentclientprotocol/claude-agent-acp`. Capabilities: image, embeddedContext, MCP http/sse, loadSession, session fork/list/resume. |
+| `@anthropic-ai/claude-code-acp`, `@anthropics/claude-code-acp` | ❌ | — | — | — | npm 404, paketnya tidak ada. |
+| `opencode acp` | — | — | — | — | opencode tidak terpasang di Mac, jadi dilewati. |
+| `hermes acp` (server) | ✅ | ✅ `0cce11b0-462a-48cd-82b8-3ad224fe6e65` | authMethods `custom` (kredensial runtime yang sudah dikonfigurasi) + `hermes-setup` (terminal). Session langsung jadi. | 159.9 MB | Capabilities: image, loadSession, session fork/list/resume. |
 
-### ACP Detail
+Tidak ada `session/prompt` yang dikirim, jadi tidak ada biaya.
 
-**Claude Code ACP** (di Mac): Handshake sukses penuh via `@zed-industries/claude-code-acp`. Initialize → agentCapabilities + authMethods → session/new → sessionId. Claude Code sudah login di Mac jadi session langsung jadi. Auth method: "Run `claude /login` in the terminal". Package ini deprecated dan akan pindah ke `@agentclientprotocol/claude-agent-acp`.
+## Hermes ACP: **YA, ada dan jalan**
 
-**Hermes ACP** (di server): ✅ Ada dan jalan. `hermes acp --version` = 0.21.2, `hermes acp --check` = OK. Handshake via stdio JSON-RPC sukses — initialize response berisi agentCapabilities (image prompt, session fork/list/resume), authMethods (custom runtime credentials + hermes-setup). session/new langsung berhasil (sessionId dapet) karena Hermes sudah terkonfigurasi di server. RSS 160 MB.
+Buktinya:
+- `hermes --help` → ada subcommand `acp`: "Run Hermes Agent as an ACP (Agent Client Protocol)".
+- `hermes acp --help` → "Start Hermes Agent in ACP mode for editor integration (VS Code, Zed, JetBrains)". Opsinya `--check`, `--setup`, `--version`, `--accept-hooks`, `--setup-browser`.
+- `hermes acp --version` → `0.21.2`; `hermes acp --check` → `Hermes ACP check OK`.
+- Handshake beneran sampai dapat sessionId, lihat `logs/f03-hermes.txt`. Stderr server mencatat `Initialize from petak-spike (protocol v1)` dan `Created ACP session ...`.
+- URL docs yang ditulis di task (`claude-code.nousresearch.com/docs`) tidak resolve dari server (curl exit 6, DNS). Jadi buktinya cukup dari CLI dan handshake di atas.
+- Catatan: tesnya di server, bukan di Mac, karena Hermes tidak terpasang di Mac. Kalau Petak mau pakai Hermes dari Mac, harus install Hermes di Mac dulu, atau bikin jembatan stdio lewat `ssh server hermes acp`. Opsi SSH ini belum dites.
 
-Dokumentasi Hermes ACP:
-- `hermes acp --help` menunjukkan: "Start Hermes Agent in ACP mode for editor integration (VS Code, Zed, JetBrains)"
-- Opsi: `--accept-hooks`, `--version`, `--check`, `--setup`, `--setup-browser`
-- Domain `claude-code.nousresearch.com/docs` tidak resolve (DNS error). Docs ada di `hermes-agent.nousresearch.com/docs`.
-- Evidence: log mentah di `docs/phase0/logs/f03-hermes.txt`.
+## Kesimpulan
+- Dart dan Swift lolos: diagnostics masuk dalam < 3 dtk, RSS sekitar 140 MB per server.
+- Kotlin (kotlin-lsp JetBrains) **belum lolos**: server nyala, tapi tidak ada diagnostics dalam 5 menit, RSS ~480 MB, install 1.1 GB. Ini risiko terbesar buat fitur Kotlin. Opsinya: selidiki lewat log server dan pull diagnostics, coba fwcd/kotlin-language-server, atau Kotlin cukup pakai highlight tree-sitter dulu di fase awal.
+- ACP: 2 agent berhasil handshake sampai dapat sessionId (Claude Code ACP di Mac, Hermes ACP di server).
 
-## Log Files
-
-- `docs/phase0/logs/f03-dart.txt` — Dart LSP full output
-- `docs/phase0/logs/f03-swift.txt` — Swift sourcekit-lsp full output
-- `docs/phase0/logs/f03-kotlin.txt` — Kotlin LSP full output (timeout)
-- `docs/phase0/logs/f03-acp-claude.txt` — Claude Code ACP handshake output
-- `docs/phase0/logs/f03-hermes.txt` — Hermes ACP handshake output
-
-## Ringkasan
-
-- **2 dari 3 LSP server** berhasil full (spawn → initialize → diagnostics non-kosong). Dart dan Swift jalan out-of-the-box.
-- **Kotlin LSP** nyala tapi terlalu lambat untuk kasih diagnostics dalam 5 menit. Ini blocker kalau mau real-time diagnostics — perlu strategi (lazy loading, background indexing, atau fallback ke fwcd/kotlin-language-server).
-- **ACP handshake berhasil** ke Claude Code (via npx deprecated package) dan Hermes ACP (native). Dua agent siap dipakai.
-- Disk impact: kotlin-lsp 1.1 GB + 15 GB .gradle cache (sudah ada sebelumnya). Sisa disk Mac 5.1 GB.
+## Log mentah
+- `logs/f03-dart.txt`, `logs/f03-swift.txt`, `logs/f03-kotlin.txt`
+- `logs/f03-acp-claude.txt` (semua kandidat ACP di Mac, termasuk yang 404 dan opencode)
+- `logs/f03-hermes.txt`
