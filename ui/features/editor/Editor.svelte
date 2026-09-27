@@ -8,9 +8,10 @@
     drawSelection,
     keymap,
   } from '@codemirror/view';
-  import { EditorState } from '@codemirror/state';
+  import { EditorState, Compartment } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { vim } from '@replit/codemirror-vim';
+  import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
 
   let {
     content = '',
@@ -26,6 +27,7 @@
 
   let container: HTMLDivElement;
   let view: EditorView | null = null;
+  const filenameCompartment = new Compartment();
 
   const petakTheme = EditorView.theme(
     {
@@ -96,6 +98,9 @@
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         petakTheme,
+        highlightTheme,
+        filenameCompartment.of(filenameFacet.of(filename)),
+        treeSitterPlugin,
       ],
     });
 
@@ -132,6 +137,15 @@
           changes: { from: 0, to: currentDoc.length, insert: content },
         });
       }
+    }
+  });
+
+  // Watch filename changes to reconfigure highlight language
+  $effect(() => {
+    if (view && filename) {
+      view.dispatch({
+        effects: filenameCompartment.reconfigure(filenameFacet.of(filename)),
+      });
     }
   });
 

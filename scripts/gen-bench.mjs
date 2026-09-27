@@ -64,5 +64,139 @@ function generateKotlin(targetLines, filename) {
   console.log(`Finished ${filePath}: ${currentLines} lines`);
 }
 
+function generateDart(targetLines, filename) {
+  const filePath = path.join(outDir, filename);
+  console.log(`Generating ${targetLines} lines into ${filePath}...`);
+  const stream = fs.createWriteStream(filePath, { encoding: 'utf-8' });
+
+  stream.write(`// Generated synthetic Dart benchmark file: ${targetLines} lines\n`);
+  stream.write(`import 'dart:async';\nimport 'dart:math';\n\n`);
+
+  let currentLines = 4;
+  let idx = 0;
+
+  while (currentLines < targetLines) {
+    idx++;
+    const chunk = [
+      `/// Model representing item #${idx}`,
+      `class DartBenchModel${idx} {`,
+      `  final String id;`,
+      `  final String title;`,
+      `  final int count;`,
+      `  final bool isEnabled;`,
+      ``,
+      `  DartBenchModel${idx}({`,
+      `    required this.id,`,
+      `    required this.title,`,
+      `    this.count = ${idx * 10},`,
+      `    this.isEnabled = ${idx % 2 === 0},`,
+      `  });`,
+      ``,
+      `  Map<String, dynamic> toJson() => {`,
+      `    'id': id,`,
+      `    'title': title,`,
+      `    'count': count,`,
+      `    'isEnabled': isEnabled,`,
+      `  };`,
+      `}`,
+      ``,
+      `class DartBenchController${idx} {`,
+      `  final List<DartBenchModel${idx}> _items = [];`,
+      ``,
+      `  Future<void> addItem(DartBenchModel${idx} item) async {`,
+      `    if (!item.isEnabled) return;`,
+      `    _items.add(item);`,
+      `    await Future<void>.delayed(const Duration(milliseconds: 1));`,
+      `  }`,
+      ``,
+      `  int calculateTotal() {`,
+      `    return _items.fold(0, (sum, el) => sum + el.count);`,
+      `  }`,
+      `}`,
+      ``
+    ];
+
+    if (currentLines + chunk.length > targetLines) {
+      const remaining = targetLines - currentLines;
+      for (let i = 0; i < remaining; i++) {
+        stream.write(`// filler line ${currentLines + i + 1}\n`);
+      }
+      currentLines = targetLines;
+      break;
+    }
+
+    stream.write(chunk.join('\n') + '\n');
+    currentLines += chunk.length;
+  }
+
+  stream.end();
+  console.log(`Finished ${filePath}: ${currentLines} lines`);
+}
+
+function generateSwift(targetLines, filename) {
+  const filePath = path.join(outDir, filename);
+  console.log(`Generating ${targetLines} lines into ${filePath}...`);
+  const stream = fs.createWriteStream(filePath, { encoding: 'utf-8' });
+
+  stream.write(`// Generated synthetic Swift benchmark file: ${targetLines} lines\n`);
+  stream.write(`import Foundation\n\n`);
+
+  let currentLines = 3;
+  let idx = 0;
+
+  while (currentLines < targetLines) {
+    idx++;
+    const chunk = [
+      `/// Struct representing entity #${idx}`,
+      `public struct SwiftBenchRecord${idx}: Codable, Identifiable {`,
+      `    public let id: String`,
+      `    public let label: String`,
+      `    public let value: Double`,
+      `    public let isFlagged: Bool`,
+      ``,
+      `    public init(id: String, label: String, value: Double, isFlagged: Bool = ${idx % 2 === 0}) {`,
+      `        self.id = id`,
+      `        self.label = label`,
+      `        self.value = value`,
+      `        self.isFlagged = isFlagged`,
+      `    }`,
+      `}`,
+      ``,
+      `public final class SwiftBenchManager${idx} {`,
+      `    private var records: [SwiftBenchRecord${idx}] = []`,
+      ``,
+      `    public func addRecord(_ record: SwiftBenchRecord${idx}) {`,
+      `        guard record.value >= 0 else { return }`,
+      `        records.append(record)`,
+      `    }`,
+      ``,
+      `    public func computeAverage() -> Double {`,
+      `        guard !records.isEmpty else { return 0.0 }`,
+      `        let sum = records.reduce(0.0) { $0 + $1.value }`,
+      `        return sum / Double(records.count)`,
+      `    }`,
+      `}`,
+      ``
+    ];
+
+    if (currentLines + chunk.length > targetLines) {
+      const remaining = targetLines - currentLines;
+      for (let i = 0; i < remaining; i++) {
+        stream.write(`// filler line ${currentLines + i + 1}\n`);
+      }
+      currentLines = targetLines;
+      break;
+    }
+
+    stream.write(chunk.join('\n') + '\n');
+    currentLines += chunk.length;
+  }
+
+  stream.end();
+  console.log(`Finished ${filePath}: ${currentLines} lines`);
+}
+
 generateKotlin(10000, 'Big10k.kt');
 generateKotlin(50000, 'Big50k.kt');
+generateDart(10000, 'Big10k.dart');
+generateSwift(10000, 'Big10k.swift');

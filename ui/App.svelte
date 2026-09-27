@@ -45,8 +45,12 @@ class CheckoutViewModel @Inject constructor(
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
 
+  import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
+
   let fileType = $derived(
-    activeFilename.endsWith('.kt') ? 'Kotlin' :
+    activeFilename.endsWith('.kt') || activeFilename.endsWith('.kts') ? 'Kotlin' :
+    activeFilename.endsWith('.dart') ? 'Dart' :
+    activeFilename.endsWith('.swift') ? 'Swift' :
     activeFilename.endsWith('.toml') ? 'TOML' :
     activeFilename.endsWith('.json') ? 'JSON' :
     activeFilename.endsWith('.rs') ? 'Rust' :
@@ -175,6 +179,138 @@ class CheckoutViewModel @Inject constructor(
       console.log(
         `[PETAK_BENCH] Typing latency: p50=${p50.toFixed(2)}ms, p95=${p95.toFixed(2)}ms, max=${max.toFixed(2)}ms`
       );
+
+      // Step 4: F0.2 Tree-sitter Benchmark (Dart, Kotlin, Swift)
+      console.log('[PETAK_BENCH] Starting F0.2 Tree-sitter Benchmark...');
+
+      // Signal for RAM measurement before loading WASM grammars
+      await api.benchLog(
+        JSON.stringify({
+          metric: 'f02_signal_before_preload',
+          ts: Date.now(),
+        })
+      );
+      await new Promise((r) => setTimeout(r, 600));
+
+      const tPreload0 = performance.now();
+      await preloadAllLanguages();
+      const preloadMs = performance.now() - tPreload0;
+      console.log(`[PETAK_BENCH] Preloaded 3 WASM grammars in ${preloadMs.toFixed(2)} ms`);
+
+      // Signal for RAM measurement after loading WASM grammars
+      await api.benchLog(
+        JSON.stringify({
+          metric: 'f02_signal_after_preload',
+          ts: Date.now(),
+          preload_ms: preloadMs,
+        })
+      );
+      await new Promise((r) => setTimeout(r, 600));
+
+      const languagesToBench = [
+        { name: 'dart', ext: 'dart', file: 'Big10k.dart' },
+        { name: 'kotlin', ext: 'kt', file: 'Big10k.kt' },
+        { name: 'swift', ext: 'swift', file: 'Big10k.swift' },
+      ];
+
+      for (const langItem of languagesToBench) {
+        console.log(`[PETAK_BENCH] Running tree-sitter benchmark for ${langItem.name}...`);
+        statusText = `Benchmarking TS ${langItem.name}...`;
+
+        const possiblePaths = [
+          `/Users/uqi/petak-bench/${langItem.file}`,
+          `/tmp/petak-bench/${langItem.file}`,
+        ];
+        let filePath = possiblePaths[0];
+
+        // 1. Switch filename
+        activeFilename = langItem.file;
+        activeFilePath = filePath;
+
+        // Clear editor
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+        // Read 10k content
+        const content = await api.readFile(filePath);
+
+        // 2. Measure full initial parse
+        const plugin = view.plugin(treeSitterPlugin);
+        const tInitial0 = performance.now();
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: content },
+        });
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const tInitial1 = performance.now();
+        const initialParseFullTimeMs = plugin?.lastInitialParseMs || (tInitial1 - tInitial0);
+        console.log(`[PETAK_BENCH] ${langItem.name} initial parse: ${initialParseFullTimeMs.toFixed(2)} ms`);
+
+        // 3. Move cursor to middle of file
+        const midPos = Math.floor(view.state.doc.length / 2);
+        view.dispatch({ selection: { anchor: midPos, head: midPos } });
+        await new Promise((r) => requestAnimationFrame(r));
+
+        // 4. 200x insert 1 character
+        const incParseSamples: number[] = [];
+        const queryDecoSamples: number[] = [];
+        const frameSamples: number[] = [];
+
+        for (let i = 0; i < 200; i++) {
+          const char = String.fromCharCode(97 + (i % 26)); // 'a'..'z'
+          const t0 = performance.now();
+          const curPos = view.state.selection.main.head;
+          view.dispatch({
+            changes: { from: curPos, insert: char },
+            selection: { anchor: curPos + 1, head: curPos + 1 },
+          });
+          await new Promise((r) => requestAnimationFrame(r));
+          const t1 = performance.now();
+
+          frameSamples.push(t1 - t0);
+          incParseSamples.push(plugin?.lastIncrementalMs || 0);
+          queryDecoSamples.push(plugin?.lastQueryDecoMs || 0);
+        }
+
+        const calcStats = (arr: number[]) => {
+          const sorted = [...arr].sort((a, b) => a - b);
+          return {
+            p50: sorted[Math.floor(sorted.length * 0.5)],
+            p95: sorted[Math.floor(sorted.length * 0.95)],
+            max: sorted[sorted.length - 1],
+            avg: sorted.reduce((a, b) => a + b, 0) / sorted.length,
+          };
+        };
+
+        const frameStats = calcStats(frameSamples);
+        const incStats = calcStats(incParseSamples);
+        const queryStats = calcStats(queryDecoSamples);
+
+        await api.benchLog(
+          JSON.stringify({
+            metric: 'f02_treesitter_bench',
+            language: langItem.name,
+            filename: langItem.file,
+            samples_count: 200,
+            initial_parse_ms: initialParseFullTimeMs,
+            incremental_p50_ms: incStats.p50,
+            incremental_p95_ms: incStats.p95,
+            incremental_max_ms: incStats.max,
+            incremental_avg_ms: incStats.avg,
+            query_deco_p50_ms: queryStats.p50,
+            query_deco_p95_ms: queryStats.p95,
+            query_deco_max_ms: queryStats.max,
+            query_deco_avg_ms: queryStats.avg,
+            frame_p50_ms: frameStats.p50,
+            frame_p95_ms: frameStats.p95,
+            frame_max_ms: frameStats.max,
+            frame_avg_ms: frameStats.avg,
+            pass_16ms: frameStats.p50 <= 16.0,
+          })
+        );
+        console.log(
+          `[PETAK_BENCH] ${langItem.name}: Initial=${initialParseFullTimeMs.toFixed(1)}ms, IncP50=${incStats.p50.toFixed(2)}ms, DecoP50=${queryStats.p50.toFixed(2)}ms, FrameP50=${frameStats.p50.toFixed(2)}ms, Pass=${frameStats.p50 <= 16.0}`
+        );
+      }
 
       statusText = 'Benchmark complete (idle)';
       await api.benchLog(
