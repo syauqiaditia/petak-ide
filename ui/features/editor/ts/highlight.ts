@@ -47,6 +47,7 @@ interface LanguageEntry {
 const languageCache = new Map<SupportedLanguage, LanguageEntry>();
 const loadingPromises = new Map<SupportedLanguage, Promise<LanguageEntry>>();
 
+let loadMutex: Promise<any> = Promise.resolve();
 export async function loadLanguage(lang: SupportedLanguage): Promise<LanguageEntry> {
   const cached = languageCache.get(lang);
   if (cached) return cached;
@@ -55,25 +56,37 @@ export async function loadLanguage(lang: SupportedLanguage): Promise<LanguageEnt
   if (existing) return existing;
 
   const promise = (async () => {
-    await initTreeSitter();
-    const wasmUrl = `/ts/tree-sitter-${lang}.wasm`;
-    const res = await fetch(wasmUrl);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch wasm from ${wasmUrl}: ${res.statusText}`);
+    // Wait for mutex so multiple Language.load calls don't corrupt WASM transfer buffer
+    await loadMutex;
+    let release: (v?: any) => void = () => {};
+    loadMutex = new Promise((resolve) => { release = resolve; });
+
+    try {
+      console.log(`[TS] Loading ${lang}...`);
+      await initTreeSitter();
+      const wasmUrl = `/ts/tree-sitter-${lang}.wasm`;
+      const res = await fetch(wasmUrl);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch wasm from ${wasmUrl}: ${res.statusText}`);
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const language = await Language.load(bytes);
+      console.log(`[TS] Language loaded for ${lang}, version: ${language.version}`);
+
+      let querySource = '';
+      if (lang === 'dart') querySource = dartQuerySource;
+      else if (lang === 'kotlin') querySource = kotlinQuerySource;
+      else if (lang === 'swift') querySource = swiftQuerySource;
+
+      const query = new Query(language, querySource);
+      console.log(`[TS] Query compiled for ${lang}, patterns: ${query.patternCount()}`);
+      const entry: LanguageEntry = { language, query };
+      languageCache.set(lang, entry);
+      return entry;
+    } finally {
+      loadingPromises.delete(lang);
+      release();
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    const language = await Language.load(bytes);
-
-    let querySource = '';
-    if (lang === 'dart') querySource = dartQuerySource;
-    else if (lang === 'kotlin') querySource = kotlinQuerySource;
-    else if (lang === 'swift') querySource = swiftQuerySource;
-
-    const query = new Query(language, querySource);
-    const entry: LanguageEntry = { language, query };
-    languageCache.set(lang, entry);
-    loadingPromises.delete(lang);
-    return entry;
   })();
 
   loadingPromises.set(lang, promise);
@@ -138,12 +151,11 @@ export class TreeSitterHighlighter {
     }
 
     this.currentLang = lang;
-    if (!this.parser) {
-      this.parser = new Parser();
-    }
-
     const cached = languageCache.get(lang);
     if (cached) {
+      if (!this.parser) {
+        this.parser = new Parser();
+      }
       this.parser.setLanguage(cached.language);
       this.query = cached.query;
       this.parseFull(this.view.state.doc.toString());
@@ -152,7 +164,10 @@ export class TreeSitterHighlighter {
       this.decorations = Decoration.none;
       loadLanguage(lang)
         .then(({ language, query }) => {
-          if (!this.parser || this.currentLang !== lang) return;
+          if (this.currentLang !== lang) return;
+          if (!this.parser) {
+            this.parser = new Parser();
+          }
           this.parser.setLanguage(language);
           this.query = query;
           this.parseFull(this.view.state.doc.toString());
@@ -167,6 +182,14 @@ export class TreeSitterHighlighter {
 
   parseFull(text: string) {
     if (!this.parser) return;
+    if (text.length > 350_000) {
+      if (this.tree) {
+        this.tree.delete();
+        this.tree = null;
+      }
+      this.lastInitialParseMs = 0;
+      return;
+    }
     const t0 = performance.now();
     this.tree = this.parser.parse(text);
     this.lastInitialParseMs = performance.now() - t0;
@@ -191,6 +214,14 @@ export class TreeSitterHighlighter {
 
     if (docChanged) {
       const docText = update.state.doc.toString();
+      if (docText.length > 350_000) {
+        if (this.tree) {
+          this.tree.delete();
+          this.tree = null;
+        }
+        this.decorations = Decoration.none;
+        return;
+      }
       if (this.tree && !update.changes.empty) {
         update.changes.iterChanges((fromA, toA, fromB, toB) => {
           const startLine = update.startState.doc.lineAt(fromA);
@@ -247,9 +278,11 @@ export class TreeSitterHighlighter {
     for (const { from, to } of view.visibleRanges) {
       if (from >= to) continue;
 
+      // In web-tree-sitter (UTF-16 in JS), byte offsets in C WASM are char index * 2.
+      // Passing char indices directly halves the queried range.
       const captures = this.query.captures(this.tree.rootNode, {
-        startIndex: from,
-        endIndex: to,
+        startIndex: from * 2,
+        endIndex: to * 2,
       });
 
       const items: { from: number; to: number; deco: Decoration }[] = [];
@@ -300,36 +333,46 @@ export const treeSitterPlugin = ViewPlugin.fromClass(TreeSitterHighlighter, {
   decorations: (v) => v.decorations,
 });
 
-export const highlightTheme = EditorView.baseTheme({
-  '.cm-ts-keyword': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-keyword-function': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-keyword-return': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-keyword-coroutine': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-keyword-repeat': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-keyword-type': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-keyword-directive': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-conditional': { color: '#cf8e6d', fontWeight: '500' },
-  '.cm-ts-string': { color: '#6aab73' },
-  '.cm-ts-string-escape': { color: '#cf8e6d' },
-  '.cm-ts-string-regex': { color: '#42b3c2' },
-  '.cm-ts-number': { color: '#2aacb8' },
-  '.cm-ts-float': { color: '#2aacb8' },
-  '.cm-ts-boolean': { color: '#2aacb8', fontWeight: '500' },
-  '.cm-ts-function': { color: '#56a8f5' },
-  '.cm-ts-function-call': { color: '#56a8f5' },
-  '.cm-ts-function-method': { color: '#56a8f5' },
-  '.cm-ts-function-builtin': { color: '#56a8f5' },
-  '.cm-ts-type': { color: '#bc8cff' },
-  '.cm-ts-type-builtin': { color: '#bc8cff' },
-  '.cm-ts-comment': { color: '#7a7e85', fontStyle: 'italic' },
-  '.cm-ts-comment-documentation': { color: '#7a7e85', fontStyle: 'italic' },
-  '.cm-ts-variable': { color: '#bcbec4' },
-  '.cm-ts-variable-parameter': { color: '#bcbec4' },
-  '.cm-ts-variable-member': { color: '#bcbec4' },
-  '.cm-ts-variable-builtin': { color: '#cf8e6d' },
-  '.cm-ts-property': { color: '#c792ea' },
-  '.cm-ts-operator': { color: '#d8d9dc' },
-  '.cm-ts-punctuation': { color: '#8b8f98' },
-  '.cm-ts-constant': { color: '#e5c07b' },
-  '.cm-ts-constant-builtin': { color: '#e5c07b' },
+export const highlightTheme = EditorView.theme({
+  '& .cm-ts-keyword': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-function': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-return': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-coroutine': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-repeat': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-type': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-directive': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-modifier': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-import': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-conditional': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-keyword-exception': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-include': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-conditional': { color: '#cf8e6d !important', fontWeight: '500' },
+  '& .cm-ts-string': { color: '#6aab73 !important' },
+  '& .cm-ts-string-escape': { color: '#cf8e6d !important' },
+  '& .cm-ts-string-regex': { color: '#42b3c2 !important' },
+  '& .cm-ts-number': { color: '#2aacb8 !important' },
+  '& .cm-ts-float': { color: '#2aacb8 !important' },
+  '& .cm-ts-boolean': { color: '#2aacb8 !important', fontWeight: '500' },
+  '& .cm-ts-function': { color: '#56a8f5 !important' },
+  '& .cm-ts-function-call': { color: '#56a8f5 !important' },
+  '& .cm-ts-function-method': { color: '#56a8f5 !important' },
+  '& .cm-ts-function-builtin': { color: '#56a8f5 !important' },
+  '& .cm-ts-constructor': { color: '#56a8f5 !important' },
+  '& .cm-ts-type': { color: '#bc8cff !important' },
+  '& .cm-ts-type-builtin': { color: '#bc8cff !important' },
+  '& .cm-ts-comment': { color: '#7a7e85 !important', fontStyle: 'italic' },
+  '& .cm-ts-comment-documentation': { color: '#7a7e85 !important', fontStyle: 'italic' },
+  '& .cm-ts-variable': { color: '#bcbec4' },
+  '& .cm-ts-variable-parameter': { color: '#bcbec4' },
+  '& .cm-ts-variable-member': { color: '#bcbec4' },
+  '& .cm-ts-variable-builtin': { color: '#cf8e6d !important' },
+  '& .cm-ts-parameter': { color: '#bcbec4' },
+  '& .cm-ts-identifier-parameter': { color: '#bcbec4' },
+  '& .cm-ts-property': { color: '#c792ea !important' },
+  '& .cm-ts-attribute': { color: '#e5c07b !important' },
+  '& .cm-ts-namespace': { color: '#bcbec4' },
+  '& .cm-ts-operator': { color: '#d8d9dc' },
+  '& .cm-ts-punctuation': { color: '#8b8f98' },
+  '& .cm-ts-constant': { color: '#e5c07b !important' },
+  '& .cm-ts-constant-builtin': { color: '#e5c07b !important' },
 });

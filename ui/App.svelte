@@ -98,6 +98,9 @@ class CheckoutViewModel @Inject constructor(
       let big50kPath = possible50kPaths[0];
 
       console.log('[PETAK_BENCH] Measuring open 50k lines (5 runs)...');
+      activeFilename = 'Big50k.kt';
+      activeFilePath = big50kPath;
+      await new Promise((r) => setTimeout(r, 100));
       const openRuns: number[] = [];
 
       for (let run = 0; run < 5; run++) {
@@ -136,6 +139,9 @@ class CheckoutViewModel @Inject constructor(
       const big10kPath = possible10kPaths[0];
 
       console.log('[PETAK_BENCH] Measuring typing latency on 10k lines (200 insertions)...');
+      activeFilename = 'Big10k.kt';
+      activeFilePath = big10kPath;
+      await new Promise((r) => setTimeout(r, 100));
       const content10k = await api.readFile(big10kPath);
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content10k },
@@ -226,6 +232,7 @@ class CheckoutViewModel @Inject constructor(
         // 1. Switch filename
         activeFilename = langItem.file;
         activeFilePath = filePath;
+        await new Promise((r) => setTimeout(r, 100));
 
         // Clear editor
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });

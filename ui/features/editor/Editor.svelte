@@ -135,6 +135,8 @@
       if (currentDoc !== content) {
         view.dispatch({
           changes: { from: 0, to: currentDoc.length, insert: content },
+          selection: { anchor: 0, head: 0 },
+          scrollIntoView: true,
         });
       }
     }
