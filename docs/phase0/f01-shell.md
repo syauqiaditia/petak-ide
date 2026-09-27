@@ -87,3 +87,13 @@ Binary: `target/release/bundle/macos/Petak.app` (10.21 MiB)
 3. **RAM & Disk:**
    - Physical footprint 122 MB berada di bawah budget 150 MB.
    - Ukuran bundle 10 MB sangat ramping jika dibandingkan dengan Electron (150+ MB) atau Android Studio (1+ GB).
+
+---
+
+## 4. Tangkapan Layar (Screenshots)
+
+- **Main Window (File explorer, editor Kotlin, Vim mode active):**  
+  `docs/phase0/screens/main.png`
+- **File 50k Baris (Big50k.kt kebuka di editor):**  
+  `docs/phase0/screens/big50k.png`
+

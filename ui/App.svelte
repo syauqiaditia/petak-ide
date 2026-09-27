@@ -45,6 +45,16 @@ class CheckoutViewModel @Inject constructor(
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
 
+  let fileType = $derived(
+    activeFilename.endsWith('.kt') ? 'Kotlin' :
+    activeFilename.endsWith('.toml') ? 'TOML' :
+    activeFilename.endsWith('.json') ? 'JSON' :
+    activeFilename.endsWith('.rs') ? 'Rust' :
+    activeFilename.endsWith('.svelte') ? 'Svelte' :
+    activeFilename.endsWith('.ts') ? 'TypeScript' :
+    activeFilename.endsWith('.md') ? 'Markdown' : 'Plain Text'
+  );
+
   let editorComponent: any = null;
 
   async function handlePickFolder() {
@@ -219,6 +229,26 @@ class CheckoutViewModel @Inject constructor(
         }
       } catch (_) {}
     }
+
+    // Periodic file open trigger from /tmp/petak_open.txt
+    const checkOpenTarget = async () => {
+      try {
+        const p = await api.readFile('/tmp/petak_open.txt');
+        if (p && p.trim()) {
+          const target = p.trim();
+          if (target !== activeFilePath) {
+            const text = await api.readFile(target);
+            editorContent = text;
+            activeFilename = target.split('/').pop() || target;
+            activeFilePath = target;
+          }
+        }
+      } catch (_) {}
+    };
+
+    checkOpenTarget();
+    const interval = setInterval(checkOpenTarget, 500);
+    return () => clearInterval(interval);
   });
 </script>
 
@@ -251,7 +281,7 @@ class CheckoutViewModel @Inject constructor(
     branchName="main"
     {statusText}
     {isBench}
-    fileType="Kotlin"
+    {fileType}
     {cursorInfo}
   />
 </div>
