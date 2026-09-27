@@ -1,0 +1,18 @@
+=== F0.2 run_f02_bench.py stdout (Mac M2, Petak.app release, PETAK_BENCH=1) — run 1, 2026-09-27 ~23:09 WIB ===
+Command: python3 ~/petak/scripts/run_f02_bench.py   (RSS via `ps -o rss= -p <WebContent pid>`)
+Found WebContent PID: 91717
+>>> WebContent RSS before preload: 183232 KB (178.94 MB)
+[BENCH_LOG] [LOG] [PETAK_BENCH] Preloaded 3 WASM grammars in 1076.00 ms
+>>> WebContent RSS after preload: 224928 KB (219.66 MB)
+...
+[BENCH_LOG] [LOG] [PETAK_BENCH] Running tree-sitter benchmark for swift...
+
+=== Benchmark Summary ===
+Completed: False          (runner timeout 240 s hit while Swift was still parsing)
+WebContent RSS Before Preload: 178.94 MB
+WebContent RSS After Preload:  219.66 MB
+WASM Preload Delta:           +40.72 MB (41696 KB)
+
+=== Run 2 (timeout raised to 900 s) ===
+Aborted by me after ~6 min: Mac screen locked (IOConsoleLocked = Yes), WebKit throttled rAF/timers,
+log stalled at "[TS] Query compiled for kotlin" (before the bench even started). No numbers used from run 2.

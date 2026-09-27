@@ -1,0 +1,35 @@
+[LOG] [TS] Loading kotlin...
+[LOG] [PETAK] Editor ready.
+[LOG] [TS] Language loaded for kotlin, version: 14
+[LOG] [TS] Query compiled for kotlin, patterns: 54
+[LOG] [PETAK_BENCH] Starting benchmark suite...
+[LOG] [PETAK_BENCH] Measuring open 50k lines (5 runs)...
+[LOG] [PETAK_BENCH] Run 1: 34.00 ms
+[LOG] [PETAK_BENCH] Run 2: 34.00 ms
+[LOG] [PETAK_BENCH] Run 3: 33.00 ms
+[LOG] [PETAK_BENCH] Run 4: 33.00 ms
+[LOG] [PETAK_BENCH] Run 5: 33.00 ms
+{"metric":"open_50k","runs_ms":[34,34,33,33,33.000000000000114],"median_ms":33.000000000000114}
+[LOG] [PETAK_BENCH] Open 50k median: 33.00 ms
+[LOG] [PETAK_BENCH] Measuring typing latency on 10k lines (200 insertions)...
+{"metric":"typing_latency_10k","samples_count":200,"p50_ms":17,"p95_ms":17.000000000000455,"max_ms":20,"avg_ms":16.655}
+[LOG] [PETAK_BENCH] Typing latency: p50=17.00ms, p95=17.00ms, max=20.00ms
+[LOG] [PETAK_BENCH] Starting F0.2 Tree-sitter Benchmark...
+{"metric":"f02_signal_before_preload","ts":1790525378080}
+[LOG] [TS] Loading dart...
+[LOG] [TS] Loading swift...
+[LOG] [TS] Language loaded for dart, version: 15
+[LOG] [TS] Query compiled for dart, patterns: 53
+[LOG] [TS] Language loaded for swift, version: 13
+[LOG] [TS] Query compiled for swift, patterns: 67
+[LOG] [PETAK_BENCH] Preloaded 3 WASM grammars in 1076.00 ms
+{"metric":"f02_signal_after_preload","ts":1790525379761,"preload_ms":1076}
+[LOG] [PETAK_BENCH] Running tree-sitter benchmark for dart...
+[LOG] [PETAK_BENCH] dart initial parse: 357.00 ms
+{"metric":"f02_treesitter_bench","language":"dart","filename":"Big10k.dart","samples_count":200,"initial_parse_ms":357,"incremental_p50_ms":1,"incremental_p95_ms":1.000000000001819,"incremental_max_ms":2.0000000000009095,"incremental_avg_ms":0.8100000000000181,"query_deco_p50_ms":0,"query_deco_p95_ms":1.0000000000009095,"query_deco_max_ms":1.000000000001819,"query_deco_avg_ms":0.3850000000000182,"frame_p50_ms":17,"frame_p95_ms":17.00000000000182,"frame_max_ms":19,"frame_avg_ms":16.65499999999999,"pass_16ms":false}
+[LOG] [PETAK_BENCH] dart: Initial=357.0ms, IncP50=1.00ms, DecoP50=0.00ms, FrameP50=17.00ms, Pass=false
+[LOG] [PETAK_BENCH] Running tree-sitter benchmark for kotlin...
+[LOG] [PETAK_BENCH] kotlin initial parse: 84.00 ms
+{"metric":"f02_treesitter_bench","language":"kotlin","filename":"Big10k.kt","samples_count":200,"initial_parse_ms":84,"incremental_p50_ms":1,"incremental_p95_ms":1.000000000001819,"incremental_max_ms":1.000000000001819,"incremental_avg_ms":0.62,"query_deco_p50_ms":0,"query_deco_p95_ms":1.000000000001819,"query_deco_max_ms":3,"query_deco_avg_ms":0.3099999999999818,"frame_p50_ms":17,"frame_p95_ms":18,"frame_max_ms":19,"frame_avg_ms":16.635,"pass_16ms":false}
+[LOG] [PETAK_BENCH] kotlin: Initial=84.0ms, IncP50=1.00ms, DecoP50=0.00ms, FrameP50=17.00ms, Pass=false
+[LOG] [PETAK_BENCH] Running tree-sitter benchmark for swift...

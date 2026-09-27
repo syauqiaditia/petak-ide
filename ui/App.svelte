@@ -375,6 +375,7 @@ class CheckoutViewModel @Inject constructor(
 
     // Periodic file open trigger from /tmp/petak_open.txt
     const checkOpenTarget = async () => {
+      if (isBench) return;
       try {
         const p = await api.readFile('/tmp/petak_open.txt');
         if (p && p.trim()) {

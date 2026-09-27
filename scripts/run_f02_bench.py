@@ -8,8 +8,14 @@ def main():
     log_file = "/tmp/petak-bench-f02.log"
     with open(log_file, "w") as f:
         f.write("")
+    try:
+        with open("/tmp/petak_open.txt", "w") as f:
+            f.write("")
+    except Exception:
+        pass
 
     # Kill existing
+    subprocess.run(["pkill", "-x", "petak-app"], stderr=subprocess.DEVNULL)
     subprocess.run(["pkill", "-f", "petak-app"], stderr=subprocess.DEVNULL)
     time.sleep(1.0)
 
@@ -34,7 +40,7 @@ def main():
     t_start = time.time()
     seen_lines = 0
 
-    while time.time() - t_start < 240:
+    while time.time() - t_start < 900:
         time.sleep(0.3)
 
         if not webcontent_pid:
@@ -92,6 +98,7 @@ def main():
             break
 
     # Terminate Petak
+    subprocess.run(["pkill", "-x", "petak-app"], stderr=subprocess.DEVNULL)
     subprocess.run(["pkill", "-f", "petak-app"], stderr=subprocess.DEVNULL)
 
     print(f"\n=== Benchmark Summary ===")
