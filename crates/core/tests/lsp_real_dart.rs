@@ -141,3 +141,173 @@ fn test_real_dart_lsp_diagnostics_and_did_change() {
 
     registry.shutdown_all();
 }
+
+#[test]
+fn test_real_dart_lsp_p23_features() {
+    if !has_dart() {
+        println!("Skipping test_real_dart_lsp_p23_features: dart not in PATH");
+        return;
+    }
+
+    let tmp = tempfile::tempdir().expect("create temp dir");
+    let project_dir = tmp.path().to_path_buf();
+
+    let pubspec = project_dir.join("pubspec.yaml");
+    std::fs::write(
+        &pubspec,
+        "name: test_p23\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n",
+    )
+    .expect("write pubspec");
+
+    let lib_dir = project_dir.join("lib");
+    std::fs::create_dir_all(&lib_dir).expect("create lib dir");
+
+    let file_path = lib_dir.join("feature.dart");
+    let code = "int mySpecialNumber = 42;\nvoid main() {\n  print(mySpecialNumber);\n}\n";
+    std::fs::write(&file_path, code).expect("write feature.dart");
+
+    let (tx, rx) = mpsc::channel();
+    let clock = Arc::new(WallClock);
+    let registry = Registry::new(clock, move |_lang, _root, event| {
+        let _ = tx.send(event);
+    });
+
+    let uri = petak_core::lsp::registry::path_to_uri(&file_path);
+
+    // 1. Open
+    registry
+        .did_open(&file_path, Lang::Dart, code, Some(&project_dir))
+        .expect("did_open");
+
+    // Wait for analysis (diagnostics notification)
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(15) {
+        if let Ok(ServerEvent::Notification { method, .. }) = rx.recv_timeout(Duration::from_millis(200)) {
+            if method == "textDocument/publishDiagnostics" {
+                break;
+            }
+        }
+    }
+
+    // 2. Completion: at line 2 character 8 ("  print(my")
+    // Let's insert a partial identifier to complete
+    let comp_change = json!({
+        "range": {
+            "start": { "line": 2, "character": 8 },
+            "end": { "line": 2, "character": 24 }
+        },
+        "text": "mySpe"
+    });
+    registry
+        .did_change(&file_path, Lang::Dart, 2, &[comp_change], Some(&project_dir))
+        .expect("did_change");
+
+    let comp_params = json!({
+        "textDocument": { "uri": &uri },
+        "position": { "line": 2, "character": 13 }
+    });
+    let comp_res = registry
+        .request(&file_path, Lang::Dart, "textDocument/completion", &comp_params, Some(&project_dir))
+        .expect("completion request");
+
+    let comp_items = if let Some(items) = comp_res.as_array() {
+        items.clone()
+    } else if let Some(items) = comp_res.get("items").and_then(|i| i.as_array()) {
+        items.clone()
+    } else {
+        vec![]
+    };
+
+    assert!(
+        !comp_items.is_empty(),
+        "Expected completion items from Dart LS, got: {:?}",
+        comp_res
+    );
+    let found_target = comp_items
+        .iter()
+        .any(|item| item.get("label").and_then(|l| l.as_str()) == Some("mySpecialNumber"));
+    assert!(
+        found_target,
+        "Expected mySpecialNumber in completion items: {:?}",
+        comp_items
+            .iter()
+            .take(10)
+            .filter_map(|i| i.get("label"))
+            .collect::<Vec<_>>()
+    );
+    println!("Dart LSP completion verified successfully!");
+
+    // 3. Hover at line 0, character 5 ("mySpecialNumber")
+    let hover_params = json!({
+        "textDocument": { "uri": &uri },
+        "position": { "line": 0, "character": 5 }
+    });
+    let hover_res = registry
+        .request(&file_path, Lang::Dart, "textDocument/hover", &hover_params, Some(&project_dir))
+        .expect("hover request");
+    assert!(
+        hover_res.get("contents").is_some(),
+        "Expected hover contents, got: {:?}",
+        hover_res
+    );
+    println!("Dart LSP hover verified successfully!");
+
+    // 4. Definition: at line 0, character 5
+    let def_params = json!({
+        "textDocument": { "uri": &uri },
+        "position": { "line": 0, "character": 5 }
+    });
+    let def_res = registry
+        .request(&file_path, Lang::Dart, "textDocument/definition", &def_params, Some(&project_dir))
+        .expect("definition request");
+    assert!(
+        !def_res.is_null(),
+        "Expected definition result, got: {:?}",
+        def_res
+    );
+    println!("Dart LSP definition verified successfully!");
+
+    // 5. Formatting: format unformatted code
+    let unformatted = "void testFormat(){int   a=1;   }\n";
+    let unformatted_file = lib_dir.join("unformatted.dart");
+    std::fs::write(&unformatted_file, unformatted).expect("write unformatted.dart");
+    let unformatted_uri = petak_core::lsp::registry::path_to_uri(&unformatted_file);
+    registry
+        .did_open(&unformatted_file, Lang::Dart, unformatted, Some(&project_dir))
+        .expect("did_open unformatted");
+
+    let format_params = json!({
+        "textDocument": { "uri": &unformatted_uri },
+        "options": { "tabSize": 2, "insertSpaces": true }
+    });
+    let format_res = registry
+        .request(&unformatted_file, Lang::Dart, "textDocument/formatting", &format_params, Some(&project_dir))
+        .expect("format request");
+
+    let edits = format_res.as_array().expect("formatting edits array");
+    assert!(
+        !edits.is_empty(),
+        "Expected formatting edits from Dart LS, got: {:?}",
+        format_res
+    );
+    println!("Dart LSP formatting verified successfully with {} edits!", edits.len());
+
+    // 6. Rename: rename mySpecialNumber at line 0, character 5 to renamedNumber
+    let rename_params = json!({
+        "textDocument": { "uri": &uri },
+        "position": { "line": 0, "character": 5 },
+        "newName": "renamedNumber"
+    });
+    let rename_res = registry
+        .request(&file_path, Lang::Dart, "textDocument/rename", &rename_params, Some(&project_dir))
+        .expect("rename request");
+
+    assert!(
+        rename_res.get("changes").is_some() || rename_res.get("documentChanges").is_some(),
+        "Expected workspace changes in rename response: {:?}",
+        rename_res
+    );
+    println!("Dart LSP rename verified successfully!");
+
+    registry.shutdown_all();
+}

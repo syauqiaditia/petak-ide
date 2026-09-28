@@ -4,7 +4,7 @@
 use super::pos;
 
 /// A text edit with LSP positions (line, UTF-16 character).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextEdit {
     pub start_line: u32,
     pub start_character: u32,
@@ -67,10 +67,19 @@ pub fn apply_edits(text: &str, edits: &[TextEdit]) -> Result<String, EditError> 
     Ok(result)
 }
 
+/// Apply a list of TextEdits to a file on disk.
+pub fn apply_to_file(path: &std::path::Path, edits: &[TextEdit]) -> Result<(), EditError> {
+    let content = std::fs::read_to_string(path).map_err(|e| EditError::Io(e.to_string()))?;
+    let new_content = apply_edits(&content, edits)?;
+    std::fs::write(path, new_content).map_err(|e| EditError::Io(e.to_string()))?;
+    Ok(())
+}
+
 #[derive(Debug, PartialEq)]
 pub enum EditError {
     OutOfBounds,
     Overlapping,
+    Io(String),
 }
 
 impl std::fmt::Display for EditError {
@@ -78,6 +87,7 @@ impl std::fmt::Display for EditError {
         match self {
             EditError::OutOfBounds => write!(f, "edit position out of bounds"),
             EditError::Overlapping => write!(f, "overlapping edits"),
+            EditError::Io(msg) => write!(f, "io error: {msg}"),
         }
     }
 }
@@ -175,5 +185,16 @@ mod tests {
     fn empty_edits() {
         let text = "hello";
         assert_eq!(apply_edits(text, &[]).unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_apply_to_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("test.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+        let edits = vec![edit(0, 6, 0, 11, "petak")];
+        apply_to_file(&file_path, &edits).unwrap();
+        let result = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(result, "hello petak");
     }
 }

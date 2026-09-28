@@ -83,7 +83,8 @@ pub fn mark_ready(ts_ms: u64) {
 pub fn bench_log(line: String) -> Result<(), String> {
     let out_var = std::env::var("PETAK_BENCH_OUT").ok();
     let is_bench = std::env::var("PETAK_BENCH").is_ok();
-    let is_test = std::env::var("PETAK_TEST_P22").is_ok()
+    let is_test = std::env::var("PETAK_TEST_P23").is_ok()
+        || std::env::var("PETAK_TEST_P22").is_ok()
         || std::env::var("PETAK_TEST_P15").is_ok()
         || std::env::var("PETAK_TEST_P14").is_ok()
         || std::env::var("PETAK_TEST_P12").is_ok()
@@ -111,6 +112,9 @@ pub fn bench_mode() -> bool {
 
 #[tauri::command]
 pub fn test_mode() -> Option<String> {
+    if std::env::var("PETAK_TEST_P23").is_ok() {
+        return Some("P23".to_string());
+    }
     if std::env::var("PETAK_TEST_P22").is_ok() {
         return Some("P22".to_string());
     }
@@ -386,4 +390,224 @@ pub async fn lsp_did_close(
         }
     });
     Ok(())
+}
+
+#[tauri::command]
+pub async fn lsp_completion(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    line: u32,
+    character: u32,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+        registry
+            .request(p, lang, "textDocument/completion", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_completion_resolve(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    item: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        registry
+            .request(p, lang, "completionItem/resolve", &item, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_hover(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    line: u32,
+    character: u32,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+        registry
+            .request(p, lang, "textDocument/hover", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_definition(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    line: u32,
+    character: u32,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+        registry
+            .request(p, lang, "textDocument/definition", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_references(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    line: u32,
+    character: u32,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character },
+            "context": { "includeDeclaration": true }
+        });
+        registry
+            .request(p, lang, "textDocument/references", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_prepare_rename(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    line: u32,
+    character: u32,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character }
+        });
+        registry
+            .request(p, lang, "textDocument/prepareRename", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_rename(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    line: u32,
+    character: u32,
+    new_name: String,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": line, "character": character },
+            "newName": new_name
+        });
+        registry
+            .request(p, lang, "textDocument/rename", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_format(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "options": {
+                "tabSize": 2,
+                "insertSpaces": true
+            }
+        });
+        registry
+            .request(p, lang, "textDocument/formatting", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_apply_workspace_edit_disk(
+    path: String,
+    edits: Vec<petak_core::lsp::edit::TextEdit>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        petak_core::lsp::edit::apply_to_file(p, &edits)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

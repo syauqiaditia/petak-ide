@@ -58,6 +58,17 @@
     }, 20);
   }
 
+  async function openUsages() {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openUsages?.();
+    }, 20);
+  }
+
   async function openPalette(mode: SearchMode, initialQuery: string = '') {
     if (!PaletteComponent) {
       const mod = await import('./features/search/Palette.svelte');
@@ -145,6 +156,30 @@
       label: 'Toggle Problems Panel',
       shortcut: '⇧⌘M',
       run: () => openProblems(),
+    },
+    {
+      id: 'reformat-code',
+      label: 'Reformat Code',
+      shortcut: '⌥⌘L',
+      run: () => editorComponent?.handleFormat(),
+    },
+    {
+      id: 'rename-symbol',
+      label: 'Rename Symbol',
+      shortcut: '⇧F6',
+      run: () => editorComponent?.handleRename(),
+    },
+    {
+      id: 'goto-definition',
+      label: 'Go to Definition',
+      shortcut: '⌘B',
+      run: () => editorComponent?.handleGoToDefinition(),
+    },
+    {
+      id: 'find-usages',
+      label: 'Find Usages',
+      shortcut: '⌥F7',
+      run: () => editorComponent?.handleFindUsages(),
     },
   ];
 
@@ -876,6 +911,57 @@
     }
   }
 
+  async function runP23AutoTest() {
+    console.log('[PETAK_TEST] Running P2.3 Autocomplete and Navigation test sequence...');
+    await api.benchLog('P23_STARTING');
+    try {
+      if (!currentFolderPath) {
+        const recents = await api.recentFolders();
+        if (recents && recents.length > 0) {
+          await openFolder(recents[0]);
+        } else {
+          await openFolder('/Users/uqi/petak-sample');
+        }
+      }
+      await new Promise((r) => setTimeout(r, 600));
+
+      const testFilePath = currentFolderPath + '/lib/main.dart';
+      await handleOpenFile(testFilePath);
+      await api.benchLog('P23_FILE_OPENED: ' + testFilePath);
+
+      // Wait 1.5s for LSP initialization
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // Trigger completion benchmark
+      const view = editorComponent?.getEditorView?.();
+      if (view) {
+        const t0 = performance.now();
+        // Request completion at build() line
+        const res = await api.lsp.completion(testFilePath, 10, 5);
+        const t1 = performance.now();
+        const latency = Math.round(t1 - t0);
+        await api.benchLog(`P23_COMPLETION_LATENCY: ${latency}ms`);
+        await api.benchLog(`P23_COMPLETION_ITEMS_COUNT: ${res ? ((res as any).items?.length || (res as any).length || 0) : 0}`);
+
+        // Test hover
+        const hoverRes = await api.lsp.hover(testFilePath, 10, 5);
+        await api.benchLog(`P23_HOVER_OK: ${hoverRes !== null}`);
+
+        // Test definition
+        const defRes = await api.lsp.definition(testFilePath, 10, 5);
+        await api.benchLog(`P23_DEFINITION_OK: ${defRes !== null}`);
+      }
+
+      await api.benchLog('P23_SCREENSHOT_READY');
+      await new Promise((r) => setTimeout(r, 2000));
+      await api.benchLog('P23_ALL_TESTS_PASS');
+      console.log('[PETAK_TEST] P2.3 all tests completed successfully');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P2.3 test:', e);
+      await api.benchLog(`P23_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -918,7 +1004,9 @@
     // 4. Automated test if testMode is set
     try {
       const tm = await api.testMode();
-      if (tm === 'P22' || tm === 'p22') {
+      if (tm === 'P23' || tm === 'p23') {
+        setTimeout(() => runP23AutoTest(), 400);
+      } else if (tm === 'P22' || tm === 'p22') {
         setTimeout(() => runP22AutoTest(), 400);
       } else if (tm === 'P15' || tm === 'p15') {
         setTimeout(() => runP15AutoTest(), 400);
@@ -976,6 +1064,7 @@
           onReady={onEditorReady}
           onCursorChange={(c) => (cursorInfo = c)}
           onStatusChange={(s) => (statusText = s)}
+          onOpenUsages={openUsages}
         />
       </div>
 

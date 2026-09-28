@@ -68,6 +68,59 @@ export interface LspDiagnosticsPayload {
   diagnostics: LspDiagnostic[];
 }
 
+export interface LspTextEdit {
+  range: LspRange;
+  newText: string;
+}
+
+export interface LspWorkspaceEdit {
+  changes?: { [uri: string]: LspTextEdit[] };
+  documentChanges?: Array<
+    | {
+        textDocument: { uri: string; version?: number };
+        edits: LspTextEdit[];
+      }
+    | any
+  >;
+}
+
+export interface LspLocation {
+  uri: string;
+  range: LspRange;
+}
+
+export interface LspLocationLink {
+  targetUri: string;
+  targetRange: LspRange;
+  targetSelectionRange: LspRange;
+  originSelectionRange?: LspRange;
+}
+
+export interface LspCompletionItem {
+  label: string;
+  kind?: number;
+  detail?: string;
+  documentation?: string | { kind: string; value: string };
+  sortText?: string;
+  filterText?: string;
+  insertText?: string;
+  insertTextFormat?: number; // 1: PlainText, 2: Snippet
+  textEdit?: LspTextEdit | { range: LspRange; newText: string };
+  additionalTextEdits?: LspTextEdit[];
+  command?: any;
+  data?: any;
+}
+
+export interface LspCompletionList {
+  isIncomplete: boolean;
+  items: LspCompletionItem[];
+}
+
+export interface LspHover {
+  contents: string | { kind: string; value: string } | Array<string | { kind: string; value: string }>;
+  range?: LspRange;
+}
+
 export interface LspStatusPayload {
   lang: string;
   root: string;
@@ -194,6 +247,68 @@ export const api = {
 
     didClose(path: string): Promise<void> {
       return invoke('lsp_did_close', { path });
+    },
+
+    completion(
+      path: string,
+      line: number,
+      character: number
+    ): Promise<LspCompletionList | LspCompletionItem[] | null> {
+      return invoke('lsp_completion', { path, line, character });
+    },
+
+    completionResolve(path: string, item: any): Promise<LspCompletionItem> {
+      return invoke('lsp_completion_resolve', { path, item });
+    },
+
+    hover(path: string, line: number, character: number): Promise<LspHover | null> {
+      return invoke('lsp_hover', { path, line, character });
+    },
+
+    definition(
+      path: string,
+      line: number,
+      character: number
+    ): Promise<LspLocation | LspLocation[] | LspLocationLink[] | null> {
+      return invoke('lsp_definition', { path, line, character });
+    },
+
+    references(path: string, line: number, character: number): Promise<LspLocation[] | null> {
+      return invoke('lsp_references', { path, line, character });
+    },
+
+    prepareRename(
+      path: string,
+      line: number,
+      character: number
+    ): Promise<LspRange | { range: LspRange; placeholder: string } | null> {
+      return invoke('lsp_prepare_rename', { path, line, character });
+    },
+
+    rename(
+      path: string,
+      line: number,
+      character: number,
+      newName: string
+    ): Promise<LspWorkspaceEdit | null> {
+      return invoke('lsp_rename', { path, line, character, newName });
+    },
+
+    format(path: string): Promise<LspTextEdit[] | null> {
+      return invoke('lsp_format', { path });
+    },
+
+    applyWorkspaceEditDisk(
+      path: string,
+      edits: Array<{
+        start_line: number;
+        start_character: number;
+        end_line: number;
+        end_character: number;
+        new_text: string;
+      }>
+    ): Promise<void> {
+      return invoke('lsp_apply_workspace_edit_disk', { path, edits });
     },
   },
 

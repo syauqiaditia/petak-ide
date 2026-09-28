@@ -6,6 +6,7 @@
   import '@xterm/xterm/css/xterm.css';
   import ProblemsPanel from '../problems/ProblemsPanel.svelte';
   import { diagnosticsStore } from '../editor/lsp/diagnostics.svelte';
+  import { usagesStore } from '../editor/lsp/nav';
 
   let {
     folderPath = '',
@@ -27,7 +28,7 @@
 
   let tabs = $state<TabItem[]>([]);
   let activeTabId = $state<number | null>(null);
-  let activeSection = $state<'problems' | 'terminal'>('terminal');
+  let activeSection = $state<'problems' | 'usages' | 'terminal'>('terminal');
 
   let bodyElement: HTMLDivElement;
   let unlistenOutput: UnlistenFn | null = null;
@@ -193,6 +194,10 @@
     activeSection = 'problems';
   }
 
+  export function openUsages() {
+    activeSection = 'usages';
+  }
+
   export function openTerminal() {
     activeSection = 'terminal';
     setTimeout(() => {
@@ -290,6 +295,22 @@
         {/if}
       </div>
 
+      {#if usagesStore.items.length > 0 || usagesStore.isOpen}
+        <div
+          class="panel-tab usages-tab"
+          class:active={activeSection === 'usages'}
+          onclick={() => (activeSection = 'usages')}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => { if (e.key === 'Enter') activeSection = 'usages'; }}
+        >
+          <span class="tab-label">Usages</span>
+          <span class="tab-badge usages-badge">
+            {usagesStore.items.length}
+          </span>
+        </div>
+      {/if}
+
       <div class="tab-divider"></div>
 
       {#each tabs as tab (tab.id)}
@@ -362,6 +383,35 @@
   {#if activeSection === 'problems'}
     <div class="panel-body problems-body">
       <ProblemsPanel {onSelectProblem} />
+    </div>
+  {/if}
+
+  {#if activeSection === 'usages'}
+    <div class="panel-body usages-body">
+      <div class="usages-panel">
+        <div class="usages-header">
+          <span>Usages of <strong class="symbol-name">{usagesStore.symbol}</strong> ({usagesStore.items.length} found)</span>
+        </div>
+        {#if usagesStore.items.length === 0}
+          <div class="usages-empty">No usages found</div>
+        {:else}
+          <div class="usages-list">
+            {#each usagesStore.items as item}
+              <div
+                class="usage-row"
+                onclick={() => onSelectProblem(item.path, item.line, item.col)}
+                role="button"
+                tabindex="0"
+                onkeydown={(e) => { if (e.key === 'Enter') onSelectProblem(item.path, item.line, item.col); }}
+              >
+                <span class="usage-file">{item.name}</span>
+                <span class="usage-pos">:{item.line}:{item.col}</span>
+                <span class="usage-text">{item.text}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -565,5 +615,76 @@
 
   :global(.terminal-instance .xterm-viewport) {
     background-color: #141518 !important;
+  }
+
+  .usages-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #141518;
+    color: #d8d9dc;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .usages-header {
+    padding: 6px 10px;
+    border-bottom: 1px solid #222428;
+    font-size: 11px;
+    color: #8b8f98;
+  }
+
+  .symbol-name {
+    color: #6ea8ff;
+  }
+
+  .usages-empty {
+    padding: 16px;
+    color: #5b5f68;
+    font-style: italic;
+  }
+
+  .usages-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+
+  .usage-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .usage-row:hover {
+    background: #1e2025;
+  }
+
+  .usage-file {
+    color: #6ea8ff;
+    font-weight: 500;
+  }
+
+  .usage-pos {
+    color: #8b8f98;
+    font-size: 11px;
+  }
+
+  .usage-text {
+    color: #bcbec4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 6px;
+  }
+
+  .usages-badge {
+    background: #2b3b55 !important;
+    color: #9cc3ff !important;
   }
 </style>

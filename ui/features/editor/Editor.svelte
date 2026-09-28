@@ -24,15 +24,22 @@
     applyStoredDiagnosticsToView,
     handleIncomingDiagnostics,
   } from './lsp/diagnostics.svelte';
+  import { createLspAutocompleteExtension } from './lsp/completion';
+  import { createLspHoverExtension } from './lsp/hover';
+  import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav';
+  import { renameStore, triggerRename, executeRename } from './lsp/rename';
+  import { formatDocument } from './lsp/format';
 
   let {
     onReady,
     onCursorChange,
     onStatusChange,
+    onOpenUsages,
   } = $props<{
     onReady?: (view: EditorView) => void;
     onCursorChange?: (cursorText: string) => void;
     onStatusChange?: (statusText: string) => void;
+    onOpenUsages?: () => void;
   }>();
 
   let container: HTMLDivElement;
@@ -143,6 +150,9 @@
         lintGutter(),
         lintTheme,
         createLspSyncExtension(() => currentSwappedPath),
+        createLspAutocompleteExtension(() => currentSwappedPath),
+        createLspHoverExtension(() => currentSwappedPath),
+        createLspNavExtension(() => currentSwappedPath, gotoLine),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active) {
@@ -240,6 +250,31 @@
     onStatusChange?.(`Kept local changes for ${active.name}`);
   }
 
+  function selectOnMount(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  export async function handleGoToDefinition() {
+    if (!view || !currentSwappedPath) return;
+    await goToDefinition(view, currentSwappedPath, undefined, gotoLine);
+  }
+
+  export async function handleFindUsages() {
+    if (!view || !currentSwappedPath) return;
+    await findUsages(view, currentSwappedPath, onOpenUsages);
+  }
+
+  export async function handleRename() {
+    if (!view || !currentSwappedPath) return;
+    await triggerRename(view, currentSwappedPath);
+  }
+
+  export async function handleFormat() {
+    if (!view || !currentSwappedPath) return;
+    await formatDocument(view, currentSwappedPath, onStatusChange);
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
@@ -249,6 +284,22 @@
       e.preventDefault();
       e.stopPropagation();
       handleCloseActiveTab();
+    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'b') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleGoToDefinition();
+    } else if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === 'F7' || e.code === 'F7')) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleFindUsages();
+    } else if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'F6' || e.code === 'F6')) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleRename();
+    } else if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleFormat();
     }
   }
 
@@ -411,6 +462,36 @@
 
   <!-- Editor container -->
   <div class="editor-container" bind:this={container} class:hidden={tabsManager.tabs.length === 0}></div>
+
+  {#if renameStore.visible}
+    <div
+      class="rename-popover"
+      style:left="{renameStore.x}px"
+      style:top="{renameStore.y}px"
+    >
+      <div class="rename-title">Rename symbol</div>
+      <input
+        class="rename-input"
+        type="text"
+        bind:value={renameStore.newName}
+        use:selectOnMount
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            executeRename(view, onStatusChange);
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            renameStore.hide();
+            view?.focus();
+          }
+        }}
+      />
+      <div class="rename-hints">
+        <span><kbd>Enter</kbd> Rename</span>
+        <span><kbd>Esc</kbd> Cancel</span>
+      </div>
+    </div>
+  {/if}
 
   {#if tabsManager.tabs.length === 0}
     <div class="empty-editor-overlay">
@@ -615,5 +696,47 @@
     color: #b9bcc3;
     font-family: inherit;
     font-size: 11px;
+  }
+  .rename-popover {
+    position: absolute;
+    z-index: 250;
+    background: #22242a;
+    border: 1px solid #34363d;
+    border-radius: 6px;
+    padding: 8px 10px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 240px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .rename-title {
+    font-size: 11px;
+    color: #8b8f98;
+    font-weight: 500;
+  }
+  .rename-input {
+    background: #141518;
+    border: 1px solid #6ea8ff;
+    border-radius: 4px;
+    color: #e6efff;
+    padding: 4px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    outline: none;
+  }
+  .rename-hints {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: #8b8f98;
+  }
+  .rename-hints kbd {
+    background: #16171a;
+    border: 1px solid #2c2e34;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #b9bcc3;
   }
 </style>
