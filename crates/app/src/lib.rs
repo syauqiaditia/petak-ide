@@ -66,6 +66,7 @@ pub fn run() {
             commands::save_file,
             commands::watch_root,
             commands::pick_folder,
+            commands::git_branch,
             commands::recent_folders,
             commands::add_recent_folder,
             commands::mark_ready,

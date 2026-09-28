@@ -23,15 +23,25 @@ pub fn save_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn watch_root(
+pub async fn watch_root(
     app: tauri::AppHandle,
     state: tauri::State<'_, Mutex<Option<notify::RecommendedWatcher>>>,
     root: String,
 ) -> Result<(), String> {
+    {
+        let mut lock = state.lock().map_err(|e| e.to_string())?;
+        *lock = None;
+    }
+
     let app_handle = app.clone();
-    let watcher = petak_core::watch::watch(std::path::Path::new(&root), move |paths| {
-        let _ = app_handle.emit("fs-changed", FsChangedPayload { paths });
+    let root_path = root.clone();
+    let watcher = tauri::async_runtime::spawn_blocking(move || {
+        petak_core::watch::watch(std::path::Path::new(&root_path), move |paths| {
+            let _ = app_handle.emit("fs-changed", FsChangedPayload { paths });
+        })
     })
+    .await
+    .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())?;
 
     let mut lock = state.lock().map_err(|e| e.to_string())?;
@@ -40,9 +50,14 @@ pub fn watch_root(
 }
 
 #[tauri::command]
-pub fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let folder = app.dialog().file().blocking_pick_folder();
     Ok(folder.map(|p| p.to_string()))
+}
+
+#[tauri::command]
+pub fn git_branch(root: String) -> Result<Option<String>, String> {
+    Ok(petak_core::git::branch(&root))
 }
 
 #[tauri::command]

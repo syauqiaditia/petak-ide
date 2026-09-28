@@ -60,6 +60,10 @@ export const api = {
     return invoke<string | null>('pick_folder');
   },
 
+  gitBranch(root: string): Promise<string | null> {
+    return invoke<string | null>('git_branch', { root });
+  },
+
   recentFolders(): Promise<string[]> {
     return invoke<string[]>('recent_folders');
   },
