@@ -22,7 +22,11 @@
   let branchName = $state<string | null>(null);
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
-  let activeRailTab = $state('project');
+  let activeRailTab = $state(
+    typeof window !== 'undefined' && (window.location.search.includes('git') || window.location.search.includes('tab=git'))
+      ? 'git'
+      : 'project'
+  );
 
   let editorComponent: any = null;
   let fileTreeComponent: any = null;

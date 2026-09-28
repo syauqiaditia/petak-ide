@@ -14,19 +14,19 @@ pub use conflict::{
     conflict_write, conflicts, op_abort, op_continue, op_state, parse_conflict_blocks,
     resolve_block,
 };
-pub use diff::{diff_commit, diff_staged, diff_worktree, parse_diff};
+pub use diff::{commit_files, diff_commit, diff_staged, diff_worktree, parse_diff, parse_name_status};
 pub use graph::layout;
 pub use log::{
     branches, get_pushed_shas, get_refs_map, log, log_with_state, parse_branches_output,
     parse_log_output, parse_tracking,
 };
 pub use model::{
-    BackupRef, BranchInfo, BranchList, Choice, Commit, ConflictBlock, ConflictChoice, ConflictFile,
-    ConflictSide, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind, FileState, GraphRow,
-    GraphState, Hunk, LocalBranch, LogFilter, LogPage, OpKind, OpResult, OpState, OpStateKind,
-    PullMode, RebaseAction, RebaseItem, RebasePlan, RebaseState, RebaseStateKind, RefKind,
-    RefLabel, Remote, RemoteBranch, RepoStatus, ResetMode, StatusEntry, StopKind, StopReason,
-    TagRef,
+    BackupRef, BranchInfo, BranchList, Choice, Commit, CommitFile, ConflictBlock, ConflictChoice,
+    ConflictFile, ConflictSide, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind, FileState,
+    GraphRow, GraphState, Hunk, LocalBranch, LogFilter, LogPage, OpKind, OpResult, OpState,
+    OpStateKind, PullMode, RebaseAction, RebaseItem, RebasePlan, RebaseState, RebaseStateKind,
+    RefKind, RefLabel, Remote, RemoteBranch, RepoStatus, ResetMode, StatusEntry, StopKind,
+    StopReason, TagRef,
 };
 pub use ops::{
     branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,

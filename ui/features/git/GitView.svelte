@@ -1,12 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { gitStore } from './git.svelte.ts';
+  import { gitStore } from './git.svelte';
   import CommitPanel from './CommitPanel.svelte';
   import DiffView from './DiffView.svelte';
+  import BranchPanel from './BranchPanel.svelte';
+  import LogView from './LogView.svelte';
+  import CommitDetail from './CommitDetail.svelte';
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
 
-  let activeSubTab = $state<'commit' | 'log'>('commit');
+  let activeSubTab = $state<'commit' | 'log'>(
+    typeof window !== 'undefined' && (window.location.search.includes('log') || window.location.search.includes('sub=log'))
+      ? 'log'
+      : 'commit'
+  );
 
   $effect(() => {
     if (folderPath && folderPath !== gitStore.root) {
@@ -76,20 +83,54 @@
         <DiffView />
       </div>
     {:else}
-      <div class="log-placeholder">
-        <div class="placeholder-icon">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="1.8" stroke-linecap="round">
-            <circle cx="6" cy="5" r="2"></circle>
-            <circle cx="6" cy="19" r="2"></circle>
-            <circle cx="18" cy="7" r="2"></circle>
-            <path d="M6 7v10M18 9c0 5-6 4-12 8"></path>
-          </svg>
-        </div>
-        <div class="placeholder-title">Git Log & Graph</div>
-        <div class="placeholder-desc">Log view akan hadir di P3.6</div>
+      <div class="log-layout">
+        <BranchPanel onSelectTab={(t) => (activeSubTab = t)} />
+        <LogView />
+        <CommitDetail />
       </div>
     {/if}
   </div>
+
+  <!-- Commit File Diff Modal / Overlay -->
+  {#if gitStore.commitDiffOpen && gitStore.commitDiffFile}
+    <div
+      class="commit-diff-modal-backdrop"
+      onclick={() => gitStore.closeCommitDiff()}
+      onkeydown={(e) => e.key === 'Escape' && gitStore.closeCommitDiff()}
+      role="button"
+      tabindex="0"
+    >
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="commit-diff-modal"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        role="dialog"
+        tabindex="-1"
+      >
+        <div class="modal-header">
+          <div class="modal-title">
+            <span class="mono sha">{gitStore.selectedCommitSha?.slice(0, 7)}</span>
+            <span class="modal-path">{gitStore.commitDiffPath}</span>
+          </div>
+          <button
+            class="modal-close-btn"
+            onclick={() => gitStore.closeCommitDiff()}
+            title="Close diff view"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <DiffView
+            diffFile={gitStore.commitDiffFile}
+            sourceKind="commit"
+            filePath={gitStore.commitDiffPath}
+          />
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -192,33 +233,97 @@
     overflow: hidden;
   }
 
-  .log-placeholder {
+  .log-layout {
     flex: 1;
     display: flex;
-    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+
+  .commit-diff-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    color: #8b8f98;
+    padding: 24px;
+    backdrop-filter: blur(2px);
   }
 
-  .placeholder-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 32px;
-    background: #1f2a3d;
+  .commit-diff-modal {
+    width: 90vw;
+    max-width: 1200px;
+    height: 85vh;
+    background: #141518;
+    border: 1px solid #34363d;
+    border-radius: 10px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-header {
+    height: 44px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111215;
+    border-bottom: 1px solid #26282d;
+    flex-shrink: 0;
+  }
+
+  .modal-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .modal-title .sha {
+    color: #9cc3ff;
+    font-size: 12px;
+  }
+
+  .modal-path {
+    color: #e6e7ea;
+    font-weight: 500;
+  }
+
+  .modal-close-btn {
+    width: 28px;
+    height: 28px;
     display: grid;
     place-items: center;
-  }
-
-  .placeholder-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #d8d9dc;
-  }
-
-  .placeholder-desc {
-    font-size: 13px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
     color: #8b8f98;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .modal-close-btn:hover {
+    background: #23252b;
+    color: #ffffff;
+  }
+
+  .modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
 </style>

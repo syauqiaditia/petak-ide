@@ -147,7 +147,15 @@ export interface LspStatusPayload {
   state: 'starting' | 'ready' | 'stopped' | 'crashed';
 }
 
-import type { GitRepoStatus, GitDiffOpts, GitDiffFile } from '../features/git/types';
+import type {
+  GitRepoStatus,
+  GitDiffOpts,
+  GitDiffFile,
+  GitLogFilter,
+  GitLogPage,
+  GitBranchList,
+  GitCommitFile,
+} from '../features/git/types';
 export * from '../features/git/types';
 
 export const api = {
@@ -215,6 +223,28 @@ export const api = {
 
   gitLastMessage(root: string): Promise<string | null> {
     return invoke<string | null>('git_last_message', { root });
+  },
+
+  gitLog(
+    root: string,
+    filter?: GitLogFilter,
+    cursor?: number,
+    limit?: number
+  ): Promise<GitLogPage> {
+    return invoke<GitLogPage>('git_log', {
+      root,
+      filter: filter ?? null,
+      cursor: cursor ?? null,
+      limit: limit ?? null,
+    });
+  },
+
+  gitBranches(root: string): Promise<GitBranchList> {
+    return invoke<GitBranchList>('git_branches', { root });
+  },
+
+  gitCommitFiles(root: string, sha: string): Promise<GitCommitFile[]> {
+    return invoke<GitCommitFile[]>('git_commit_files', { root, sha });
   },
 
   recentFolders(): Promise<string[]> {

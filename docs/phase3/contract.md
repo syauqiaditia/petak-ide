@@ -15,6 +15,9 @@ Seluruh model data memakai serde `rename_all = "camelCase"` dari `petak_core::gi
 | `git_unstage_hunk` | `git_unstage_hunk` | `root: String`, `path: String`, `hunk_index: usize` (`hunkIndex`) | `()` / `void` | Diff staged file → build patch hunk → `git apply --cached --reverse` |
 | `git_commit` | `git_commit` | `root: String`, `message: String`, `amend: bool` | `String` / `string` | `git commit [-amend] -F -` |
 | `git_last_message` | `git_last_message` | `root: String` | `Option<String>` / `string \| null` | `git log -1 --format=%B` (null jika repo kosong) |
+| `git_log` | `git_log` | `root: String`, `filter: Option<LogFilter>`, `cursor: Option<usize>`, `limit: Option<usize>` | `petak_core::git::LogPage` / `GitLogPage` | Paged log dengan layout lane graph |
+| `git_branches` | `git_branches` | `root: String` | `petak_core::git::BranchList` / `GitBranchList` | Local branches, remote branches, dan tags dalam 1 panggilan |
+| `git_commit_files` | `git_commit_files` | `root: String`, `sha: String` | `Vec<petak_core::git::CommitFile>` / `GitCommitFile[]` | Daftar nama file + status perubahan dari `git show --name-status` |
 
 ## 2. Model & Tipe Data
 
@@ -133,5 +136,111 @@ TS (`GitDiffFile`):
   status: GitFileState;
   binary: boolean;
   hunks: GitHunk[];
+}
+```
+
+### CommitFile
+Rust: `petak_core::git::CommitFile`
+```rust
+pub struct CommitFile {
+    pub path: String,
+    pub status: FileState,
+}
+```
+TS (`GitCommitFile`):
+```typescript
+{
+  path: string;
+  status: GitFileState;
+}
+```
+
+### Edge & GraphRow
+Rust: `petak_core::git::{Edge, GraphRow, EdgeKind}`
+TS (`GitEdge`, `GitGraphRow`):
+```typescript
+type GitEdgeKind = 'straight' | 'mergeIn' | 'branchOut';
+
+interface GitEdge {
+  from: number;
+  to: number;
+  kind: GitEdgeKind;
+  color: number;
+}
+
+interface GitGraphRow {
+  lane: number;
+  color: number;
+  edges: GitEdge[];
+}
+```
+
+### Commit & LogPage
+Rust: `petak_core::git::{Commit, RefLabel, RefKind, LogPage, LogFilter}`
+TS (`GitCommit`, `GitLogPage`, `GitLogFilter`):
+```typescript
+type GitRefKind = 'head' | 'branch' | 'remote' | 'tag';
+
+interface GitRefLabel {
+  kind: GitRefKind;
+  name: string;
+  isCurrent: boolean;
+}
+
+interface GitCommit {
+  sha: string;
+  shortSha: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  authorTime: number;
+  subject: string;
+  refs: GitRefLabel[];
+  pushed: boolean;
+}
+
+interface GitLogPage {
+  commits: GitCommit[];
+  graph: GitGraphRow[];
+  nextCursor: number | null;
+}
+
+interface GitLogFilter {
+  branches?: string[];
+  author?: string;
+  since?: string;
+  until?: string;
+  path?: string;
+  text?: string;
+}
+```
+
+### BranchList
+Rust: `petak_core::git::{BranchList, LocalBranch, RemoteBranch, TagRef}`
+TS (`GitBranchList`):
+```typescript
+interface GitLocalBranch {
+  name: string;
+  upstream?: string | null;
+  ahead: number;
+  behind: number;
+  isCurrent: boolean;
+  sha: string;
+}
+
+interface GitRemoteBranch {
+  name: string;
+  sha: string;
+}
+
+interface GitTagRef {
+  name: string;
+  sha: string;
+}
+
+interface GitBranchList {
+  local: GitLocalBranch[];
+  remote: GitRemoteBranch[];
+  tags: GitTagRef[];
 }
 ```

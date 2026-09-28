@@ -62,3 +62,83 @@ export interface GitDiffOpts {
   path?: string;
   ignoreWs?: boolean;
 }
+
+export interface GitCommitFile {
+  path: string;
+  status: GitFileState;
+}
+
+export type GitRefKind = 'head' | 'branch' | 'remote' | 'tag';
+
+export interface GitRefLabel {
+  kind: GitRefKind;
+  name: string;
+  isCurrent: boolean;
+}
+
+export interface GitCommit {
+  sha: string;
+  shortSha: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  authorTime: number;
+  subject: string;
+  refs: GitRefLabel[];
+  pushed: boolean;
+}
+
+export type GitEdgeKind = 'straight' | 'mergeIn' | 'branchOut';
+
+export interface GitEdge {
+  from: number;
+  to: number;
+  kind: GitEdgeKind;
+  color: number;
+}
+
+export interface GitGraphRow {
+  lane: number;
+  color: number;
+  edges: GitEdge[];
+}
+
+export interface GitLogPage {
+  commits: GitCommit[];
+  graph: GitGraphRow[];
+  nextCursor: number | null;
+}
+
+export interface GitLocalBranch {
+  name: string;
+  upstream?: string | null;
+  ahead: number;
+  behind: number;
+  isCurrent: boolean;
+  sha: string;
+}
+
+export interface GitRemoteBranch {
+  name: string;
+  sha: string;
+}
+
+export interface GitTagRef {
+  name: string;
+  sha: string;
+}
+
+export interface GitBranchList {
+  local: GitLocalBranch[];
+  remote: GitRemoteBranch[];
+  tags: GitTagRef[];
+}
+
+export interface GitLogFilter {
+  branches?: string[];
+  author?: string;
+  since?: string;
+  until?: string;
+  path?: string;
+  text?: string;
+}

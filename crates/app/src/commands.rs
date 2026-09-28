@@ -205,6 +205,50 @@ pub async fn git_last_message(root: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+pub async fn git_log(
+    root: String,
+    filter: Option<petak_core::git::LogFilter>,
+    cursor: Option<usize>,
+    limit: Option<usize>,
+) -> Result<petak_core::git::LogPage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let filt = filter.unwrap_or_default();
+        let skip = cursor.unwrap_or(0);
+        let lim = limit.unwrap_or(50);
+        petak_core::git::log(&exec, repo, &filt, skip, lim).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_branches(root: String) -> Result<petak_core::git::BranchList, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::branches(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_commit_files(
+    root: String,
+    sha: String,
+) -> Result<Vec<petak_core::git::CommitFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::commit_files(&exec, repo, &sha).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub fn recent_folders() -> Result<Vec<String>, String> {
     let recent_path = petak_core::recent::default_recent_path()
         .ok_or_else(|| "Could not determine recent folders path".to_string())?;

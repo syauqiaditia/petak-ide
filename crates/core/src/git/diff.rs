@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::exec::{git, git_raw, Exec, GitError};
-use crate::git::model::{DiffFile, DiffLine, DiffLineKind, FileState, Hunk};
+use crate::git::model::{CommitFile, DiffFile, DiffLine, DiffLineKind, FileState, Hunk};
 
 pub fn diff_worktree(
     exec: &dyn Exec,
@@ -97,6 +97,47 @@ pub fn diff_commit(
     }
     let stdout = git(exec, repo, &args)?;
     Ok(parse_diff(&stdout))
+}
+
+pub fn commit_files(
+    exec: &dyn Exec,
+    repo: &Path,
+    sha: &str,
+) -> Result<Vec<CommitFile>, GitError> {
+    let stdout = git(exec, repo, &["show", "--name-status", "--format=", sha])?;
+    Ok(parse_name_status(&stdout))
+}
+
+pub fn parse_name_status(raw: &str) -> Vec<CommitFile> {
+    let mut files = Vec::new();
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.is_empty() {
+            continue;
+        }
+        let code = parts[0].chars().next().unwrap_or('M');
+        let status = match code {
+            'A' => FileState::Added,
+            'D' => FileState::Deleted,
+            'R' => FileState::Renamed,
+            'C' => FileState::Copied,
+            'T' => FileState::TypeChanged,
+            _ => FileState::Modified,
+        };
+        let path = if parts.len() >= 3 {
+            parts[2].to_string()
+        } else if parts.len() >= 2 {
+            parts[1].to_string()
+        } else {
+            continue;
+        };
+        files.push(CommitFile { path, status });
+    }
+    files
 }
 
 pub fn parse_diff(raw: &str) -> Vec<DiffFile> {
@@ -492,5 +533,20 @@ index 20cbb4d..cbb96cb 100644
         assert_eq!(h.lines[1].new_no, None);
         assert_eq!(h.lines[2].kind, DiffLineKind::Add);
         assert_eq!(h.lines[3].kind, DiffLineKind::NoNewline);
+    }
+
+    #[test]
+    fn test_parse_name_status() {
+        let raw = "M\tsrc/main.rs\nA\tREADME.md\nD\told.txt\nR100\told_dir/a.txt\tnew_dir/b.txt\n";
+        let files = parse_name_status(raw);
+        assert_eq!(files.len(), 4);
+        assert_eq!(files[0].path, "src/main.rs");
+        assert_eq!(files[0].status, FileState::Modified);
+        assert_eq!(files[1].path, "README.md");
+        assert_eq!(files[1].status, FileState::Added);
+        assert_eq!(files[2].path, "old.txt");
+        assert_eq!(files[2].status, FileState::Deleted);
+        assert_eq!(files[3].path, "new_dir/b.txt");
+        assert_eq!(files[3].status, FileState::Renamed);
     }
 }
