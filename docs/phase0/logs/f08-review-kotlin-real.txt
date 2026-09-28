@@ -1,0 +1,9 @@
+F0.8 review re-run: fwcd kotlin-language-server on real Android project (architecture-samples, Mac M2)
+Command: node /tmp/f06-kotlin-test.mjs ~/.local/kotlin-language-server/server/bin/kotlin-language-server -- /tmp/petak-kotlin-test /tmp/petak-kotlin-test/app/src/main/java/.../TodoActivity.kt 120 fwcd-real-reverify
+=== fwcd-real-reverify ===
+initialized OK (15792ms)
+diagnostics! (1 items, 24235ms)
+  - Type mismatch: inferred type is String but Int was expected
+peakRSSMB: 917.4
+(stderr "Bus is already disposed" at shutdown, same non-fatal pattern as F0.6 log)
+Compare vs F0.6 claim: init 15193ms/diag 23682ms/RSS 849.2MB — consistent (<10% diff), error correctly detected.

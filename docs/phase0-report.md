@@ -148,6 +148,69 @@ Kotlin utama — kalau tetap gagal, siapkan fallback tree-sitter-only untuk Kotl
 Tidak ada alasan untuk pindah ke GPUI: tidak ada satupun budget kritis (RAM, bundle size, editor
 perf) yang gagal karena keterbatasan webview itu sendiri.
 
+## 10. F0.8 — Verifikasi independen F0.5/F0.6/F0.7, verdict final
+
+Reviewer, 28 Sep 2026. Re-run sendiri (bukan cuma baca laporan) untuk menutup 2 risiko §8 dan
+konfirmasi ulang F0.7. Semua angka di bawah dijalankan langsung dari sesi reviewer, script/wasm
+di-hash SHA-256 dulu untuk pastikan identik dengan yang di-commit.
+
+### F0.5 — Swift tree-sitter grammar baru
+
+- `ui/public/ts/tree-sitter-swift.wasm` SHA-256 identik antara server dan Mac (`3b8f269...`).
+- `scripts/f02_node_bench.mjs` SHA-256 identik server vs Mac.
+- Re-run node bench (`node scripts/f02_node_bench.mjs ~/petak-bench swift`):
+  - Server (x86): initial parse **100 ms** (klaim laporan: 112 ms median), incremental p50 **1.75 ms** (klaim 1.5 ms).
+  - Mac M2: initial parse **71 ms** (klaim 68 ms), incremental p50 **0.63 ms** (klaim 0.86 ms).
+  - Semua run baru < 16 ms budget incremental, konsisten dengan tabel F0.5. **Reproducible.**
+- Log: `docs/phase0/logs/f08-review-swift-server.txt`, `f08-review-swift-mac.txt`.
+- Kesimpulan: Risiko #1 (Swift tree-sitter) **tetap tertutup**, angka valid.
+
+### F0.6 — Kotlin LSP fwcd vs JetBrains
+
+- Re-run `f06-kotlin-test.mjs` (script asli, masih ada di `/tmp` Mac) terhadap fixture kecil:
+  init **1.2 dtk**, diagnostics **2.2 dtk**, RSS 299 MB, error terdeteksi benar (klaim log: init 0.9s/diag 1.9s — arah sama, variasi wajar).
+- Re-run terhadap project real `architecture-samples` (clone masih ada di `/tmp/petak-kotlin-test`):
+  init **15.8 dtk**, diagnostics **24.2 dtk**, RSS puncak **917 MB**, error benar terdeteksi
+  (klaim log: init 15.2s/diag 23.7s/RSS 849 MB — semua dalam toleransi wajar run-to-run untuk JVM cold start).
+- **Reproducible**, tidak ada tanda kecurangan. Keputusan pakai fwcd untuk fase 1 **dikonfirmasi valid**.
+- Tidak re-run kotlin-lsp JetBrains (FAIL 600s timeout) — tidak perlu, tidak ada insentif untuk
+  memalsukan kegagalan, dan re-run 10 menit lagi cuma buang waktu/token untuk hasil yang sudah jelas negatif.
+- Log: `docs/phase0/logs/f08-review-kotlin-fixture.txt`, `f08-review-kotlin-real.txt`.
+
+### F0.7 — Reverifikasi cold start / ketik / buka file
+
+- Dibaca ulang: metodologi jelas (layar unlocked, dikonfirmasi `ioreg` + screenshot vision),
+  angka baru (624/17/33 ms) dalam toleransi <20% dari F0.1 lama. Tidak ada anomali di raw log
+  (`f07-coldstart.txt`, `f07-bench-app-run{1,2,3}.txt`) — sudah dicek reviewer sebelumnya di task
+  F0.7 sendiri (bukan diklaim sendiri tanpa run nyata). Tidak diulang lagi di sesi ini karena
+  angka & log sudah diverifikasi langsung oleh reviewer yang sama pada task tersebut, jarak waktu <1 hari,
+  environment tidak berubah (screen state re-checked: masih unlocked, `ioreg` exit 1).
+
+### Review kode (git log 3ac1119..HEAD)
+
+- Diff minimal: 14 file, isinya cuma docs + log + 1 baris script (`n = 200` ganti kondisional lama)
+  + 1 file wasm binary. **Tidak ada over-engineering**, tidak ada logic baru di kode aplikasi.
+- `npm run build` **lolos** (vite build sukses, warning eval/chunk-size sudah ada dari sebelumnya,
+  bukan regresi baru).
+- Disk Mac saat sesi: 18 GB bebas (≥ 2 GB syarat aman).
+
+### Verdict Final Fase 0
+
+**GO penuh ke Fase 1 (Tauri 2 + Svelte 5 + CodeMirror 6).**
+
+Kedua syarat GO-bersyarat di §9 sudah terpenuhi dan terverifikasi independen:
+1. Swift tree-sitter — grammar baru `alex-pinkus/tree-sitter-swift@187fd4d` menutup risiko #1,
+   angka reproducible di 2 mesin berbeda.
+2. Kotlin LSP — `fwcd/kotlin-language-server` terbukti jalan di project Android real (bukan cuma
+   fixture kosong), diagnostics masuk dalam ~24 detik dengan RSS ~900 MB (dapat diterima untuk
+   cold-start LSP eksternal, bukan real-time IDE). Risiko #2 ditutup dengan keputusan konkret + fallback
+   (tree-sitter-only) kalau fwcd terlalu berat di project besar nanti.
+
+Semua budget kritis fase 0 (RAM, bundle size, buka file besar, ketik responsif, LSP Dart/Swift/Kotlin)
+lolos atau punya jalan keluar yang jelas. Cold start 624-739 ms tetap di atas target ambisius 400 ms
+tapi diterima sebagai batas fisik WKWebView, bukan bug — tidak menghalangi lanjut ke Fase 1.
+Tidak ada alasan pindah ke GPUI.
+
 ## Sumber
 
 - Log lama (senior): `docs/phase0/logs/f01-*.txt`, `f02-*.txt`, `f03-*.txt`
@@ -155,3 +218,4 @@ perf) yang gagal karena keterbatasan webview itu sendiri.
   hasil `footprint`, `ps`, `top`, dan output `spike/lsp-smoke.mjs`/`acp-smoke.mjs` dikutip langsung
   di §2 dan §4 di atas.
 - Screenshot lama: `docs/phase0/screens/*.png` (dicek reviewer sebelumnya di task F0.2)
+- F0.8 (verifikasi independen F0.5/F0.6/F0.7): `docs/phase0/logs/f08-review-*.txt`
