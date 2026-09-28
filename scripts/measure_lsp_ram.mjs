@@ -29,7 +29,7 @@ dartSend({
   method: 'initialize',
   params: {
     processId: process.pid,
-    rootUri: 'file:///mnt/storage/flutter-uqi/examples/hello_world',
+    rootUri: 'file://' + path.resolve('spike/fixtures/dart'),
     capabilities: {},
   },
 });
@@ -41,7 +41,11 @@ dartProc.kill();
 
 // 2. Measure Kotlin LS RAM
 console.log('\n--- Measuring Kotlin Language Server RAM ---');
-const kotlinCmd = '/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server';
+const kotlinCmd = process.env.PETAK_KOTLIN_LS || '/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server';
+if (!fs.existsSync(kotlinCmd)) {
+  console.log(`Kotlin LS not found at ${kotlinCmd}, skipped (set PETAK_KOTLIN_LS)`);
+  process.exit(0);
+}
 const kotlinProc = spawn(kotlinCmd, [], {
   stdio: ['pipe', 'pipe', 'inherit'],
 });
@@ -57,7 +61,7 @@ kotlinSend({
   method: 'initialize',
   params: {
     processId: process.pid,
-    rootUri: 'file:///mnt/storage/uqi-projects/petak/spike/fixtures/kotlin',
+    rootUri: 'file://' + path.resolve('spike/fixtures/kotlin'),
     capabilities: {},
   },
 });

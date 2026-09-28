@@ -3,8 +3,9 @@ import { EditorState, ChangeSet, Text } from '@codemirror/state';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-const dartFilePath = '/home/uqi/petak-bench/Big10k.dart';
+const dartFilePath = path.join(os.homedir(), 'petak-bench/Big10k.dart');
 const codeText = fs.readFileSync(dartFilePath, 'utf8');
 
 // Initialize web-tree-sitter
