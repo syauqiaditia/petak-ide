@@ -1,3 +1,4 @@
+pub mod exec;
 pub mod fs;
 pub mod git;
 pub mod lsp;

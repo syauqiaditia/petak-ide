@@ -1,3 +1,18 @@
+pub mod diff;
+pub mod model;
+pub mod ops;
+pub mod status;
+
+pub use diff::{diff_commit, diff_staged, diff_worktree, parse_diff};
+pub use model::{
+    BranchInfo, DiffFile, DiffLine, DiffLineKind, FileState, Hunk, RepoStatus, StatusEntry,
+};
+pub use ops::{
+    build_hunk_patch, commit, last_commit_message, stage_files, stage_hunk, unstage_files,
+    unstage_hunk,
+};
+pub use status::{parse_status, status};
+
 use std::fs;
 use std::path::Path;
 
@@ -87,7 +102,8 @@ mod tests {
 
         let head_file = git_dir.join("HEAD");
         let mut f = File::create(&head_file).unwrap();
-        f.write_all(b"b0ea6c855a82390f779a1f1a566190be2d627b0f\n").unwrap();
+        f.write_all(b"b0ea6c855a82390f779a1f1a566190be2d627b0f\n")
+            .unwrap();
 
         let b = branch(temp_dir.path());
         assert_eq!(b, Some("b0ea6c8".to_string()));
