@@ -9,6 +9,12 @@ import {
   type GitBranchList,
   type GitLogFilter,
   type GitCommitFile,
+  type GitBackupRef,
+  type GitOpState,
+  type GitConflictFile,
+  type GitRemote,
+  type GitOpResult,
+  type GitResetMode,
 } from '../../lib/api';
 
 class GitStore {
@@ -45,6 +51,28 @@ class GitStore {
   commitDiffOpen = $state<boolean>(false);
   commitDiffFile = $state<GitDiffFile | null>(null);
   commitDiffPath = $state<string>('');
+
+  // Backup & undo state
+  backups = $state<GitBackupRef[]>([]);
+  backupsLoading = $state<boolean>(false);
+
+  // Op state (rebase / merge / cherry-pick / revert)
+  opState = $state<GitOpState | null>(null);
+
+  // Conflict state
+  conflicts = $state<GitConflictFile[]>([]);
+  conflictsLoading = $state<boolean>(false);
+
+  // Remotes
+  remotes = $state<GitRemote[]>([]);
+
+  // Toast / notification banner with Undo support
+  toast = $state<{
+    message: string;
+    type?: 'info' | 'error' | 'success' | 'warning';
+    backupRef?: string | null;
+  } | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -181,6 +209,12 @@ class GitStore {
       // Also refresh branches and log asynchronously
       this.loadBranches().catch(() => {});
       this.loadLog(true).catch(() => {});
+      this.loadBackups().catch(() => {});
+      this.loadOpState().catch(() => {});
+      this.loadRemotes().catch(() => {});
+      if (this.conflictedEntries.length > 0 || this.opState?.kind !== 'none') {
+        this.loadConflicts().catch(() => {});
+      }
     }
   }
 
@@ -400,6 +434,348 @@ class GitStore {
     this.commitDiffOpen = false;
     this.commitDiffFile = null;
     this.commitDiffPath = '';
+  }
+
+  showToast(
+    message: string,
+    opts?: {
+      type?: 'info' | 'error' | 'success' | 'warning';
+      backupRef?: string | null;
+      duration?: number;
+    }
+  ) {
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = null;
+    }
+    this.toast = {
+      message,
+      type: opts?.type ?? 'info',
+      backupRef: opts?.backupRef ?? null,
+    };
+    const duration = opts?.duration ?? (opts?.backupRef ? 10000 : 5000);
+    this.toastTimer = setTimeout(() => {
+      this.clearToast();
+    }, duration);
+  }
+
+  clearToast() {
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = null;
+    }
+    this.toast = null;
+  }
+
+  async undoBackup(backupRef: string): Promise<void> {
+    if (!this.root || !backupRef) return;
+    try {
+      await api.gitBackupRestore(this.root, backupRef);
+      this.showToast(`Berhasil restore ke backup ${backupRef}`, { type: 'success' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Gagal restore backup: ${e}`, { type: 'error' });
+    }
+  }
+
+  async loadBackups(): Promise<void> {
+    if (!this.root) return;
+    this.backupsLoading = true;
+    try {
+      this.backups = await api.gitBackupList(this.root);
+    } catch (e: any) {
+      console.error('Failed to load backups:', e);
+    } finally {
+      this.backupsLoading = false;
+    }
+  }
+
+  async deleteBackup(name: string): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitBackupDelete(this.root, name);
+      this.showToast(`Backup ${name} dihapus`, { type: 'info' });
+      await this.loadBackups();
+    } catch (e: any) {
+      this.showToast(`Gagal menghapus backup: ${e}`, { type: 'error' });
+    }
+  }
+
+  async restoreBackup(name: string): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitBackupRestore(this.root, name);
+      this.showToast(`Branch berhasil di-reset ke backup ${name}`, { type: 'success' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Gagal reset ke backup: ${e}`, { type: 'error' });
+    }
+  }
+
+  async loadOpState(): Promise<void> {
+    if (!this.root) return;
+    try {
+      const state = await api.gitOpState(this.root);
+      this.opState = state;
+      if (state.kind !== 'none') {
+        await this.loadConflicts();
+      }
+    } catch (e: any) {
+      console.error('Failed to load op state:', e);
+    }
+  }
+
+  async opContinue(): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitOpContinue(this.root);
+      if (res.ok) {
+        this.showToast('Operasi berhasil dilanjutkan', { type: 'success', backupRef: res.backupRef });
+      } else {
+        this.showToast('Operasi terhenti karena ada konflik', { type: 'warning' });
+      }
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Gagal continue: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async opAbort(): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitOpAbort(this.root);
+      this.showToast('Operasi dibatalkan (aborted)', { type: 'info' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Gagal abort: ${e}`, { type: 'error' });
+    }
+  }
+
+  async loadConflicts(): Promise<void> {
+    if (!this.root) return;
+    this.conflictsLoading = true;
+    try {
+      this.conflicts = await api.gitConflicts(this.root);
+    } catch (e: any) {
+      console.error('Failed to load conflicts:', e);
+    } finally {
+      this.conflictsLoading = false;
+    }
+  }
+
+  async loadRemotes(): Promise<void> {
+    if (!this.root) return;
+    try {
+      this.remotes = await api.gitRemotes(this.root);
+    } catch (e: any) {
+      console.error('Failed to load remotes:', e);
+    }
+  }
+
+  async fetchRemote(remote?: string): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitFetch(this.root, remote);
+      this.showToast('Fetch selesai: update remote diterima', { type: 'success' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Fetch error: ${e}`, { type: 'error' });
+    }
+  }
+
+  async pullRemote(mode: 'rebase' | 'merge'): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitPull(this.root, mode);
+      if (res.ok) {
+        this.showToast(`Pull (${mode}) berhasil`, { type: 'success' });
+      } else {
+        this.showToast(`Pull berhenti: ada konflik`, { type: 'warning' });
+      }
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Pull error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async pushRemote(
+    remote: string,
+    branch: string,
+    setUpstream: boolean,
+    forceWithLease: boolean
+  ): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitPush(this.root, remote, branch, setUpstream, forceWithLease);
+      this.showToast(`Push ke ${remote}/${branch} berhasil`, { type: 'success' });
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Push error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async branchCheckout(name: string): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitBranchCheckout(this.root, name);
+      this.showToast(`Switched to branch '${name}'`, { type: 'success' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Checkout error: ${e}`, { type: 'error' });
+    }
+  }
+
+  async branchCreate(name: string, startPoint?: string | null): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitBranchCreate(this.root, name, startPoint);
+      this.showToast(`Branch '${name}' berhasil dibuat`, { type: 'success' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Create branch error: ${e}`, { type: 'error' });
+    }
+  }
+
+  async branchDelete(name: string, force = false): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitBranchDelete(this.root, name, force);
+      this.showToast(`Branch '${name}' dihapus`, { type: 'info' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Delete branch error: ${e}`, { type: 'error' });
+    }
+  }
+
+  async branchRename(oldName: string, newName: string): Promise<void> {
+    if (!this.root) return;
+    try {
+      await api.gitBranchRename(this.root, oldName, newName);
+      this.showToast(`Branch di-rename: '${oldName}' → '${newName}'`, { type: 'success' });
+      await this.refresh();
+    } catch (e: any) {
+      this.showToast(`Rename branch error: ${e}`, { type: 'error' });
+    }
+  }
+
+  async squashCommits(shas: string[], message: string): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitSquash(this.root, shas, message);
+      this.showToast(`Berhasil squash ${shas.length} commit`, {
+        type: 'success',
+        backupRef: res.backupRef,
+      });
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Squash error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async rewordCommit(sha: string, message: string): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitReword(this.root, sha, message);
+      this.showToast(`Commit message diubah`, {
+        type: 'success',
+        backupRef: res.backupRef,
+      });
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Reword error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async fixupCommit(sha: string): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitFixup(this.root, sha);
+      this.showToast(`Fixup ke commit sebelumnya berhasil`, {
+        type: 'success',
+        backupRef: res.backupRef,
+      });
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Fixup error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async dropCommits(shas: string[]): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitDrop(this.root, shas);
+      this.showToast(`${shas.length} commit dihapus (dropped)`, {
+        type: 'info',
+        backupRef: res.backupRef,
+      });
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Drop error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async resetBranch(sha: string, mode: GitResetMode): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitReset(this.root, sha, mode);
+      this.showToast(`Reset (${mode}) ke ${sha.slice(0, 7)} berhasil`, {
+        type: 'info',
+        backupRef: res.backupRef,
+      });
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Reset error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async cherryPickCommits(shas: string[]): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitCherryPick(this.root, shas);
+      if (res.ok) {
+        this.showToast(`Cherry-pick ${shas.length} commit berhasil`, { type: 'success' });
+      } else {
+        this.showToast(`Cherry-pick berhenti: ada konflik`, { type: 'warning' });
+      }
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Cherry-pick error: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async revertCommits(shas: string[]): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitRevert(this.root, shas);
+      if (res.ok) {
+        this.showToast(`Revert ${shas.length} commit berhasil`, { type: 'success' });
+      } else {
+        this.showToast(`Revert berhenti: ada konflik`, { type: 'warning' });
+      }
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Revert error: ${e}`, { type: 'error' });
+      throw e;
+    }
   }
 }
 
