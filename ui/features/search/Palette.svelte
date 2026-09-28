@@ -8,6 +8,7 @@
     folderPath = '',
     recentFiles = [],
     actions = [],
+    initialQuery = '',
     onClose,
     onOpenFile,
   } = $props<{
@@ -15,6 +16,7 @@
     folderPath?: string;
     recentFiles?: string[];
     actions?: ActionItem[];
+    initialQuery?: string;
     onClose: () => void;
     onOpenFile: (path: string, line?: number, col?: number) => void;
   }>();
@@ -37,7 +39,7 @@
   $effect(() => {
     currentMode = mode;
     selectedIndex = 0;
-    query = '';
+    query = initialQuery || '';
   });
 
   interface SearchItem {

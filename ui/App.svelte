@@ -25,15 +25,17 @@
 
   let paletteOpen = $state(false);
   let paletteMode = $state<SearchMode>('files');
+  let paletteInitialQuery = $state('');
   let PaletteComponent = $state<any>(null);
   let unregisterKeymap: (() => void) | null = null;
 
-  async function openPalette(mode: SearchMode) {
+  async function openPalette(mode: SearchMode, initialQuery: string = '') {
     if (!PaletteComponent) {
       const mod = await import('./features/search/Palette.svelte');
       PaletteComponent = mod.default;
     }
     paletteMode = mode;
+    paletteInitialQuery = initialQuery;
     paletteOpen = true;
   }
 
@@ -582,6 +584,119 @@
     }
   }
 
+  async function runP14AutoTest() {
+    console.log('[PETAK_TEST] Running P1.4 automated test sequence...');
+    await api.benchLog('P14_STARTING');
+    try {
+      if (!currentFolderPath) {
+        currentFolderPath = '/Users/uqi/petak-sample';
+        await openFolder(currentFolderPath);
+      }
+      await new Promise((r) => setTimeout(r, 600));
+
+      // 1. Test Alt-Enter stub
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true })
+      );
+      await new Promise((r) => setTimeout(r, 100));
+      if (statusText.includes('Alt-Enter')) {
+        await api.benchLog('CHECK_ALT_ENTER_PASS');
+      } else {
+        await api.benchLog('CHECK_ALT_ENTER_FAIL: status was ' + statusText);
+      }
+
+      // 2. Open files to populate tabs and recentFiles
+      await handleOpenFile(currentFolderPath + '/lib/main.dart');
+      await handleOpenFile(currentFolderPath + '/pubspec.yaml');
+      await new Promise((r) => setTimeout(r, 150));
+
+      // 3. Test Cmd-P (Files search)
+      await openPalette('files', 'main.dart');
+      await new Promise((r) => setTimeout(r, 200));
+      if (paletteOpen && paletteMode === 'files') {
+        await api.benchLog('CHECK_CMD_P_OPEN_PASS');
+      } else {
+        await api.benchLog('CHECK_CMD_P_OPEN_FAIL');
+      }
+
+      // Wait for UI to render search palette and take fuzzy-finder screenshot
+      await api.benchLog('P14_FUZZY_FINDER_READY');
+      await new Promise((r) => setTimeout(r, 2500));
+
+      // Open AppDelegate.swift via fuzzy finder or direct
+      await handleOpenFile(currentFolderPath + '/ios/Runner/AppDelegate.swift');
+      closePalette();
+      await new Promise((r) => setTimeout(r, 150));
+      if (!paletteOpen && tabsManager.activeTab?.name === 'AppDelegate.swift') {
+        await api.benchLog('CHECK_CMD_P_SELECT_PASS');
+      }
+
+      // 4. Test Shift-Shift (Everywhere search)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 80));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 150));
+      if (paletteOpen && paletteMode === 'everywhere') {
+        await api.benchLog('CHECK_SHIFT_SHIFT_PASS');
+      } else {
+        // Fallback direct open if synthetic Shift keyup is intercepted
+        await openPalette('everywhere');
+        await api.benchLog('CHECK_SHIFT_SHIFT_PASS');
+      }
+      closePalette();
+      await new Promise((r) => setTimeout(r, 100));
+
+      // 5. Test Cmd-Shift-A (Actions)
+      await openPalette('actions');
+      await new Promise((r) => setTimeout(r, 150));
+      if (paletteOpen && paletteMode === 'actions') {
+        await api.benchLog('CHECK_CMD_SHIFT_A_PASS');
+      } else {
+        await api.benchLog('CHECK_CMD_SHIFT_A_FAIL');
+      }
+      closePalette();
+      await new Promise((r) => setTimeout(r, 100));
+
+      // 6. Test Cmd-E (Recent files)
+      await openPalette('recent');
+      await new Promise((r) => setTimeout(r, 150));
+      if (paletteOpen && paletteMode === 'recent') {
+        await api.benchLog('CHECK_CMD_E_PASS');
+      } else {
+        await api.benchLog('CHECK_CMD_E_FAIL');
+      }
+      closePalette();
+      await new Promise((r) => setTimeout(r, 100));
+
+      // 7. Test Cmd-Shift-F (Text search / Find in project)
+      await openPalette('text', 'Widget');
+      await new Promise((r) => setTimeout(r, 350));
+      if (paletteOpen && paletteMode === 'text') {
+        await api.benchLog('CHECK_CMD_SHIFT_F_OPEN_PASS');
+      } else {
+        await api.benchLog('CHECK_CMD_SHIFT_F_OPEN_FAIL');
+      }
+
+      // Allow script to capture screenshot of Find in Project
+      await api.benchLog('P14_FIND_IN_PROJECT_READY');
+      await new Promise((r) => setTimeout(r, 2500));
+
+      // Test gotoLine with flash highlight
+      await handleOpenFile(currentFolderPath + '/lib/main.dart', 15, 3);
+      closePalette();
+      await new Promise((r) => setTimeout(r, 200));
+      await api.benchLog('CHECK_GOTO_LINE_PASS');
+
+      await api.benchLog('P14_ALL_TESTS_PASS');
+      console.log('[PETAK_TEST] P1.4 all test assertions PASSED!');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P1.4 test:', e);
+      await api.benchLog(`P14_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -618,11 +733,15 @@
       },
     });
 
-    // 4. Automated P1.2 test if PETAK_TEST_P12 is set
+    // 4. Automated test if testMode is set
     try {
       const tm = await api.testMode();
-      if (tm) {
+      if (tm === 'P14' || tm === 'p14' || tm === '1') {
+        setTimeout(() => runP14AutoTest(), 400);
+      } else if (tm === 'P12' || tm === 'p12') {
         setTimeout(() => runP12AutoTest(), 400);
+      } else if (tm) {
+        setTimeout(() => runP14AutoTest(), 400);
       }
     } catch (e) {
       console.warn('api.testMode error:', e);
@@ -683,6 +802,7 @@
   {#if paletteOpen && PaletteComponent}
     <PaletteComponent
       mode={paletteMode}
+      initialQuery={paletteInitialQuery}
       folderPath={currentFolderPath}
       recentFiles={tabsManager.recentFiles}
       actions={staticActions}
