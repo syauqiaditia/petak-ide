@@ -1,51 +1,28 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { api, type Entry } from './lib/api';
+  import { onMount, onDestroy } from 'svelte';
+  import { api, type Entry, type UnlistenFn } from './lib/api';
   import TitleBar from './shell/TitleBar.svelte';
   import Rail from './shell/Rail.svelte';
   import FileTree from './shell/FileTree.svelte';
   import StatusBar from './shell/StatusBar.svelte';
   import Editor from './features/editor/Editor.svelte';
+  import { tabsManager } from './features/editor/tabs.svelte';
   import type { EditorView } from '@codemirror/view';
-
-  // Sample default content from design/Main.html
-  const DEFAULT_CONTENT = `package id.shop.checkout
-
-import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.*
-
-@HiltViewModel
-class CheckoutViewModel @Inject constructor(
-    private val repo: CartRepository,
-) : ViewModel() {
-
-    private val _state = MutableStateFlow(CheckoutState())
-    val state = _state.asStateFlow()
-
-    // Voucher dari input user, divalidasi server
-    fun applyVoucher(code: String) {
-        val total = _state.value.subtotal
-        viewModelScope.launch {
-            repo.applyVoucher(code)
-                .onSuccess { v -> _state.update { it.copy(voucher = v) } }
-                .onFailure { e -> _state.update { it.copy(error = e.message) } }
-        }
-    }
-
-    fun retry() = applyVoucher("HEMAT50")
-}
-`;
+  import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
 
   let currentFolderPath = $state('');
-  let entries = $state<Entry[]>([]);
-  let activeFilename = $state('CheckoutViewModel.kt');
-  let activeFilePath = $state('src/main/kotlin/id/shop/checkout/CheckoutViewModel.kt');
-  let editorContent = $state(DEFAULT_CONTENT);
+  let rootEntries = $state<Entry[]>([]);
+  let recentFolders = $state<string[]>([]);
   let statusText = $state('Ready');
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
 
-  import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
+  let editorComponent: any = null;
+  let fileTreeComponent: any = null;
+  let unlistenFs: UnlistenFn | null = null;
+
+  let activeFilename = $derived(tabsManager.activeTab?.name || '');
+  let activeFilePath = $derived(tabsManager.activeTab?.path || '');
 
   let fileType = $derived(
     activeFilename.endsWith('.kt') || activeFilename.endsWith('.kts') ? 'Kotlin' :
@@ -56,17 +33,30 @@ class CheckoutViewModel @Inject constructor(
     activeFilename.endsWith('.rs') ? 'Rust' :
     activeFilename.endsWith('.svelte') ? 'Svelte' :
     activeFilename.endsWith('.ts') ? 'TypeScript' :
-    activeFilename.endsWith('.md') ? 'Markdown' : 'Plain Text'
+    activeFilename.endsWith('.md') ? 'Markdown' :
+    activeFilename ? 'Plain Text' : 'Empty'
   );
 
-  let editorComponent: any = null;
+  async function openFolder(folderPath: string) {
+    try {
+      const list = await api.listDir(folderPath);
+      currentFolderPath = folderPath;
+      rootEntries = list;
+      recentFolders = await api.addRecentFolder(folderPath);
+      await api.watchRoot(folderPath);
+      statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
+    } catch (e) {
+      console.error('Failed to open folder:', folderPath, e);
+      statusText = 'Failed to open folder';
+      throw e;
+    }
+  }
 
   async function handlePickFolder() {
     try {
       const folder = await api.pickFolder();
       if (folder) {
-        currentFolderPath = folder;
-        entries = await api.listDir(folder);
+        await openFolder(folder);
       }
     } catch (e) {
       console.error('Failed to pick folder:', e);
@@ -75,12 +65,76 @@ class CheckoutViewModel @Inject constructor(
 
   async function handleSelectFile(entry: Entry) {
     try {
+      const existing = tabsManager.tabs.find((t) => t.path === entry.path);
+      if (existing) {
+        tabsManager.setActive(entry.path);
+        return;
+      }
       const text = await api.readFile(entry.path);
-      editorContent = text;
-      activeFilename = entry.name;
-      activeFilePath = entry.path;
+      tabsManager.openTab(entry.path, entry.name, text);
+      statusText = `Opened ${entry.name}`;
     } catch (e) {
-      console.error('Failed to read file:', e);
+      console.error('Failed to read file:', entry.path, e);
+      statusText = `Failed to open ${entry.name}`;
+    }
+  }
+
+  async function handleExternalChange(paths: string[]) {
+    // 1. Check open tabs
+    for (const tab of tabsManager.tabs) {
+      if (paths.includes(tab.path)) {
+        try {
+          const diskContent = await api.readFile(tab.path);
+          // Ignore event from our own save (disk content matches what we saved)
+          if (diskContent === tab.savedContent) {
+            continue;
+          }
+
+          if (!tab.dirty) {
+            // Reload silently
+            tab.savedContent = diskContent;
+            if (tab.path === tabsManager.activePath) {
+              const view = editorComponent?.getEditorView();
+              if (view) {
+                const curSel = view.state.selection;
+                const maxLen = diskContent.length;
+                const newAnchor = Math.min(curSel.main.anchor, maxLen);
+                const newHead = Math.min(curSel.main.head, maxLen);
+                view.dispatch({
+                  changes: { from: 0, to: view.state.doc.length, insert: diskContent },
+                  selection: { anchor: newAnchor, head: newHead },
+                });
+                tab.state = view.state;
+              }
+            } else {
+              tab.state = undefined;
+            }
+            statusText = `Reloaded ${tab.name} from disk`;
+          } else {
+            // Dirty tab -> show conflict bar
+            tab.externalConflict = true;
+            tab.pendingDiskContent = diskContent;
+            statusText = `File ${tab.name} modified on disk (conflict)`;
+          }
+        } catch (e) {
+          console.error('Failed to handle external change for:', tab.path, e);
+        }
+      }
+    }
+
+    // 2. Refresh file tree expanded folders
+    if (fileTreeComponent) {
+      await fileTreeComponent.refreshExpandedFolders(paths);
+    }
+
+    // 3. Refresh root directory if affected
+    if (
+      currentFolderPath &&
+      paths.some((p) => p === currentFolderPath || p.startsWith(currentFolderPath + '/'))
+    ) {
+      try {
+        rootEntries = await api.listDir(currentFolderPath);
+      } catch (_) {}
     }
   }
 
@@ -89,8 +143,6 @@ class CheckoutViewModel @Inject constructor(
     console.log('[PETAK_BENCH] Starting benchmark suite...');
 
     try {
-      // Step 2: Buka file 50k baris
-      // Path: ~/petak-bench/Big50k.kt (resolve homedir or check /tmp/petak-bench or /Users/uqi/petak-bench)
       const possible50kPaths = [
         '/Users/uqi/petak-bench/Big50k.kt',
         '/tmp/petak-bench/Big50k.kt',
@@ -98,13 +150,10 @@ class CheckoutViewModel @Inject constructor(
       let big50kPath = possible50kPaths[0];
 
       console.log('[PETAK_BENCH] Measuring open 50k lines (5 runs)...');
-      activeFilename = 'Big50k.kt';
-      activeFilePath = big50kPath;
       await new Promise((r) => setTimeout(r, 100));
       const openRuns: number[] = [];
 
       for (let run = 0; run < 5; run++) {
-        // Clear editor first
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
@@ -131,7 +180,6 @@ class CheckoutViewModel @Inject constructor(
       );
       console.log(`[PETAK_BENCH] Open 50k median: ${medianOpen.toFixed(2)} ms`);
 
-      // Step 3: Latency ketik di file 10k baris
       const possible10kPaths = [
         '/Users/uqi/petak-bench/Big10k.kt',
         '/tmp/petak-bench/Big10k.kt',
@@ -139,8 +187,6 @@ class CheckoutViewModel @Inject constructor(
       const big10kPath = possible10kPaths[0];
 
       console.log('[PETAK_BENCH] Measuring typing latency on 10k lines (200 insertions)...');
-      activeFilename = 'Big10k.kt';
-      activeFilePath = big10kPath;
       await new Promise((r) => setTimeout(r, 100));
       const content10k = await api.readFile(big10kPath);
       view.dispatch({
@@ -148,13 +194,12 @@ class CheckoutViewModel @Inject constructor(
       });
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-      // Move cursor to middle of file
       const midPos = Math.floor(view.state.doc.length / 2);
       view.dispatch({ selection: { anchor: midPos, head: midPos } });
 
       const typingSamples: number[] = [];
       for (let i = 0; i < 200; i++) {
-        const char = String.fromCharCode(97 + (i % 26)); // 'a'..'z'
+        const char = String.fromCharCode(97 + (i % 26));
         const t0 = performance.now();
         const curPos = view.state.selection.main.head;
         view.dispatch({
@@ -186,10 +231,7 @@ class CheckoutViewModel @Inject constructor(
         `[PETAK_BENCH] Typing latency: p50=${p50.toFixed(2)}ms, p95=${p95.toFixed(2)}ms, max=${max.toFixed(2)}ms`
       );
 
-      // Step 4: F0.2 Tree-sitter Benchmark (Dart, Kotlin, Swift)
       console.log('[PETAK_BENCH] Starting F0.2 Tree-sitter Benchmark...');
-
-      // Signal for RAM measurement before loading WASM grammars
       await api.benchLog(
         JSON.stringify({
           metric: 'f02_signal_before_preload',
@@ -203,7 +245,6 @@ class CheckoutViewModel @Inject constructor(
       const preloadMs = performance.now() - tPreload0;
       console.log(`[PETAK_BENCH] Preloaded 3 WASM grammars in ${preloadMs.toFixed(2)} ms`);
 
-      // Signal for RAM measurement after loading WASM grammars
       await api.benchLog(
         JSON.stringify({
           metric: 'f02_signal_after_preload',
@@ -229,19 +270,13 @@ class CheckoutViewModel @Inject constructor(
         ];
         let filePath = possiblePaths[0];
 
-        // 1. Switch filename
-        activeFilename = langItem.file;
-        activeFilePath = filePath;
         await new Promise((r) => setTimeout(r, 100));
 
-        // Clear editor
         view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-        // Read 10k content
         const content = await api.readFile(filePath);
 
-        // 2. Measure full initial parse
         const plugin = view.plugin(treeSitterPlugin);
         const tInitial0 = performance.now();
         view.dispatch({
@@ -252,18 +287,16 @@ class CheckoutViewModel @Inject constructor(
         const initialParseFullTimeMs = plugin?.lastInitialParseMs || (tInitial1 - tInitial0);
         console.log(`[PETAK_BENCH] ${langItem.name} initial parse: ${initialParseFullTimeMs.toFixed(2)} ms`);
 
-        // 3. Move cursor to middle of file
-        const midPos = Math.floor(view.state.doc.length / 2);
-        view.dispatch({ selection: { anchor: midPos, head: midPos } });
+        const mid = Math.floor(view.state.doc.length / 2);
+        view.dispatch({ selection: { anchor: mid, head: mid } });
         await new Promise((r) => requestAnimationFrame(r));
 
-        // 4. 200x insert 1 character
         const incParseSamples: number[] = [];
         const queryDecoSamples: number[] = [];
         const frameSamples: number[] = [];
 
         for (let i = 0; i < 200; i++) {
-          const char = String.fromCharCode(97 + (i % 26)); // 'a'..'z'
+          const char = String.fromCharCode(97 + (i % 26));
           const t0 = performance.now();
           const curPos = view.state.selection.main.head;
           view.dispatch({
@@ -314,9 +347,6 @@ class CheckoutViewModel @Inject constructor(
             pass_16ms: frameStats.p50 <= 16.0,
           })
         );
-        console.log(
-          `[PETAK_BENCH] ${langItem.name}: Initial=${initialParseFullTimeMs.toFixed(1)}ms, IncP50=${incStats.p50.toFixed(2)}ms, DecoP50=${queryStats.p50.toFixed(2)}ms, FrameP50=${frameStats.p50.toFixed(2)}ms, Pass=${frameStats.p50 <= 16.0}`
-        );
       }
 
       statusText = 'Benchmark complete (idle)';
@@ -351,7 +381,6 @@ class CheckoutViewModel @Inject constructor(
       const bench = await api.benchMode();
       isBench = bench;
       if (bench) {
-        // Run benchmarks automatically
         setTimeout(() => runBenchmark(view), 200);
       }
     } catch (e) {
@@ -360,24 +389,42 @@ class CheckoutViewModel @Inject constructor(
   }
 
   onMount(async () => {
-    // Initial folder auto-load if in petak project
-    const candidates = ['/Users/uqi/petak', '/mnt/storage/uqi-projects/petak', '.'];
-    for (const dir of candidates) {
-      try {
-        const list = await api.listDir(dir);
-        if (list && list.length > 0) {
-          currentFolderPath = dir;
-          entries = list;
-          break;
+    // 1. Listen for filesystem events
+    try {
+      unlistenFs = await api.onFsChanged((payload) => {
+        handleExternalChange(payload.paths);
+      });
+    } catch (e) {
+      console.warn('Failed to listen to fs-changed:', e);
+    }
+
+    // 2. Load recent folders and auto-open first recent folder if available
+    try {
+      const recents = await api.recentFolders();
+      recentFolders = recents;
+      if (recents && recents.length > 0) {
+        try {
+          await openFolder(recents[0]);
+        } catch (e) {
+          console.warn('Could not auto-open recent folder:', recents[0], e);
         }
-      } catch (_) {}
+      }
+    } catch (e) {
+      console.warn('Failed to load recent folders:', e);
+    }
+  });
+
+  onDestroy(() => {
+    if (unlistenFs) {
+      unlistenFs();
+      unlistenFs = null;
     }
   });
 </script>
 
 <div class="app-layout">
   <TitleBar
-    projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'petak' : 'petak'}
+    projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
     branchName="main"
     onPickFolder={handlePickFolder}
   />
@@ -385,18 +432,20 @@ class CheckoutViewModel @Inject constructor(
   <div class="main-body">
     <Rail />
     <FileTree
-      {entries}
+      bind:this={fileTreeComponent}
+      {rootEntries}
       folderPath={currentFolderPath}
       {activeFilePath}
+      {recentFolders}
       onPickFolder={handlePickFolder}
       onSelectFile={handleSelectFile}
+      onOpenRecent={openFolder}
     />
     <Editor
       bind:this={editorComponent}
-      content={editorContent}
-      filename={activeFilename}
-      filepath={activeFilePath}
       onReady={onEditorReady}
+      onCursorChange={(c) => (cursorInfo = c)}
+      onStatusChange={(s) => (statusText = s)}
     />
   </div>
 

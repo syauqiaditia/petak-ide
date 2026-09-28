@@ -1,74 +1,184 @@
 <script lang="ts">
-  import type { Entry } from '../lib/api';
+  import { api, type Entry } from '../lib/api';
 
   let {
-    entries = [],
+    rootEntries = [],
     activeFilePath = '',
     folderPath = '',
+    recentFolders = [],
     onSelectFile,
     onPickFolder,
+    onOpenRecent,
   } = $props<{
-    entries?: Entry[];
+    rootEntries?: Entry[];
     activeFilePath?: string;
     folderPath?: string;
+    recentFolders?: string[];
     onSelectFile?: (entry: Entry) => void;
     onPickFolder?: () => void;
+    onOpenRecent?: (path: string) => void;
   }>();
+
+  let expanded = $state<Record<string, boolean>>({});
+  let childrenCache = $state<Record<string, Entry[]>>({});
+  let loading = $state<Record<string, boolean>>({});
 
   let folderLeaf = $derived(
     folderPath ? folderPath.split('/').filter(Boolean).pop() || 'Project' : 'No Folder Open'
   );
+
+  async function toggleFolder(entry: Entry) {
+    const path = entry.path;
+    if (expanded[path]) {
+      expanded[path] = false;
+    } else {
+      if (!childrenCache[path]) {
+        loading[path] = true;
+        try {
+          const items = await api.listDir(path);
+          childrenCache[path] = items;
+        } catch (e) {
+          console.error('Failed to list directory:', path, e);
+        } finally {
+          loading[path] = false;
+        }
+      }
+      expanded[path] = true;
+    }
+  }
+
+  export async function refreshExpandedFolders(changedPaths: string[]) {
+    // If any expanded folder contains a changed path, re-fetch it
+    for (const p of Object.keys(childrenCache)) {
+      if (expanded[p]) {
+        const affected = changedPaths.some((cp) => cp === p || cp.startsWith(p + '/'));
+        if (affected) {
+          try {
+            childrenCache[p] = await api.listDir(p);
+          } catch (e) {
+            console.error('Failed to refresh folder:', p, e);
+          }
+        }
+      }
+    }
+  }
+
+  function getFileColor(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.kt') || lower.endsWith('.kts')) return '#7fc98f';
+    if (lower.endsWith('.dart')) return '#2aacb8';
+    if (lower.endsWith('.swift')) return '#cf8e6d';
+    if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return '#b3ae60';
+    if (lower.endsWith('.json')) return '#e8b45a';
+    if (lower.endsWith('.xml')) return '#8b8f98';
+    if (lower.endsWith('.md')) return '#6ea8ff';
+    return '#8b8f98';
+  }
 </script>
 
 <div class="file-tree">
   <div class="header">
     <span class="header-title">PROJECT</span>
     <button class="open-btn" onclick={onPickFolder} title="Open Folder">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
       </svg>
       <span>Open</span>
     </button>
   </div>
 
-  <div class="root-folder">
-    <span class="caret">▾</span>
-    <span class="folder-name">{folderLeaf}</span>
-  </div>
+  {#if folderPath}
+    <div class="root-folder">
+      <span class="caret">▾</span>
+      <span class="folder-name">{folderLeaf}</span>
+    </div>
 
-  <div class="tree-list">
-    {#if entries.length === 0}
-      <div class="empty-state">
-        <span>No files loaded</span>
-        <button class="empty-open-btn" onclick={onPickFolder}>Open a Folder</button>
-      </div>
-    {:else}
-      {#each entries as entry (entry.path)}
-        {#if entry.is_dir}
-          <div class="item dir-item">
-            <span class="item-caret">▾</span>
-            <svg class="item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="1.8">
-              <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-            </svg>
-            <span class="item-name">{entry.name}</span>
+    <div class="tree-list">
+      {#if rootEntries.length === 0}
+        <div class="empty-folder">Empty folder</div>
+      {:else}
+        {#snippet renderEntry(entry: Entry, depth: number)}
+          {@const isExpanded = !!expanded[entry.path]}
+          {@const isDir = entry.is_dir}
+          {@const isActive = entry.path === activeFilePath}
+
+          {#if isDir}
+            <button
+              class="item dir-item"
+              style="padding-left: {8 + depth * 16}px;"
+              onclick={() => toggleFolder(entry)}
+            >
+              <span class="item-caret">{isExpanded ? '▾' : '▸'}</span>
+              {#if isExpanded}
+                <svg class="item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 19h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                  <path d="M3 19l2-8h16l-2 8"></path>
+                </svg>
+              {:else}
+                <svg class="item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                </svg>
+              {/if}
+              <span class="item-name">{entry.name}</span>
+            </button>
+
+            {#if isExpanded}
+              {#if loading[entry.path]}
+                <div class="loading-node" style="padding-left: {8 + (depth + 1) * 16}px;">...</div>
+              {:else if childrenCache[entry.path]}
+                {#each childrenCache[entry.path] as child (child.path)}
+                  {@render renderEntry(child, depth + 1)}
+                {/each}
+              {/if}
+            {/if}
+          {:else}
+            <button
+              class="item file-item"
+              class:active={isActive}
+              style="padding-left: {8 + depth * 16}px;"
+              onclick={() => onSelectFile?.(entry)}
+            >
+              <span class="item-spacer"></span>
+              <svg class="item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={getFileColor(entry.name)} stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span class="item-name">{entry.name}</span>
+            </button>
+          {/if}
+        {/snippet}
+
+        {#each rootEntries as entry (entry.path)}
+          {@render renderEntry(entry, 0)}
+        {/each}
+      {/if}
+    </div>
+  {:else}
+    <div class="empty-state">
+      <span class="empty-label">No folder open</span>
+      <button class="open-folder-btn" onclick={onPickFolder}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+        </svg>
+        <span>Open Folder</span>
+      </button>
+
+      {#if recentFolders && recentFolders.length > 0}
+        <div class="recent-section">
+          <span class="recent-title">RECENT</span>
+          <div class="recent-list">
+            {#each recentFolders as rf}
+              {@const leaf = rf.split('/').filter(Boolean).pop() || rf}
+              <button class="recent-item" onclick={() => onOpenRecent?.(rf)} title={rf}>
+                <span class="recent-name">{leaf}</span>
+                <span class="recent-path">{rf}</span>
+              </button>
+            {/each}
           </div>
-        {:else}
-          <button
-            class="item file-item"
-            class:active={entry.path === activeFilePath}
-            onclick={() => onSelectFile?.(entry)}
-          >
-            <span class="item-spacer"></span>
-            <svg class="item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="1.8">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-            </svg>
-            <span class="item-name">{entry.name}</span>
-          </button>
-        {/if}
-      {/each}
-    {/if}
-  </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -106,6 +216,9 @@
     padding: 2px 6px;
     border-radius: 4px;
     transition: background 0.15s;
+    background: transparent;
+    border: none;
+    cursor: pointer;
   }
   .open-btn:hover {
     background: #1f2a3d;
@@ -118,6 +231,7 @@
     font-size: 13px;
     font-weight: 500;
     color: #e6e7ea;
+    border-bottom: 1px solid #1c1d22;
   }
   .caret {
     color: #8b8f98;
@@ -135,7 +249,6 @@
     align-items: center;
     gap: 6px;
     height: 26px;
-    padding-left: 20px;
     padding-right: 12px;
     font-size: 13px;
     color: #bcbec4;
@@ -144,6 +257,7 @@
     transition: background 0.1s;
     border: none;
     background: transparent;
+    cursor: pointer;
   }
   .item:hover {
     background: #1b1c21;
@@ -156,10 +270,15 @@
   .item-caret {
     font-size: 10px;
     color: #6e727b;
-    width: 10px;
+    width: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
   .item-spacer {
-    width: 10px;
+    width: 12px;
+    flex-shrink: 0;
   }
   .item-icon {
     flex-shrink: 0;
@@ -168,24 +287,93 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 13px;
+  }
+  .loading-node {
+    height: 20px;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    color: #5b5f68;
+  }
+  .empty-folder {
+    padding: 16px;
+    color: #8b8f98;
+    font-size: 12px;
+    text-align: center;
   }
   .empty-state {
     padding: 20px 14px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 10px;
+    align-items: stretch;
+    gap: 12px;
     color: #8b8f98;
-    font-size: 12px;
   }
-  .empty-open-btn {
-    padding: 6px 12px;
+  .empty-label {
+    font-size: 12px;
+    color: #8b8f98;
+    text-align: center;
+  }
+  .open-folder-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 12px;
     border-radius: 6px;
     background: #1f2a3d;
     color: #6ea8ff;
     font-size: 12px;
+    font-weight: 500;
+    border: 1px solid #2a3d5e;
+    cursor: pointer;
+    transition: background 0.15s;
   }
-  .empty-open-btn:hover {
+  .open-folder-btn:hover {
     background: #253652;
+  }
+  .recent-section {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .recent-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: #5b5f68;
+  }
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .recent-item {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: #18191d;
+    border: 1px solid #22242a;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  .recent-item:hover {
+    background: #202227;
+  }
+  .recent-name {
+    font-size: 12px;
+    color: #d8d9dc;
+    font-weight: 500;
+  }
+  .recent-path {
+    font-size: 10px;
+    color: #6e727b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>
