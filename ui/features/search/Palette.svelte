@@ -550,36 +550,18 @@
           >
             {#if item.type === 'action'}
               <div class="item-title">
-                {#each highlightSubstring(item.title, query) as chunk}
-                  {#if chunk.match}
-                    <span class="match-highlight">{chunk.text}</span>
-                  {:else}
-                    <span>{chunk.text}</span>
-                  {/if}
-                {/each}
+                <span class="title-text">{#each highlightSubstring(item.title, query) as chunk}{#if chunk.match}<span class="match-highlight">{chunk.text}</span>{:else}<span>{chunk.text}</span>{/if}{/each}</span>
               </div>
               {#if item.shortcut}
                 <div class="item-shortcut">{item.shortcut}</div>
               {/if}
             {:else if item.type === 'file'}
               <div class="item-title">
-                {#each splitByIndices(item.title, item.indices) as chunk}
-                  {#if chunk.match}
-                    <span class="match-highlight">{chunk.text}</span>
-                  {:else}
-                    <span>{chunk.text}</span>
-                  {/if}
-                {/each}
+                <span class="title-text">{#each splitByIndices(item.title, item.indices) as chunk}{#if chunk.match}<span class="match-highlight">{chunk.text}</span>{:else}<span>{chunk.text}</span>{/if}{/each}</span>
               </div>
             {:else if item.type === 'recent'}
               <div class="item-title">
-                {#each highlightSubstring(item.title, query) as chunk}
-                  {#if chunk.match}
-                    <span class="match-highlight">{chunk.text}</span>
-                  {:else}
-                    <span>{chunk.text}</span>
-                  {/if}
-                {/each}
+                <span class="title-text">{#each highlightSubstring(item.title, query) as chunk}{#if chunk.match}<span class="match-highlight">{chunk.text}</span>{:else}<span>{chunk.text}</span>{/if}{/each}</span>
                 {#if item.subtitle}
                   <span class="item-subtitle">{item.subtitle}</span>
                 {/if}
@@ -587,15 +569,7 @@
             {:else if item.type === 'hit' && item.hit}
               <div class="hit-row">
                 <span class="hit-loc">{item.hit.line}:{item.hit.col}</span>
-                <span class="hit-content">
-                  {#each highlightHit(item.hit.text, query, isRegex, caseSensitive) as chunk}
-                    {#if chunk.match}
-                      <span class="match-highlight">{chunk.text}</span>
-                    {:else}
-                      <span>{chunk.text}</span>
-                    {/if}
-                  {/each}
-                </span>
+                <span class="hit-content"><span class="title-text">{#each highlightHit(item.hit.text, query, isRegex, caseSensitive) as chunk}{#if chunk.match}<span class="match-highlight">{chunk.text}</span>{:else}<span>{chunk.text}</span>{/if}{/each}</span></span>
               </div>
             {/if}
           </div>
@@ -779,6 +753,13 @@
     align-items: center;
     gap: 8px;
     flex: 1;
+    min-width: 0;
+  }
+
+  .title-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .item-subtitle {
@@ -820,6 +801,10 @@
     text-overflow: ellipsis;
     white-space: pre;
     font-size: 12.5px;
+  }
+
+  .hit-content .title-text {
+    white-space: pre;
   }
 
   .match-highlight {
