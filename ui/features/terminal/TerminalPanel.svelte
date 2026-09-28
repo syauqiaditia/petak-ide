@@ -6,7 +6,7 @@
   import '@xterm/xterm/css/xterm.css';
   import ProblemsPanel from '../problems/ProblemsPanel.svelte';
   import { diagnosticsStore } from '../editor/lsp/diagnostics.svelte';
-  import { usagesStore } from '../editor/lsp/nav';
+  import { usagesStore } from '../editor/lsp/nav.svelte';
 
   let {
     folderPath = '',

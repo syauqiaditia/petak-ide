@@ -27,10 +27,10 @@
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
   import { createLspHoverExtension } from './lsp/hover';
-  import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav';
-  import { renameStore, triggerRename, executeRename } from './lsp/rename';
+  import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
+  import { renameStore, triggerRename, executeRename } from './lsp/rename.svelte';
   import { formatDocument } from './lsp/format';
-  import { triggerCodeActions, queueLightbulbCheck } from './lsp/codeAction';
+  import { triggerCodeActions, queueLightbulbCheck } from './lsp/codeAction.svelte';
   import CodeActionPopup from './lsp/CodeActionPopup.svelte';
   import { applyWorkspaceEdit } from './lsp/applyEdit';
 

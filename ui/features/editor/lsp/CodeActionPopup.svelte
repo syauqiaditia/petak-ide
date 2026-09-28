@@ -5,7 +5,7 @@
     applyCodeAction,
     triggerCodeActions,
     type CodeActionItem,
-  } from './codeAction';
+  } from './codeAction.svelte';
 
   let {
     getView,

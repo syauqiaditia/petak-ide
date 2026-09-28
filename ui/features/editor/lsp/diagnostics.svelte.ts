@@ -4,7 +4,7 @@ import { setDiagnostics } from '@codemirror/lint';
 import type { Text } from '@codemirror/state';
 import type { LspDiagnostic } from '../../../lib/api';
 import { lspPosToOffset } from './pos';
-import { populateQuickFixSlot } from './codeAction';
+import { populateQuickFixSlot } from './codeAction.svelte';
 
 export interface FileDiagnostic {
   path: string;
