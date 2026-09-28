@@ -13,6 +13,8 @@ pub fn run() {
             commands::save_file,
             commands::watch_root,
             commands::pick_folder,
+            commands::recent_folders,
+            commands::add_recent_folder,
             commands::mark_ready,
             commands::bench_log,
             commands::bench_mode,

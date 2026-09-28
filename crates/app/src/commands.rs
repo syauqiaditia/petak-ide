@@ -46,6 +46,20 @@ pub fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+pub fn recent_folders() -> Result<Vec<String>, String> {
+    let recent_path = petak_core::recent::default_recent_path()
+        .ok_or_else(|| "Could not determine recent folders path".to_string())?;
+    petak_core::recent::load_recent(&recent_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_recent_folder(path: String) -> Result<Vec<String>, String> {
+    let recent_path = petak_core::recent::default_recent_path()
+        .ok_or_else(|| "Could not determine recent folders path".to_string())?;
+    petak_core::recent::push_recent(&recent_path, &path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn mark_ready(ts_ms: u64) {
     println!("PETAK_READY {}", ts_ms);
 }

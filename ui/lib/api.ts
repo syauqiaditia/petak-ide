@@ -38,6 +38,14 @@ export const api = {
     return invoke<string | null>('pick_folder');
   },
 
+  recentFolders(): Promise<string[]> {
+    return invoke<string[]>('recent_folders');
+  },
+
+  addRecentFolder(path: string): Promise<string[]> {
+    return invoke<string[]>('add_recent_folder', { path });
+  },
+
   markReady(tsMs: number): Promise<void> {
     return invoke('mark_ready', { tsMs });
   },
