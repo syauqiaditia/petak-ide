@@ -112,6 +112,69 @@ fn main() {
                     }));
                 }
             }
+            "test/server_request" => {
+                let p_id = 9001;
+                send(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": p_id,
+                    "method": "window/workDoneProgress/create",
+                    "params": { "token": "p1" }
+                }));
+
+                let mut progress_ok = false;
+                loop {
+                    let resp_body = match decode_one(&mut reader) {
+                        Ok(b) => b,
+                        Err(_) => break,
+                    };
+                    let resp: serde_json::Value = match serde_json::from_slice(&resp_body) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    if resp.get("id").and_then(|i| i.as_i64()) == Some(p_id) {
+                        progress_ok = resp.get("result").map_or(false, |r| r.is_null());
+                        break;
+                    }
+                }
+
+                let c_id = 9002;
+                send(&serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": c_id,
+                    "method": "workspace/configuration",
+                    "params": { "items": [{}, {}] }
+                }));
+
+                let mut config_ok = false;
+                loop {
+                    let resp_body = match decode_one(&mut reader) {
+                        Ok(b) => b,
+                        Err(_) => break,
+                    };
+                    let resp: serde_json::Value = match serde_json::from_slice(&resp_body) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    if resp.get("id").and_then(|i| i.as_i64()) == Some(c_id) {
+                        config_ok = resp
+                            .get("result")
+                            .and_then(|r| r.as_array())
+                            .map_or(false, |arr| arr.len() == 2 && arr.iter().all(|v| v.is_null()));
+                        break;
+                    }
+                }
+
+                if let Some(id) = id {
+                    send(&serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "progress_ok": progress_ok,
+                            "config_ok": config_ok
+                        }
+                    }));
+                }
+            }
             "shutdown" => {
                 if let Some(id) = id {
                     send(&serde_json::json!({

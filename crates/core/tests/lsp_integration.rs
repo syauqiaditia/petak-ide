@@ -2,19 +2,30 @@
 
 use petak_core::lsp::{Clock, Lang, Registry, Server, ServerConfig, ServerEvent};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// Find the fake_lsp binary in the target directory.
+/// Mutex to serialize registry integration tests that modify process environment variables (PETAK_LSP_DART).
+static REGISTRY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Find the fake_lsp binary in the target directory (respecting CARGO_TARGET_DIR if set).
 fn fake_lsp_path() -> String {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.pop(); // crates
-    path.pop(); // workspace root
-    path.push("target");
-    path.push("debug");
-    path.push("examples");
-    path.push("fake_lsp");
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            path.pop(); // crates
+            path.pop(); // workspace root
+            path.push("target");
+            path
+        });
+    let path = target_dir.join("debug").join("examples").join("fake_lsp");
+    if !path.exists() {
+        let _ = std::process::Command::new("cargo")
+            .args(["build", "-p", "petak-core", "--example", "fake_lsp"])
+            .status();
+    }
     assert!(
         path.exists(),
         "fake_lsp not built: run `cargo build --example fake_lsp` first. Path: {}",
@@ -34,10 +45,24 @@ fn server_start_and_shutdown() {
         root_uri: "file:///tmp/test".to_string(),
     };
 
-    let server = Server::start(&config, |_| {}).expect("start server");
+    let crashed = Arc::new(AtomicBool::new(false));
+    let crashed_clone = Arc::clone(&crashed);
+    let server = Server::start(&config, move |event| {
+        if matches!(event, ServerEvent::Crashed) {
+            crashed_clone.store(true, Ordering::SeqCst);
+        }
+    })
+    .expect("start server");
+
     assert!(server.is_alive());
     assert!(server.capabilities.lock().unwrap().is_some());
     server.shutdown();
+
+    std::thread::sleep(Duration::from_millis(50));
+    assert!(
+        !crashed.load(Ordering::SeqCst),
+        "normal shutdown must not trigger Crashed event"
+    );
 }
 
 #[test]
@@ -102,6 +127,32 @@ fn server_request_response() {
     server.shutdown();
 }
 
+#[test]
+fn server_responds_to_server_initiated_requests() {
+    let fake = fake_lsp_path();
+    let config = ServerConfig {
+        command: fake,
+        args: vec![],
+        root_uri: "file:///tmp/test".to_string(),
+    };
+
+    let server = Server::start(&config, |_| {}).expect("start server");
+
+    let res = server
+        .request("test/server_request", &serde_json::json!({}))
+        .expect("request");
+    assert_eq!(
+        res["progress_ok"], true,
+        "workDoneProgress/create should receive null result"
+    );
+    assert_eq!(
+        res["config_ok"], true,
+        "workspace/configuration should receive array of nulls"
+    );
+
+    server.shutdown();
+}
+
 // ── registry.rs tests ──
 
 /// Fake clock for testing idle timeouts.
@@ -139,6 +190,7 @@ fn make_temp_dart_project() -> (tempfile::TempDir, PathBuf) {
 
 #[test]
 fn registry_lazy_start() {
+    let _lock = REGISTRY_TEST_LOCK.lock().unwrap();
     let fake = fake_lsp_path();
     std::env::set_var("PETAK_LSP_DART", &fake);
 
@@ -160,14 +212,19 @@ fn registry_lazy_start() {
     assert_eq!(registry.server_count(), 1);
 
     // Wait for diagnostics
-    std::thread::sleep(Duration::from_millis(300));
-    let evts = events.lock().unwrap();
-    assert!(
-        evts.iter().any(
+    let mut got_diags = false;
+    for _ in 0..50 {
+        let evts = events.lock().unwrap();
+        if evts.iter().any(
             |e| matches!(e, ServerEvent::Notification { method, .. } if method == "textDocument/publishDiagnostics")
-        ),
-        "expected diagnostics notification"
-    );
+        ) {
+            got_diags = true;
+            break;
+        }
+        drop(evts);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(got_diags, "expected diagnostics notification");
 
     registry.shutdown_all();
     std::env::remove_var("PETAK_LSP_DART");
@@ -175,11 +232,18 @@ fn registry_lazy_start() {
 
 #[test]
 fn registry_idle_kill() {
+    let _lock = REGISTRY_TEST_LOCK.lock().unwrap();
     let fake = fake_lsp_path();
     std::env::set_var("PETAK_LSP_DART", &fake);
 
     let clock = Arc::new(FakeClock::new());
-    let registry = Registry::new(clock.clone(), |_, _| {});
+    let crashed = Arc::new(AtomicBool::new(false));
+    let crashed_clone = Arc::clone(&crashed);
+    let registry = Registry::new(clock.clone(), move |_, event| {
+        if matches!(event, ServerEvent::Crashed) {
+            crashed_clone.store(true, Ordering::SeqCst);
+        }
+    });
 
     let (_tmp, file_path) = make_temp_dart_project();
 
@@ -193,12 +257,18 @@ fn registry_idle_kill() {
     registry.tick();
 
     assert_eq!(registry.server_count(), 0);
+    std::thread::sleep(Duration::from_millis(50));
+    assert!(
+        !crashed.load(Ordering::SeqCst),
+        "idle kill must not trigger Crashed event"
+    );
 
     std::env::remove_var("PETAK_LSP_DART");
 }
 
 #[test]
 fn registry_crash_restart_reopens_docs() {
+    let _lock = REGISTRY_TEST_LOCK.lock().unwrap();
     let fake = fake_lsp_path();
 
     // Use a wrapper script: first invocation crashes, second works
@@ -233,11 +303,19 @@ fn registry_crash_restart_reopens_docs() {
 
     let crash_count = Arc::new(AtomicUsize::new(0));
     let crash_count_clone = Arc::clone(&crash_count);
+    let diags_received = Arc::new(Mutex::new(Vec::new()));
+    let diags_clone = Arc::clone(&diags_received);
     let clock = Arc::new(FakeClock::new());
-    let registry = Registry::new(clock.clone(), move |_, event| {
-        if matches!(event, ServerEvent::Crashed) {
+    let registry = Registry::new(clock.clone(), move |_, event| match event {
+        ServerEvent::Crashed => {
             crash_count_clone.fetch_add(1, Ordering::SeqCst);
         }
+        ServerEvent::Notification { method, params }
+            if method == "textDocument/publishDiagnostics" =>
+        {
+            diags_clone.lock().unwrap().push(params);
+        }
+        _ => {}
     });
 
     let (_tmp, file_path) = make_temp_dart_project();
@@ -246,9 +324,23 @@ fn registry_crash_restart_reopens_docs() {
     let _ = registry.did_open(&file_path, Lang::Dart, "void main() {}", None);
 
     // Give server time to crash
-    std::thread::sleep(Duration::from_millis(500));
+    for _ in 0..50 {
+        if crash_count.load(Ordering::SeqCst) > 0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        crash_count.load(Ordering::SeqCst),
+        1,
+        "should have crashed once"
+    );
+
+    // Clear diagnostics collected during initial run (if any)
+    diags_received.lock().unwrap().clear();
 
     // A subsequent request should trigger auto-restart (second run won't crash)
+    // and re-open the tracked document (which triggers textDocument/publishDiagnostics from fake_lsp)
     let result = registry.request(
         &file_path,
         Lang::Dart,
@@ -262,7 +354,122 @@ fn registry_crash_restart_reopens_docs() {
         "request after crash restart should succeed: {:?}",
         result
     );
-    assert!(crash_count.load(Ordering::SeqCst) >= 1, "should have crashed at least once");
+
+    // Assert that the document was reopened: fake_lsp sends publishDiagnostics on didOpen
+    let mut got_reopen_diag = false;
+    let expected_uri = format!("file://{}", file_path.display());
+    for _ in 0..50 {
+        let list = diags_received.lock().unwrap();
+        if list
+            .iter()
+            .any(|p| p.get("uri").and_then(|u| u.as_str()) == Some(&expected_uri))
+        {
+            got_reopen_diag = true;
+            break;
+        }
+        drop(list);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        got_reopen_diag,
+        "tracked doc should have been re-opened after crash restart"
+    );
+
+    registry.shutdown_all();
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(
+        crash_count.load(Ordering::SeqCst),
+        1,
+        "shutdown_all must not increment crash count"
+    );
+
+    std::env::remove_var("PETAK_LSP_DART");
+}
+
+#[test]
+fn registry_crash_restart_on_did_change() {
+    let _lock = REGISTRY_TEST_LOCK.lock().unwrap();
+    let fake = fake_lsp_path();
+
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let counter_file = tmp_dir.path().join("counter");
+    std::fs::write(&counter_file, "0").unwrap();
+
+    let script_path = tmp_dir.path().join("crash_once.sh");
+    let script = format!(
+        "#!/bin/sh\n\
+        COUNT=$(cat \"{}\")\n\
+        if [ \"$COUNT\" = \"0\" ]; then\n\
+          echo 1 > \"{}\"\n\
+          exec \"{}\" --crash-after-init\n\
+        else\n\
+          exec \"{}\"\n\
+        fi\n",
+        counter_file.display(),
+        counter_file.display(),
+        fake,
+        fake
+    );
+    std::fs::write(&script_path, &script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    std::env::set_var("PETAK_LSP_DART", script_path.to_string_lossy().as_ref());
+
+    let crash_count = Arc::new(AtomicUsize::new(0));
+    let crash_count_clone = Arc::clone(&crash_count);
+    let diags_received = Arc::new(Mutex::new(Vec::new()));
+    let diags_clone = Arc::clone(&diags_received);
+    let clock = Arc::new(FakeClock::new());
+    let registry = Registry::new(clock.clone(), move |_, event| match event {
+        ServerEvent::Crashed => {
+            crash_count_clone.fetch_add(1, Ordering::SeqCst);
+        }
+        ServerEvent::Notification { method, params }
+            if method == "textDocument/publishDiagnostics" =>
+        {
+            diags_clone.lock().unwrap().push(params);
+        }
+        _ => {}
+    });
+
+    let (_tmp, file_path) = make_temp_dart_project();
+
+    // First didOpen — triggers crash after init
+    let _ = registry.did_open(&file_path, Lang::Dart, "void main() {}", None);
+
+    for _ in 0..50 {
+        if crash_count.load(Ordering::SeqCst) > 0 {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(crash_count.load(Ordering::SeqCst), 1);
+
+    diags_received.lock().unwrap().clear();
+
+    // did_change on crashed server should restart it, reopen doc, and succeed
+    let change_res = registry.did_change(&file_path, Lang::Dart, 2, "void main() { int x = 1; }", None);
+    assert!(change_res.is_ok(), "did_change after crash should restart and succeed");
+
+    let mut got_reopen_diag = false;
+    let expected_uri = format!("file://{}", file_path.display());
+    for _ in 0..50 {
+        let list = diags_received.lock().unwrap();
+        if list
+            .iter()
+            .any(|p| p.get("uri").and_then(|u| u.as_str()) == Some(&expected_uri))
+        {
+            got_reopen_diag = true;
+            break;
+        }
+        drop(list);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(got_reopen_diag, "doc should have been re-opened on did_change restart");
 
     registry.shutdown_all();
     std::env::remove_var("PETAK_LSP_DART");

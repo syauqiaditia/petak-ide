@@ -34,9 +34,11 @@ pub struct ServerConfig {
 /// A running LSP server connection.
 pub struct Server {
     next_id: AtomicI64,
-    writer: Mutex<BufWriter<std::process::ChildStdin>>,
+    writer: Arc<Mutex<BufWriter<std::process::ChildStdin>>>,
     pending: Arc<Mutex<HashMap<i64, Sender<Result<Value, ServerError>>>>>,
     alive: Arc<AtomicBool>,
+    /// Set by kill()/shutdown() so the reader doesn't report a normal stop as a crash.
+    stopping: Arc<AtomicBool>,
     #[allow(dead_code)] // joined on Drop in future
     reader_thread: Option<thread::JoinHandle<()>>,
     child: Mutex<Option<Child>>,
@@ -83,7 +85,7 @@ impl Server {
 
         let stdout = child.stdout.take().unwrap();
         let stdin = child.stdin.take().unwrap();
-        let writer = Mutex::new(BufWriter::new(stdin));
+        let writer = Arc::new(Mutex::new(BufWriter::new(stdin)));
 
         let pending: Arc<Mutex<HashMap<i64, Sender<Result<Value, ServerError>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -94,6 +96,9 @@ impl Server {
         let alive_clone = Arc::clone(&alive);
         let on_event = Arc::new(on_event);
         let on_event_clone = Arc::clone(&on_event);
+        let stopping = Arc::new(AtomicBool::new(false));
+        let stopping_clone = Arc::clone(&stopping);
+        let writer_clone = Arc::clone(&writer);
 
         let reader_thread = thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
@@ -130,11 +135,22 @@ impl Server {
                                         id: id.clone(),
                                         edit,
                                     });
+                                    continue;
                                 }
-                                // Other server requests: respond with null/[] default
-                                // (handled below by not forwarding, the writer is not accessible here
-                                //  so we store a response-needed flag — but simpler: just ignore,
-                                //  the caller can respond via respond_to_server_request)
+                                // Other server requests (workDoneProgress/create,
+                                // registerCapability, ...): answer a default so the server
+                                // doesn't block. configuration wants one entry per item.
+                                let result = if method == "workspace/configuration" {
+                                    let n = msg
+                                        .pointer("/params/items")
+                                        .and_then(|i| i.as_array())
+                                        .map_or(0, |a| a.len());
+                                    Value::Array(vec![Value::Null; n])
+                                } else {
+                                    Value::Null
+                                };
+                                let reply = json!({ "jsonrpc": "2.0", "id": id, "result": result });
+                                let _ = rpc::write_msg(&mut *writer_clone.lock().unwrap(), &reply);
                                 continue;
                             }
                         }
@@ -155,7 +171,9 @@ impl Server {
                         for (_, tx) in map.drain() {
                             let _ = tx.send(Err(ServerError::ServerDied));
                         }
-                        on_event_clone(ServerEvent::Crashed);
+                        if !stopping_clone.load(Ordering::SeqCst) {
+                            on_event_clone(ServerEvent::Crashed);
+                        }
                         break;
                     }
                 }
@@ -167,6 +185,7 @@ impl Server {
             writer,
             pending,
             alive,
+            stopping,
             reader_thread: Some(reader_thread),
             child: Mutex::new(Some(child)),
             capabilities: Mutex::new(None),
@@ -262,6 +281,7 @@ impl Server {
 
     /// Graceful shutdown: send shutdown request, then exit notification.
     pub fn shutdown(self) {
+        self.stopping.store(true, Ordering::SeqCst);
         if self.alive.load(Ordering::SeqCst) {
             // Try shutdown request (ignore errors)
             let _ = self.request_with_timeout("shutdown", &Value::Null, Duration::from_secs(5));
@@ -276,6 +296,7 @@ impl Server {
 
     /// Kill the server process immediately.
     pub fn kill(&self) {
+        self.stopping.store(true, Ordering::SeqCst);
         self.alive.store(false, Ordering::SeqCst);
         if let Some(mut child) = self.child.lock().unwrap().take() {
             let _ = child.kill();

@@ -8,6 +8,21 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Helper: convert Path to file:// URI, percent-encoding unsafe characters.
+fn path_to_uri(path: &Path) -> String {
+    let mut out = String::from("file://");
+    for b in path.to_string_lossy().bytes() {
+        match b {
+            b' ' => out.push_str("%20"),
+            b'%' => out.push_str("%25"),
+            b'#' => out.push_str("%23"),
+            b'?' => out.push_str("%3F"),
+            _ => out.push(b as char),
+        }
+    }
+    out
+}
+
 /// Injectable clock trait for testability.
 pub trait Clock: Send + Sync {
     fn now(&self) -> Instant;
@@ -88,6 +103,17 @@ struct OpenDoc {
     text: String,
 }
 
+fn did_open_params(doc: &OpenDoc) -> serde_json::Value {
+    json!({
+        "textDocument": {
+            "uri": &doc.uri,
+            "languageId": &doc.language_id,
+            "version": doc.version,
+            "text": &doc.text,
+        }
+    })
+}
+
 /// State for one managed server.
 struct ManagedServer {
     server: Server,
@@ -116,50 +142,71 @@ impl Registry {
         }
     }
 
-    /// Find the project root for a given file path and language.
-    pub fn find_root(file_path: &Path, lang: Lang) -> PathBuf {
-        let mut dir = if file_path.is_file() {
-            file_path.parent().map(|p| p.to_path_buf())
+    /// Find the project root: nearest ancestor with the lang's marker (Kotlin: a
+    /// settings.gradle(.kts) anywhere up wins over the nearest build.gradle(.kts)),
+    /// else `workspace_root`, else the file's directory.
+    pub fn find_root(file_path: &Path, lang: Lang, workspace_root: Option<&Path>) -> PathBuf {
+        let start_dir = if file_path.is_file() || file_path.extension().is_some() {
+            file_path.parent().unwrap_or(file_path)
         } else {
-            Some(file_path.to_path_buf())
+            file_path
         };
 
-        while let Some(d) = dir {
-            let found = match lang {
-                Lang::Dart => d.join("pubspec.yaml").exists(),
-                Lang::Kotlin => {
-                    d.join("settings.gradle").exists()
-                        || d.join("settings.gradle.kts").exists()
-                        || d.join("build.gradle").exists()
-                        || d.join("build.gradle.kts").exists()
-                }
-                Lang::Swift => {
-                    d.join("Package.swift").exists()
-                        || std::fs::read_dir(&d)
-                            .map(|entries| {
-                                entries
-                                    .filter_map(|e| e.ok())
-                                    .any(|e| {
-                                        e.path()
-                                            .extension()
-                                            .map(|ext| ext == "xcodeproj")
-                                            .unwrap_or(false)
-                                    })
-                            })
-                            .unwrap_or(false)
-                }
-            };
-            if found {
-                return d;
+        let has_xcodeproj = |d: &Path| {
+            std::fs::read_dir(d).map_or(false, |es| {
+                es.filter_map(|e| e.ok())
+                    .any(|e| e.path().extension().map_or(false, |x| x == "xcodeproj"))
+            })
+        };
+
+        let passes: Vec<Box<dyn Fn(&Path) -> bool>> = match lang {
+            Lang::Dart => vec![Box::new(|d: &Path| d.join("pubspec.yaml").exists())],
+            Lang::Kotlin => vec![
+                Box::new(|d: &Path| {
+                    d.join("settings.gradle").exists() || d.join("settings.gradle.kts").exists()
+                }),
+                Box::new(|d: &Path| {
+                    d.join("build.gradle").exists() || d.join("build.gradle.kts").exists()
+                }),
+            ],
+            Lang::Swift => vec![Box::new(move |d: &Path| {
+                d.join("Package.swift").exists() || has_xcodeproj(d)
+            })],
+        };
+
+        for is_match in &passes {
+            if let Some(d) = start_dir.ancestors().find(|d| is_match(d)) {
+                return d.to_path_buf();
             }
-            dir = d.parent().map(|p| p.to_path_buf());
         }
 
-        // Fallback: use file's directory
-        file_path
-            .parent()
-            .unwrap_or(file_path)
+        workspace_root
+            .unwrap_or(start_dir)
             .to_path_buf()
+    }
+
+    /// Restart a crashed server (re-didOpen its tracked docs) and bump activity.
+    /// Errs if no server exists for `key` — servers are only created by did_open.
+    fn ensure_alive<'a>(
+        &self,
+        servers: &'a mut HashMap<ServerKey, ManagedServer>,
+        key: &ServerKey,
+    ) -> Result<&'a mut ManagedServer, ServerError> {
+        let dead = servers.get(key).ok_or(ServerError::ServerDied)?;
+        if !dead.server.is_alive() {
+            let docs: Vec<OpenDoc> = dead.open_docs.values().cloned().collect();
+            let mut fresh = self.start_server(key.lang, &key.root)?;
+            for doc in docs {
+                let _ = fresh.server.notify("textDocument/didOpen", &did_open_params(&doc));
+                fresh.open_docs.insert(doc.uri.clone(), doc);
+            }
+            if let Some(old) = servers.insert(key.clone(), fresh) {
+                old.server.kill(); // reap the dead child
+            }
+        }
+        let managed = servers.get_mut(key).unwrap();
+        managed.last_activity = self.clock.now();
+        Ok(managed)
     }
 
     /// Open a document — lazily starts the server if needed.
@@ -170,14 +217,12 @@ impl Registry {
         text: &str,
         workspace_root: Option<&Path>,
     ) -> Result<(), ServerError> {
-        let root = workspace_root
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| Self::find_root(file_path, lang));
+        let root = Self::find_root(file_path, lang, workspace_root);
         let key = ServerKey {
             lang,
             root: root.clone(),
         };
-        let uri = format!("file://{}", file_path.display());
+        let uri = path_to_uri(file_path);
         let language_id = match lang {
             Lang::Dart => "dart",
             Lang::Kotlin => "kotlin",
@@ -186,40 +231,21 @@ impl Registry {
 
         let mut servers = self.servers.lock().unwrap();
 
-        // Ensure server is running
-        if !servers.contains_key(&key) || !servers.get(&key).unwrap().server.is_alive() {
-            // Start or restart
-            servers.remove(&key);
-            let managed = self.start_server(lang, &root)?;
-            servers.insert(key.clone(), managed);
+        if !servers.contains_key(&key) {
+            let fresh = self.start_server(lang, &root)?;
+            servers.insert(key.clone(), fresh);
         }
 
-        let managed = servers.get_mut(&key).unwrap();
-        managed.last_activity = self.clock.now();
+        let managed = self.ensure_alive(&mut servers, &key)?;
 
-        // Send didOpen
-        managed.server.notify(
-            "textDocument/didOpen",
-            &json!({
-                "textDocument": {
-                    "uri": uri,
-                    "languageId": language_id,
-                    "version": 1,
-                    "text": text,
-                }
-            }),
-        )?;
-
-        // Track open doc for crash recovery
-        managed.open_docs.insert(
-            uri.clone(),
-            OpenDoc {
-                uri,
-                language_id: language_id.to_string(),
-                version: 1,
-                text: text.to_string(),
-            },
-        );
+        let doc = OpenDoc {
+            uri: uri.clone(),
+            language_id: language_id.to_string(),
+            version: 1,
+            text: text.to_string(),
+        };
+        managed.server.notify("textDocument/didOpen", &did_open_params(&doc))?;
+        managed.open_docs.insert(uri, doc);
 
         Ok(())
     }
@@ -233,46 +259,46 @@ impl Registry {
         text: &str,
         workspace_root: Option<&Path>,
     ) -> Result<(), ServerError> {
-        let root = workspace_root
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| Self::find_root(file_path, lang));
+        let root = Self::find_root(file_path, lang, workspace_root);
         let key = ServerKey { lang, root };
-        let uri = format!("file://{}", file_path.display());
+        let uri = path_to_uri(file_path);
 
         let mut servers = self.servers.lock().unwrap();
-        if let Some(managed) = servers.get_mut(&key) {
-            managed.last_activity = self.clock.now();
-            managed.server.notify(
-                "textDocument/didChange",
-                &json!({
-                    "textDocument": { "uri": &uri, "version": version },
-                    "contentChanges": [{ "text": text }]
-                }),
-            )?;
-            // Update tracked text
-            if let Some(doc) = managed.open_docs.get_mut(&uri) {
-                doc.version = version;
-                doc.text = text.to_string();
-            }
+        let managed = self.ensure_alive(&mut servers, &key)?;
+        managed.server.notify(
+            "textDocument/didChange",
+            &json!({
+                "textDocument": { "uri": &uri, "version": version },
+                "contentChanges": [{ "text": text }]
+            }),
+        )?;
+        if let Some(doc) = managed.open_docs.get_mut(&uri) {
+            doc.version = version;
+            doc.text = text.to_string();
         }
         Ok(())
     }
 
     /// Close a document.
-    pub fn did_close(&self, file_path: &Path, lang: Lang, workspace_root: Option<&Path>) -> Result<(), ServerError> {
-        let root = workspace_root
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| Self::find_root(file_path, lang));
+    pub fn did_close(
+        &self,
+        file_path: &Path,
+        lang: Lang,
+        workspace_root: Option<&Path>,
+    ) -> Result<(), ServerError> {
+        let root = Self::find_root(file_path, lang, workspace_root);
         let key = ServerKey { lang, root };
-        let uri = format!("file://{}", file_path.display());
+        let uri = path_to_uri(file_path);
 
         let mut servers = self.servers.lock().unwrap();
         if let Some(managed) = servers.get_mut(&key) {
             managed.last_activity = self.clock.now();
-            let _ = managed.server.notify(
-                "textDocument/didClose",
-                &json!({ "textDocument": { "uri": &uri } }),
-            );
+            if managed.server.is_alive() {
+                let _ = managed.server.notify(
+                    "textDocument/didClose",
+                    &json!({ "textDocument": { "uri": &uri } }),
+                );
+            }
             managed.open_docs.remove(&uri);
         }
         Ok(())
@@ -287,45 +313,12 @@ impl Registry {
         params: &Value,
         workspace_root: Option<&Path>,
     ) -> Result<Value, ServerError> {
-        let root = workspace_root
-            .map(|p| p.to_path_buf())
-            .unwrap_or_else(|| Self::find_root(file_path, lang));
-        let key = ServerKey { lang, root: root.clone() };
+        let root = Self::find_root(file_path, lang, workspace_root);
+        let key = ServerKey { lang, root };
 
         let mut servers = self.servers.lock().unwrap();
-
-        // Auto-restart on crash
-        if let Some(managed) = servers.get(&key) {
-            if !managed.server.is_alive() {
-                // Server crashed — restart and re-open docs
-                let docs: Vec<OpenDoc> = managed.open_docs.values().cloned().collect();
-                servers.remove(&key);
-                let mut new_managed = self.start_server(lang, &root)?;
-                // Re-open documents
-                for doc in &docs {
-                    let _ = new_managed.server.notify(
-                        "textDocument/didOpen",
-                        &json!({
-                            "textDocument": {
-                                "uri": &doc.uri,
-                                "languageId": &doc.language_id,
-                                "version": doc.version,
-                                "text": &doc.text,
-                            }
-                        }),
-                    );
-                    new_managed.open_docs.insert(doc.uri.clone(), doc.clone());
-                }
-                servers.insert(key.clone(), new_managed);
-            }
-        }
-
-        if let Some(managed) = servers.get_mut(&key) {
-            managed.last_activity = self.clock.now();
-            managed.server.request(method, params)
-        } else {
-            Err(ServerError::ServerDied)
-        }
+        let managed = self.ensure_alive(&mut servers, &key)?;
+        managed.server.request(method, params)
     }
 
     /// Respond to a server-initiated request (e.g. workspace/applyEdit).
@@ -382,7 +375,7 @@ impl Registry {
 
     fn start_server(&self, lang: Lang, root: &Path) -> Result<ManagedServer, ServerError> {
         let (cmd, args) = lang.command();
-        let root_uri = format!("file://{}", root.display());
+        let root_uri = path_to_uri(root);
         let config = ServerConfig {
             command: cmd,
             args,
@@ -399,5 +392,94 @@ impl Registry {
             last_activity: self.clock.now(),
             open_docs: HashMap::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_root_dart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pubspec = tmp.path().join("pubspec.yaml");
+        std::fs::write(&pubspec, "name: foo").unwrap();
+        let file = tmp.path().join("lib").join("src").join("main.dart");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        let ws = tmp.path().parent().unwrap();
+        let root = Registry::find_root(&file, Lang::Dart, Some(ws));
+        assert_eq!(root, tmp.path());
+    }
+
+    #[test]
+    fn test_find_root_kotlin_settings_wins_over_build_gradle() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("settings.gradle.kts"), "").unwrap();
+        let app = tmp.path().join("app");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join("build.gradle.kts"), "").unwrap();
+        let file = app.join("src").join("main").join("MainActivity.kt");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        let root = Registry::find_root(&file, Lang::Kotlin, None);
+        assert_eq!(root, tmp.path());
+    }
+
+    #[test]
+    fn test_find_root_kotlin_build_gradle_fallback() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = tmp.path().join("app");
+        std::fs::create_dir_all(&app).unwrap();
+        std::fs::write(app.join("build.gradle"), "").unwrap();
+        let file = app.join("src").join("main").join("MainActivity.kt");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        let root = Registry::find_root(&file, Lang::Kotlin, None);
+        assert_eq!(root, app);
+    }
+
+    #[test]
+    fn test_find_root_swift_package() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("Package.swift"), "").unwrap();
+        let file = tmp.path().join("Sources").join("MyLib").join("Lib.swift");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        let root = Registry::find_root(&file, Lang::Swift, None);
+        assert_eq!(root, tmp.path());
+    }
+
+    #[test]
+    fn test_find_root_swift_xcodeproj() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("App.xcodeproj")).unwrap();
+        let file = tmp.path().join("App").join("AppDelegate.swift");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        let root = Registry::find_root(&file, Lang::Swift, None);
+        assert_eq!(root, tmp.path());
+    }
+
+    #[test]
+    fn test_find_root_fallback_workspace_and_parent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = tmp.path().join("workspace");
+        let file = ws.join("subdir").join("scratch.dart");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "").unwrap();
+
+        // Fallback to workspace_root
+        let root = Registry::find_root(&file, Lang::Dart, Some(&ws));
+        assert_eq!(root, ws);
+
+        // Fallback to file parent
+        let root2 = Registry::find_root(&file, Lang::Dart, None);
+        assert_eq!(root2, file.parent().unwrap());
     }
 }

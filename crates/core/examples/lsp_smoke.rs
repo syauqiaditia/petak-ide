@@ -31,7 +31,7 @@ fn main() {
     });
 
     // Find project root
-    let root = petak_core::lsp::Registry::find_root(&file_path, lang);
+    let root = petak_core::lsp::Registry::find_root(&file_path, lang, None);
     println!("File:    {}", file_path.display());
     println!("Root:    {}", root.display());
     println!("Lang:    {:?}", lang);
