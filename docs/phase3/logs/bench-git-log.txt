@@ -1,0 +1,15 @@
+=== Benchmarking Git Log (Page 1: 500 commits) on 10k repo ===
+Repo: /mnt/storage/uqi-cache/tmp/petak-git10k
+Warmup: 47.791203ms (commits: 500, graph rows: 500)
+Run #1: 47.528637ms (commits: 500, graph rows: 500)
+Run #2: 47.796504ms (commits: 500, graph rows: 500)
+Run #3: 47.489796ms (commits: 500, graph rows: 500)
+Run #4: 47.322415ms (commits: 500, graph rows: 500)
+Run #5: 47.586423ms (commits: 500, graph rows: 500)
+
+=== Benchmark Summary ===
+Min:    47.322415ms
+Median: 47.528637ms
+Max:    47.796504ms
+Target: < 500 ms
+Result: PASSED (well within budget)

@@ -1,0 +1,9 @@
+=== P3.6 Preview Benchmark & Virtual List Verification ===
+Total commits loaded in memory: 10000
+Viewport height: 600px (Row height: 30px, Buffer: 10)
+DOM rendered row count at top:    30 rows (indices 0..30)
+DOM rendered row count at middle: 40 rows (indices 90..130)
+DOM rendered row count at bottom: 41 rows (indices 9956..9997)
+Virtual list DOM node check: PASSED (bounded to ~40 rows for 10k commits) ✓
+
+[Preview Browser] First row / visible slice render time: 0.0039 ms

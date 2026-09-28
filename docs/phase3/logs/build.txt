@@ -1,0 +1,18 @@
+
+> petak@0.1.0 build
+> vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 194 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                           1.74 kB │ gzip:   0.81 kB
+dist/assets/tree-sitter-DJ2BG7o-.wasm   205.97 kB │ gzip:  80.99 kB
+dist/assets/Palette-xGlKP5I3.css          3.44 kB │ gzip:   1.08 kB
+dist/assets/TerminalPanel-Cq0Sk8Vj.css   10.70 kB │ gzip:   3.15 kB
+dist/assets/index-4wJ2vc2b.css           61.60 kB │ gzip:  10.00 kB
+dist/assets/Palette-Da1DT6t3.js          10.85 kB │ gzip:   4.01 kB
+dist/assets/TerminalPanel-C7u85T96.js   342.03 kB │ gzip:  87.63 kB
+dist/assets/index-C_U5KQ_I.js           910.58 kB │ gzip: 267.55 kB
+✓ built in 3.92s

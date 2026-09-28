@@ -653,9 +653,9 @@ pub fn mark_ready(ts_ms: u64) {
 #[tauri::command]
 pub fn bench_log(line: String) -> Result<(), String> {
     let out_var = std::env::var("PETAK_BENCH_OUT").ok();
-    let is_bench = std::env::var("PETAK_BENCH").is_ok();
-    let is_test = std::env::var("PETAK_TEST_P23").is_ok()
-        || std::env::var("PETAK_TEST_P22").is_ok()
+    let is_test = std::env::var("PETAK_TEST_P3").is_ok()
+        || std::env::var("PETAK_TEST_P24").is_ok()
+        || std::env::var("PETAK_TEST_P23").is_ok()
         || std::env::var("PETAK_TEST_P15").is_ok()
         || std::env::var("PETAK_TEST_P14").is_ok()
         || std::env::var("PETAK_TEST_P12").is_ok()
@@ -683,6 +683,9 @@ pub fn bench_mode() -> bool {
 
 #[tauri::command]
 pub fn test_mode() -> Option<String> {
+    if std::env::var("PETAK_TEST_P3").is_ok() {
+        return Some("P3".to_string());
+    }
     if std::env::var("PETAK_TEST_P24").is_ok() {
         return Some("P24".to_string());
     }
@@ -705,6 +708,11 @@ pub fn test_mode() -> Option<String> {
         return Some("P12".to_string());
     }
     None
+}
+
+#[tauri::command]
+pub fn test_repo_path() -> Option<String> {
+    std::env::var("PETAK_TEST_REPO").ok()
 }
 
 #[tauri::command]

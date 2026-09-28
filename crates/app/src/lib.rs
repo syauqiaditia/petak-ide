@@ -171,6 +171,7 @@ pub fn run() {
             commands::bench_log,
             commands::bench_mode,
             commands::test_mode,
+            commands::test_repo_path,
             commands::index_build,
             commands::find_files,
             commands::grep,

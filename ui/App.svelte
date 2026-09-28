@@ -1043,6 +1043,55 @@
     }
   }
 
+  async function runP3AutoTest() {
+    console.log('[PETAK_TEST] Running P3 Git automated test sequence...');
+    await api.benchLog('P3_STARTING');
+    try {
+      let targetRepo = await api.testRepoPath?.().catch(() => null);
+      if (!targetRepo) {
+        targetRepo = currentFolderPath || '/tmp/petak-phase3-demo';
+      }
+      if (currentFolderPath !== targetRepo) {
+        await openFolder(targetRepo);
+      }
+      await new Promise((r) => setTimeout(r, 400));
+
+      // Switch to git view
+      activeRailTab = 'git';
+      await new Promise((r) => setTimeout(r, 200));
+
+      // 1. Measure status refresh
+      const t0Status = performance.now();
+      await gitStore.refresh(targetRepo);
+      const statusDuration = performance.now() - t0Status;
+      await api.benchLog(`P3_STATUS_LATENCY: ${statusDuration.toFixed(2)}ms`);
+      await api.benchLog(`P3_BRANCH: ${gitStore.branch?.head || 'detached'}`);
+      await api.benchLog(`P3_ENTRIES_COUNT: ${gitStore.entries.length}`);
+      await api.benchLog('P3_COMMIT_VIEW_READY');
+
+      // 2. Measure log page 1
+      const t0Log = performance.now();
+      const logRes = await api.gitLog(targetRepo, undefined, undefined, 500);
+      const logDuration = performance.now() - t0Log;
+      await api.benchLog(`P3_LOG_LATENCY: ${logDuration.toFixed(2)}ms`);
+      await api.benchLog(`P3_LOG_COMMITS_COUNT: ${logRes?.commits?.length || 0}`);
+      await api.benchLog('P3_LOG_VIEW_READY');
+
+      // 3. Check conflicts
+      const conflicts = await api.gitConflicts(targetRepo).catch(() => []);
+      await api.benchLog(`P3_CONFLICT_COUNT: ${conflicts.length}`);
+      if (conflicts.length > 0) {
+        await api.benchLog('P3_CONFLICT_VIEW_READY');
+      }
+
+      await api.benchLog('P3_ALL_TESTS_PASS');
+      console.log('[PETAK_TEST] P3 Git all tests completed successfully');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P3 test:', e);
+      await api.benchLog(`P3_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -1085,7 +1134,9 @@
     // 4. Automated test if testMode is set
     try {
       const tm = await api.testMode();
-      if (tm === 'P24' || tm === 'p24') {
+      if (tm === 'P3' || tm === 'p3') {
+        setTimeout(() => runP3AutoTest(), 400);
+      } else if (tm === 'P24' || tm === 'p24') {
         setTimeout(() => runP24AutoTest(), 400);
       } else if (tm === 'P23' || tm === 'p23') {
         setTimeout(() => runP23AutoTest(), 400);

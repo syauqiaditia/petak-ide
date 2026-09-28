@@ -414,6 +414,10 @@ export const api = {
     return invoke<string | null>('test_mode');
   },
 
+  testRepoPath(): Promise<string | null> {
+    return invoke<string | null>('test_repo_path');
+  },
+
   indexBuild(root: string): Promise<void> {
     return invoke('index_build', { root });
   },
