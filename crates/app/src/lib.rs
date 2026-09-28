@@ -79,6 +79,7 @@ pub fn run() {
             commands::term_write,
             commands::term_resize,
             commands::term_close,
+            commands::resize_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

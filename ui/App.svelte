@@ -765,9 +765,27 @@
 
       // 5. Test resize: switch back to tab 1
       const allTabs = terminalComponent?.getTabs();
-      if (allTabs && allTabs.length > 0) {
-        terminalComponent?.setActiveTab(allTabs[0].id);
+      const tab1Id = allTabs && allTabs.length > 0 ? allTabs[0].id : null;
+      if (tab1Id !== null) {
+        terminalComponent?.setActiveTab(tab1Id);
         await new Promise((r) => setTimeout(r, 400));
+      }
+
+      // Resize window from 1440x900 to 1050x700 to verify tput cols change
+      try {
+        await api.resizeWindow(1050, 700);
+        await new Promise((r) => setTimeout(r, 800));
+        const sizeAfter = terminalComponent?.getActiveColsRows();
+        const colsAfter = sizeAfter?.cols ?? 0;
+        await api.benchLog(`TPUT_COLS_AFTER: ${colsAfter}`);
+        terminalComponent?.writeToActive('tput cols\n');
+        await new Promise((r) => setTimeout(r, 600));
+
+        // Restore size to 1440x900 for canonical screenshot
+        await api.resizeWindow(1440, 900);
+        await new Promise((r) => setTimeout(r, 800));
+      } catch (err) {
+        console.warn('resizeWindow error:', err);
       }
 
       // Ready for capture

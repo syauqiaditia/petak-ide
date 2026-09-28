@@ -131,4 +131,8 @@ export const api = {
   onTermExit(cb: (payload: TermExitPayload) => void): Promise<UnlistenFn> {
     return listen<TermExitPayload>('term-exit', (event) => cb(event.payload));
   },
+
+  resizeWindow(width: number, height: number): Promise<void> {
+    return invoke('resize_window', { width, height });
+  },
 };
