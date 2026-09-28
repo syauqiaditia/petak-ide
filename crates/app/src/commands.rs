@@ -141,3 +141,129 @@ pub async fn grep(
     .await
     .map_err(|e| e.to_string())?
 }
+
+pub type TermSessions = Mutex<std::collections::HashMap<u32, petak_core::term::TermSession>>;
+pub type TermCounter = std::sync::atomic::AtomicU32;
+
+#[derive(Clone, serde::Serialize)]
+pub struct TermOutputPayload {
+    pub id: u32,
+    pub data: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct TermExitPayload {
+    pub id: u32,
+}
+
+#[tauri::command]
+pub fn term_open(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, TermSessions>,
+    counter: tauri::State<'_, TermCounter>,
+    cwd: Option<String>,
+    cols: u16,
+    rows: u16,
+) -> Result<u32, String> {
+    let id = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let app_handle = app.clone();
+
+    let remainder_buf = std::sync::Arc::new(Mutex::new(Vec::<u8>::new()));
+    let remainder_clone = remainder_buf.clone();
+
+    let on_output = move |bytes: Vec<u8>| {
+        if let Ok(mut rem_guard) = remainder_clone.lock() {
+            let mut combined = std::mem::take(&mut *rem_guard);
+            combined.extend_from_slice(&bytes);
+
+            match std::str::from_utf8(&combined) {
+                Ok(valid) => {
+                    let _ = app_handle.emit(
+                        "term-output",
+                        TermOutputPayload {
+                            id,
+                            data: valid.to_string(),
+                        },
+                    );
+                }
+                Err(e) => {
+                    let valid_len = e.valid_up_to();
+                    if valid_len > 0 {
+                        let valid_str = String::from_utf8_lossy(&combined[..valid_len]).to_string();
+                        let _ = app_handle.emit(
+                            "term-output",
+                            TermOutputPayload {
+                                id,
+                                data: valid_str,
+                            },
+                        );
+                    }
+                    if e.error_len().is_none() {
+                        *rem_guard = combined[valid_len..].to_vec();
+                    } else {
+                        let rest = String::from_utf8_lossy(&combined[valid_len..]).to_string();
+                        let _ = app_handle.emit(
+                            "term-output",
+                            TermOutputPayload {
+                                id,
+                                data: rest,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    };
+
+    let app_handle_exit = app.clone();
+    let on_exit = move || {
+        let _ = app_handle_exit.emit("term-exit", TermExitPayload { id });
+    };
+
+    let cwd_path = cwd.as_deref().filter(|s| !s.is_empty()).map(std::path::Path::new);
+    let session = petak_core::term::TermSession::open(cwd_path, cols, rows, on_output, on_exit)
+        .map_err(|e| e.to_string())?;
+
+    let mut sessions = state.lock().map_err(|e| e.to_string())?;
+    sessions.insert(id, session);
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn term_write(
+    state: tauri::State<'_, TermSessions>,
+    id: u32,
+    data: String,
+) -> Result<(), String> {
+    let sessions = state.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = sessions.get(&id) {
+        session.write(data.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn term_resize(
+    state: tauri::State<'_, TermSessions>,
+    id: u32,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    let sessions = state.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = sessions.get(&id) {
+        session.resize(cols, rows).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn term_close(
+    state: tauri::State<'_, TermSessions>,
+    id: u32,
+) -> Result<(), String> {
+    let mut sessions = state.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = sessions.remove(&id) {
+        let _ = session.kill();
+    }
+    Ok(())
+}

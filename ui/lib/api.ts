@@ -26,6 +26,15 @@ export interface Hit {
   text: string;
 }
 
+export interface TermOutputPayload {
+  id: number;
+  data: string;
+}
+
+export interface TermExitPayload {
+  id: number;
+}
+
 export const api = {
   listDir(path: string): Promise<Entry[]> {
     return invoke<Entry[]>('list_dir', { path });
@@ -97,5 +106,29 @@ export const api = {
       caseSensitive,
       limit,
     });
+  },
+
+  termOpen(cwd?: string | null, cols = 80, rows = 24): Promise<number> {
+    return invoke<number>('term_open', { cwd: cwd ?? null, cols, rows });
+  },
+
+  termWrite(id: number, data: string): Promise<void> {
+    return invoke('term_write', { id, data });
+  },
+
+  termResize(id: number, cols: number, rows: number): Promise<void> {
+    return invoke('term_resize', { id, cols, rows });
+  },
+
+  termClose(id: number): Promise<void> {
+    return invoke('term_close', { id });
+  },
+
+  onTermOutput(cb: (payload: TermOutputPayload) => void): Promise<UnlistenFn> {
+    return listen<TermOutputPayload>('term-output', (event) => cb(event.payload));
+  },
+
+  onTermExit(cb: (payload: TermExitPayload) => void): Promise<UnlistenFn> {
+    return listen<TermExitPayload>('term-exit', (event) => cb(event.payload));
   },
 };
