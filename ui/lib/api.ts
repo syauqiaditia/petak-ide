@@ -121,6 +121,26 @@ export interface LspHover {
   range?: LspRange;
 }
 
+export interface LspCodeAction {
+  title: string;
+  kind?: string;
+  diagnostics?: LspDiagnostic[];
+  isPreferred?: boolean;
+  disabled?: { reason: string };
+  edit?: LspWorkspaceEdit;
+  command?: {
+    title: string;
+    command: string;
+    arguments?: any[];
+  };
+  data?: any;
+}
+
+export interface LspApplyEditPayload {
+  id: any;
+  edit: LspWorkspaceEdit;
+}
+
 export interface LspStatusPayload {
   lang: string;
   root: string;
@@ -310,6 +330,26 @@ export const api = {
     ): Promise<void> {
       return invoke('lsp_apply_workspace_edit_disk', { path, edits });
     },
+
+    codeActions(
+      path: string,
+      range: LspRange,
+      diagnostics: LspDiagnostic[]
+    ): Promise<Array<LspCodeAction | any> | null> {
+      return invoke('lsp_code_actions', { path, range, diagnostics });
+    },
+
+    codeActionResolve(path: string, action: any): Promise<LspCodeAction> {
+      return invoke('lsp_code_action_resolve', { path, action });
+    },
+
+    executeCommand(path: string, command: string, args?: any[]): Promise<any> {
+      return invoke('lsp_execute_command', { path, command, arguments: args ?? null });
+    },
+
+    applyEditResult(id: any, applied: boolean): Promise<void> {
+      return invoke('lsp_apply_edit_result', { id, applied });
+    },
   },
 
   onLspDiagnostics(cb: (payload: LspDiagnosticsPayload) => void): Promise<UnlistenFn> {
@@ -318,5 +358,9 @@ export const api = {
 
   onLspStatus(cb: (payload: LspStatusPayload) => void): Promise<UnlistenFn> {
     return listen<LspStatusPayload>('lsp-status', (event) => cb(event.payload));
+  },
+
+  onLspApplyEdit(cb: (payload: LspApplyEditPayload) => void): Promise<UnlistenFn> {
+    return listen<LspApplyEditPayload>('lsp-apply-edit', (event) => cb(event.payload));
   },
 };

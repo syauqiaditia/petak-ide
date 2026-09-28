@@ -90,7 +90,14 @@ impl Lang {
     pub fn default_command(&self) -> (String, Vec<String>) {
         match self {
             Lang::Dart => ("dart".into(), vec!["language-server".into(), "--protocol=lsp".into()]),
-            Lang::Kotlin => ("kotlin-language-server".into(), vec![]),
+            Lang::Kotlin => {
+                let local_path = "/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server";
+                if std::path::Path::new(local_path).exists() {
+                    (local_path.into(), vec![])
+                } else {
+                    ("kotlin-language-server".into(), vec![])
+                }
+            }
             Lang::Swift => ("xcrun".into(), vec!["sourcekit-lsp".into()]),
         }
     }
@@ -158,6 +165,7 @@ pub struct Registry {
     clock: Arc<dyn Clock>,
     event_callback: Arc<dyn Fn(Lang, PathBuf, ServerEvent) + Send + Sync>,
     idle_timeout: Duration,
+    pending_apply_edits: Arc<Mutex<HashMap<String, ServerKey>>>,
 }
 
 impl Registry {
@@ -170,6 +178,7 @@ impl Registry {
             clock,
             event_callback: Arc::new(on_event),
             idle_timeout: Duration::from_secs(600), // 10 minutes
+            pending_apply_edits: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -423,6 +432,31 @@ impl Registry {
         }
     }
 
+    /// Respond to a server-initiated applyEdit request.
+    pub fn respond_apply_edit(&self, id: &Value, applied: bool) -> Result<(), ServerError> {
+        let result = json!({ "applied": applied });
+        let key_opt = self.pending_apply_edits.lock().unwrap().remove(&id.to_string());
+        let servers = self.servers.lock().unwrap();
+        if let Some(key) = key_opt {
+            if let Some(managed) = servers.get(&key) {
+                return managed.server.respond(id, &result);
+            }
+        }
+        // Fallback: send to any alive server
+        let mut sent = false;
+        for (_, managed) in servers.iter() {
+            if managed.server.is_alive() {
+                let _ = managed.server.respond(id, &result);
+                sent = true;
+            }
+        }
+        if sent {
+            Ok(())
+        } else {
+            Err(ServerError::ServerDied)
+        }
+    }
+
     /// Called periodically by the app. Kills servers idle for > 10 minutes.
     pub fn tick(&self) {
         let now = self.clock.now();
@@ -470,7 +504,17 @@ impl Registry {
 
         let cb = Arc::clone(&self.event_callback);
         let root_clone = root_buf.clone();
+        let pending_edits = Arc::clone(&self.pending_apply_edits);
         let server = match Server::start(&config, move |event| {
+            if let ServerEvent::ApplyEdit { ref id, .. } = event {
+                pending_edits.lock().unwrap().insert(
+                    id.to_string(),
+                    ServerKey {
+                        lang,
+                        root: root_clone.clone(),
+                    },
+                );
+            }
             cb(lang, root_clone.clone(), event);
         }) {
             Ok(s) => s,

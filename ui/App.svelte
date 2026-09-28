@@ -11,6 +11,7 @@
   import type { EditorView } from '@codemirror/view';
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
   import { registerKeymap, showIntentions, type SearchMode } from './features/search/keymap';
+  import { applyWorkspaceEdit } from './features/editor/lsp/applyEdit';
 
   let currentFolderPath = $state('');
   let rootEntries = $state<Entry[]>([]);
@@ -962,6 +963,75 @@
     }
   }
 
+  async function runP24AutoTest() {
+    console.log('[PETAK_TEST] Running P2.4 Code Actions test sequence...');
+    await api.benchLog('P24_STARTING');
+    try {
+      if (!currentFolderPath) {
+        const recents = await api.recentFolders();
+        if (recents && recents.length > 0) {
+          await openFolder(recents[0]);
+        } else {
+          await openFolder('/Users/uqi/petak-sample');
+        }
+      }
+      await new Promise((r) => setTimeout(r, 600));
+
+      const testFilePath = currentFolderPath + '/lib/main.dart';
+      await handleOpenFile(testFilePath);
+      await api.benchLog('P24_FILE_OPENED: ' + testFilePath);
+
+      // Wait 1.5s for LSP initialization
+      await new Promise((r) => setTimeout(r, 1500));
+
+      const view = editorComponent?.getEditorView?.();
+      if (view) {
+        const text = view.state.doc.toString();
+        await api.benchLog('P24_BEFORE_CODE: ' + text.slice(0, 100).replace(/\n/g, ' '));
+        const textPos = text.indexOf('Text(');
+        const line = textPos !== -1 ? view.state.doc.lineAt(textPos) : view.state.doc.line(1);
+        const lineNum = line.number - 1;
+        const charNum = textPos !== -1 ? textPos - line.from + 1 : 0;
+
+        const range = {
+          start: { line: lineNum, character: charNum },
+          end: { line: lineNum, character: charNum },
+        };
+
+        const t0 = performance.now();
+        const actions = await api.lsp.codeActions(testFilePath, range, []);
+        const latency = Math.round(performance.now() - t0);
+        await api.benchLog(`P24_CODE_ACTIONS_LATENCY: ${latency}ms`);
+        await api.benchLog(`P24_CODE_ACTIONS_COUNT: ${actions ? actions.length : 0}`);
+
+        if (actions && actions.length > 0) {
+          await api.benchLog('P24_POPUP_BEFORE_SCREENSHOT');
+          const wrapAction =
+            actions.find(
+              (a: any) => a.title && a.title.toLowerCase().includes('padding')
+            ) || actions[0];
+
+          if (wrapAction) {
+            await api.benchLog('P24_APPLYING_ACTION: ' + wrapAction.title);
+            if (wrapAction.edit) {
+              await applyWorkspaceEdit(wrapAction.edit, view);
+            }
+          }
+        }
+
+        const afterText = view.state.doc.toString();
+        await api.benchLog('P24_AFTER_CODE: ' + afterText.slice(0, 100).replace(/\n/g, ' '));
+        await api.benchLog('P24_POPUP_AFTER_SCREENSHOT');
+      }
+
+      await api.benchLog('P24_ALL_TESTS_PASS');
+      console.log('[PETAK_TEST] P2.4 all tests completed successfully');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P2.4 test:', e);
+      await api.benchLog(`P24_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -1004,7 +1074,9 @@
     // 4. Automated test if testMode is set
     try {
       const tm = await api.testMode();
-      if (tm === 'P23' || tm === 'p23') {
+      if (tm === 'P24' || tm === 'p24') {
+        setTimeout(() => runP24AutoTest(), 400);
+      } else if (tm === 'P23' || tm === 'p23') {
         setTimeout(() => runP23AutoTest(), 400);
       } else if (tm === 'P22' || tm === 'p22') {
         setTimeout(() => runP22AutoTest(), 400);

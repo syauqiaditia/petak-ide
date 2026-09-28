@@ -112,6 +112,9 @@ pub fn bench_mode() -> bool {
 
 #[tauri::command]
 pub fn test_mode() -> Option<String> {
+    if std::env::var("PETAK_TEST_P24").is_ok() {
+        return Some("P24".to_string());
+    }
     if std::env::var("PETAK_TEST_P23").is_ok() {
         return Some("P23".to_string());
     }
@@ -606,6 +609,98 @@ pub async fn lsp_apply_workspace_edit_disk(
     tauri::async_runtime::spawn_blocking(move || {
         let p = std::path::Path::new(&path);
         petak_core::lsp::edit::apply_to_file(p, &edits)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_code_actions(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    range: serde_json::Value,
+    diagnostics: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let uri = petak_core::lsp::registry::path_to_uri(p);
+        let params = serde_json::json!({
+            "textDocument": { "uri": uri },
+            "range": range,
+            "context": {
+                "diagnostics": diagnostics
+            }
+        });
+        registry
+            .request(p, lang, "textDocument/codeAction", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_code_action_resolve(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    action: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        registry
+            .request(p, lang, "codeAction/resolve", &action, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_execute_command(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    command: String,
+    arguments: Option<Vec<serde_json::Value>>,
+) -> Result<serde_json::Value, String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let lang = petak_core::lsp::Lang::from_extension(ext)
+            .ok_or_else(|| "unsupported language".to_string())?;
+        let mut params = serde_json::json!({
+            "command": command,
+        });
+        if let Some(args) = arguments {
+            params["arguments"] = serde_json::Value::Array(args);
+        }
+        registry
+            .request(p, lang, "workspace/executeCommand", &params, None)
+            .map_err(|e| format!("{:?}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_apply_edit_result(
+    state: tauri::State<'_, AppRegistry>,
+    id: serde_json::Value,
+    applied: bool,
+) -> Result<(), String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        registry
+            .respond_apply_edit(&id, applied)
             .map_err(|e| format!("{:?}", e))
     })
     .await

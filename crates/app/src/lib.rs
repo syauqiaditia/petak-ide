@@ -151,6 +151,10 @@ pub fn run() {
             commands::lsp_rename,
             commands::lsp_format,
             commands::lsp_apply_workspace_edit_disk,
+            commands::lsp_code_actions,
+            commands::lsp_code_action_resolve,
+            commands::lsp_execute_command,
+            commands::lsp_apply_edit_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

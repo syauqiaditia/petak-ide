@@ -23,12 +23,16 @@
     diagnosticsStore,
     applyStoredDiagnosticsToView,
     handleIncomingDiagnostics,
+    setDiagnosticsEditorView,
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
   import { createLspHoverExtension } from './lsp/hover';
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav';
   import { renameStore, triggerRename, executeRename } from './lsp/rename';
   import { formatDocument } from './lsp/format';
+  import { triggerCodeActions, queueLightbulbCheck } from './lsp/codeAction';
+  import CodeActionPopup from './lsp/CodeActionPopup.svelte';
+  import { applyWorkspaceEdit } from './lsp/applyEdit';
 
   let {
     onReady,
@@ -46,6 +50,7 @@
   let view: EditorView | null = null;
   let currentSwappedPath: string | null = null;
   let unlistenDiagnostics: UnlistenFn | null = null;
+  let unlistenApplyEdit: UnlistenFn | null = null;
 
   const petakTheme = EditorView.theme(
     {
@@ -167,6 +172,9 @@
             const head = update.state.selection.main.head;
             const line = update.state.doc.lineAt(head);
             onCursorChange?.(`Ln ${line.number}, Col ${head - line.from + 1}`);
+            if (view && currentSwappedPath) {
+              queueLightbulbCheck(view, currentSwappedPath);
+            }
           }
         }),
       ],
@@ -300,6 +308,12 @@
       e.preventDefault();
       e.stopPropagation();
       handleFormat();
+    } else if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === 'Enter' || e.code === 'Enter')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (view && currentSwappedPath) {
+        triggerCodeActions(view, currentSwappedPath);
+      }
     }
   }
 
@@ -326,6 +340,8 @@
       applyStoredDiagnosticsToView(view, active.path);
     }
 
+    setDiagnosticsEditorView(() => view);
+
     api.onLspDiagnostics((payload) => {
       handleIncomingDiagnostics(
         payload,
@@ -338,6 +354,18 @@
       );
     }).then((unlisten) => {
       unlistenDiagnostics = unlisten;
+    });
+
+    api.onLspApplyEdit(async (payload) => {
+      try {
+        await applyWorkspaceEdit(payload.edit, view);
+        await api.lsp.applyEditResult(payload.id, true);
+      } catch (err) {
+        console.error('Failed to apply workspace/applyEdit:', err);
+        await api.lsp.applyEditResult(payload.id, false);
+      }
+    }).then((unlisten) => {
+      unlistenApplyEdit = unlisten;
     });
 
     view.focus();
@@ -356,6 +384,10 @@
     if (unlistenDiagnostics) {
       unlistenDiagnostics();
       unlistenDiagnostics = null;
+    }
+    if (unlistenApplyEdit) {
+      unlistenApplyEdit();
+      unlistenApplyEdit = null;
     }
     if (view) {
       view.destroy();
@@ -492,6 +524,8 @@
       </div>
     </div>
   {/if}
+
+  <CodeActionPopup getView={() => view} />
 
   {#if tabsManager.tabs.length === 0}
     <div class="empty-editor-overlay">

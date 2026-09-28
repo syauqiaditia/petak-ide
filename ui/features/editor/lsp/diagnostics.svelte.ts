@@ -4,6 +4,7 @@ import { setDiagnostics } from '@codemirror/lint';
 import type { Text } from '@codemirror/state';
 import type { LspDiagnostic } from '../../../lib/api';
 import { lspPosToOffset } from './pos';
+import { populateQuickFixSlot } from './codeAction';
 
 export interface FileDiagnostic {
   path: string;
@@ -83,6 +84,12 @@ export function lspSeverityToCm(sev?: number): 'error' | 'warning' | 'info' | 'h
     default:
       return 'hint';
   }
+}
+
+let activeEditorViewGetter: () => EditorView | null = () => null;
+
+export function setDiagnosticsEditorView(getView: () => EditorView | null) {
+  activeEditorViewGetter = getView;
 }
 
 /**
@@ -169,6 +176,9 @@ function renderLintPopup(diag: FileDiagnostic): HTMLElement {
   actionSlot.className = 'quick-fix-slot';
   actionSlot.style.cssText = 'display: flex; gap: 6px;';
   footer.appendChild(actionSlot);
+
+  // Populate quick fix actions asynchronously
+  populateQuickFixSlot(diag, actionSlot, activeEditorViewGetter);
 
   // Ask agent button (disabled)
   const agentBtn = document.createElement('button');

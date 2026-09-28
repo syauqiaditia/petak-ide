@@ -19,6 +19,54 @@ export function uriToPath(uri: string): string {
 }
 
 /**
+ * Process snippet syntax (e.g. ${1:widget}, $1, ${0}) from LSP edit.
+ * Returns cleanText without snippet markup, plus the offset and length of the first placeholder.
+ */
+export function processSnippet(text: string): {
+  cleanText: string;
+  placeholderOffset: number | null;
+  placeholderLen: number | null;
+} {
+  if (!text || !text.includes('$')) {
+    return { cleanText: text, placeholderOffset: null, placeholderLen: null };
+  }
+
+  const snippetRegex = /\$\{([0-9]+)(?::([^}]*))?\}|\$([0-9]+)/g;
+  let match: RegExpExecArray | null;
+  let cleanText = '';
+  let lastIndex = 0;
+  let targetPlaceholder: { offset: number; len: number } | null = null;
+
+  while ((match = snippetRegex.exec(text)) !== null) {
+    const rawMatch = match[0];
+    const matchIndex = match.index;
+    const num = parseInt(match[1] || match[3] || '0', 10);
+    const content = match[2] !== undefined ? match[2] : '';
+
+    cleanText += text.slice(lastIndex, matchIndex);
+    const offsetInClean = cleanText.length;
+    cleanText += content;
+
+    if (num === 1 || (targetPlaceholder === null && num === 0)) {
+      targetPlaceholder = {
+        offset: offsetInClean,
+        len: content.length,
+      };
+    }
+
+    lastIndex = matchIndex + rawMatch.length;
+  }
+
+  cleanText += text.slice(lastIndex);
+
+  return {
+    cleanText,
+    placeholderOffset: targetPlaceholder ? targetPlaceholder.offset : null,
+    placeholderLen: targetPlaceholder ? targetPlaceholder.len : null,
+  };
+}
+
+/**
  * Apply a single file's TextEdits to a CodeMirror 6 EditorView via a transaction.
  * Preserves undo history and positions.
  */
@@ -26,10 +74,18 @@ export function applyTextEditsToView(view: EditorView, edits: LspTextEdit[]): bo
   if (!edits || edits.length === 0) return false;
 
   const doc = view.state.doc;
+  let targetSelection: { anchor: number; head: number } | null = null;
+
   const changes = edits.map((e) => {
     const from = lspPosToOffset(doc, e.range.start);
     const to = lspPosToOffset(doc, e.range.end);
-    return { from, to, insert: e.newText };
+    const { cleanText, placeholderOffset, placeholderLen } = processSnippet(e.newText);
+    if (placeholderOffset !== null && !targetSelection) {
+      const selFrom = from + placeholderOffset;
+      const selTo = selFrom + (placeholderLen ?? 0);
+      targetSelection = { anchor: selFrom, head: selTo };
+    }
+    return { from, to, insert: cleanText };
   });
 
   // Sort ascending by 'from' for CodeMirror 6 ChangeSpec array
@@ -46,11 +102,19 @@ export function applyTextEditsToView(view: EditorView, edits: LspTextEdit[]): bo
           .reverse()
           .map((c) => ({ changes: c }))
       );
+      if (targetSelection) {
+        view.dispatch({ selection: targetSelection, scrollIntoView: true });
+      }
       return true;
     }
   }
 
-  view.dispatch({ changes });
+  const sel = targetSelection as { anchor: number; head: number } | null;
+  view.dispatch({
+    changes,
+    selection: sel ? { anchor: sel.anchor, head: sel.head } : undefined,
+    scrollIntoView: true,
+  });
   return true;
 }
 
@@ -107,7 +171,7 @@ export async function applyWorkspaceEdit(
         const changes = edits.map((e) => ({
           from: lspPosToOffset(doc, e.range.start),
           to: lspPosToOffset(doc, e.range.end),
-          insert: e.newText,
+          insert: processSnippet(e.newText).cleanText,
         }));
         changes.sort((a, b) => a.from - b.from || a.to - b.to);
         const tr = openTab.state.update({ changes });
@@ -122,7 +186,7 @@ export async function applyWorkspaceEdit(
         start_character: e.range.start.character,
         end_line: e.range.end.line,
         end_character: e.range.end.character,
-        new_text: e.newText,
+        new_text: processSnippet(e.newText).cleanText,
       }));
       await api.lsp.applyWorkspaceEditDisk(filePath, diskEdits);
     }
