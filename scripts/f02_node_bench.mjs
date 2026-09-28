@@ -26,7 +26,7 @@ for (const lang of langs) {
 
   let pos = Math.floor(text.length / 2);
   const inc = [], q = [];
-  const n = lang === 'swift' ? 20 : 200; // swift: first edit alone takes ~30 s
+  const n = 200; // f05: new swift grammar is fast enough for 200 samples
   for (let i = 0; i < n; i++) {
     const before = text.slice(0, pos).split('\n');
     const row = before.length - 1, column = before[row].length;

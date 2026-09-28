@@ -1,0 +1,19 @@
+F05 Swift grammar benchmark — server (x86_64, node v26.8.2)
+Grammar: alex-pinkus/tree-sitter-swift @ 187fd4d (latest, 2026-09-28)
+Built with: tree-sitter-cli 0.25.3 + emsdk 6.0.10
+web-tree-sitter: 0.25.3
+File: Big10k.swift (10000 lines, 238285 chars)
+200 incremental edits per run, 3 runs
+
+=== RUN 1 ===
+{"metric":"f02_node_bench","runtime":"node v26.8.2","language":"swift","samples":200,"initial_parse_ms":141.26263699999998,"first_incremental_ms":2.7247560000000135,"incremental":{"p50":2.2038479999999936,"p95":2.7247560000000135,"max":3.0358850000000075},"incremental_excl_first":{"p50":2.1842779999999493,"p95":2.722533999999996,"max":3.0358850000000075},"query_viewport":{"p50":0.7646929999999657,"p95":1.6509669999999232,"max":8.247767000000067}}
+=== RUN 2 ===
+{"metric":"f02_node_bench","runtime":"node v26.8.2","language":"swift","samples":200,"initial_parse_ms":111.89380599999998,"first_incremental_ms":2.415802000000042,"incremental":{"p50":1.4940020000000231,"p95":2.0346739999999954,"max":14.533698999999956},"incremental_excl_first":{"p50":1.491960000000006,"p95":1.9812009999999418,"max":14.533698999999956},"query_viewport":{"p50":0.5603839999999991,"p95":1.0216569999999479,"max":4.161791000000051}}
+=== RUN 3 ===
+{"metric":"f02_node_bench","runtime":"node v26.8.2","language":"swift","samples":200,"initial_parse_ms":105.88880999999998,"first_incremental_ms":3.613505000000032,"incremental":{"p50":1.5113249999999994,"p95":2.1640760000000228,"max":14.88777600000003},"incremental_excl_first":{"p50":1.5082720000000336,"p95":2.1169239999999263,"max":14.88777600000003},"query_viewport":{"p50":0.5354959999999664,"p95":1.157621000000006,"max":6.270106999999996}}
+
+Medians across 3 runs:
+  initial_parse: 112 ms
+  incremental p50: 1.5 ms
+  incremental p95: 2.2 ms
+  query_viewport p50: 0.6 ms

@@ -1,0 +1,23 @@
+F05 Swift grammar benchmark — Mac M2 (node v25.5.0)
+Grammar: alex-pinkus/tree-sitter-swift @ 187fd4d (latest, 2026-09-28)
+Built with: tree-sitter-cli 0.25.3 + emsdk 6.0.10
+web-tree-sitter: 0.25.3
+File: Big10k.swift (10000 lines, 238285 chars)
+200 incremental edits per run, 3 runs
+
+=== RUN 1 ===
+{"metric":"f02_node_bench","runtime":"node v25.5.0","language":"swift","samples":200,"initial_parse_ms":68.22854099999995,"first_incremental_ms":1.540666999999985,"incremental":{"p50":0.631458000000066,"p95":1.540666999999985,"max":10.579459000000043},"incremental_excl_first":{"p50":0.6304999999999836,"p95":1.307374999999979,"max":10.579459000000043},"query_viewport":{"p50":0.297916999999984,"p95":1.8880410000000438,"max":15.944124999999985}}
+=== RUN 2 ===
+{"metric":"f02_node_bench","runtime":"node v25.5.0","language":"swift","samples":200,"initial_parse_ms":68.36329200000003,"first_incremental_ms":1.4129580000000033,"incremental":{"p50":0.8552080000000046,"p95":7.692875000000015,"max":24.60775000000001},"incremental_excl_first":{"p50":0.8548749999999927,"p95":7.692875000000015,"max":24.60775000000001},"query_viewport":{"p50":0.37725000000000364,"p95":3.7329999999999472,"max":19.049207999999908}}
+=== RUN 3 ===
+{"metric":"f02_node_bench","runtime":"node v25.5.0","language":"swift","samples":200,"initial_parse_ms":291.25245800000005,"first_incremental_ms":7.883207999999968,"incremental":{"p50":1.238540999999941,"p95":4.880499999999984,"max":20.011957999999822},"incremental_excl_first":{"p50":1.2262499999999363,"p95":4.79491599999983,"max":20.011957999999822},"query_viewport":{"p50":0.4836250000000746,"p95":3.02145900000005,"max":19.606624999999894}}
+
+Medians across 3 runs:
+  initial_parse: 68 ms
+  incremental p50: 0.86 ms
+  incremental p95: 4.9 ms (run 2/3 had GC spikes to ~20ms max)
+  query_viewport p50: 0.38 ms
+
+Note: run 3 had a GC spike causing initial parse of 291ms (outlier);
+typical initial parse is 68ms. Max incremental 20-25ms (GC) but p50 is
+always <1.3ms and p95 <8ms — well under 16ms budget.
