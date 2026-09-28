@@ -61,4 +61,54 @@ mod tests {
         let paths = received.unwrap();
         assert!(!paths.is_empty(), "Paths should not be empty");
     }
+
+    #[test]
+    fn test_watch_ignores_git_and_temp_files() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let (tx, rx) = mpsc::channel();
+
+        let git_dir = temp_dir.path().join(".git");
+        std::fs::create_dir_all(&git_dir).unwrap();
+
+        let _watcher = watch(temp_dir.path(), move |paths| {
+            let _ = tx.send(paths);
+        })
+        .unwrap();
+
+        // Write to .git/config and a .petak-tmp file
+        let git_file = git_dir.join("config");
+        let mut f1 = File::create(&git_file).unwrap();
+        f1.write_all(b"[core]\n").unwrap();
+        f1.sync_all().unwrap();
+
+        let tmp_file = temp_dir.path().join(".main.rs.petak-tmp");
+        let mut f2 = File::create(&tmp_file).unwrap();
+        f2.write_all(b"temporary").unwrap();
+        f2.sync_all().unwrap();
+
+        // Now write a valid file
+        let valid_file = temp_dir.path().join("main.rs");
+        let mut f3 = File::create(&valid_file).unwrap();
+        f3.write_all(b"fn main() {}").unwrap();
+        f3.sync_all().unwrap();
+
+        // Should receive the valid file event
+        let start = std::time::Instant::now();
+        let mut received_valid = false;
+        while start.elapsed() < Duration::from_secs(2) {
+            if let Ok(paths) = rx.recv_timeout(Duration::from_millis(500)) {
+                for p in paths {
+                    assert!(!p.contains(".git"), "Watcher leaked .git path: {}", p);
+                    assert!(!p.ends_with(".petak-tmp"), "Watcher leaked .petak-tmp path: {}", p);
+                    if p.ends_with("main.rs") {
+                        received_valid = true;
+                    }
+                }
+                if received_valid {
+                    break;
+                }
+            }
+        }
+        assert!(received_valid, "Expected to receive event for main.rs");
+    }
 }
