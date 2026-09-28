@@ -1,12 +1,12 @@
 <script lang="ts">
   let {
-    branchName = 'main',
+    branchName = '',
     statusText = 'Ready',
     isBench = false,
     fileType = 'Kotlin',
     cursorInfo = 'Ln 1, Col 1',
   } = $props<{
-    branchName?: string;
+    branchName?: string | null;
     statusText?: string;
     isBench?: boolean;
     fileType?: string;
@@ -15,7 +15,9 @@
 </script>
 
 <div class="status-bar">
-  <span class="branch-tag">{branchName} ↑1</span>
+  {#if branchName}
+    <span class="branch-tag">{branchName}</span>
+  {/if}
   <span class="status-indicator">
     <span class="dot"></span>
     {statusText}
@@ -23,8 +25,6 @@
   {#if isBench}
     <span class="bench-badge">⚡ BENCH RUNNING</span>
   {/if}
-  <span class="toolchain">Gradle synced</span>
-  <span class="toolchain">Pixel 8 connected</span>
 
   <div class="spacer"></div>
 
@@ -71,9 +71,6 @@
     border-radius: 4px;
     font-size: 10px;
     font-weight: 600;
-  }
-  .toolchain {
-    color: #6e727b;
   }
   .spacer {
     flex-grow: 1;
