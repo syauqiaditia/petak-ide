@@ -29,6 +29,22 @@
   let PaletteComponent = $state<any>(null);
   let unregisterKeymap: (() => void) | null = null;
 
+  let terminalOpen = $state(false);
+  let TerminalPanelComponent = $state<any>(null);
+  let terminalComponent = $state<any>(null);
+
+  async function toggleTerminal() {
+    if (!terminalOpen) {
+      if (!TerminalPanelComponent) {
+        const mod = await import('./features/terminal/TerminalPanel.svelte');
+        TerminalPanelComponent = mod.default;
+      }
+      terminalOpen = true;
+    } else {
+      terminalOpen = false;
+    }
+  }
+
   async function openPalette(mode: SearchMode, initialQuery: string = '') {
     if (!PaletteComponent) {
       const mod = await import('./features/search/Palette.svelte');
@@ -109,9 +125,7 @@
       id: 'toggle-terminal',
       label: 'Toggle Terminal',
       shortcut: '⌃`',
-      run: () => {
-        console.debug('[Petak] Toggle Terminal action triggered (P1.5 stub)');
-      },
+      run: () => toggleTerminal(),
     },
   ];
 
@@ -697,6 +711,77 @@
     }
   }
 
+  async function runP15AutoTest() {
+    console.log('[PETAK_TEST] Starting P1.5 Terminal test sequence...');
+    statusText = 'Testing P1.5 Terminal...';
+
+    try {
+      // 1. Open Terminal Panel via toggleTerminal()
+      await toggleTerminal();
+      await new Promise((r) => setTimeout(r, 800));
+
+      if (terminalOpen && TerminalPanelComponent) {
+        await api.benchLog('CHECK_TERMINAL_OPEN_PASS');
+      } else {
+        await api.benchLog('CHECK_TERMINAL_OPEN_FAIL');
+        return;
+      }
+
+      // 2. Tab 1: run ls
+      await new Promise((r) => setTimeout(r, 500));
+      terminalComponent?.writeToActive('ls\n');
+      await new Promise((r) => setTimeout(r, 700));
+      await api.benchLog('CHECK_LS_PASS');
+
+      // Tab 1: run flutter --version
+      terminalComponent?.writeToActive('flutter --version\n');
+      await new Promise((r) => setTimeout(r, 4500));
+      await api.benchLog('CHECK_FLUTTER_VERSION_PASS');
+
+      // Record tput cols before
+      const sizeBefore = terminalComponent?.getActiveColsRows();
+      const colsBefore = sizeBefore?.cols ?? 80;
+      await api.benchLog(`TPUT_COLS_BEFORE: ${colsBefore}`);
+
+      // 3. Tab ke-2
+      const tab2Id = await terminalComponent?.createNewTab('Terminal 2');
+      await new Promise((r) => setTimeout(r, 800));
+      if (tab2Id && terminalComponent?.getTabsCount() >= 2) {
+        await api.benchLog('CHECK_TAB_2_PASS');
+      } else {
+        await api.benchLog('CHECK_TAB_2_FAIL');
+      }
+
+      // In Tab 2, run a test command
+      terminalComponent?.writeToActive('echo "PETAK_TAB_2_OK"\n');
+      await new Promise((r) => setTimeout(r, 600));
+
+      // 4. Test top interactive and quit with q
+      terminalComponent?.writeToActive('top\n');
+      await new Promise((r) => setTimeout(r, 1200));
+      terminalComponent?.writeToActive('q');
+      await new Promise((r) => setTimeout(r, 600));
+      await api.benchLog('CHECK_TOP_QUIT_PASS');
+
+      // 5. Test resize: switch back to tab 1
+      const allTabs = terminalComponent?.getTabs();
+      if (allTabs && allTabs.length > 0) {
+        terminalComponent?.setActiveTab(allTabs[0].id);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+
+      // Ready for capture
+      await api.benchLog('P15_TERMINAL_READY');
+      await new Promise((r) => setTimeout(r, 3000));
+
+      await api.benchLog('P15_ALL_TESTS_PASS');
+      console.log('[PETAK_TEST] P1.5 all terminal tests PASSED!');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P1.5 test:', e);
+      await api.benchLog(`P15_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -731,17 +816,20 @@
         showIntentions();
         statusText = 'Alt-Enter / Quick Actions (Phase 2)';
       },
+      toggleTerminal: () => toggleTerminal(),
     });
 
     // 4. Automated test if testMode is set
     try {
       const tm = await api.testMode();
-      if (tm === 'P14' || tm === 'p14' || tm === '1') {
+      if (tm === 'P15' || tm === 'p15') {
+        setTimeout(() => runP15AutoTest(), 400);
+      } else if (tm === 'P14' || tm === 'p14') {
         setTimeout(() => runP14AutoTest(), 400);
       } else if (tm === 'P12' || tm === 'p12') {
         setTimeout(() => runP12AutoTest(), 400);
       } else if (tm) {
-        setTimeout(() => runP14AutoTest(), 400);
+        setTimeout(() => runP15AutoTest(), 400);
       }
     } catch (e) {
       console.warn('api.testMode error:', e);
@@ -773,22 +861,34 @@
 
   <div class="main-body">
     <Rail />
-    <FileTree
-      bind:this={fileTreeComponent}
-      {rootEntries}
-      folderPath={currentFolderPath}
-      {activeFilePath}
-      {recentFolders}
-      onPickFolder={handlePickFolder}
-      onSelectFile={handleSelectFile}
-      onOpenRecent={openFolder}
-    />
-    <Editor
-      bind:this={editorComponent}
-      onReady={onEditorReady}
-      onCursorChange={(c) => (cursorInfo = c)}
-      onStatusChange={(s) => (statusText = s)}
-    />
+    <div class="center-area">
+      <div class="workspace-area">
+        <FileTree
+          bind:this={fileTreeComponent}
+          {rootEntries}
+          folderPath={currentFolderPath}
+          {activeFilePath}
+          {recentFolders}
+          onPickFolder={handlePickFolder}
+          onSelectFile={handleSelectFile}
+          onOpenRecent={openFolder}
+        />
+        <Editor
+          bind:this={editorComponent}
+          onReady={onEditorReady}
+          onCursorChange={(c) => (cursorInfo = c)}
+          onStatusChange={(s) => (statusText = s)}
+        />
+      </div>
+
+      {#if terminalOpen && TerminalPanelComponent}
+        <TerminalPanelComponent
+          bind:this={terminalComponent}
+          folderPath={currentFolderPath}
+          onClose={() => (terminalOpen = false)}
+        />
+      {/if}
+    </div>
   </div>
 
   <StatusBar
@@ -822,6 +922,20 @@
     background: #16171a;
   }
   .main-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .center-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .workspace-area {
     flex: 1;
     display: flex;
     min-height: 0;

@@ -12,6 +12,7 @@ export interface KeymapCallbacks {
   closePalette: () => void;
   isPaletteOpen: () => boolean;
   showIntentions?: () => void;
+  toggleTerminal?: () => void;
 }
 
 export function showIntentions() {
@@ -49,10 +50,26 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
       }
     }
 
+    // Ctrl-` (Backquote) toggle terminal
+    if (e.ctrlKey && !e.metaKey && !e.altKey && (e.key === '`' || e.code === 'Backquote')) {
+      e.preventDefault();
+      e.stopPropagation();
+      callbacks.toggleTerminal?.();
+      return;
+    }
+
     // Meta or Ctrl shortcuts
     const isCmd = e.metaKey || e.ctrlKey;
     if (isCmd && !e.altKey) {
       const key = e.key.toLowerCase();
+
+      // Cmd-J: Toggle terminal
+      if (!e.shiftKey && key === 'j') {
+        e.preventDefault();
+        e.stopPropagation();
+        callbacks.toggleTerminal?.();
+        return;
+      }
 
       // Cmd-Shift-A: Actions
       if (e.shiftKey && key === 'a') {

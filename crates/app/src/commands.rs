@@ -84,8 +84,9 @@ pub fn bench_mode() -> bool {
 
 #[tauri::command]
 pub fn test_mode() -> Option<String> {
-    std::env::var("PETAK_TEST_P14")
+    std::env::var("PETAK_TEST_P15")
         .ok()
+        .or_else(|| std::env::var("PETAK_TEST_P14").ok())
         .or_else(|| std::env::var("PETAK_TEST").ok())
         .or_else(|| std::env::var("PETAK_TEST_P12").ok())
 }
