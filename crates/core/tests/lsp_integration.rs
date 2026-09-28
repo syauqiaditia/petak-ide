@@ -267,6 +267,33 @@ fn registry_idle_kill() {
 }
 
 #[test]
+fn registry_idle_kill_with_env_override() {
+    let _lock = REGISTRY_TEST_LOCK.lock().unwrap();
+    let fake = fake_lsp_path();
+    std::env::set_var("PETAK_LSP_DART", &fake);
+    std::env::set_var("PETAK_LSP_IDLE_SECS", "5");
+
+    let clock = Arc::new(FakeClock::new());
+    let registry = Registry::new(clock.clone(), |_, _, _| {});
+
+    let tmp = tempfile::tempdir().unwrap();
+    let file_path = tmp.path().join("main.dart");
+    registry
+        .did_open(&file_path, Lang::Dart, "void main() {}", None)
+        .unwrap();
+    assert_eq!(registry.server_count(), 1);
+
+    // Advance clock past 5 seconds
+    clock.advance(Duration::from_secs(6));
+    registry.tick();
+
+    assert_eq!(registry.server_count(), 0);
+
+    std::env::remove_var("PETAK_LSP_DART");
+    std::env::remove_var("PETAK_LSP_IDLE_SECS");
+}
+
+#[test]
 fn registry_crash_restart_reopens_docs() {
     let _lock = REGISTRY_TEST_LOCK.lock().unwrap();
     let fake = fake_lsp_path();

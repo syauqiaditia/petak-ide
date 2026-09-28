@@ -173,11 +173,17 @@ impl Registry {
     where
         F: Fn(Lang, PathBuf, ServerEvent) + Send + Sync + 'static,
     {
+        let idle_timeout = std::env::var("PETAK_LSP_IDLE_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(600));
+
         Self {
             servers: Mutex::new(HashMap::new()),
             clock,
             event_callback: Arc::new(on_event),
-            idle_timeout: Duration::from_secs(600), // 10 minutes
+            idle_timeout,
             pending_apply_edits: Arc::new(Mutex::new(HashMap::new())),
         }
     }

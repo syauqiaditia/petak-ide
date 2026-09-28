@@ -1,0 +1,25 @@
+=== Benchmarking Dart Completion Latency (< 150 ms) ===
+Target project: /tmp/petak_bench_dart_completion
+Sample 1 (prefix: "pri"): 11.97 ms (2 items)
+Sample 2 (prefix: "poi"): 5.71 ms (4 items)
+Sample 3 (prefix: "Ma"): 4.69 ms (27 items)
+Sample 4 (prefix: "Stri"): 4.57 ms (14 items)
+Sample 5 (prefix: "dou"): 5.36 ms (2 items)
+Sample 6 (prefix: "lis"): 5.47 ms (8 items)
+Sample 7 (prefix: "Map"): 5.66 ms (12 items)
+Sample 8 (prefix: "int"): 5.90 ms (22 items)
+Sample 9 (prefix: "bool"): 5.33 ms (3 items)
+Sample 10 (prefix: "Set"): 16.86 ms (15 items)
+Sample 11 (prefix: "Futu"): 4.66 ms (19 items)
+Sample 12 (prefix: "Stre"): 4.99 ms (19 items)
+Sample 13 (prefix: "Ite"): 6.11 ms (21 items)
+Sample 14 (prefix: "Run"): 4.55 ms (6 items)
+Sample 15 (prefix: "Asse"): 5.26 ms (3 items)
+
+--- Completion Latency Summary (15 samples) ---
+Min: 4.55 ms
+Max: 16.86 ms
+Avg: 6.47 ms
+p50: 5.36 ms
+p95: 16.86 ms
+Budget Target: < 150 ms -> PASS (LOLOS)
