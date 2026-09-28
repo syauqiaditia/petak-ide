@@ -281,6 +281,9 @@ pub enum RebaseStateKind {
     Revert,
 }
 
+pub type OpKind = RebaseStateKind;
+pub type OpStateKind = RebaseStateKind;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RebaseState {
@@ -289,4 +292,61 @@ pub struct RebaseState {
     pub head_name: Option<String>,
     pub onto_name: Option<String>,
     pub current_commit: Option<String>,
+}
+
+pub type OpState = RebaseState;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConflictSide {
+    Ours,
+    Theirs,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictBlock {
+    pub start_line: usize,
+    pub end_line: usize,
+    pub ours: Vec<String>,
+    pub base: Option<Vec<String>>,
+    pub theirs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictFile {
+    pub path: String,
+    pub ours: String,
+    pub theirs: String,
+    pub base: Option<String>,
+    pub merged: String,
+    pub blocks: Vec<ConflictBlock>,
+    pub deleted_in: Option<ConflictSide>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConflictChoice {
+    Ours,
+    Theirs,
+    Both,
+    BothTheirsFirst,
+}
+
+pub type Choice = ConflictChoice;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Remote {
+    pub name: String,
+    pub fetch_url: Option<String>,
+    pub push_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PullMode {
+    Rebase,
+    Merge,
 }

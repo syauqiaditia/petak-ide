@@ -1,13 +1,19 @@
 pub mod backup;
+pub mod conflict;
 pub mod diff;
 pub mod graph;
 pub mod log;
 pub mod model;
 pub mod ops;
 pub mod rebase;
+pub mod remote;
 pub mod status;
 
 pub use backup::{backup_create, backup_delete, backup_list, backup_restore};
+pub use conflict::{
+    conflict_write, conflicts, op_abort, op_continue, op_state, parse_conflict_blocks,
+    resolve_block,
+};
 pub use diff::{diff_commit, diff_staged, diff_worktree, parse_diff};
 pub use graph::layout;
 pub use log::{
@@ -15,10 +21,12 @@ pub use log::{
     parse_log_output, parse_tracking,
 };
 pub use model::{
-    BackupRef, BranchInfo, BranchList, Commit, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind,
-    FileState, GraphRow, GraphState, Hunk, LocalBranch, LogFilter, LogPage, OpResult, RebaseAction,
-    RebaseItem, RebasePlan, RebaseState, RebaseStateKind, RefKind, RefLabel, RemoteBranch,
-    RepoStatus, ResetMode, StatusEntry, StopKind, StopReason, TagRef,
+    BackupRef, BranchInfo, BranchList, Choice, Commit, ConflictBlock, ConflictChoice, ConflictFile,
+    ConflictSide, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind, FileState, GraphRow,
+    GraphState, Hunk, LocalBranch, LogFilter, LogPage, OpKind, OpResult, OpState, OpStateKind,
+    PullMode, RebaseAction, RebaseItem, RebasePlan, RebaseState, RebaseStateKind, RefKind,
+    RefLabel, Remote, RemoteBranch, RepoStatus, ResetMode, StatusEntry, StopKind, StopReason,
+    TagRef,
 };
 pub use ops::{
     branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,
@@ -29,6 +37,7 @@ pub use rebase::{
     drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,
     rebase_state, rebase_todo, reword, squash,
 };
+pub use remote::{fetch, pull, push, remotes};
 pub use status::{parse_status, status};
 
 use std::fs;

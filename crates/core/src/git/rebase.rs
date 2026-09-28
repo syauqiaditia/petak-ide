@@ -351,7 +351,7 @@ pub fn rebase_state(exec: &dyn Exec, repo: &Path) -> Result<RebaseState, GitErro
         return Ok(RebaseState {
             kind: RebaseStateKind::Rebase,
             step,
-            head_name: None,
+            head_name: crate::git::branch(repo),
             onto_name: None,
             current_commit,
         });
@@ -362,11 +362,21 @@ pub fn rebase_state(exec: &dyn Exec, repo: &Path) -> Result<RebaseState, GitErro
         let commit = fs::read_to_string(&merge_head)
             .ok()
             .map(|s| s.trim().to_string());
+        let merge_msg = fs::read_to_string(gdir.join("MERGE_MSG")).unwrap_or_default();
+        let onto = if let Some(rest) = merge_msg.strip_prefix("Merge branch '") {
+            rest.split('\'').next().map(|s| s.to_string())
+        } else if let Some(rest) = merge_msg.strip_prefix("Merge commit '") {
+            rest.split('\'').next().map(|s| s.to_string())
+        } else {
+            None
+        };
+        let onto_name = onto.or_else(|| commit.clone());
+
         return Ok(RebaseState {
             kind: RebaseStateKind::Merge,
             step: None,
-            head_name: None,
-            onto_name: None,
+            head_name: crate::git::branch(repo),
+            onto_name,
             current_commit: commit,
         });
     }
@@ -379,8 +389,8 @@ pub fn rebase_state(exec: &dyn Exec, repo: &Path) -> Result<RebaseState, GitErro
         return Ok(RebaseState {
             kind: RebaseStateKind::CherryPick,
             step: None,
-            head_name: None,
-            onto_name: None,
+            head_name: crate::git::branch(repo),
+            onto_name: commit.clone(),
             current_commit: commit,
         });
     }
@@ -393,8 +403,8 @@ pub fn rebase_state(exec: &dyn Exec, repo: &Path) -> Result<RebaseState, GitErro
         return Ok(RebaseState {
             kind: RebaseStateKind::Revert,
             step: None,
-            head_name: None,
-            onto_name: None,
+            head_name: crate::git::branch(repo),
+            onto_name: commit.clone(),
             current_commit: commit,
         });
     }
