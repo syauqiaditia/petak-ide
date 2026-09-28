@@ -311,3 +311,224 @@ fn test_real_dart_lsp_p23_features() {
 
     registry.shutdown_all();
 }
+
+#[test]
+fn test_real_dart_lsp_p24_code_actions() {
+    if !has_dart() {
+        println!("Skipping test_real_dart_lsp_p24_code_actions: dart not in PATH");
+        return;
+    }
+
+    let tmp = tempfile::tempdir().expect("create temp dir");
+    let project_dir = tmp.path().to_path_buf();
+
+    let pubspec = project_dir.join("pubspec.yaml");
+    std::fs::write(
+        &pubspec,
+        "name: test_lsp_p24\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n",
+    )
+    .expect("write pubspec");
+
+    let lib_dir = project_dir.join("lib");
+    std::fs::create_dir_all(&lib_dir).expect("create lib dir");
+
+    let (tx, rx) = mpsc::channel();
+    let clock = Arc::new(WallClock);
+    let registry = Registry::new(clock, move |lang, root, event| {
+        let _ = tx.send((lang, root, event));
+    });
+
+    // 1. Test "Remove unused import" quickfix
+    let unused_code = "import 'dart:math';\nvoid main() {}\n";
+    let unused_file = lib_dir.join("unused.dart");
+    std::fs::write(&unused_file, unused_code).expect("write unused.dart");
+    let unused_uri = petak_core::lsp::registry::path_to_uri(&unused_file);
+
+    registry
+        .did_open(&unused_file, Lang::Dart, unused_code, Some(&project_dir))
+        .expect("did_open unused");
+
+    // Wait for diagnostics on unused_import
+    let start = Instant::now();
+    let mut unused_diags = vec![];
+    while start.elapsed() < Duration::from_secs(10) {
+        if let Ok((_lang, _root, ServerEvent::Notification { method, params })) =
+            rx.recv_timeout(Duration::from_millis(150))
+        {
+            if method == "textDocument/publishDiagnostics" {
+                if let Some(uri) = params.get("uri").and_then(|u| u.as_str()) {
+                    if uri == unused_uri {
+                        if let Some(diags) = params.get("diagnostics").and_then(|d| d.as_array()) {
+                            if !diags.is_empty() {
+                                unused_diags = diags.clone();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let ca_params = json!({
+        "textDocument": { "uri": &unused_uri },
+        "range": {
+            "start": { "line": 0, "character": 7 },
+            "end": { "line": 0, "character": 18 }
+        },
+        "context": {
+            "diagnostics": unused_diags
+        }
+    });
+
+    let ca_res = registry
+        .request(&unused_file, Lang::Dart, "textDocument/codeAction", &ca_params, Some(&project_dir))
+        .expect("codeAction request");
+
+    let actions = ca_res.as_array().expect("code actions array");
+    let remove_import = actions.iter().find(|a| {
+        a.get("title")
+            .and_then(|t| t.as_str())
+            .map(|t| t.contains("Remove unused import"))
+            .unwrap_or(false)
+    });
+    assert!(
+        remove_import.is_some(),
+        "Expected 'Remove unused import' code action, got: {:?}",
+        actions
+    );
+    println!("Verified 'Remove unused import' code action!");
+
+    // 2. Test "Import library" for missing import
+    let missing_code = "void main() {\n  Random r = Random();\n}\n";
+    let missing_file = lib_dir.join("missing.dart");
+    std::fs::write(&missing_file, missing_code).expect("write missing.dart");
+    let missing_uri = petak_core::lsp::registry::path_to_uri(&missing_file);
+
+    registry
+        .did_open(&missing_file, Lang::Dart, missing_code, Some(&project_dir))
+        .expect("did_open missing");
+
+    let start = Instant::now();
+    let mut missing_diags = vec![];
+    while start.elapsed() < Duration::from_secs(10) {
+        if let Ok((_lang, _root, ServerEvent::Notification { method, params })) =
+            rx.recv_timeout(Duration::from_millis(150))
+        {
+            if method == "textDocument/publishDiagnostics" {
+                if let Some(uri) = params.get("uri").and_then(|u| u.as_str()) {
+                    if uri == missing_uri {
+                        if let Some(diags) = params.get("diagnostics").and_then(|d| d.as_array()) {
+                            if !diags.is_empty() {
+                                missing_diags = diags.clone();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let ca_missing_params = json!({
+        "textDocument": { "uri": &missing_uri },
+        "range": {
+            "start": { "line": 1, "character": 2 },
+            "end": { "line": 1, "character": 8 }
+        },
+        "context": {
+            "diagnostics": missing_diags
+        }
+    });
+
+    let ca_missing_res = registry
+        .request(&missing_file, Lang::Dart, "textDocument/codeAction", &ca_missing_params, Some(&project_dir))
+        .expect("codeAction missing import request");
+
+    let missing_actions = ca_missing_res.as_array().expect("missing code actions array");
+    let add_import = missing_actions.iter().find(|a| {
+        a.get("title")
+            .and_then(|t| t.as_str())
+            .map(|t| t.contains("Import library 'dart:math'"))
+            .unwrap_or(false)
+    });
+    assert!(
+        add_import.is_some(),
+        "Expected \"Import library 'dart:math'\" code action, got: {:?}",
+        missing_actions
+    );
+    println!("Verified 'Import library dart:math' code action!");
+
+    // 3. Test Flutter wrap actions if flutter hello_world project exists
+    let flutter_example = std::path::PathBuf::from("/mnt/storage/flutter-uqi/examples/hello_world");
+    if flutter_example.exists() {
+        let flutter_main = flutter_example.join("lib/main.dart");
+        let flutter_code = std::fs::read_to_string(&flutter_main).expect("read flutter main.dart");
+        let flutter_uri = petak_core::lsp::registry::path_to_uri(&flutter_main);
+
+        registry
+            .did_open(&flutter_main, Lang::Dart, &flutter_code, Some(&flutter_example))
+            .expect("did_open flutter main");
+
+        std::thread::sleep(Duration::from_millis(1500));
+
+        let ca_flutter_params = json!({
+            "textDocument": { "uri": &flutter_uri },
+            "range": {
+                "start": { "line": 8, "character": 11 },
+                "end": { "line": 8, "character": 11 }
+            },
+            "context": {
+                "diagnostics": []
+            }
+        });
+
+        let ca_flutter_res = registry
+            .request(&flutter_main, Lang::Dart, "textDocument/codeAction", &ca_flutter_params, Some(&flutter_example))
+            .expect("flutter codeAction request");
+
+        let flutter_actions = ca_flutter_res.as_array().expect("flutter code actions array");
+        let titles: Vec<&str> = flutter_actions
+            .iter()
+            .filter_map(|a| a.get("title").and_then(|t| t.as_str()))
+            .collect();
+        println!("Flutter code actions available: {:?}", titles);
+
+        assert!(
+            titles.iter().any(|t| t.contains("Wrap with Padding")),
+            "Expected 'Wrap with Padding', got: {:?}",
+            titles
+        );
+        assert!(
+            titles.iter().any(|t| t.contains("Wrap with Center")),
+            "Expected 'Wrap with Center', got: {:?}",
+            titles
+        );
+        assert!(
+            titles.iter().any(|t| t.contains("Wrap with Column")),
+            "Expected 'Wrap with Column', got: {:?}",
+            titles
+        );
+        assert!(
+            titles.iter().any(|t| t.contains("Wrap with widget")),
+            "Expected 'Wrap with widget', got: {:?}",
+            titles
+        );
+
+        let padding_action = flutter_actions
+            .iter()
+            .find(|a| a.get("title").and_then(|t| t.as_str()).map(|t| t.contains("Wrap with Padding")).unwrap_or(false))
+            .unwrap();
+        let edit = padding_action.get("edit").expect("edit field in Wrap with Padding");
+        let doc_changes = edit.get("documentChanges").expect("documentChanges in edit");
+        let new_text = doc_changes[0]["edits"][0]["newText"].as_str().expect("newText");
+        assert!(
+            new_text.contains("Padding(") && new_text.contains("EdgeInsets.all(8.0)"),
+            "Expected Padding edit with EdgeInsets, got: {}",
+            new_text
+        );
+        println!("Verified Flutter Wrap with Padding edit content!");
+    }
+
+    registry.shutdown_all();
+}
