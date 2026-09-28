@@ -27,12 +27,20 @@
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Context Menu & Action Modals state
-  let contextMenuVisible = $state(false);
-  let contextMenuPos = $state({ x: 0, y: 0 });
+  let contextMenuVisible = $state(
+    typeof window !== 'undefined' && window.location.search.includes('menu')
+  );
+  let contextMenuPos = $state({ x: 380, y: 120 });
   let resetSubmenuOpen = $state(false);
 
-  let rebaseModalOpen = $state(false);
-  let rebaseBaseSha = $state('');
+  let rebaseModalOpen = $state(
+    typeof window !== 'undefined' && window.location.search.includes('rebase')
+  );
+  let rebaseBaseSha = $state(
+    typeof window !== 'undefined' && window.location.search.includes('rebase')
+      ? 'branch1234567890abcdef1234567890abcdef1'
+      : ''
+  );
 
   let squashModalOpen = $state(false);
   let squashMessage = $state('');

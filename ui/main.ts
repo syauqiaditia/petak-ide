@@ -261,6 +261,131 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
           { path: 'strings.xml', status: 'modified' },
         ];
       }
+      if (cmd === 'git_backup_list') {
+        return [
+          {
+            name: 'refs/petak/backup/20260928-153012-rebase',
+            targetSha: '5e44a0b1234567890abcdef1234567890abcdef1',
+            op: 'rebase',
+            subject: 'feat(transfer): add daily limit check',
+            createdAt: Math.floor(Date.now() / 1000) - 1800,
+          },
+          {
+            name: 'refs/petak/backup/20260928-144500-reset',
+            targetSha: '3a11b2c1234567890abcdef1234567890abcdef1',
+            op: 'reset',
+            subject: 'refactor(ui): extract amount input component',
+            createdAt: Math.floor(Date.now() / 1000) - 4500,
+          },
+        ];
+      }
+      if (cmd === 'git_remotes') {
+        return [
+          {
+            name: 'origin',
+            fetchUrl: 'git@code.istar.id:bankjatim/jconnect.git',
+            pushUrl: 'git@code.istar.id:bankjatim/jconnect.git',
+          },
+        ];
+      }
+      if (cmd === 'git_op_state') {
+        if (typeof window !== 'undefined' && window.location.search.includes('conflict')) {
+          return {
+            kind: 'rebase',
+            headName: 'feature/checkout',
+            ontoName: 'origin/main',
+            step: [2, 5],
+            conflictFiles: ['CheckoutScreen.kt', 'strings.xml'],
+          };
+        }
+        return { kind: 'none', headName: null, ontoName: null, step: null, conflictFiles: [] };
+      }
+      if (cmd === 'git_conflicts') {
+        return [
+          {
+            path: 'lib/features/checkout/CheckoutScreen.kt',
+            merged: `package id.co.bankjatim.jconnect.checkout\n\n<<<<<<< HEAD\nfun renderTotalAmount(total: Double, voucherDiscount: Double): Double {\n  return total - voucherDiscount\n}\n=======\nfun renderTotalAmount(total: Double, voucher: Voucher?): Double {\n  val discount = voucher?.discount ?: 0.0\n  return (total - discount).coerceAtLeast(0.0)\n}\n>>>>>>> origin/main\n`,
+            blocks: [
+              {
+                index: 0,
+                startLine: 3,
+                ours: [
+                  'fun renderTotalAmount(total: Double, voucherDiscount: Double): Double {',
+                  '  return total - voucherDiscount',
+                  '}',
+                ],
+                theirs: [
+                  'fun renderTotalAmount(total: Double, voucher: Voucher?): Double {',
+                  '  val discount = voucher?.discount ?: 0.0',
+                  '  return (total - discount).coerceAtLeast(0.0)',
+                  '}',
+                ],
+                base: null,
+              },
+            ],
+          },
+          {
+            path: 'res/values/strings.xml',
+            merged: `<resources>\n<<<<<<< HEAD\n  <string name="checkout_pay">Bayar Sekarang</string>\n=======\n  <string name="checkout_pay">Lanjutkan Pembayaran</string>\n>>>>>>> origin/main\n</resources>`,
+            blocks: [
+              {
+                index: 0,
+                startLine: 2,
+                ours: ['  <string name="checkout_pay">Bayar Sekarang</string>'],
+                theirs: ['  <string name="checkout_pay">Lanjutkan Pembayaran</string>'],
+                base: null,
+              },
+            ],
+          },
+        ];
+      }
+      if (cmd === 'git_rebase_todo') {
+        return [
+          {
+            action: 'pick',
+            sha: '5e44a0b1234567890abcdef1234567890abcdef1',
+            shortSha: '5e44a0b',
+            message: 'feat(transfer): add daily limit check',
+          },
+          {
+            action: 'pick',
+            sha: '3a11b2c1234567890abcdef1234567890abcdef1',
+            shortSha: '3a11b2c',
+            message: 'refactor(ui): extract amount input component',
+          },
+          {
+            action: 'pick',
+            sha: '7f99e8d1234567890abcdef1234567890abcdef1',
+            shortSha: '7f99e8d',
+            message: 'fix(form): prevent negative amount entry',
+          },
+          {
+            action: 'pick',
+            sha: '2b88c7a1234567890abcdef1234567890abcdef1',
+            shortSha: '2b88c7a',
+            message: 'style: format currency with separator dots',
+          },
+          {
+            action: 'pick',
+            sha: '1c55d4e1234567890abcdef1234567890abcdef1',
+            shortSha: '1c55d4e',
+            message: 'test: add unit test for daily limit edge cases',
+          },
+        ];
+      }
+      if (cmd === 'git_resolve_block') {
+        const choice = args?.choice;
+        if (choice === 'theirs') {
+          return 'fun renderTotalAmount(total: Double, voucher: Voucher?): Double {\n  val discount = voucher?.discount ?: 0.0\n  return (total - discount).coerceAtLeast(0.0)\n}';
+        }
+        return 'fun renderTotalAmount(total: Double, voucherDiscount: Double): Double {\n  return total - voucherDiscount\n}';
+      }
+      if (cmd === 'git_rebase_run' || cmd === 'git_op_continue' || cmd === 'git_squash' || cmd === 'git_reword' || cmd === 'git_fixup' || cmd === 'git_drop' || cmd === 'git_reset' || cmd === 'git_cherry_pick' || cmd === 'git_revert' || cmd === 'git_pull' || cmd === 'git_push') {
+        return { ok: true, backupRef: 'refs/petak/backup/20260928-153012-rebase' };
+      }
+      if (cmd === 'git_branch_checkout' || cmd === 'git_branch_create' || cmd === 'git_branch_rename' || cmd === 'git_branch_delete' || cmd === 'git_backup_restore' || cmd === 'git_backup_delete' || cmd === 'git_op_abort' || cmd === 'git_conflict_write' || cmd === 'git_fetch') {
+        return null;
+      }
       if (cmd === 'git_branch') return 'feature/checkout';
       if (cmd === 'git_last_message') return 'feat(transfer): add daily limit check';
       if (cmd === 'git_commit') return 'commit mock success';
