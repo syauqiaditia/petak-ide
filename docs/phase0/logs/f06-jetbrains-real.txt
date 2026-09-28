@@ -1,0 +1,56 @@
+F06: kotlin-lsp (JetBrains) v263.4702.0 on real Android project
+================================================================
+Date: 2026-09-28 ~08:16-08:26 WIB (Mac M2)
+
+Project: android/architecture-samples (shallow clone --depth 1)
+  Commit: ee66e15 (HEAD)
+  Size on disk: 4.8 MB
+  Source: https://github.com/android/architecture-samples
+  .kt files: ~30 (app/src/main + test + androidTest)
+
+Test file: app/src/main/.../todoapp/TodoActivity.kt
+  Injected error: fun typeError(): Int { return "hello" }
+  (should report: Type mismatch, String vs Int)
+
+Environment:
+  JAVA_HOME: ~/Library/Java/JavaVirtualMachines/openjdk-19.0.2/Contents/Home (Java 19.0.2)
+  ANDROID_HOME: ~/Library/Android/sdk (platforms: android-28, android-29)
+  Gradle cache: 15 GB in ~/.gradle (pre-existing)
+  kotlin-lsp binary: ~/petak-tools/kotlin-lsp/kotlin-server-263.4702.0/bin/intellij-server --stdio
+  Install size: 1.1 GB
+
+Disk before: 4.1 GB free
+Disk after: 19 GB free (Gradle downloaded 8.11.1, but overall freed space — possibly temp cleanup from macOS)
+
+=== RUN OUTPUT ===
+=== START: Mon Sep 28 08:16:34 WIB 2026 ===
+=== kotlin-lsp-jetbrains-real ===
+cmd: ~/petak-tools/kotlin-lsp/kotlin-server-263.4702.0/bin/intellij-server --stdio
+rootDir: /tmp/petak-kotlin-test
+file: /tmp/petak-kotlin-test/app/src/main/java/com/example/android/architecture/blueprints/todoapp/TodoActivity.kt
+timeout: 600s
+  initialize sent
+  stderr: idea.config.path=/var/folders/.../T/idea-system.../config
+  stderr: idea.system.path=/var/folders/.../T/idea-system.../system
+  stderr: Log file: /var/folders/.../T/idea-system.../system/log/intellij-server.log
+  stderr: Fetching distribution.
+  stderr: Downloading https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+  stderr: ............ (download progress dots, ~5 minutes)
+  initialized OK (2357ms)
+  didOpen sent
+  empty diagnostics #1
+  empty diagnostics #2
+TIMEOUT: 600s
+
+finish: timeout
+initializeMs: 2357
+diagnosticsMs: null (never received non-empty diagnostics)
+peakRSSMB: 911.5
+emptyDiagCount: 2
+=== END: Mon Sep 28 08:26:40 WIB 2026 ===
+
+RESULT: FAIL — no diagnostics in 600 seconds.
+  Initialize was fast (2.4s) but the server spent the remaining time
+  doing Gradle sync / IntelliJ indexing. Only 2 empty publishDiagnostics
+  notifications received. Same behavior as F03 fixture test (300s timeout,
+  2 empty diags, 481.8 MB RSS) but worse RSS (911.5 MB on real project).

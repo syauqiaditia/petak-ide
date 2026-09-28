@@ -1,0 +1,83 @@
+F06: fwcd/kotlin-language-server v1.3.13 on real Android project
+================================================================
+Date: 2026-09-28 ~08:26-08:28 WIB (Mac M2)
+
+Project: android/architecture-samples (same as JetBrains test)
+  Commit: ee66e15 (HEAD)
+
+Test file: app/src/main/.../todoapp/TodoActivity.kt
+  Injected error: fun typeError(): Int { return "hello" }
+
+Environment:
+  JAVA_HOME: ~/Library/Java/JavaVirtualMachines/openjdk-19.0.2/Contents/Home (Java 19.0.2)
+  ANDROID_HOME: ~/Library/Android/sdk
+  fwcd binary: ~/.local/kotlin-language-server/server/bin/kotlin-language-server
+  Install size: 89 MB (zip 83 MB)
+
+=== RUN OUTPUT (real project) ===
+=== START: Mon Sep 28 08:26:45 WIB 2026 ===
+=== fwcd kotlin-language-server v1.3.13 ===
+cmd: ~/.local/kotlin-language-server/server/bin/kotlin-language-server
+rootDir: /tmp/petak-kotlin-test
+file: /tmp/petak-kotlin-test/app/src/main/.../TodoActivity.kt
+timeout: 600s
+  initialize sent
+  stderr: SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+  stderr: SLF4J: Defaulting to no-operation (NOP) logger implementation
+  initialized OK (15193ms)
+  didOpen sent
+  diagnostics! (1 items, 23682ms)
+    - Type mismatch: inferred type is String but Int was expected
+
+finish: diagnostics received
+initializeMs: 15193
+diagnosticsMs: 23682
+peakRSSMB: 849.2
+emptyDiagCount: 0
+diagnostics: [{"message":"Type mismatch: inferred type is String but Int was expected","severity":1}]
+
+  stderr: ERROR: Bus is already disposed (non-fatal, happens during shutdown)
+
+=== END: Mon Sep 28 08:28:25 WIB 2026 ===
+
+RESULT: PASS — diagnostics received in 23.7 seconds.
+  Initialize 15.2s, diagnostics at 23.7s. Correct error detected (severity 1).
+  Peak RSS 849 MB. Install 89 MB.
+
+Note: the "Bus is already disposed" stderr error is non-fatal, occurs during
+shutdown after diagnostics were already delivered. The SLF4J warning is also
+benign (no logging backend configured, falls back to NOP).
+
+
+=== RUN OUTPUT (fixture / tiny project) ===
+=== START: Mon Sep 28 08:28:41 WIB 2026 ===
+=== fwcd on fixture (tiny project) ===
+cmd: ~/.local/kotlin-language-server/server/bin/kotlin-language-server
+rootDir: ~/petak/spike/fixtures/kotlin
+file: ~/petak/spike/fixtures/kotlin/src/main/kotlin/Main.kt
+timeout: 300s
+  initialize sent
+  initialized OK (946ms)
+  didOpen sent
+  diagnostics! (1 items, 1878ms)
+    - Type mismatch: inferred type is String but Int was expected
+
+finish: diagnostics received
+initializeMs: 946
+diagnosticsMs: 1878
+peakRSSMB: 210.4
+emptyDiagCount: 0
+diagnostics: [{"message":"Type mismatch: inferred type is String but Int was expected","severity":1}]
+
+=== END: Mon Sep 28 08:28:45 WIB 2026 ===
+
+RESULT: PASS — diagnostics received in 1.9 seconds on tiny project.
+  Initialize 0.9s, diagnostics at 1.9s. RAM only 210 MB.
+
+
+=== DISK ===
+Before all tests: 4.1 GB free
+After all tests: 19 GB free
+After cleanup (temp clone removed): 19 GB free
+Leftover: /tmp/petak-kotlin-test (4.8 MB) + /tmp/f06-kotlin-test.mjs — agent
+  could not rm due to security scanner. Negligible size. UQi can rm manually.
