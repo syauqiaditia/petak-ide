@@ -125,6 +125,10 @@
     return view;
   }
 
+  export function focus() {
+    view?.focus();
+  }
+
   export function gotoLine(line: number, col: number = 1) {
     if (!view) return;
     const doc = view.state.doc;

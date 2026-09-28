@@ -9,6 +9,7 @@
   import { tabsManager } from './features/editor/tabs.svelte';
   import type { EditorView } from '@codemirror/view';
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
+  import { registerKeymap, type SearchMode } from './features/search/keymap';
 
   let currentFolderPath = $state('');
   let rootEntries = $state<Entry[]>([]);
@@ -21,6 +22,49 @@
   let fileTreeComponent: any = null;
   let unlistenFs: UnlistenFn | null = null;
   let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  let paletteOpen = $state(false);
+  let paletteMode = $state<SearchMode>('files');
+  let PaletteComponent = $state<any>(null);
+  let unregisterKeymap: (() => void) | null = null;
+
+  async function openPalette(mode: SearchMode) {
+    if (!PaletteComponent) {
+      const mod = await import('./features/search/Palette.svelte');
+      PaletteComponent = mod.default;
+    }
+    paletteMode = mode;
+    paletteOpen = true;
+  }
+
+  function closePalette() {
+    paletteOpen = false;
+    editorComponent?.focus();
+  }
+
+  async function handleOpenFile(filePath: string, line?: number, col?: number) {
+    try {
+      const existing = tabsManager.tabs.find((t) => t.path === filePath);
+      const filename = filePath.split('/').filter(Boolean).pop() || '';
+      if (!existing) {
+        const text = await api.readFile(filePath);
+        tabsManager.openTab(filePath, filename, text);
+      } else {
+        tabsManager.setActive(filePath);
+      }
+      statusText = `Opened ${filename}`;
+      if (line !== undefined) {
+        setTimeout(() => {
+          editorComponent?.gotoLine(line, col || 1);
+        }, 50);
+      } else {
+        editorComponent?.focus();
+      }
+    } catch (e) {
+      console.error('Failed to open file:', filePath, e);
+      statusText = `Failed to open ${filePath}`;
+    }
+  }
 
   function triggerIndexRebuild(rootPath: string) {
     if (!rootPath) return;
@@ -516,7 +560,14 @@
       console.warn('Failed to load recent folders:', e);
     }
 
-    // 3. Automated P1.2 test if PETAK_TEST_P12 is set
+    // 3. Register global keymap
+    unregisterKeymap = registerKeymap({
+      openPalette: (mode) => openPalette(mode),
+      closePalette: () => closePalette(),
+      isPaletteOpen: () => paletteOpen,
+    });
+
+    // 4. Automated P1.2 test if PETAK_TEST_P12 is set
     try {
       const tm = await api.testMode();
       if (tm) {
@@ -528,6 +579,10 @@
   });
 
   onDestroy(() => {
+    if (unregisterKeymap) {
+      unregisterKeymap();
+      unregisterKeymap = null;
+    }
     if (indexDebounceTimer) {
       clearTimeout(indexDebounceTimer);
       indexDebounceTimer = null;
@@ -573,6 +628,15 @@
     {fileType}
     {cursorInfo}
   />
+
+  {#if paletteOpen && PaletteComponent}
+    <PaletteComponent
+      mode={paletteMode}
+      folderPath={currentFolderPath}
+      onClose={closePalette}
+      onOpenFile={handleOpenFile}
+    />
+  {/if}
 </div>
 
 <style>
