@@ -110,6 +110,7 @@
               tab.state = undefined;
             }
             statusText = `Reloaded ${tab.name} from disk`;
+            await api.benchLog(`CHECK2_EXTERNAL_RELOAD_VERIFIED: ${tab.name}`);
           } else {
             // Dirty tab -> show conflict bar
             tab.externalConflict = true;
@@ -430,10 +431,36 @@
         is_dir: false,
       });
 
-      // Active tab is AppDelegate.swift. Make an edit so it becomes dirty
+      // Check 1: Test Save (Cmd-S flow)
+      // Switch to main.dart, edit, and save
+      tabsManager.setActive(currentFolderPath + '/lib/main.dart');
+      await new Promise((r) => setTimeout(r, 100));
       const view = editorComponent?.getEditorView();
       if (view) {
         view.dispatch({
+          changes: { from: 0, insert: '// Petak saved via saveFile\n' },
+        });
+        await editorComponent?.handleSave();
+        await api.benchLog('CHECK1_SAVE_VERIFIED: main.dart saved');
+      }
+
+      // Check 3: Test Cmd-W flow
+      // Open a 4th tab, then close it
+      await handleSelectFile({
+        path: currentFolderPath + '/analysis_options.yaml',
+        name: 'analysis_options.yaml',
+        is_dir: false,
+      });
+      await new Promise((r) => setTimeout(r, 100));
+      editorComponent?.handleCloseActiveTab();
+      await api.benchLog('CHECK3_CMDW_VERIFIED: tab closed without closing window');
+
+      // Final state: Switch to AppDelegate.swift and make it dirty for screenshot
+      tabsManager.setActive(currentFolderPath + '/ios/Runner/AppDelegate.swift');
+      await new Promise((r) => setTimeout(r, 100));
+      const finalView = editorComponent?.getEditorView();
+      if (finalView) {
+        finalView.dispatch({
           changes: { from: 0, insert: '// Petak dirty test: edited in editor\n' },
         });
       }
