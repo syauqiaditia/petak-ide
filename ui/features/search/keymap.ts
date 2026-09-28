@@ -27,6 +27,18 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
       shiftInterrupted = true;
     }
 
+    // Alt-Enter (Option-Enter on macOS): Quick fix / intentions stub
+    if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (callbacks.showIntentions) {
+        callbacks.showIntentions();
+      } else {
+        showIntentions();
+      }
+      return;
+    }
+
     // Escape closes palette if open
     if (e.key === 'Escape') {
       if (callbacks.isPaletteOpen()) {

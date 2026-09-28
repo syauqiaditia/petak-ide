@@ -9,7 +9,7 @@
   import { tabsManager } from './features/editor/tabs.svelte';
   import type { EditorView } from '@codemirror/view';
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
-  import { registerKeymap, type SearchMode } from './features/search/keymap';
+  import { registerKeymap, showIntentions, type SearchMode } from './features/search/keymap';
 
   let currentFolderPath = $state('');
   let rootEntries = $state<Entry[]>([]);
@@ -612,6 +612,10 @@
       openPalette: (mode) => openPalette(mode),
       closePalette: () => closePalette(),
       isPaletteOpen: () => paletteOpen,
+      showIntentions: () => {
+        showIntentions();
+        statusText = 'Alt-Enter / Quick Actions (Phase 2)';
+      },
     });
 
     // 4. Automated P1.2 test if PETAK_TEST_P12 is set
