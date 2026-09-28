@@ -56,7 +56,7 @@
     const state = inStaged ? entry.index : entry.worktree;
     switch (state) {
       case 'modified':
-        return { char: 'M', color: '#6ea8ff' };
+        return { char: 'M', color: '#9cc3ff' };
       case 'added':
         return { char: 'A', color: '#7fc98f' };
       case 'deleted':

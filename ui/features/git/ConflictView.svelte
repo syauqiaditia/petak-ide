@@ -488,7 +488,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 32px;
+    height: 30px;
     padding: 0 14px;
     background: transparent;
     border: none;

@@ -718,7 +718,7 @@
     flex-grow: 1;
     resize: none;
     background: #141518;
-    border: 1px solid #2c2e34;
+    border: 1px solid #3a4f75;
     border-radius: 8px;
     padding: 12px;
     color: #d8d9dc;

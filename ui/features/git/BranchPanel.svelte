@@ -515,6 +515,7 @@
   }
 
   .branch-item.current {
+    background: #1f2a3d;
     color: #cfe0ff;
     font-weight: 500;
   }

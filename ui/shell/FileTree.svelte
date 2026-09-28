@@ -44,7 +44,7 @@
     const entry = gitStore.statusMap.get(rel);
     if (!entry) return null;
     if (entry.conflicted) return '#e8b45a';
-    if (entry.worktree === 'modified' || entry.index === 'modified') return '#6ea8ff';
+    if (entry.worktree === 'modified' || entry.index === 'modified') return '#9cc3ff';
     if (
       entry.worktree === 'untracked' ||
       entry.worktree === 'added' ||
