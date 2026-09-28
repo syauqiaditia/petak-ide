@@ -88,3 +88,117 @@ impl DiffFile {
             .unwrap_or("")
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RefKind {
+    Head,
+    Branch,
+    Remote,
+    Tag,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefLabel {
+    pub kind: RefKind,
+    pub name: String,
+    pub is_current: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Commit {
+    pub sha: String,
+    pub short_sha: String,
+    pub parents: Vec<String>,
+    pub author_name: String,
+    pub author_email: String,
+    pub author_time: i64,
+    pub subject: String,
+    pub refs: Vec<RefLabel>,
+    pub pushed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EdgeKind {
+    Straight,
+    MergeIn,
+    BranchOut,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Edge {
+    pub from: u16,
+    pub to: u16,
+    pub kind: EdgeKind,
+    pub color: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphRow {
+    pub lane: u16,
+    pub color: u16,
+    pub edges: Vec<Edge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogPage {
+    pub commits: Vec<Commit>,
+    pub graph: Vec<GraphRow>,
+    pub next_cursor: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalBranch {
+    pub name: String,
+    pub upstream: Option<String>,
+    pub ahead: u32,
+    pub behind: u32,
+    pub is_current: bool,
+    pub sha: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteBranch {
+    pub name: String,
+    pub sha: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagRef {
+    pub name: String,
+    pub sha: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchList {
+    pub local: Vec<LocalBranch>,
+    pub remote: Vec<RemoteBranch>,
+    pub tags: Vec<TagRef>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogFilter {
+    pub branches: Vec<String>,
+    pub author: Option<String>,
+    pub since: Option<String>,
+    pub until: Option<String>,
+    pub path: Option<String>,
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphState {
+    pub active_lanes: Vec<Option<String>>,
+}

@@ -18,3 +18,6 @@ tempfile = "3.8"
 
 [[example]]
 name = "fake_lsp"
+
+[[example]]
+name = "git_log_bench"

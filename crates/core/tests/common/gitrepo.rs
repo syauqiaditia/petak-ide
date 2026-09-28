@@ -40,6 +40,7 @@ impl TestRepo {
         String::from_utf8_lossy(&output.stdout).to_string()
     }
 
+    #[allow(dead_code)]
     pub fn git_raw(&self, args: &[&str]) -> std::process::Output {
         Command::new("git")
             .current_dir(self.path())

@@ -1,11 +1,20 @@
 pub mod diff;
+pub mod graph;
+pub mod log;
 pub mod model;
 pub mod ops;
 pub mod status;
 
 pub use diff::{diff_commit, diff_staged, diff_worktree, parse_diff};
+pub use graph::layout;
+pub use log::{
+    branches, get_pushed_shas, get_refs_map, log, log_with_state, parse_branches_output,
+    parse_log_output, parse_tracking,
+};
 pub use model::{
-    BranchInfo, DiffFile, DiffLine, DiffLineKind, FileState, Hunk, RepoStatus, StatusEntry,
+    BranchInfo, BranchList, Commit, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind, FileState,
+    GraphRow, GraphState, Hunk, LocalBranch, LogFilter, LogPage, RefKind, RefLabel, RemoteBranch,
+    RepoStatus, StatusEntry, TagRef,
 };
 pub use ops::{
     build_hunk_patch, commit, last_commit_message, stage_files, stage_hunk, unstage_files,
