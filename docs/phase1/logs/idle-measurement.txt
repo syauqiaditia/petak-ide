@@ -1,0 +1,52 @@
+=== Petak Idle RAM & CPU Measurement (30s sample) ===
+Launching /Users/uqi/petak/target/release/bundle/macos/Petak.app...
+Petak App PID: 89135
+Petak WebContent PID: 89139
+Waiting 10s for application to settle into idle state...
+
+--- Idle RAM Measurement ---
+petak-app RSS:    91808 KB (89.66 MB)
+WebContent RSS:   46256 KB (45.17 MB)
+Total Idle RAM:   138064 KB (134.83 MB)
+Budget: < 150 MB -> PASS
+
+--- Idle CPU Sampling (30 seconds, 1 sample/sec) ---
+Sample  1/30: app=0.0%, web=0.0%, total=0.0%
+Sample  2/30: app=0.0%, web=0.0%, total=0.0%
+Sample  3/30: app=0.0%, web=0.0%, total=0.0%
+Sample  4/30: app=0.0%, web=0.0%, total=0.0%
+Sample  5/30: app=0.0%, web=0.0%, total=0.0%
+Sample  6/30: app=0.0%, web=0.0%, total=0.0%
+Sample  7/30: app=0.0%, web=0.0%, total=0.0%
+Sample  8/30: app=0.0%, web=0.0%, total=0.0%
+Sample  9/30: app=0.0%, web=0.0%, total=0.0%
+Sample 10/30: app=0.0%, web=0.0%, total=0.0%
+Sample 11/30: app=0.0%, web=0.0%, total=0.0%
+Sample 12/30: app=0.0%, web=0.0%, total=0.0%
+Sample 13/30: app=0.0%, web=0.0%, total=0.0%
+Sample 14/30: app=0.0%, web=0.0%, total=0.0%
+Sample 15/30: app=0.0%, web=0.0%, total=0.0%
+Sample 16/30: app=0.0%, web=0.0%, total=0.0%
+Sample 17/30: app=0.0%, web=0.0%, total=0.0%
+Sample 18/30: app=0.0%, web=0.0%, total=0.0%
+Sample 19/30: app=0.0%, web=0.0%, total=0.0%
+Sample 20/30: app=0.0%, web=0.0%, total=0.0%
+Sample 21/30: app=0.0%, web=0.0%, total=0.0%
+Sample 22/30: app=0.0%, web=0.0%, total=0.0%
+Sample 23/30: app=0.0%, web=0.0%, total=0.0%
+Sample 24/30: app=0.0%, web=0.0%, total=0.0%
+Sample 25/30: app=0.0%, web=0.0%, total=0.0%
+Sample 26/30: app=0.0%, web=0.0%, total=0.0%
+Sample 27/30: app=0.0%, web=0.0%, total=0.0%
+Sample 28/30: app=0.0%, web=0.0%, total=0.0%
+Sample 29/30: app=0.0%, web=0.0%, total=0.0%
+Sample 30/30: app=0.0%, web=0.0%, total=0.0%
+
+--- CPU Summary (30s) ---
+Average petak-app:   0.00%
+Average WebContent:  0.00%
+Average Total CPU:   0.00%
+Max Total CPU:       0.00%
+Budget: ~0% (idle) -> PASS
+
+Results saved to /Users/uqi/petak/docs/phase1/logs/idle-ram-cpu.json

@@ -1,0 +1,14 @@
+=== Cold Start Benchmark ===
+--- Run 0: First Launch ---
+First Launch: 812 ms (wall: 833 ms)
+--- Runs 1..5: Subsequent Launches ---
+Run 1: 725 ms (wall: 730 ms)
+Run 2: 764 ms (wall: 783 ms)
+Run 3: 710 ms (wall: 724 ms)
+Run 4: 752 ms (wall: 767 ms)
+Run 5: 802 ms (wall: 816 ms)
+
+Results:
+First launch: 812 ms
+Subsequent runs: 710, 725, 752, 764, 802 ms
+Median cold start: 752 ms

@@ -1,0 +1,47 @@
+Launching Petak benchmark: open -n --env PETAK_BENCH=1 --env PETAK_BENCH_OUT=/tmp/petak-bench-f02.log /Users/uqi/petak/target/release/bundle/macos/Petak.app
+Found WebContent PID: 88587
+[BENCH_LOG] [LOG] [PETAK] Editor ready.
+[BENCH_LOG] [LOG] [PETAK_BENCH] Starting benchmark suite...
+[BENCH_LOG] [LOG] [PETAK_BENCH] Measuring open 50k lines (5 runs)...
+[BENCH_LOG] [LOG] [PETAK_BENCH] Run 1: 187.00 ms
+[BENCH_LOG] [LOG] [PETAK_BENCH] Run 2: 168.00 ms
+[BENCH_LOG] [LOG] [PETAK_BENCH] Run 3: 156.00 ms
+[BENCH_LOG] [LOG] [PETAK_BENCH] Run 4: 135.00 ms
+[BENCH_LOG] [LOG] [PETAK_BENCH] Run 5: 234.00 ms
+[BENCH_LOG] {"metric":"open_50k","runs_ms":[186.99999999999994,168,156,135,234],"median_ms":168}
+[BENCH_LOG] [LOG] [PETAK_BENCH] Open 50k median: 168.00 ms
+[BENCH_LOG] [LOG] [PETAK_BENCH] Measuring typing latency on 10k lines (200 insertions)...
+[BENCH_LOG] {"metric":"typing_latency_10k","samples_count":200,"p50_ms":17,"p95_ms":18,"max_ms":22.999999999999773,"avg_ms":16.62}
+[BENCH_LOG] [LOG] [PETAK_BENCH] Typing latency: p50=17.00ms, p95=18.00ms, max=23.00ms
+[BENCH_LOG] [LOG] [PETAK_BENCH] Starting F0.2 Tree-sitter Benchmark...
+[BENCH_LOG] {"metric":"f02_signal_before_preload","ts":1790572100793}
+>>> WebContent RSS before preload: 481200 KB (469.92 MB)
+[BENCH_LOG] [LOG] [TS] Loading dart...
+[BENCH_LOG] [LOG] [TS] Loading kotlin...
+[BENCH_LOG] [LOG] [TS] Loading swift...
+[BENCH_LOG] [LOG] [TS] Language loaded for dart, version: 15
+[BENCH_LOG] [LOG] [TS] Query compiled for dart, patterns: 53
+[BENCH_LOG] [LOG] [TS] Language loaded for kotlin, version: 14
+[BENCH_LOG] [LOG] [TS] Query compiled for kotlin, patterns: 54
+[BENCH_LOG] [LOG] [TS] Language loaded for swift, version: 15
+[BENCH_LOG] [LOG] [TS] Query compiled for swift, patterns: 67
+[BENCH_LOG] [LOG] [PETAK_BENCH] Preloaded 3 WASM grammars in 363.00 ms
+[BENCH_LOG] {"metric":"f02_signal_after_preload","ts":1790572101756,"preload_ms":363}
+>>> WebContent RSS after preload: 474512 KB (463.39 MB)
+[BENCH_LOG] [LOG] [PETAK_BENCH] Running tree-sitter benchmark for dart...
+[BENCH_LOG] [LOG] [PETAK_BENCH] dart initial parse: 32.00 ms
+[BENCH_LOG] {"metric":"f02_treesitter_bench","language":"dart","filename":"Big10k.dart","samples_count":200,"initial_parse_ms":32,"incremental_p50_ms":0,"incremental_p95_ms":0,"incremental_max_ms":0,"incremental_avg_ms":0,"query_deco_p50_ms":0,"query_deco_p95_ms":0,"query_deco_max_ms":0,"query_deco_avg_ms":0,"frame_p50_ms":17,"frame_p95_ms":18,"frame_max_ms":19,"frame_avg_ms":16.665,"pass_16ms":false}
+[BENCH_LOG] [LOG] [PETAK_BENCH] Running tree-sitter benchmark for kotlin...
+[BENCH_LOG] [LOG] [PETAK_BENCH] kotlin initial parse: 47.00 ms
+[BENCH_LOG] {"metric":"f02_treesitter_bench","language":"kotlin","filename":"Big10k.kt","samples_count":200,"initial_parse_ms":47,"incremental_p50_ms":0,"incremental_p95_ms":0,"incremental_max_ms":0,"incremental_avg_ms":0,"query_deco_p50_ms":0,"query_deco_p95_ms":0,"query_deco_max_ms":0,"query_deco_avg_ms":0,"frame_p50_ms":17,"frame_p95_ms":19,"frame_max_ms":23,"frame_avg_ms":16.665,"pass_16ms":false}
+[BENCH_LOG] [LOG] [PETAK_BENCH] Running tree-sitter benchmark for swift...
+[BENCH_LOG] [LOG] [PETAK_BENCH] swift initial parse: 33.00 ms
+[BENCH_LOG] {"metric":"f02_treesitter_bench","language":"swift","filename":"Big10k.swift","samples_count":200,"initial_parse_ms":33,"incremental_p50_ms":0,"incremental_p95_ms":0,"incremental_max_ms":0,"incremental_avg_ms":0,"query_deco_p50_ms":0,"query_deco_p95_ms":0,"query_deco_max_ms":0,"query_deco_avg_ms":0,"frame_p50_ms":17,"frame_p95_ms":18.000000000003638,"frame_max_ms":19.000000000003638,"frame_avg_ms":16.665,"pass_16ms":false}
+[BENCH_LOG] {"metric":"bench_status","status":"complete","ts":1790572112927}
+>>> Benchmark complete!
+
+=== Benchmark Summary ===
+Completed: True
+WebContent RSS Before Preload: 469.92 MB
+WebContent RSS After Preload:  463.39 MB
+WASM Preload Delta:           +-6.53 MB (-6688 KB)

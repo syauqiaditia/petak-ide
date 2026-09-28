@@ -810,20 +810,22 @@
       console.warn('Failed to listen to fs-changed:', e);
     }
 
-    // 2. Load recent folders and auto-open first recent folder if available
-    try {
-      const recents = await api.recentFolders();
-      recentFolders = recents;
-      if (recents && recents.length > 0) {
-        try {
-          await openFolder(recents[0]);
-        } catch (e) {
-          console.warn('Could not auto-open recent folder:', recents[0], e);
+    // 2. Load recent folders and auto-open first recent folder if available (deferred so initial window/editor paint is instant)
+    setTimeout(async () => {
+      try {
+        const recents = await api.recentFolders();
+        recentFolders = recents;
+        if (recents && recents.length > 0) {
+          try {
+            await openFolder(recents[0]);
+          } catch (e) {
+            console.warn('Could not auto-open recent folder:', recents[0], e);
+          }
         }
+      } catch (e) {
+        console.warn('Failed to load recent folders:', e);
       }
-    } catch (e) {
-      console.warn('Failed to load recent folders:', e);
-    }
+    }, 20);
 
     // 3. Register global keymap
     unregisterKeymap = registerKeymap({

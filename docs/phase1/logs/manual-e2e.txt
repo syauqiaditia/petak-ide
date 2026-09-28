@@ -1,0 +1,25 @@
+=== Running Complete End-to-End Manual & Visual Verification on Mac ===
+
+--- [1/3] Testing P1.2: Tree, Tabs, Save, Cmd-W ---
+Petak window ID: 9528
+Captured /Users/uqi/petak/docs/phase1/screens/tree-tabs.png
+
+--- [2/3] Testing P1.4: Keymaps & Palette ---
+Petak window ID: 9539
+Captured /Users/uqi/petak/docs/phase1/screens/fuzzy-finder.png
+Captured /Users/uqi/petak/docs/phase1/screens/find-in-project.png
+P1.4 all test assertions PASSED!
+
+--- [3/3] Testing P1.5: Terminal Panel, Commands, Tabs, Resize ---
+Petak window ID: 9552
+Captured /Users/uqi/petak/docs/phase1/screens/terminal.png
+P1.5 all terminal test assertions PASSED!
+
+=== Verification Summary ===
+P1.2 tree-tabs captured:     True
+P1.4 fuzzy-finder captured:  True
+P1.4 find-in-proj captured:  True
+P1.4 assertions passed:      True
+P1.5 terminal captured:      True
+P1.5 assertions passed:      True
+ALL VERIFICATIONS COMPLETED SUCCESSFULLY!

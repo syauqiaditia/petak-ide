@@ -66,8 +66,19 @@ pub fn mark_ready(ts_ms: u64) {
 
 #[tauri::command]
 pub fn bench_log(line: String) -> Result<(), String> {
+    let out_var = std::env::var("PETAK_BENCH_OUT").ok();
+    let is_bench = std::env::var("PETAK_BENCH").is_ok();
+    let is_test = std::env::var("PETAK_TEST_P15").is_ok()
+        || std::env::var("PETAK_TEST_P14").is_ok()
+        || std::env::var("PETAK_TEST_P12").is_ok()
+        || std::env::var("PETAK_TEST").is_ok();
+
+    if out_var.is_none() && !is_bench && !is_test {
+        return Ok(());
+    }
+
     use std::io::Write;
-    let path = std::env::var("PETAK_BENCH_OUT").unwrap_or_else(|_| "/tmp/petak-bench.log".to_string());
+    let path = out_var.unwrap_or_else(|| "/tmp/petak-bench.log".to_string());
     let mut file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)

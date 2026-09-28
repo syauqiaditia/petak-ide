@@ -10,7 +10,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    target: 'safari13',
+    target: ['es2022', 'safari16'],
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
   },
