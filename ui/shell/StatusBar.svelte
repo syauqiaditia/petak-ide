@@ -1,5 +1,6 @@
 <script lang="ts">
   import { diagnosticsStore } from '../features/editor/lsp/diagnostics.svelte';
+  import { gitStore } from '../features/git/git.svelte.ts';
 
   let {
     branchName = '',
@@ -16,11 +17,24 @@
     cursorInfo?: string;
     onOpenProblems?: () => void;
   }>();
+
+  let branch = $derived(gitStore.branch);
+  let displayBranch = $derived(branch?.head || branchName || null);
+  let ahead = $derived(branch?.upstream ? branch.ahead : 0);
+  let behind = $derived(branch?.upstream ? branch.behind : 0);
 </script>
 
 <div class="status-bar">
-  {#if branchName}
-    <span class="branch-tag">{branchName}</span>
+  {#if displayBranch}
+    <span class="branch-tag">
+      {displayBranch}
+      {#if ahead > 0}
+        <span class="ahead-tag">↑{ahead}</span>
+      {/if}
+      {#if behind > 0}
+        <span class="behind-tag">↓{behind}</span>
+      {/if}
+    </span>
   {/if}
   <span class="status-indicator">
     <span class="dot"></span>
@@ -85,6 +99,19 @@
   }
   .branch-tag {
     color: #b9bcc3;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .ahead-tag {
+    color: #7fc98f;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .behind-tag {
+    color: #e8b45a;
+    font-size: 11px;
+    font-weight: 500;
   }
   .status-indicator {
     display: flex;

@@ -147,6 +147,9 @@ export interface LspStatusPayload {
   state: 'starting' | 'ready' | 'stopped' | 'crashed';
 }
 
+import type { GitRepoStatus, GitDiffOpts, GitDiffFile } from '../features/git/types';
+export * from '../features/git/types';
+
 export const api = {
   listDir(path: string): Promise<Entry[]> {
     return invoke<Entry[]>('list_dir', { path });
@@ -174,6 +177,44 @@ export const api = {
 
   gitBranch(root: string): Promise<string | null> {
     return invoke<string | null>('git_branch', { root });
+  },
+
+  gitStatus(root: string): Promise<GitRepoStatus> {
+    return invoke<GitRepoStatus>('git_status', { root });
+  },
+
+  gitDiff(root: string, opts: GitDiffOpts): Promise<GitDiffFile[]> {
+    return invoke<GitDiffFile[]>('git_diff', {
+      root,
+      kind: opts.kind,
+      sha: opts.sha ?? null,
+      path: opts.path ?? null,
+      ignoreWs: opts.ignoreWs ?? false,
+    });
+  },
+
+  gitStageFiles(root: string, paths: string[]): Promise<void> {
+    return invoke('git_stage_files', { root, paths });
+  },
+
+  gitUnstageFiles(root: string, paths: string[]): Promise<void> {
+    return invoke('git_unstage_files', { root, paths });
+  },
+
+  gitStageHunk(root: string, path: string, hunkIndex: number): Promise<void> {
+    return invoke('git_stage_hunk', { root, path, hunkIndex });
+  },
+
+  gitUnstageHunk(root: string, path: string, hunkIndex: number): Promise<void> {
+    return invoke('git_unstage_hunk', { root, path, hunkIndex });
+  },
+
+  gitCommit(root: string, message: string, amend = false): Promise<string> {
+    return invoke<string>('git_commit', { root, message, amend });
+  },
+
+  gitLastMessage(root: string): Promise<string | null> {
+    return invoke<string | null>('git_last_message', { root });
   },
 
   recentFolders(): Promise<string[]> {

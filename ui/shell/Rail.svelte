@@ -1,12 +1,23 @@
 <script lang="ts">
-  let activeTab = $state('project');
+  let {
+    activeTab = $bindable('project'),
+    onTabChange,
+  } = $props<{
+    activeTab?: string;
+    onTabChange?: (tab: string) => void;
+  }>();
+
+  function selectTab(tab: string) {
+    activeTab = tab;
+    onTabChange?.(tab);
+  }
 </script>
 
 <div class="rail">
   <button
     class="rail-btn"
     class:active={activeTab === 'project'}
-    onclick={() => (activeTab = 'project')}
+    onclick={() => selectTab('project')}
     aria-label="Project"
     title="Project"
   >
@@ -18,7 +29,7 @@
   <button
     class="rail-btn"
     class:active={activeTab === 'git'}
-    onclick={() => (activeTab = 'git')}
+    onclick={() => selectTab('git')}
     aria-label="Git"
     title="Git"
   >
@@ -33,7 +44,7 @@
   <button
     class="rail-btn"
     class:active={activeTab === 'agents'}
-    onclick={() => (activeTab = 'agents')}
+    onclick={() => selectTab('agents')}
     aria-label="Agents"
     title="Agents"
   >
@@ -45,7 +56,7 @@
   <button
     class="rail-btn"
     class:active={activeTab === 'devices'}
-    onclick={() => (activeTab = 'devices')}
+    onclick={() => selectTab('devices')}
     aria-label="Devices"
     title="Devices"
   >
@@ -60,7 +71,7 @@
   <button
     class="rail-btn settings-btn"
     class:active={activeTab === 'settings'}
-    onclick={() => (activeTab = 'settings')}
+    onclick={() => selectTab('settings')}
     aria-label="Settings"
     title="Settings"
   >

@@ -12,6 +12,8 @@
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
   import { registerKeymap, showIntentions, type SearchMode } from './features/search/keymap';
   import { applyWorkspaceEdit } from './features/editor/lsp/applyEdit';
+  import { gitStore } from './features/git/git.svelte.ts';
+  import GitView from './features/git/GitView.svelte';
 
   let currentFolderPath = $state('');
   let rootEntries = $state<Entry[]>([]);
@@ -20,6 +22,7 @@
   let branchName = $state<string | null>(null);
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
+  let activeRailTab = $state('project');
 
   let editorComponent: any = null;
   let fileTreeComponent: any = null;
@@ -219,6 +222,7 @@
       await api.watchRoot(folderPath);
       api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
       api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
+      gitStore.refresh(folderPath).catch((e) => console.warn('gitStore refresh error:', e));
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
     } catch (e) {
       console.error('Failed to open folder:', folderPath, e);
@@ -317,6 +321,9 @@
     if (currentFolderPath) {
       triggerIndexRebuild(currentFolderPath);
     }
+
+    // 5. Debounced git store refresh
+    gitStore.handleFsChanged(paths);
   }
 
   async function runBenchmark(view: EditorView) {
@@ -1118,9 +1125,9 @@
   />
 
   <div class="main-body">
-    <Rail />
+    <Rail bind:activeTab={activeRailTab} />
     <div class="center-area">
-      <div class="workspace-area">
+      <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
         <FileTree
           bind:this={fileTreeComponent}
           {rootEntries}
@@ -1139,6 +1146,10 @@
           onOpenUsages={openUsages}
         />
       </div>
+
+      {#if activeRailTab === 'git'}
+        <GitView folderPath={currentFolderPath} />
+      {/if}
 
       {#if terminalOpen && TerminalPanelComponent}
         <TerminalPanelComponent
@@ -1201,5 +1212,8 @@
     display: flex;
     min-height: 0;
     overflow: hidden;
+  }
+  .hidden-view {
+    display: none !important;
   }
 </style>

@@ -61,6 +61,150 @@ pub fn git_branch(root: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+pub async fn git_status(root: String) -> Result<petak_core::git::RepoStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::git::status(&exec, std::path::Path::new(&root)).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_diff(
+    root: String,
+    kind: String,
+    sha: Option<String>,
+    path: Option<String>,
+    ignore_ws: Option<bool>,
+) -> Result<Vec<petak_core::git::DiffFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let path_ref = path.as_deref().map(std::path::Path::new);
+        let ignore_ws = ignore_ws.unwrap_or(false);
+        match kind.as_str() {
+            "worktree" => petak_core::git::diff_worktree(&exec, repo, path_ref, ignore_ws)
+                .map_err(|e| e.to_string()),
+            "staged" => petak_core::git::diff_staged(&exec, repo, path_ref, ignore_ws)
+                .map_err(|e| e.to_string()),
+            "commit" => {
+                let s = sha.ok_or_else(|| "commit sha required for commit diff".to_string())?;
+                petak_core::git::diff_commit(&exec, repo, &s, path_ref, ignore_ws)
+                    .map_err(|e| e.to_string())
+            }
+            other => Err(format!("unknown diff kind: {}", other)),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stage_files(root: String, paths: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let path_slices: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+        petak_core::git::stage_files(&exec, repo, &path_slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_unstage_files(root: String, paths: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let path_slices: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+        petak_core::git::unstage_files(&exec, repo, &path_slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stage_hunk(root: String, path: String, hunk_index: usize) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let diffs = petak_core::git::diff_worktree(
+            &exec,
+            repo,
+            Some(std::path::Path::new(&path)),
+            false,
+        )
+        .map_err(|e| e.to_string())?;
+
+        let file_diff = diffs
+            .into_iter()
+            .find(|d| {
+                d.path() == path
+                    || d.new_path.as_deref() == Some(&path)
+                    || d.old_path.as_deref() == Some(&path)
+            })
+            .ok_or_else(|| format!("no worktree diff found for {}", path))?;
+
+        petak_core::git::stage_hunk(&exec, repo, &file_diff, hunk_index)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_unstage_hunk(root: String, path: String, hunk_index: usize) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let diffs = petak_core::git::diff_staged(
+            &exec,
+            repo,
+            Some(std::path::Path::new(&path)),
+            false,
+        )
+        .map_err(|e| e.to_string())?;
+
+        let file_diff = diffs
+            .into_iter()
+            .find(|d| {
+                d.path() == path
+                    || d.new_path.as_deref() == Some(&path)
+                    || d.old_path.as_deref() == Some(&path)
+            })
+            .ok_or_else(|| format!("no staged diff found for {}", path))?;
+
+        petak_core::git::unstage_hunk(&exec, repo, &file_diff, hunk_index)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_commit(root: String, message: String, amend: bool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::commit(&exec, repo, &message, amend).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_last_message(root: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::last_commit_message(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub fn recent_folders() -> Result<Vec<String>, String> {
     let recent_path = petak_core::recent::default_recent_path()
         .ok_or_else(|| "Could not determine recent folders path".to_string())?;

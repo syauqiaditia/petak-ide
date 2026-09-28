@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, type Entry } from '../lib/api';
+  import { gitStore } from '../features/git/git.svelte.ts';
 
   let {
     rootEntries = [],
@@ -26,6 +27,39 @@
   let folderLeaf = $derived(
     folderPath ? folderPath.split('/').filter(Boolean).pop() || 'Project' : 'No Folder Open'
   );
+
+  function getRelPath(absPath: string): string {
+    if (!folderPath) return '';
+    if (absPath.startsWith(folderPath)) {
+      let rel = absPath.slice(folderPath.length);
+      if (rel.startsWith('/')) rel = rel.slice(1);
+      return rel;
+    }
+    return absPath;
+  }
+
+  function getFileGitColor(absPath: string): string | null {
+    const rel = getRelPath(absPath);
+    if (!rel) return null;
+    const entry = gitStore.statusMap.get(rel);
+    if (!entry) return null;
+    if (entry.conflicted) return '#e8b45a';
+    if (entry.worktree === 'modified' || entry.index === 'modified') return '#6ea8ff';
+    if (
+      entry.worktree === 'untracked' ||
+      entry.worktree === 'added' ||
+      entry.index === 'added'
+    )
+      return '#7fc98f';
+    if (entry.worktree === 'deleted' || entry.index === 'deleted') return '#f07a74';
+    return null;
+  }
+
+  function isDirChanged(absPath: string): boolean {
+    const rel = getRelPath(absPath);
+    if (!rel) return false;
+    return gitStore.changedDirsSet.has(rel);
+  }
 
   export async function toggleFolder(entry: Entry) {
     const path = entry.path;
@@ -119,7 +153,7 @@
                   <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                 </svg>
               {/if}
-              <span class="item-name">{entry.name}</span>
+              <span class="item-name" class:dir-changed={isDirChanged(entry.path)}>{entry.name}</span>
             </button>
 
             {#if isExpanded}
@@ -132,6 +166,7 @@
               {/if}
             {/if}
           {:else}
+            {@const gitColor = getFileGitColor(entry.path)}
             <button
               class="item file-item"
               class:active={isActive}
@@ -143,7 +178,7 @@
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path>
                 <polyline points="14 2 14 8 20 8"></polyline>
               </svg>
-              <span class="item-name">{entry.name}</span>
+              <span class="item-name" style={gitColor ? `color: ${gitColor};` : ''}>{entry.name}</span>
             </button>
           {/if}
         {/snippet}
@@ -288,6 +323,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
+  }
+  .item-name.dir-changed {
+    color: #e2e4e9;
   }
   .loading-node {
     height: 20px;
