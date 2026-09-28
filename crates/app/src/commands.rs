@@ -249,6 +249,389 @@ pub async fn git_commit_files(
 }
 
 #[tauri::command]
+pub async fn git_rebase_todo(
+    root: String,
+    base: String,
+) -> Result<Vec<petak_core::git::RebaseItem>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::rebase_todo(&exec, repo, &base).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_rebase_run(
+    root: String,
+    plan: petak_core::git::RebasePlan,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::rebase_run(&exec, repo, &plan).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_rebase_continue(root: String) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::rebase_continue(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_rebase_abort(root: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::rebase_abort(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_rebase_state(root: String) -> Result<petak_core::git::RebaseState, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::rebase_state(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_reword(
+    root: String,
+    sha: String,
+    message: String,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::reword(&exec, repo, &sha, &message).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_squash(
+    root: String,
+    shas: Vec<String>,
+    message: String,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let sha_slices: Vec<&str> = shas.iter().map(|s| s.as_str()).collect();
+        petak_core::git::squash(&exec, repo, &sha_slices, &message).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_fixup(root: String, sha: String) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::fixup_into_previous(&exec, repo, &sha).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_drop(
+    root: String,
+    shas: Vec<String>,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let sha_slices: Vec<&str> = shas.iter().map(|s| s.as_str()).collect();
+        petak_core::git::drop(&exec, repo, &sha_slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_reset(
+    root: String,
+    sha: String,
+    mode: petak_core::git::ResetMode,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::reset(&exec, repo, &sha, mode).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_cherry_pick(
+    root: String,
+    shas: Vec<String>,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let sha_slices: Vec<&str> = shas.iter().map(|s| s.as_str()).collect();
+        petak_core::git::cherry_pick(&exec, repo, &sha_slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_revert(
+    root: String,
+    shas: Vec<String>,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let sha_slices: Vec<&str> = shas.iter().map(|s| s.as_str()).collect();
+        petak_core::git::revert(&exec, repo, &sha_slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_branch_create(
+    root: String,
+    name: String,
+    start_point: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::branch_create(&exec, repo, &name, start_point.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_branch_checkout(root: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::branch_checkout(&exec, repo, &name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_branch_delete(root: String, name: String, force: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::branch_delete(&exec, repo, &name, force).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_branch_rename(root: String, old_name: String, new_name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::branch_rename(&exec, repo, &old_name, &new_name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_backup_create(root: String, op: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::backup_create(&exec, repo, &op).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_backup_list(root: String) -> Result<Vec<petak_core::git::BackupRef>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::backup_list(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_backup_restore(root: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::backup_restore(&exec, repo, &name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_backup_delete(root: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::backup_delete(&exec, repo, &name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_conflicts(root: String) -> Result<Vec<petak_core::git::ConflictFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::conflicts(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn git_resolve_block(
+    merged: String,
+    block_index: usize,
+    choice: petak_core::git::ConflictChoice,
+) -> Result<String, String> {
+    Ok(petak_core::git::resolve_block(&merged, block_index, choice))
+}
+
+#[tauri::command]
+pub async fn git_conflict_write(
+    root: String,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::conflict_write(&exec, repo, &path, &content).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_op_state(root: String) -> Result<petak_core::git::OpState, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::op_state(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_op_continue(root: String) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::op_continue(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_op_abort(root: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::op_abort(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_remotes(root: String) -> Result<Vec<petak_core::git::Remote>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::remotes(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_fetch(
+    root: String,
+    remote: Option<String>,
+    prune: Option<bool>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::fetch(&exec, repo, remote.as_deref(), prune.unwrap_or(false))
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_pull(
+    root: String,
+    mode: petak_core::git::PullMode,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::pull(&exec, repo, mode).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_push(
+    root: String,
+    remote: String,
+    branch: String,
+    set_upstream: bool,
+    force_with_lease: bool,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::push(&exec, repo, &remote, &branch, set_upstream, force_with_lease)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub fn recent_folders() -> Result<Vec<String>, String> {
     let recent_path = petak_core::recent::default_recent_path()
         .ok_or_else(|| "Could not determine recent folders path".to_string())?;

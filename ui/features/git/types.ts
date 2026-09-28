@@ -142,3 +142,84 @@ export interface GitLogFilter {
   path?: string;
   text?: string;
 }
+
+export type GitRebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+
+export interface GitRebaseItem {
+  sha: string;
+  action: GitRebaseAction;
+  message?: string | null;
+}
+
+export interface GitRebasePlan {
+  base: string;
+  items: GitRebaseItem[];
+  backup: boolean;
+}
+
+export type GitStopKind = 'conflict' | 'edit';
+
+export interface GitStopReason {
+  kind: GitStopKind;
+  sha: string;
+}
+
+export interface GitOpResult {
+  ok: boolean;
+  backupRef?: string | null;
+  stoppedAt?: GitStopReason | null;
+  newHead: string;
+}
+
+export interface GitBackupRef {
+  name: string;
+  sha: string;
+  createdAt: string;
+  op: string;
+  subject: string;
+}
+
+export type GitResetMode = 'soft' | 'mixed' | 'hard';
+
+export type GitRebaseStateKind = 'none' | 'rebase' | 'merge' | 'cherryPick' | 'revert';
+
+export interface GitRebaseState {
+  kind: GitRebaseStateKind;
+  step?: [number, number] | null;
+  headName?: string | null;
+  ontoName?: string | null;
+  currentCommit?: string | null;
+}
+
+export type GitOpState = GitRebaseState;
+
+export type GitConflictSide = 'ours' | 'theirs';
+
+export interface GitConflictBlock {
+  startLine: number;
+  endLine: number;
+  ours: string[];
+  base?: string[] | null;
+  theirs: string[];
+}
+
+export interface GitConflictFile {
+  path: string;
+  ours: string;
+  theirs: string;
+  base?: string | null;
+  merged: string;
+  blocks: GitConflictBlock[];
+  deletedIn?: GitConflictSide | null;
+}
+
+export type GitConflictChoice = 'ours' | 'theirs' | 'both' | 'bothTheirsFirst';
+
+export interface GitRemote {
+  name: string;
+  fetchUrl?: string | null;
+  pushUrl?: string | null;
+}
+
+export type GitPullMode = 'rebase' | 'merge';
+

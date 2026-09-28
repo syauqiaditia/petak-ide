@@ -18,6 +18,36 @@ Seluruh model data memakai serde `rename_all = "camelCase"` dari `petak_core::gi
 | `git_log` | `git_log` | `root: String`, `filter: Option<LogFilter>`, `cursor: Option<usize>`, `limit: Option<usize>` | `petak_core::git::LogPage` / `GitLogPage` | Paged log dengan layout lane graph |
 | `git_branches` | `git_branches` | `root: String` | `petak_core::git::BranchList` / `GitBranchList` | Local branches, remote branches, dan tags dalam 1 panggilan |
 | `git_commit_files` | `git_commit_files` | `root: String`, `sha: String` | `Vec<petak_core::git::CommitFile>` / `GitCommitFile[]` | Daftar nama file + status perubahan dari `git show --name-status` |
+| `git_rebase_todo` | `git_rebase_todo` | `root: String`, `base: String` | `Vec<petak_core::git::RebaseItem>` / `GitRebaseItem[]` | Daftar commit untuk interactive rebase plan |
+| `git_rebase_run` | `git_rebase_run` | `root: String`, `plan: RebasePlan` | `petak_core::git::OpResult` / `GitOpResult` | Menjalankan rebase plan dengan opsi backup ref |
+| `git_rebase_continue` | `git_rebase_continue` | `root: String` | `petak_core::git::OpResult` / `GitOpResult` | Melanjutkan rebase setelah resolusi konflik |
+| `git_rebase_abort` | `git_rebase_abort` | `root: String` | `()` / `void` | Membatalkan rebase dan mengembalikan worktree |
+| `git_rebase_state` | `git_rebase_state` | `root: String` | `petak_core::git::RebaseState` / `GitRebaseState` | Status rebase yang sedang berjalan |
+| `git_reword` | `git_reword` | `root: String`, `sha: String`, `message: String` | `petak_core::git::OpResult` / `GitOpResult` | Mengubah commit message (auto backup) |
+| `git_squash` | `git_squash` | `root: String`, `shas: Vec<String>`, `message: String` | `petak_core::git::OpResult` / `GitOpResult` | Menggabungkan >=2 commit berurutan (auto backup) |
+| `git_fixup` | `git_fixup` | `root: String`, `sha: String` | `petak_core::git::OpResult` / `GitOpResult` | Fixup commit ke commit sebelumnya (auto backup) |
+| `git_drop` | `git_drop` | `root: String`, `shas: Vec<String>` | `petak_core::git::OpResult` / `GitOpResult` | Menghapus commit dari riwayat (auto backup) |
+| `git_reset` | `git_reset` | `root: String`, `sha: String`, `mode: ResetMode` | `petak_core::git::OpResult` / `GitOpResult` | Reset soft/mixed/hard (hard auto-creates backup) |
+| `git_cherry_pick` | `git_cherry_pick` | `root: String`, `shas: Vec<String>` | `petak_core::git::OpResult` / `GitOpResult` | Cherry-pick commit |
+| `git_revert` | `git_revert` | `root: String`, `shas: Vec<String>` | `petak_core::git::OpResult` / `GitOpResult` | Revert commit |
+| `git_branch_create` | `git_branch_create` | `root: String`, `name: String`, `start_point: Option<String>` | `()` / `void` | Membuat branch baru |
+| `git_branch_checkout` | `git_branch_checkout` | `root: String`, `name: String` | `()` / `void` | Pindah branch (checkout) |
+| `git_branch_delete` | `git_branch_delete` | `root: String`, `name: String`, `force: bool` | `()` / `void` | Menghapus branch lokal |
+| `git_branch_rename` | `git_branch_rename` | `root: String`, `old_name: String`, `new_name: String` | `()` / `void` | Mengganti nama branch |
+| `git_backup_create` | `git_backup_create` | `root: String`, `op: String` | `String` / `string` | Membuat backup ref petak |
+| `git_backup_list` | `git_backup_list` | `root: String` | `Vec<petak_core::git::BackupRef>` / `GitBackupRef[]` | Daftar backup ref petak |
+| `git_backup_restore` | `git_backup_restore` | `root: String`, `name: String` | `()` / `void` | Merestore branch ke state backup ref |
+| `git_backup_delete` | `git_backup_delete` | `root: String`, `name: String` | `()` / `void` | Menghapus backup ref |
+| `git_conflicts` | `git_conflicts` | `root: String` | `Vec<petak_core::git::ConflictFile>` / `GitConflictFile[]` | Daftar file berkonflik & blok parsed |
+| `git_resolve_block` | `git_resolve_block` | `merged: String`, `block_index: usize`, `choice: ConflictChoice` | `String` / `string` | Resolusi blok konflik murni |
+| `git_conflict_write` | `git_conflict_write` | `root: String`, `path: String`, `content: String` | `()` / `void` | Menulis file hasil resolusi konflik |
+| `git_op_state` | `git_op_state` | `root: String` | `petak_core::git::OpState` / `GitOpState` | Status operasi berlangsung (rebase/merge/cherry-pick/revert) |
+| `git_op_continue` | `git_op_continue` | `root: String` | `petak_core::git::OpResult` / `GitOpResult` | Melanjutkan operasi yang berhenti |
+| `git_op_abort` | `git_op_abort` | `root: String` | `()` / `void` | Membatalkan operasi yang berhenti |
+| `git_remotes` | `git_remotes` | `root: String` | `Vec<petak_core::git::Remote>` / `GitRemote[]` | Daftar configured remote |
+| `git_fetch` | `git_fetch` | `root: String`, `remote: Option<String>`, `prune: Option<bool>` | `()` / `void` | Fetch update dari remote |
+| `git_pull` | `git_pull` | `root: String`, `mode: PullMode` | `petak_core::git::OpResult` / `GitOpResult` | Pull rebase atau merge |
+| `git_push` | `git_push` | `root: String`, `remote: String`, `branch: String`, `set_upstream: bool`, `force_with_lease: bool` | `petak_core::git::OpResult` / `GitOpResult` | Push branch ke remote |
 
 ## 2. Model & Tipe Data
 
@@ -244,3 +274,104 @@ interface GitBranchList {
   tags: GitTagRef[];
 }
 ```
+
+### RebasePlan & RebaseItem
+Rust: `petak_core::git::{RebasePlan, RebaseItem, RebaseAction}`
+TS:
+```typescript
+type GitRebaseAction = 'pick' | 'reword' | 'edit' | 'squash' | 'fixup' | 'drop';
+
+interface GitRebaseItem {
+  sha: string;
+  action: GitRebaseAction;
+  message?: string | null;
+}
+
+interface GitRebasePlan {
+  base: string;
+  items: GitRebaseItem[];
+  backup: boolean;
+}
+```
+
+### OpResult & BackupRef
+Rust: `petak_core::git::{OpResult, StopReason, StopKind, BackupRef, ResetMode}`
+TS:
+```typescript
+type GitStopKind = 'conflict' | 'edit';
+
+interface GitStopReason {
+  kind: GitStopKind;
+  sha: string;
+}
+
+interface GitOpResult {
+  ok: boolean;
+  backupRef?: string | null;
+  stoppedAt?: GitStopReason | null;
+  newHead: string;
+}
+
+interface GitBackupRef {
+  name: string;
+  sha: string;
+  createdAt: string;
+  op: string;
+  subject: string;
+}
+
+type GitResetMode = 'soft' | 'mixed' | 'hard';
+```
+
+### ConflictFile, ConflictBlock, ConflictChoice & OpState
+Rust: `petak_core::git::{ConflictFile, ConflictBlock, ConflictChoice, ConflictSide, RebaseState, RebaseStateKind}`
+TS:
+```typescript
+type GitConflictSide = 'ours' | 'theirs';
+
+interface GitConflictBlock {
+  startLine: number;
+  endLine: number;
+  ours: string[];
+  base?: string[] | null;
+  theirs: string[];
+}
+
+interface GitConflictFile {
+  path: string;
+  ours: string;
+  theirs: string;
+  base?: string | null;
+  merged: string;
+  blocks: GitConflictBlock[];
+  deletedIn?: GitConflictSide | null;
+}
+
+type GitConflictChoice = 'ours' | 'theirs' | 'both' | 'bothTheirsFirst';
+
+type GitRebaseStateKind = 'none' | 'rebase' | 'merge' | 'cherryPick' | 'revert';
+
+interface GitRebaseState {
+  kind: GitRebaseStateKind;
+  step?: [number, number] | null;
+  headName?: string | null;
+  ontoName?: string | null;
+  currentCommit?: string | null;
+}
+
+type GitOpState = GitRebaseState;
+```
+
+### Remote & PullMode
+Rust: `petak_core::git::{Remote, PullMode}`
+TS:
+```typescript
+interface GitRemote {
+  name: string;
+  fetchUrl?: string | null;
+  pushUrl?: string | null;
+}
+
+type GitPullMode = 'rebase' | 'merge';
+```
+

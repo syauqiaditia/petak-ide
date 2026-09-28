@@ -155,6 +155,17 @@ import type {
   GitLogPage,
   GitBranchList,
   GitCommitFile,
+  GitRebaseItem,
+  GitRebasePlan,
+  GitOpResult,
+  GitRebaseState,
+  GitOpState,
+  GitResetMode,
+  GitBackupRef,
+  GitConflictFile,
+  GitConflictChoice,
+  GitRemote,
+  GitPullMode,
 } from '../features/git/types';
 export * from '../features/git/types';
 
@@ -245,6 +256,138 @@ export const api = {
 
   gitCommitFiles(root: string, sha: string): Promise<GitCommitFile[]> {
     return invoke<GitCommitFile[]>('git_commit_files', { root, sha });
+  },
+
+  gitRebaseTodo(root: string, base: string): Promise<GitRebaseItem[]> {
+    return invoke<GitRebaseItem[]>('git_rebase_todo', { root, base });
+  },
+
+  gitRebaseRun(root: string, plan: GitRebasePlan): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_rebase_run', { root, plan });
+  },
+
+  gitRebaseContinue(root: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_rebase_continue', { root });
+  },
+
+  gitRebaseAbort(root: string): Promise<void> {
+    return invoke('git_rebase_abort', { root });
+  },
+
+  gitRebaseState(root: string): Promise<GitRebaseState> {
+    return invoke<GitRebaseState>('git_rebase_state', { root });
+  },
+
+  gitReword(root: string, sha: string, message: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_reword', { root, sha, message });
+  },
+
+  gitSquash(root: string, shas: string[], message: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_squash', { root, shas, message });
+  },
+
+  gitFixup(root: string, sha: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_fixup', { root, sha });
+  },
+
+  gitDrop(root: string, shas: string[]): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_drop', { root, shas });
+  },
+
+  gitReset(root: string, sha: string, mode: GitResetMode): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_reset', { root, sha, mode });
+  },
+
+  gitCherryPick(root: string, shas: string[]): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_cherry_pick', { root, shas });
+  },
+
+  gitRevert(root: string, shas: string[]): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_revert', { root, shas });
+  },
+
+  gitBranchCreate(root: string, name: string, startPoint?: string | null): Promise<void> {
+    return invoke('git_branch_create', { root, name, startPoint: startPoint ?? null });
+  },
+
+  gitBranchCheckout(root: string, name: string): Promise<void> {
+    return invoke('git_branch_checkout', { root, name });
+  },
+
+  gitBranchDelete(root: string, name: string, force = false): Promise<void> {
+    return invoke('git_branch_delete', { root, name, force });
+  },
+
+  gitBranchRename(root: string, oldName: string, newName: string): Promise<void> {
+    return invoke('git_branch_rename', { root, oldName, newName });
+  },
+
+  gitBackupCreate(root: string, op: string): Promise<string> {
+    return invoke<string>('git_backup_create', { root, op });
+  },
+
+  gitBackupList(root: string): Promise<GitBackupRef[]> {
+    return invoke<GitBackupRef[]>('git_backup_list', { root });
+  },
+
+  gitBackupRestore(root: string, name: string): Promise<void> {
+    return invoke('git_backup_restore', { root, name });
+  },
+
+  gitBackupDelete(root: string, name: string): Promise<void> {
+    return invoke('git_backup_delete', { root, name });
+  },
+
+  gitConflicts(root: string): Promise<GitConflictFile[]> {
+    return invoke<GitConflictFile[]>('git_conflicts', { root });
+  },
+
+  gitResolveBlock(merged: string, blockIndex: number, choice: GitConflictChoice): Promise<string> {
+    return invoke<string>('git_resolve_block', { merged, blockIndex, choice });
+  },
+
+  gitConflictWrite(root: string, path: string, content: string): Promise<void> {
+    return invoke('git_conflict_write', { root, path, content });
+  },
+
+  gitOpState(root: string): Promise<GitOpState> {
+    return invoke<GitOpState>('git_op_state', { root });
+  },
+
+  gitOpContinue(root: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_op_continue', { root });
+  },
+
+  gitOpAbort(root: string): Promise<void> {
+    return invoke('git_op_abort', { root });
+  },
+
+  gitRemotes(root: string): Promise<GitRemote[]> {
+    return invoke<GitRemote[]>('git_remotes', { root });
+  },
+
+  gitFetch(root: string, remote?: string, prune = false): Promise<void> {
+    return invoke('git_fetch', { root, remote: remote ?? null, prune });
+  },
+
+  gitPull(root: string, mode: GitPullMode): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_pull', { root, mode });
+  },
+
+  gitPush(
+    root: string,
+    remote: string,
+    branch: string,
+    setUpstream = false,
+    forceWithLease = false
+  ): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_push', {
+      root,
+      remote,
+      branch,
+      setUpstream,
+      forceWithLease,
+    });
   },
 
   recentFolders(): Promise<string[]> {
