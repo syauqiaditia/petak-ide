@@ -25,18 +25,26 @@ Seluruh verifikasi dijalankan langsung pada mesin Mac M2 fisik secara menyeluruh
 
 | Metrik | Patokan / Budget | Hasil Fase 0 (F0.1 / F0.7) | Hasil Fase 1 (Mac M2) | Status | Log Mentah Bukti |
 |---|---|---|---|---|---|
-| **Cold Start (median)** | $\le$ 686 ms (624 +10%) | 739 ms (F0.1) / 624 ms (F0.7) | **722 – 752 ms** | **WAIVER / ACCEPTED** (WebKit bootstrap ceiling) | `docs/phase1/logs/coldstart.txt` |
-| **Cold Start (first launch)** | — | 1,691 ms (F0.1) / 1,635 ms (F0.7) | **812 – 836 ms** | **LEBIH CEPAT** (-50% vs F0.7) | `docs/phase1/logs/coldstart.txt` |
+| **Cold Start (median)** | $\le$ 686 ms (624 +10%) | 739 ms (F0.1) / 624 ms (F0.7) | **690 / 692 ms** (2 set ukur ulang P1.10) | **FAIL** — masih di atas budget, keputusan waive/tidak ada di UQi | `docs/phase1/logs/coldstart-recheck.txt` |
+| **Cold Start (first launch)** | — | 1,691 ms (F0.1) / 1,635 ms (F0.7) | **1,509 – 1,826 ms** (P1.10 recheck) | Lebih lambat dari angka report lama (812–836ms) — beda kondisi mesin (browser jalan), lihat log | `docs/phase1/logs/coldstart-recheck.txt` |
 | **RAM Idle (panel tertutup)** | < 150 MB | 122 MB (F0.1) | **134.83 MB** (App: 89.7 MB, WebContent: 45.2 MB) | **PASS** | `docs/phase1/logs/idle-measurement.txt`, `idle-ram-cpu.json` |
 | **CPU Idle (30s sampling)** | ~0% | ~4.1% (F0.1) | **0.00% avg** (Max: 0.00%) | **PASS** | `docs/phase1/logs/idle-measurement.txt`, `idle-ram-cpu.json` |
 | **Ketik 10k baris (p50)** | $\le$ 17 ms | 17.00 ms (F0.1 / F0.7) | **17.00 ms** (avg 16.62 ms) | **PASS** (1 frame @60Hz) | `docs/phase1/logs/bench-f02.txt` |
-| **Buka file 50k baris** | < 300 ms | 33.00 ms (F0.7) | **168.00 ms** | **PASS** (jauh di bawah 300 ms) | `docs/phase1/logs/bench-f02.txt` |
+| **Buka file 50k baris** | < 300 ms | 33.00 ms (F0.7) | **168.00 ms** | **PASS budget** (< 300ms), tapi **regresi 5x vs fase 0** — investigasi lihat catatan di bawah | `docs/phase1/logs/bench-f02.txt`, `docs/phase1/logs/bench-50k-investigation.txt` |
 | **Fuzzy index @20k files** | < 50 ms | — | **Median 1.39 ms, p95 4.88 ms, max 5.12 ms** | **PASS** (10x lebih kencang dari budget) | `docs/phase1/logs/fuzzy-bench.txt` |
-| **Ukuran Bundle (.app)** | < 20 MB | 10.21 MB (F0.1) | **13.74 MB** | **PASS** | File bundle output |
-| **Ukuran Bundle (.dmg)** | — | 2.96 MB (F0.1) | **4.54 MB** | **PASS** | File bundle output |
+| **Ukuran Bundle (.app)** | < 20 MB | 10.21 MB (F0.1) | **13.74 MB** (rebuild P1.10: 13.82 MiB) | **PASS** | File bundle output |
+| **Ukuran Bundle (.dmg)** | — | 2.96 MB (F0.1) | **4.54 MB** (rebuild P1.10: 4.56 MiB) | **PASS** | File bundle output |
 
-> **Catatan Cold Start:**
-> Pada pengujian Fase 1, `first launch` mengalami akselerasi signifikan menjadi 812–836 ms (dari sebelumnya 1,635 ms di F0.7). Median cold start berada di 722 ms, konsisten dengan batas fisik WebKit XPC bootstrap di macOS (~700 ms seperti di F0.1: 739 ms). Faktor beban memori Mac M2 (RAM 8 GB dengan 7.4 GB terpakai dan beban swap aktif) berkontribusi pada variasi antarframenya (~36 ms dari threshold 686 ms). Mengingat aplikasi tetap instan (<0.8 detik) dan jauh mengungguli cold start Android Studio (~15–30 detik), hasil ini diterima.
+> **Catatan Cold Start (update P1.10):**
+> Ukur ulang di kondisi Mac TIDAK steril (Chrome + Brave jalan, swap terpakai 2.4GB dari 3GB, memory free 41%
+> — instruksi task melarang menutup app UQi sendiri). Hasil 2 set (5 run tiap set): median 690 ms dan 692 ms,
+> keduanya **di atas budget 686 ms**. Ini lebih baik dari angka report lama (722–752 ms) tapi tetap FAIL.
+> Cek jalur boot (`ui/main.ts`, `App.svelte onMount`, `Editor.svelte onMount`): auto-open recent folder
+> sudah di-defer `setTimeout(20ms)`, tree-sitter/Palette/TerminalPanel sudah lazy-import, font Google Fonts
+> non-blocking (`media=print` trick) — tidak ditemukan kerja non-kritis baru yang blocking first paint.
+> Selisih ke budget kemungkinan besar overhead WKWebView/Tauri runtime + kondisi mesin tidak steril, bukan
+> regresi kode yang jelas. **Status FAIL ditulis apa adanya — PASS/WAIVER adalah keputusan UQi, bukan
+> senior.**
 
 ---
 
@@ -89,6 +97,51 @@ Seluruh screenshot disimpan dalam direktori `docs/phase1/screens/` dan telah div
 
 ---
 
+## 4.5 Fix pasca-review (P1.9 / P1.10)
+
+Reviewer UQi mengangkat 4 temuan setelah verifikasi awal di atas. Status masing-masing:
+
+1. **Highlight fuzzy-finder renggang** — FIXED (P1.9, commit `c500f69`). Chunk highlighted dibungkus
+   dalam satu span `title-text` dengan `min-width:0` + `text-overflow:ellipsis` sehingga karakter yang
+   cocok tidak lagi bercelah. Diverifikasi vision di screenshot baru `fuzzy-finder.png` &
+   `fuzzy-finder-maindart.png` (§4, tanpa gap).
+2. **Status bar/title bar palsu (Pixel, Gradle synced, device, ↑1 ahead)** — FIXED (P1.9, commit
+   `4d51eb3`, `e36a9a4`, `2b844d6`). Semua badge palsu dihapus; nama branch git sekarang dibaca nyata
+   dari `.git/HEAD` via `petak_core::git` (tanpa spawn proses, handle ref/detached/worktree/no-git/
+   empty). 6 unit test baru (`git::tests::*`) menutupi kasus-kasus ini. Diverifikasi grep
+   `Pixel|Gradle synced|↑1` di `ui/` = kosong, dan screenshot `tree-tabs.png` menampilkan branch asli
+   `master`.
+3. **Regresi buka 50k baris (33ms → 168ms)** — INVESTIGASI + ISOLASI EMPIRIS SELESAI (P1.10), BELUM
+   ADA FIX. Metode ukur fase 0 vs fase 1 identik (dicek diff `git show` langsung) — bukan salah ukur.
+   Dua kandidat kode dicurigai dari diff `Editor.svelte` fase0→fase1: (a) `EditorView.updateListener`
+   baru (P1.2, multi-tab dirty-check) yang men-stringify seluruh dokumen kedua kali per dispatch, dan
+   (b) `treeSitterPlugin`. Diuji empiris 5-run per varian (matikan masing-masing & keduanya): median
+   turun dari 168-173ms ke 161-164ms saja (~6-12ms, ~5-7%) — JAUH lebih kecil dari total regresi
+   (~100-140ms). Jadi kedua kandidat **BUKAN penyebab utama** (dibuktikan, bukan tebakan). Kandidat
+   tersisa: perbedaan versi resolved dependency (CodeMirror6/Tauri) antara commit fase 0 lama dan
+   sekarang (tidak ada `package-lock.json` di-commit) — belum sempat diverifikasi dalam timebox 1 jam.
+   Angka 168ms tetap PASS budget (<300ms) tapi regresi 5x belum ditutup. Detail lengkap termasuk
+   semua angka mentah per varian: `docs/phase1/logs/bench-50k-investigation.txt`.
+4. **Cold start 722–752ms > budget 686ms** — DIUKUR ULANG (P1.10), **STATUS: FAIL**, bukan keputusan
+   senior untuk waive. Build release baru dari kode HEAD, 2 set x 5 run: median 690ms dan 692ms — turun
+   dari 722–752ms tapi masih di atas 686ms. Kondisi mesin dicatat (Chrome+Brave jalan, tidak ditutup
+   sesuai instruksi, swap 2.4GB terpakai). Jalur boot dicek: auto-open recent folder sudah di-defer
+   (setTimeout 20ms), tree-sitter/Palette/TerminalPanel sudah lazy-import, font non-blocking — tidak
+   ada kerja non-kritis baru yang blocking first paint ditemukan di kode. Detail:
+   `docs/phase1/logs/coldstart-recheck.txt`.
+
+Sebelum/sesudah (angka mentah, lihat log terkait untuk detail penuh):
+
+| Metrik | Sebelum (report lama) | Sesudah (P1.10) | Budget | Status |
+|---|---|---|---|---|
+| Cold start median | 722–752 ms | 690 / 692 ms | ≤ 686 ms | FAIL (lebih baik, belum lolos) |
+| Buka 50k baris | 168 ms | 168 ms (isolasi selesai, 2 kandidat terbukti bukan penyebab utama, belum ada fix) | < 300 ms | PASS budget / regresi belum ditutup |
+
+Screenshot baru dari P1.9 (§4: `tree-tabs.png`, `fuzzy-finder.png`, `fuzzy-finder-maindart.png`)
+menggantikan bukti visual lama untuk temuan #1 dan #2 di atas.
+
+---
+
 ## 5. Indeks Log Mentah Pengujian
 
 Seluruh log mentah tersimpan di `docs/phase1/logs/` untuk keperluan audit:
@@ -99,6 +152,8 @@ Seluruh log mentah tersimpan di `docs/phase1/logs/` untuk keperluan audit:
 * `docs/phase1/logs/idle-measurement.txt` — Output pengukuran konsumsi RAM dan sampling CPU % selama 30 detik.
 * `docs/phase1/logs/idle-ram-cpu.json` — Data JSON terstruktur pengukuran idle RAM dan CPU.
 * `docs/phase1/logs/manual-e2e.txt` — Log eksekusi otomatis pengujian menyeluruh (P1.2, P1.4, P1.5) dan penangkapan screenshot.
+* `docs/phase1/logs/bench-50k-investigation.txt` — (P1.10) Investigasi regresi buka 50k baris: perbandingan metode ukur fase0/fase1, diff extension CM6, kesimpulan kandidat penyebab.
+* `docs/phase1/logs/coldstart-recheck.txt` — (P1.10) Ukur ulang cold start dengan kondisi mesin tercatat + cek jalur boot.
 
 ---
 

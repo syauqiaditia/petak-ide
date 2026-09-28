@@ -1,0 +1,152 @@
+Investigasi regresi "buka 50k baris" — 33 ms (fase 0, f07) -> 168 ms (fase 1, bench-f02.txt run 135-234)
+Tanggal: 2026-09-28 (P1.10)
+
+=== 1. Bandingin cara ukur (metode bench) ===
+
+Fase 0 (commit 1a9320d^:ui/App.svelte, ini baseline f07 yang menghasilkan 33ms):
+```
+for (let run = 0; run < 5; run++) {
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const t0 = performance.now();
+  const content50k = await api.readFile(big50kPath);
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content50k } });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const t1 = performance.now();
+  ...
+}
+```
+
+Fase 1 (ui/App.svelte:268-306, HEAD saat ini):
+```
+for (let run = 0; run < 5; run++) {
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: '' } });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const t0 = performance.now();
+  const content50k = await api.readFile(big50kPath);
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content50k } });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const t1 = performance.now();
+  ...
+}
+```
+
+KESIMPULAN #1: metode ukur IDENTIK byte-per-byte (readFile via IPC ikut dihitung dalam t0-t1 di kedua fase,
+file sama Big50k.kt, jumlah run sama 5x, warmup clear+2xrAF sama). Jadi regresi BUKAN karena beda cara ukur.
+Artinya harus dicari di sisi kode yang dieksekusi saat `view.dispatch(...insert: content50k)` — yaitu
+extension CM6 yang aktif di editor state.
+
+=== 2. Diff extension CM6: fase 0 vs fase 1 (Editor.svelte) ===
+
+Fase 0 (`onMount` bikin `EditorState.create` sekali, extensions):
+  vim(), lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(),
+  history(), keymap.of([...defaultKeymap, ...historyKeymap]), petakTheme, highlightTheme,
+  filenameCompartment.of(filenameFacet.of(filename)), treeSitterPlugin
+
+Fase 1 (`createEditorState()`, dipanggil tiap ganti tab — P1.2 multi-tab):
+  vim(), lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(),
+  history(), keymap.of([...defaultKeymap, ...historyKeymap]), petakTheme, highlightTheme,
+  filenameFacet.of(filename), treeSitterPlugin, flashLineField (P1.4 goto-line),
+  EditorView.updateListener.of((update) => { ... })   <-- BARU, ditambah P1.2 (tabs)
+
+Extension baru yang jalan tiap dispatch (docChanged) di fase 1: `EditorView.updateListener`.
+Isinya (Editor.svelte:133-149):
+```
+EditorView.updateListener.of((update) => {
+  const active = tabsManager.activeTab;
+  if (active) {
+    active.state = update.state;
+    if (update.docChanged) {
+      const currentText = update.state.doc.toString();   // <-- full-doc stringify #2
+      const isDirty = currentText !== active.savedContent;
+      tabsManager.markDirty(active.path, isDirty);
+    }
+  }
+  if (update.selectionSet || update.docChanged) {
+    const head = update.state.selection.main.head;
+    const line = update.state.doc.lineAt(head);
+    onCursorChange?.(...);
+  }
+})
+```
+
+`treeSitterPlugin.update()` (highlight.ts:198-260) SUDAH melakukan `update.state.doc.toString()` sendiri
+untuk parsing tree-sitter (satu kali per docChanged, ini juga ada di fase 0, bukan baru). Yang BARU di
+fase 1 adalah updateListener memanggil `update.state.doc.toString()` LAGI (call ke-2) cuma buat cek dirty
+flag — men-stringify ulang seluruh dokumen 50k baris yang baru saja di-dispatch, redundant dengan kerja
+yang treeSitterPlugin sudah lakukan.
+
+flashLineField (StateField) cuma bereaksi ke effect `setFlashLine`; kalau tidak ada effect itu di
+transaksi, `update(deco, tr) { ... return deco.map(tr.changes); }` — `.map()` di RangeSet kosong itu O(1),
+bukan kandidat biaya besar.
+
+=== 3. Analisis biaya (statis, belum sempat isolasi empiris — lihat §4 blocker) ===
+
+Kandidat penyebab (urutan kemungkinan terbesar -> terkecil):
+1. `EditorView.updateListener` full-doc `toString()` kedua kali di setiap dispatch besar (dirty check).
+   Ini pekerjaan baru murni fase 1 (P1.2 tabs), tidak ada di fase 0. String-ify 50k baris 2x vs 1x
+   plausibel menjelaskan sebagian besar dari kenaikan 33ms -> ~135-234ms (variance run 135-234 di
+   bench-f02.txt juga konsisten dengan kerja tambahan yang goyah tergantung GC/scheduler).
+2. treeSitterPlugin tidak berubah kodenya (diff highlight.ts fase0 vs fase1 = KOSONG, sudah dicek
+   `git diff` langsung), jadi bukan penyebab baru — parsing tree-sitter dart di f02 bench terpisah
+   tercatat cuma ~32ms initial parse, jauh di bawah 168ms, jadi bukan dia sendirian.
+3. `api.watchRoot` (fs watcher) tidak diaktifkan di jalur benchmark (`runBenchmark` tidak pernah
+   memanggil `openFolder`/`watchRoot` — dicek `grep -n watchRoot ui/App.svelte`, cuma dipanggil di
+   `openFolder()`), jadi watcher BUKAN kandidat untuk skenario bench 50k murni (beda dengan skenario
+   pakai app sungguhan yang sudah buka folder).
+
+=== 4. BLOCKER — belum sempat isolasi empiris 5-run per varian ===
+
+Rencana: toggle sementara (matiin updateListener dirty-check, matiin treeSitterPlugin) dan ukur 5 run
+tiap varian di Mac (build release + jalanin app dengan PETAK_BENCH=1) sesuai task. Build release SUDAH
+jalan sukses (npm run build + npx tauri build, `Petak.app` 14 MiB) dan cold start SUDAH diukur ulang
+(lihat coldstart-recheck.txt) — tapi di tengah proses isolasi 50k, koneksi Tailscale ke Mac
+(100.100.1.1) putus (dari `active` jadi `offline`, tx berhenti bertambah, ssh timeout berulang ~5 menit).
+Sesuai aturan task ("Layar Mac terkunci -> kanban_block, jangan loop"), saya berhenti coba ulang dan
+BLOCK alih-alih fabrikasi angka isolasi yang belum sempat diukur.
+
+STATUS: kesimpulan §1-3 di atas berbasis pembacaan kode nyata (bukan tebakan), tapi angka "median per
+varian setelah toggle" di §2 rencana investigasi BELUM ada — perlu sesi lanjutan begitu Mac
+reachable lagi. Fix yang disarankan (belum diterapkan, nunggu konfirmasi UQi karena scope OUT:
+optimasi besar): ganti dirty-check di updateListener dari `doc.toString() !== active.savedContent`
+jadi hitung dirty dari `update.changes.empty` / cache length+hash ringan, biar gak re-stringify 50k
+baris tiap keystroke ATAU tiap paste besar.
+
+=== UPDATE: Mac reconnect, isolasi empiris dijalankan (lanjutan setelah §4 blocker) ===
+Koneksi Tailscale ke Mac pulih. Isolasi 5-run per varian dijalankan pakai build release
+(PETAK_BENCH=1), toggle lokal di ui/features/editor/Editor.svelte (TIDAK dicommit, sudah
+di-restore ke original setelah selesai):
+
+Baseline (HEAD, semua fitur aktif), 2x run:
+  run A: runs_ms=[187,168,156,135,234] median=168
+  run B (ulang): runs_ms=[177,173,166,136,187] median=173
+
+Varian 1: updateListener dirty-check dimatikan (no-op, tidak stringify doc lagi):
+  runs_ms=[176,164,157,133,175] median=164
+
+Varian 2: treeSitterPlugin dimatikan (dikomen dari extensions array):
+  runs_ms=[182,161,157,132,175] median=161
+
+Varian 3: kedua-duanya dimatikan (updateListener dirty-check off + treeSitterPlugin off):
+  runs_ms=[184,162,156,132,162] median=162
+
+KESIMPULAN EMPIRIS: mematikan salah satu atau kedua kandidat (dirty-check stringify ganda,
+tree-sitter plugin) HANYA mengurangi median ~6-12ms (168/173 -> 161-164ms). Ini JAUH lebih
+kecil dari total regresi 33ms->~135-173ms (selisih ~100-140ms). Jadi dua kandidat di §3 BUKAN
+penyebab utama regresi — cuma kontributor kecil (~5-7%).
+
+Penyebab utama regresi kemungkinan besar BUKAN di kode aplikasi (Editor.svelte/App.svelte/
+highlight.ts semuanya sudah dicek: highlight.ts diff kosong dari fase 0, App.svelte bench loop
+identik). Kandidat paling mungkin: versi resolved dependency (CodeMirror 6 / Tauri IPC bridge)
+berbeda antara saat fase-0 bench dijalankan (commit 1a9320d^, beberapa hari lalu) dan sekarang —
+package.json pin sama (^6.x, tauri ^2.2.0) tapi `npm install` di rentang waktu berbeda bisa
+resolve minor/patch version berbeda (lockfile tidak diperiksa krn tidak ada package-lock.json
+di-commit di repo ini). Tidak sempat diverifikasi lebih lanjut dalam timebox ~1 jam (sudah
+terpakai untuk baca kode + 4 build+bench cycle di atas + gangguan konektivitas Mac).
+
+STATUS AKHIR: 168ms tetap PASS budget (<300ms). Regresi 5x vs fase 0 TIDAK tertutup dengan fix
+dalam timebox task ini — dua kandidat kode yang dicurigai terbukti BUKAN penyebab dominan
+(dibuktikan empiris, bukan tebakan). Rekomendasi: kalau UQi mau ini dikejar lebih jauh, perlu
+sesi terpisah untuk bandingin versi dependency resolved (cek `npm ls @codemirror/view
+@tauri-apps/api` di kedua titik waktu / commit) atau profiling langsung (Instruments/Safari
+Web Inspector timeline) saat runBenchmark jalan — di luar scope timebox P1.10.
