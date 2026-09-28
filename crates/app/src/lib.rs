@@ -8,6 +8,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(None::<notify::RecommendedWatcher>))
+        .manage(Mutex::new(None::<petak_core::search::FileIndex>))
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
@@ -57,6 +58,9 @@ pub fn run() {
             commands::bench_log,
             commands::bench_mode,
             commands::test_mode,
+            commands::index_build,
+            commands::find_files,
+            commands::grep,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -86,3 +86,55 @@ pub fn bench_mode() -> bool {
 pub fn test_mode() -> Option<String> {
     std::env::var("PETAK_TEST_P12").ok()
 }
+
+#[tauri::command]
+pub async fn index_build(
+    state: tauri::State<'_, Mutex<Option<petak_core::search::FileIndex>>>,
+    root: String,
+) -> Result<(), String> {
+    let index = tauri::async_runtime::spawn_blocking(move || {
+        petak_core::search::FileIndex::build(&root)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut lock = state.lock().map_err(|e| e.to_string())?;
+    *lock = Some(index);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn find_files(
+    state: tauri::State<'_, Mutex<Option<petak_core::search::FileIndex>>>,
+    q: String,
+    limit: usize,
+) -> Result<Vec<petak_core::search::FileMatch>, String> {
+    let lock = state.lock().map_err(|e| e.to_string())?;
+    match &*lock {
+        Some(index) => Ok(index.query(&q, limit)),
+        None => Ok(Vec::new()),
+    }
+}
+
+#[tauri::command]
+pub async fn grep(
+    root: String,
+    query: String,
+    regex: bool,
+    case_sensitive: bool,
+    limit: usize,
+) -> Result<Vec<petak_core::search::Hit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::search::grep(
+            &root,
+            &query,
+            petak_core::search::GrepOpts {
+                regex,
+                case_sensitive,
+            },
+            limit,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

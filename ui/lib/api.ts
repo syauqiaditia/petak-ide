@@ -13,6 +13,19 @@ export interface FsChangedPayload {
   paths: string[];
 }
 
+export interface FileMatch {
+  path: string;
+  score: number;
+  indices: number[];
+}
+
+export interface Hit {
+  path: string;
+  line: number;
+  col: number;
+  text: string;
+}
+
 export const api = {
   listDir(path: string): Promise<Entry[]> {
     return invoke<Entry[]>('list_dir', { path });
@@ -60,5 +73,29 @@ export const api = {
 
   testMode(): Promise<string | null> {
     return invoke<string | null>('test_mode');
+  },
+
+  indexBuild(root: string): Promise<void> {
+    return invoke('index_build', { root });
+  },
+
+  findFiles(q: string, limit: number): Promise<FileMatch[]> {
+    return invoke<FileMatch[]>('find_files', { q, limit });
+  },
+
+  grep(
+    root: string,
+    query: string,
+    regex: boolean,
+    caseSensitive: boolean,
+    limit: number
+  ): Promise<Hit[]> {
+    return invoke<Hit[]>('grep', {
+      root,
+      query,
+      regex,
+      caseSensitive,
+      limit,
+    });
   },
 };

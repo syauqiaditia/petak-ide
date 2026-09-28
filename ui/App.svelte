@@ -20,6 +20,17 @@
   let editorComponent: any = null;
   let fileTreeComponent: any = null;
   let unlistenFs: UnlistenFn | null = null;
+  let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function triggerIndexRebuild(rootPath: string) {
+    if (!rootPath) return;
+    if (indexDebounceTimer) {
+      clearTimeout(indexDebounceTimer);
+    }
+    indexDebounceTimer = setTimeout(() => {
+      api.indexBuild(rootPath).catch((e) => console.warn('indexBuild rebuild error:', e));
+    }, 500);
+  }
 
   let activeFilename = $derived(tabsManager.activeTab?.name || '');
   let activeFilePath = $derived(tabsManager.activeTab?.path || '');
@@ -44,6 +55,7 @@
       rootEntries = list;
       recentFolders = await api.addRecentFolder(folderPath);
       await api.watchRoot(folderPath);
+      api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
     } catch (e) {
       console.error('Failed to open folder:', folderPath, e);
@@ -136,6 +148,11 @@
       try {
         rootEntries = await api.listDir(currentFolderPath);
       } catch (_) {}
+    }
+
+    // 4. Debounced index rebuild
+    if (currentFolderPath) {
+      triggerIndexRebuild(currentFolderPath);
     }
   }
 
@@ -511,6 +528,10 @@
   });
 
   onDestroy(() => {
+    if (indexDebounceTimer) {
+      clearTimeout(indexDebounceTimer);
+      indexDebounceTimer = null;
+    }
     if (unlistenFs) {
       unlistenFs();
       unlistenFs = null;

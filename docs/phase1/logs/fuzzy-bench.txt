@@ -1,0 +1,36 @@
+=== Petak Fuzzy Finder Benchmark (20k files) ===
+Generated 20000 realistic paths.
+
+--- Query Benchmarks (limit 50) ---
+Query  1 ("m"   ): median = 1.188 ms (min = 0.844 ms, max = 8.796 ms, matches = 50)
+Query  2 ("d"   ): median = 2.065 ms (min = 2.023 ms, max = 2.170 ms, matches = 50)
+Query  3 ("fe"  ): median = 5.030 ms (min = 4.996 ms, max = 5.114 ms, matches = 50)
+Query  4 ("re"  ): median = 4.612 ms (min = 4.561 ms, max = 5.300 ms, matches = 50)
+Query  5 ("sub" ): median = 0.259 ms (min = 0.250 ms, max = 0.285 ms, matches = 0)
+Query  6 ("scr" ): median = 2.510 ms (min = 2.492 ms, max = 2.638 ms, matches = 50)
+Query  7 ("rep" ): median = 1.910 ms (min = 1.878 ms, max = 2.397 ms, matches = 50)
+Query  8 ("dart"): median = 3.344 ms (min = 3.297 ms, max = 3.418 ms, matches = 50)
+Query  9 ("repo"): median = 2.556 ms (min = 2.510 ms, max = 2.655 ms, matches = 50)
+Query 10 ("auth"): median = 0.653 ms (min = 0.641 ms, max = 0.668 ms, matches = 50)
+Query 11 ("home"): median = 0.912 ms (min = 0.906 ms, max = 0.918 ms, matches = 50)
+Query 12 ("card"): median = 1.458 ms (min = 1.419 ms, max = 1.998 ms, matches = 50)
+Query 13 ("file8"): median = 1.559 ms (min = 1.530 ms, max = 1.606 ms, matches = 50)
+Query 14 ("model"): median = 0.264 ms (min = 0.254 ms, max = 0.266 ms, matches = 0)
+Query 15 ("notif"): median = 0.934 ms (min = 0.900 ms, max = 0.993 ms, matches = 50)
+Query 16 ("trans"): median = 1.171 ms (min = 1.164 ms, max = 1.219 ms, matches = 50)
+Query 17 ("mainda"): median = 1.398 ms (min = 1.393 ms, max = 1.431 ms, matches = 50)
+Query 18 ("usrrep"): median = 0.821 ms (min = 0.817 ms, max = 0.833 ms, matches = 50)
+Query 19 ("screen"): median = 0.697 ms (min = 0.695 ms, max = 0.707 ms, matches = 50)
+Query 20 ("domain"): median = 0.782 ms (min = 0.776 ms, max = 0.787 ms, matches = 50)
+
+--- Summary Across All 20 Queries (100 samples) ---
+Min:    0.250 ms
+Avg:    1.808 ms
+Median: 1.398 ms
+p95:    5.030 ms
+Max:    8.796 ms
+Budget: median & p95 < 50.0 ms -> PASS
+
+--- Real Project FileIndex::build ---
+Target: /Users/uqi/petak-sample (161 files indexed)
+FileIndex::build time: median = 4.337 ms (min = 4.210 ms, max = 13.772 ms)
