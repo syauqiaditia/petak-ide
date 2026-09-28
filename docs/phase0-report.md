@@ -5,7 +5,9 @@ Reviewer independen, 27–28 Sep 2026. Verifikasi ulang hasil F0.1/F0.2/F0.3 di 
 
 ## 0. Ringkasan cepat
 
-**Rekomendasi: GO bersyarat.** Arah Tauri 2 + CM6 sudah kena semua budget kritis (RAM, ukuran
+> **UPDATE 28 Sep (F0.8): verdict final = GO PENUH ke Fase 1.** Swift (grammar baru) dan Kotlin (fwcd) udah beres, lihat §10. Bagian 0–9 di bawah = laporan awal F0.4.
+
+**Rekomendasi awal (F0.4): GO bersyarat.** Arah Tauri 2 + CM6 sudah kena semua budget kritis (RAM, ukuran
 bundle, buka file besar, ketik). Cold start meleset dari target ambisius tapi itu batas fisik
 webview, bukan bug implementasi. Dua risiko nyata yang harus diputuskan sebelum Fase 1 jalan penuh:
 Swift tree-sitter (grammar rusak) dan Kotlin LSP (kotlin-lsp JetBrains gak kasih diagnostics).
