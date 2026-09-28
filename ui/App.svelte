@@ -66,6 +66,53 @@
     }
   }
 
+  const staticActions = [
+    {
+      id: 'open-folder',
+      label: 'Open Folder...',
+      shortcut: '⌘O',
+      run: () => handlePickFolder(),
+    },
+    {
+      id: 'save',
+      label: 'Save',
+      shortcut: '⌘S',
+      run: () => editorComponent?.handleSave(),
+    },
+    {
+      id: 'close-tab',
+      label: 'Close Tab',
+      shortcut: '⌘W',
+      run: () => editorComponent?.handleCloseActiveTab(),
+    },
+    {
+      id: 'find-file',
+      label: 'Find File...',
+      shortcut: '⌘P',
+      run: () => openPalette('files'),
+    },
+    {
+      id: 'find-in-project',
+      label: 'Find in Project...',
+      shortcut: '⇧⌘F',
+      run: () => openPalette('text'),
+    },
+    {
+      id: 'recent-files',
+      label: 'Recent Files',
+      shortcut: '⌘E',
+      run: () => openPalette('recent'),
+    },
+    {
+      id: 'toggle-terminal',
+      label: 'Toggle Terminal',
+      shortcut: '⌃`',
+      run: () => {
+        console.debug('[Petak] Toggle Terminal action triggered (P1.5 stub)');
+      },
+    },
+  ];
+
   function triggerIndexRebuild(rootPath: string) {
     if (!rootPath) return;
     if (indexDebounceTimer) {
@@ -633,6 +680,8 @@
     <PaletteComponent
       mode={paletteMode}
       folderPath={currentFolderPath}
+      recentFiles={tabsManager.recentFiles}
+      actions={staticActions}
       onClose={closePalette}
       onOpenFile={handleOpenFile}
     />
