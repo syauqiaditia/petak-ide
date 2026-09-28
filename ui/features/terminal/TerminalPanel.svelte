@@ -4,13 +4,17 @@
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import '@xterm/xterm/css/xterm.css';
+  import ProblemsPanel from '../problems/ProblemsPanel.svelte';
+  import { diagnosticsStore } from '../editor/lsp/diagnostics.svelte';
 
   let {
     folderPath = '',
     onClose = () => {},
+    onSelectProblem = (_path: string, _line: number, _col: number) => {},
   } = $props<{
     folderPath?: string;
     onClose?: () => void;
+    onSelectProblem?: (path: string, line: number, col: number) => void;
   }>();
 
   interface TabItem {
@@ -23,6 +27,7 @@
 
   let tabs = $state<TabItem[]>([]);
   let activeTabId = $state<number | null>(null);
+  let activeSection = $state<'problems' | 'terminal'>('terminal');
 
   let bodyElement: HTMLDivElement;
   let unlistenOutput: UnlistenFn | null = null;
@@ -184,6 +189,28 @@
     return tabs.map((t) => ({ id: t.id, name: t.name }));
   }
 
+  export function openProblems() {
+    activeSection = 'problems';
+  }
+
+  export function openTerminal() {
+    activeSection = 'terminal';
+    setTimeout(() => {
+      const active = tabs.find((t) => t.id === activeTabId);
+      if (active) {
+        try {
+          active.fitAddon.fit();
+          api.termResize(active.id, active.term.cols, active.term.rows);
+          active.term.focus();
+        } catch (_) {}
+      }
+    }, 10);
+  }
+
+  export function getActiveSection(): 'problems' | 'terminal' {
+    return activeSection;
+  }
+
   onMount(async () => {
     unlistenOutput = await api.onTermOutput((payload) => {
       const target = tabs.find((t) => t.id === payload.id);
@@ -243,14 +270,44 @@
 <div class="terminal-panel">
   <div class="panel-header">
     <div class="tabs-list">
+      <div
+        class="panel-tab problems-tab"
+        class:active={activeSection === 'problems'}
+        onclick={() => (activeSection = 'problems')}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') activeSection = 'problems'; }}
+      >
+        <span class="tab-label">Problems</span>
+        {#if diagnosticsStore.totalCount > 0}
+          <span
+            class="tab-badge"
+            class:is-error={diagnosticsStore.totalErrors > 0}
+            class:is-warning={diagnosticsStore.totalErrors === 0 && diagnosticsStore.totalWarnings > 0}
+          >
+            {diagnosticsStore.totalCount}
+          </span>
+        {/if}
+      </div>
+
+      <div class="tab-divider"></div>
+
       {#each tabs as tab (tab.id)}
         <div
           class="terminal-tab"
-          class:active={tab.id === activeTabId}
-          onclick={() => setActiveTab(tab.id)}
+          class:active={activeSection === 'terminal' && tab.id === activeTabId}
+          onclick={() => {
+            activeSection = 'terminal';
+            setActiveTab(tab.id);
+          }}
           role="button"
           tabindex="0"
-          onkeydown={(e) => { if (e.key === 'Enter') setActiveTab(tab.id); }}
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              activeSection = 'terminal';
+              setActiveTab(tab.id);
+            }
+          }}
         >
           <span class="tab-label">{tab.name}</span>
           <button
@@ -269,7 +326,10 @@
 
       <button
         class="add-tab-btn"
-        onclick={() => createNewTab()}
+        onclick={() => {
+          activeSection = 'terminal';
+          createNewTab();
+        }}
         title="New Terminal Tab"
         aria-label="New Terminal Tab"
       >
@@ -293,7 +353,17 @@
     </div>
   </div>
 
-  <div class="panel-body" bind:this={bodyElement}></div>
+  <div
+    class="panel-body terminal-body"
+    bind:this={bodyElement}
+    style:display={activeSection === 'terminal' ? 'block' : 'none'}
+  ></div>
+
+  {#if activeSection === 'problems'}
+    <div class="panel-body problems-body">
+      <ProblemsPanel {onSelectProblem} />
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -325,6 +395,61 @@
     align-items: stretch;
     gap: 2px;
     overflow-x: auto;
+  }
+
+  .panel-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    font-size: 12px;
+    color: #8b8f98;
+    cursor: pointer;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    transition: color 0.1s;
+    user-select: none;
+  }
+
+  .panel-tab:hover {
+    color: #d8d9dc;
+  }
+
+  .panel-tab.active {
+    color: #e6e7ea;
+    border-bottom: 2px solid #6ea8ff;
+    background: #141518;
+  }
+
+  .tab-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 9px;
+    background: #23252b;
+    color: #8b8f98;
+  }
+
+  .tab-badge.is-error {
+    background: #381e1e;
+    color: #f07a74;
+  }
+
+  .tab-badge.is-warning {
+    background: #332814;
+    color: #e8b45a;
+  }
+
+  .tab-divider {
+    width: 1px;
+    height: 16px;
+    background: #26282d;
+    align-self: center;
+    margin: 0 4px;
+  }
+
+  .problems-body {
+    padding: 0;
   }
 
   .terminal-tab {

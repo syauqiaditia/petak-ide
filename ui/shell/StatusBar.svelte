@@ -1,16 +1,20 @@
 <script lang="ts">
+  import { diagnosticsStore } from '../features/editor/lsp/diagnostics.svelte';
+
   let {
     branchName = '',
     statusText = 'Ready',
     isBench = false,
     fileType = 'Kotlin',
     cursorInfo = 'Ln 1, Col 1',
+    onOpenProblems = () => {},
   } = $props<{
     branchName?: string | null;
     statusText?: string;
     isBench?: boolean;
     fileType?: string;
     cursorInfo?: string;
+    onOpenProblems?: () => void;
   }>();
 </script>
 
@@ -22,6 +26,36 @@
     <span class="dot"></span>
     {statusText}
   </span>
+  {#if diagnosticsStore.totalCount > 0}
+    <div
+      class="problems-badge-group"
+      onclick={() => onOpenProblems?.()}
+      role="button"
+      tabindex="0"
+      onkeydown={(e) => { if (e.key === 'Enter') onOpenProblems?.(); }}
+    >
+      {#if diagnosticsStore.totalErrors > 0}
+        <span class="status-errors" title="{diagnosticsStore.totalErrors} errors">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          {diagnosticsStore.totalErrors}
+        </span>
+      {/if}
+      {#if diagnosticsStore.totalWarnings > 0}
+        <span class="status-warnings" title="{diagnosticsStore.totalWarnings} warnings">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <path d="M12 3l10 18H2z"></path>
+            <line x1="12" y1="10" x2="12" y2="15"></line>
+            <line x1="12" y1="18" x2="12.01" y2="18"></line>
+          </svg>
+          {diagnosticsStore.totalWarnings}
+        </span>
+      {/if}
+    </div>
+  {/if}
   {#if isBench}
     <span class="bench-badge">⚡ BENCH RUNNING</span>
   {/if}
@@ -57,6 +91,33 @@
     align-items: center;
     gap: 6px;
     color: #7fc98f;
+  }
+  .problems-badge-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .problems-badge-group:hover {
+    background: #1f2127;
+  }
+  .status-errors {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #f07a74;
+  }
+  .status-warnings {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #e8b45a;
   }
   .dot {
     width: 6px;

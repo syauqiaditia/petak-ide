@@ -35,6 +35,45 @@ export interface TermExitPayload {
   id: number;
 }
 
+export interface LspPosition {
+  line: number;
+  character: number;
+}
+
+export interface LspRange {
+  start: LspPosition;
+  end: LspPosition;
+}
+
+export interface LspChange {
+  range?: LspRange;
+  text: string;
+}
+
+export interface LspDiagnostic {
+  range: LspRange;
+  severity?: 1 | 2 | 3 | 4; // 1: Error, 2: Warning, 3: Information, 4: Hint
+  code?: number | string;
+  source?: string;
+  message: string;
+  tags?: number[];
+  relatedInformation?: Array<{
+    location: { uri: string; range: LspRange };
+    message: string;
+  }>;
+}
+
+export interface LspDiagnosticsPayload {
+  path: string;
+  diagnostics: LspDiagnostic[];
+}
+
+export interface LspStatusPayload {
+  lang: string;
+  root: string;
+  state: 'starting' | 'ready' | 'stopped' | 'crashed';
+}
+
 export const api = {
   listDir(path: string): Promise<Entry[]> {
     return invoke<Entry[]>('list_dir', { path });
@@ -138,5 +177,31 @@ export const api = {
 
   resizeWindow(width: number, height: number): Promise<void> {
     return invoke('resize_window', { width, height });
+  },
+
+  lsp: {
+    didOpen(path: string, text: string): Promise<void> {
+      return invoke('lsp_did_open', { path, text });
+    },
+
+    didChange(path: string, version: number, changes: LspChange[]): Promise<void> {
+      return invoke('lsp_did_change', { path, version, changes });
+    },
+
+    didSave(path: string, text: string): Promise<void> {
+      return invoke('lsp_did_save', { path, text });
+    },
+
+    didClose(path: string): Promise<void> {
+      return invoke('lsp_did_close', { path });
+    },
+  },
+
+  onLspDiagnostics(cb: (payload: LspDiagnosticsPayload) => void): Promise<UnlistenFn> {
+    return listen<LspDiagnosticsPayload>('lsp-diagnostics', (event) => cb(event.payload));
+  },
+
+  onLspStatus(cb: (payload: LspStatusPayload) => void): Promise<UnlistenFn> {
+    return listen<LspStatusPayload>('lsp-status', (event) => cb(event.payload));
   },
 };

@@ -21,6 +21,8 @@ pub enum ServerEvent {
     ApplyEdit { id: Value, edit: Value },
     /// Server process crashed unexpectedly
     Crashed,
+    /// Server status changed (starting, ready, stopped, crashed)
+    Status { state: String },
 }
 
 /// Configuration for spawning an LSP server.

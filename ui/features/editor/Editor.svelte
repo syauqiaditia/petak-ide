@@ -15,7 +15,15 @@
   import { vim } from '@replit/codemirror-vim';
   import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
   import { tabsManager, type TabItem } from './tabs.svelte';
-  import { api } from '../../lib/api';
+  import { api, type UnlistenFn } from '../../lib/api';
+  import { lintGutter } from '@codemirror/lint';
+  import { lintTheme } from './lsp/theme';
+  import { createLspSyncExtension, onTabOpen, onTabSave, onTabClose } from './lsp/sync';
+  import {
+    diagnosticsStore,
+    applyStoredDiagnosticsToView,
+    handleIncomingDiagnostics,
+  } from './lsp/diagnostics.svelte';
 
   let {
     onReady,
@@ -30,6 +38,7 @@
   let container: HTMLDivElement;
   let view: EditorView | null = null;
   let currentSwappedPath: string | null = null;
+  let unlistenDiagnostics: UnlistenFn | null = null;
 
   const petakTheme = EditorView.theme(
     {
@@ -131,6 +140,9 @@
         filenameFacet.of(filename),
         treeSitterPlugin,
         flashLineField,
+        lintGutter(),
+        lintTheme,
+        createLspSyncExtension(() => currentSwappedPath),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active) {
@@ -186,6 +198,7 @@
     try {
       await api.saveFile(active.path, currentText);
       tabsManager.markSaved(active.path, currentText);
+      onTabSave(active.path, currentText);
       onStatusChange?.(`Saved ${active.name}`);
     } catch (e) {
       console.error('Failed to save file:', active.path, e);
@@ -196,6 +209,7 @@
   export function handleCloseActiveTab() {
     const active = tabsManager.activeTab;
     if (!active) return;
+    onTabClose(active.path);
     tabsManager.closeTab(active.path);
   }
 
@@ -249,11 +263,30 @@
     if (active) {
       active.state = initialState;
       currentSwappedPath = active.path;
+      onTabOpen(active.path, active.savedContent);
     }
 
     view = new EditorView({
       state: initialState,
       parent: container,
+    });
+
+    if (active) {
+      applyStoredDiagnosticsToView(view, active.path);
+    }
+
+    api.onLspDiagnostics((payload) => {
+      handleIncomingDiagnostics(
+        payload,
+        view,
+        currentSwappedPath,
+        (p) => {
+          const tab = tabsManager.tabs.find((t) => t.path === p);
+          return tab?.state?.doc ?? null;
+        }
+      );
+    }).then((unlisten) => {
+      unlistenDiagnostics = unlisten;
     });
 
     view.focus();
@@ -269,6 +302,10 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', onKeydown, true);
+    if (unlistenDiagnostics) {
+      unlistenDiagnostics();
+      unlistenDiagnostics = null;
+    }
     if (view) {
       view.destroy();
       view = null;
@@ -296,6 +333,9 @@
         }
         view.setState(active.state);
         view.focus();
+
+        onTabOpen(active.path, active.savedContent);
+        applyStoredDiagnosticsToView(view, active.path);
 
         const head = active.state.selection.main.head;
         const line = active.state.doc.lineAt(head);
@@ -331,6 +371,7 @@
           class="tab-close-btn"
           onclick={(e) => {
             e.stopPropagation();
+            onTabClose(tab.path);
             tabsManager.closeTab(tab.path);
           }}
           title="Close tab"

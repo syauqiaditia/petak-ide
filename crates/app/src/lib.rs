@@ -2,7 +2,7 @@ mod commands;
 
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -21,9 +21,66 @@ pub fn run() {
                         }
                     }
                 }
+                if let Some(reg) = window.try_state::<commands::AppRegistry>() {
+                    reg.shutdown_all();
+                }
             }
         })
         .setup(|app| {
+            let app_handle = app.handle().clone();
+            let app_handle_for_events = app_handle.clone();
+            let registry = std::sync::Arc::new(petak_core::lsp::Registry::new(
+                std::sync::Arc::new(petak_core::lsp::WallClock),
+                move |lang, root, event| {
+                    match event {
+                        petak_core::lsp::ServerEvent::Notification { method, params } => {
+                            if method == "textDocument/publishDiagnostics" {
+                                if let Some(uri_val) = params.get("uri").and_then(|u| u.as_str()) {
+                                    let path = petak_core::lsp::registry::uri_to_path(uri_val)
+                                        .map(|p| p.to_string_lossy().to_string())
+                                        .unwrap_or_else(|| uri_val.to_string());
+                                    let diagnostics = params.get("diagnostics").cloned().unwrap_or(serde_json::json!([]));
+                                    let _ = app_handle_for_events.emit("lsp-diagnostics", serde_json::json!({
+                                        "path": path,
+                                        "diagnostics": diagnostics,
+                                    }));
+                                }
+                            }
+                        }
+                        petak_core::lsp::ServerEvent::Status { state } => {
+                            let _ = app_handle_for_events.emit("lsp-status", serde_json::json!({
+                                "lang": lang.as_str(),
+                                "root": root.to_string_lossy().to_string(),
+                                "state": state,
+                            }));
+                        }
+                        petak_core::lsp::ServerEvent::Crashed => {
+                            let _ = app_handle_for_events.emit("lsp-status", serde_json::json!({
+                                "lang": lang.as_str(),
+                                "root": root.to_string_lossy().to_string(),
+                                "state": "crashed",
+                            }));
+                        }
+                        petak_core::lsp::ServerEvent::ApplyEdit { id, edit } => {
+                            let _ = app_handle_for_events.emit("lsp-apply-edit", serde_json::json!({
+                                "id": id,
+                                "edit": edit,
+                            }));
+                        }
+                    }
+                },
+            ));
+
+            app.manage(registry.clone());
+
+            let reg_tick = registry.clone();
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                    reg_tick.tick();
+                }
+            });
+
             #[cfg(target_os = "macos")]
             {
                 let app_handle = app.handle();
@@ -81,6 +138,10 @@ pub fn run() {
             commands::term_resize,
             commands::term_close,
             commands::resize_window,
+            commands::lsp_did_open,
+            commands::lsp_did_change,
+            commands::lsp_did_save,
+            commands::lsp_did_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

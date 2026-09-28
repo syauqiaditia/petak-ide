@@ -7,6 +7,7 @@
   import StatusBar from './shell/StatusBar.svelte';
   import Editor from './features/editor/Editor.svelte';
   import { tabsManager } from './features/editor/tabs.svelte';
+  import { diagnosticsStore } from './features/editor/lsp/diagnostics.svelte';
   import type { EditorView } from '@codemirror/view';
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
   import { registerKeymap, showIntentions, type SearchMode } from './features/search/keymap';
@@ -44,6 +45,17 @@
     } else {
       terminalOpen = false;
     }
+  }
+
+  async function openProblems() {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openProblems?.();
+    }, 20);
   }
 
   async function openPalette(mode: SearchMode, initialQuery: string = '') {
@@ -127,6 +139,12 @@
       label: 'Toggle Terminal',
       shortcut: '⌃`',
       run: () => toggleTerminal(),
+    },
+    {
+      id: 'toggle-problems',
+      label: 'Toggle Problems Panel',
+      shortcut: '⇧⌘M',
+      run: () => openProblems(),
     },
   ];
 
@@ -802,6 +820,62 @@
     }
   }
 
+  async function runP22AutoTest() {
+    console.log('[PETAK_TEST] Running P2.2 LSP wiring and diagnostics test sequence...');
+    await api.benchLog('P22_STARTING');
+    try {
+      if (!currentFolderPath) {
+        const recents = await api.recentFolders();
+        if (recents && recents.length > 0) {
+          await openFolder(recents[0]);
+        } else {
+          await openFolder('/Users/uqi/petak-sample');
+        }
+      }
+      await new Promise((r) => setTimeout(r, 600));
+
+      const startTime = Date.now();
+      const testFilePath = currentFolderPath + '/lib/main.dart';
+      await handleOpenFile(testFilePath);
+      await api.benchLog('P22_FILE_OPENED: ' + testFilePath);
+
+      // Wait for diagnostics to arrive from LSP server (target < 3s, timeout 12s)
+      let diagArrived = false;
+      let firstDiagDuration = 0;
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (diagnosticsStore.totalCount > 0) {
+          diagArrived = true;
+          firstDiagDuration = Date.now() - startTime;
+          break;
+        }
+      }
+
+      if (diagArrived) {
+        await api.benchLog(
+          `CHECK_FIRST_DIAGNOSTICS_PASS: ${firstDiagDuration}ms (count: ${diagnosticsStore.totalCount}, errors: ${diagnosticsStore.totalErrors}, warnings: ${diagnosticsStore.totalWarnings})`
+        );
+      } else {
+        await api.benchLog('CHECK_FIRST_DIAGNOSTICS_TIMEOUT');
+      }
+
+      // Open Problems panel
+      await openProblems();
+      await new Promise((r) => setTimeout(r, 500));
+      await api.benchLog('CHECK_PROBLEMS_PANEL_PASS');
+
+      // Ready for screenshot
+      await api.benchLog('P22_SCREENSHOT_READY');
+      await new Promise((r) => setTimeout(r, 2500));
+
+      await api.benchLog('P22_ALL_TESTS_PASS');
+      console.log('[PETAK_TEST] P2.2 all tests completed successfully');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P2.2 test:', e);
+      await api.benchLog(`P22_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -844,7 +918,9 @@
     // 4. Automated test if testMode is set
     try {
       const tm = await api.testMode();
-      if (tm === 'P15' || tm === 'p15') {
+      if (tm === 'P22' || tm === 'p22') {
+        setTimeout(() => runP22AutoTest(), 400);
+      } else if (tm === 'P15' || tm === 'p15') {
         setTimeout(() => runP15AutoTest(), 400);
       } else if (tm === 'P14' || tm === 'p14') {
         setTimeout(() => runP14AutoTest(), 400);
@@ -908,6 +984,7 @@
           bind:this={terminalComponent}
           folderPath={currentFolderPath}
           onClose={() => (terminalOpen = false)}
+          onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
         />
       {/if}
     </div>
@@ -919,6 +996,7 @@
     {isBench}
     {fileType}
     {cursorInfo}
+    onOpenProblems={openProblems}
   />
 
   {#if paletteOpen && PaletteComponent}

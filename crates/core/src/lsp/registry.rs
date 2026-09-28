@@ -1,6 +1,7 @@
 // Registry: map (Lang, root) → Server. Lazy start on didOpen, idle kill after 10 min,
 // crash restart with re-didOpen of open documents.
 
+use super::pos;
 use super::server::{Server, ServerConfig, ServerError, ServerEvent};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -9,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Helper: convert Path to file:// URI, percent-encoding unsafe characters.
-fn path_to_uri(path: &Path) -> String {
+pub fn path_to_uri(path: &Path) -> String {
     let mut out = String::from("file://");
     for b in path.to_string_lossy().bytes() {
         match b {
@@ -21,6 +22,27 @@ fn path_to_uri(path: &Path) -> String {
         }
     }
     out
+}
+
+/// Helper: convert file:// URI back to PathBuf, percent-decoding characters.
+pub fn uri_to_path(uri: &str) -> Option<PathBuf> {
+    let stripped = uri.strip_prefix("file://")?;
+    let mut bytes = Vec::new();
+    let b = stripped.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let Ok(val) = u8::from_str_radix(std::str::from_utf8(&b[i + 1..i + 3]).unwrap_or(""), 16) {
+                bytes.push(val);
+                i += 3;
+                continue;
+            }
+        }
+        bytes.push(b[i]);
+        i += 1;
+    }
+    let s = String::from_utf8(bytes).ok()?;
+    Some(PathBuf::from(s))
 }
 
 /// Injectable clock trait for testability.
@@ -45,6 +67,15 @@ pub enum Lang {
 }
 
 impl Lang {
+    /// Name of the language as string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Lang::Dart => "dart",
+            Lang::Kotlin => "kotlin",
+            Lang::Swift => "swift",
+        }
+    }
+
     /// Detect language from file extension.
     pub fn from_extension(ext: &str) -> Option<Self> {
         match ext {
@@ -125,14 +156,14 @@ struct ManagedServer {
 pub struct Registry {
     servers: Mutex<HashMap<ServerKey, ManagedServer>>,
     clock: Arc<dyn Clock>,
-    event_callback: Arc<dyn Fn(Lang, ServerEvent) + Send + Sync>,
+    event_callback: Arc<dyn Fn(Lang, PathBuf, ServerEvent) + Send + Sync>,
     idle_timeout: Duration,
 }
 
 impl Registry {
     pub fn new<F>(clock: Arc<dyn Clock>, on_event: F) -> Self
     where
-        F: Fn(Lang, ServerEvent) + Send + Sync + 'static,
+        F: Fn(Lang, PathBuf, ServerEvent) + Send + Sync + 'static,
     {
         Self {
             servers: Mutex::new(HashMap::new()),
@@ -250,13 +281,13 @@ impl Registry {
         Ok(())
     }
 
-    /// Notify didChange for a document.
+    /// Notify didChange for a document with incremental or full content changes.
     pub fn did_change(
         &self,
         file_path: &Path,
         lang: Lang,
         version: i32,
-        text: &str,
+        changes: &[Value],
         workspace_root: Option<&Path>,
     ) -> Result<(), ServerError> {
         let root = Self::find_root(file_path, lang, workspace_root);
@@ -269,12 +300,63 @@ impl Registry {
             "textDocument/didChange",
             &json!({
                 "textDocument": { "uri": &uri, "version": version },
-                "contentChanges": [{ "text": text }]
+                "contentChanges": changes
             }),
         )?;
         if let Some(doc) = managed.open_docs.get_mut(&uri) {
             doc.version = version;
-            doc.text = text.to_string();
+            for change in changes {
+                if let Some(text_val) = change.get("text").and_then(|t| t.as_str()) {
+                    if let Some(range_val) = change.get("range") {
+                        if let (Some(sl), Some(sc), Some(el), Some(ec)) = (
+                            range_val.get("start").and_then(|s| s.get("line")).and_then(|l| l.as_u64()),
+                            range_val.get("start").and_then(|s| s.get("character")).and_then(|c| c.as_u64()),
+                            range_val.get("end").and_then(|e| e.get("line")).and_then(|l| l.as_u64()),
+                            range_val.get("end").and_then(|e| e.get("character")).and_then(|c| c.as_u64()),
+                        ) {
+                            if let (Some(start_byte), Some(end_byte)) = (
+                                pos::lsp_to_byte_offset(&doc.text, sl as u32, sc as u32),
+                                pos::lsp_to_byte_offset(&doc.text, el as u32, ec as u32),
+                            ) {
+                                if start_byte <= end_byte && end_byte <= doc.text.len() {
+                                    doc.text.replace_range(start_byte..end_byte, text_val);
+                                }
+                            }
+                        }
+                    } else {
+                        doc.text = text_val.to_string();
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Notify didSave for a document.
+    pub fn did_save(
+        &self,
+        file_path: &Path,
+        lang: Lang,
+        text: Option<&str>,
+        workspace_root: Option<&Path>,
+    ) -> Result<(), ServerError> {
+        let root = Self::find_root(file_path, lang, workspace_root);
+        let key = ServerKey { lang, root };
+        let uri = path_to_uri(file_path);
+
+        let mut servers = self.servers.lock().unwrap();
+        let managed = self.ensure_alive(&mut servers, &key)?;
+        let mut params = json!({
+            "textDocument": { "uri": &uri }
+        });
+        if let Some(t) = text {
+            params["text"] = json!(t);
+        }
+        managed.server.notify("textDocument/didSave", &params)?;
+        if let Some(doc) = managed.open_docs.get_mut(&uri) {
+            if let Some(t) = text {
+                doc.text = t.to_string();
+            }
         }
         Ok(())
     }
@@ -356,6 +438,7 @@ impl Registry {
         for key in to_remove {
             if let Some(managed) = servers.remove(&key) {
                 managed.server.kill();
+                (self.event_callback)(key.lang, key.root, ServerEvent::Status { state: "stopped".into() });
             }
         }
     }
@@ -363,8 +446,9 @@ impl Registry {
     /// Shutdown all servers.
     pub fn shutdown_all(&self) {
         let mut servers = self.servers.lock().unwrap();
-        for (_, managed) in servers.drain() {
+        for (key, managed) in servers.drain() {
             managed.server.kill();
+            (self.event_callback)(key.lang, key.root, ServerEvent::Status { state: "stopped".into() });
         }
     }
 
@@ -374,6 +458,8 @@ impl Registry {
     }
 
     fn start_server(&self, lang: Lang, root: &Path) -> Result<ManagedServer, ServerError> {
+        let root_buf = root.to_path_buf();
+        (self.event_callback)(lang, root_buf.clone(), ServerEvent::Status { state: "starting".into() });
         let (cmd, args) = lang.command();
         let root_uri = path_to_uri(root);
         let config = ServerConfig {
@@ -383,9 +469,18 @@ impl Registry {
         };
 
         let cb = Arc::clone(&self.event_callback);
-        let server = Server::start(&config, move |event| {
-            cb(lang, event);
-        })?;
+        let root_clone = root_buf.clone();
+        let server = match Server::start(&config, move |event| {
+            cb(lang, root_clone.clone(), event);
+        }) {
+            Ok(s) => s,
+            Err(e) => {
+                (self.event_callback)(lang, root_buf, ServerEvent::Status { state: "crashed".into() });
+                return Err(e);
+            }
+        };
+
+        (self.event_callback)(lang, root_buf, ServerEvent::Status { state: "ready".into() });
 
         Ok(ManagedServer {
             server,
@@ -398,6 +493,15 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_uri_roundtrip() {
+        let p = PathBuf::from("/Users/uqi/My Projects/main.dart");
+        let uri = path_to_uri(&p);
+        assert_eq!(uri, "file:///Users/uqi/My%20Projects/main.dart");
+        let back = uri_to_path(&uri).unwrap();
+        assert_eq!(back, p);
+    }
 
     #[test]
     fn test_find_root_dart() {

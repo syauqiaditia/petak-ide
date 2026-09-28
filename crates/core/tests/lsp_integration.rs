@@ -197,7 +197,7 @@ fn registry_lazy_start() {
     let clock = Arc::new(FakeClock::new());
     let events = Arc::new(Mutex::new(Vec::new()));
     let events_clone = Arc::clone(&events);
-    let registry = Registry::new(clock.clone(), move |_lang, event| {
+    let registry = Registry::new(clock.clone(), move |_, _, event| {
         events_clone.lock().unwrap().push(event);
     });
 
@@ -239,7 +239,7 @@ fn registry_idle_kill() {
     let clock = Arc::new(FakeClock::new());
     let crashed = Arc::new(AtomicBool::new(false));
     let crashed_clone = Arc::clone(&crashed);
-    let registry = Registry::new(clock.clone(), move |_, event| {
+    let registry = Registry::new(clock.clone(), move |_, _, event| {
         if matches!(event, ServerEvent::Crashed) {
             crashed_clone.store(true, Ordering::SeqCst);
         }
@@ -306,7 +306,7 @@ fn registry_crash_restart_reopens_docs() {
     let diags_received = Arc::new(Mutex::new(Vec::new()));
     let diags_clone = Arc::clone(&diags_received);
     let clock = Arc::new(FakeClock::new());
-    let registry = Registry::new(clock.clone(), move |_, event| match event {
+    let registry = Registry::new(clock.clone(), move |_, _, event| match event {
         ServerEvent::Crashed => {
             crash_count_clone.fetch_add(1, Ordering::SeqCst);
         }
@@ -424,7 +424,7 @@ fn registry_crash_restart_on_did_change() {
     let diags_received = Arc::new(Mutex::new(Vec::new()));
     let diags_clone = Arc::clone(&diags_received);
     let clock = Arc::new(FakeClock::new());
-    let registry = Registry::new(clock.clone(), move |_, event| match event {
+    let registry = Registry::new(clock.clone(), move |_, _, event| match event {
         ServerEvent::Crashed => {
             crash_count_clone.fetch_add(1, Ordering::SeqCst);
         }
@@ -452,7 +452,7 @@ fn registry_crash_restart_on_did_change() {
     diags_received.lock().unwrap().clear();
 
     // did_change on crashed server should restart it, reopen doc, and succeed
-    let change_res = registry.did_change(&file_path, Lang::Dart, 2, "void main() { int x = 1; }", None);
+    let change_res = registry.did_change(&file_path, Lang::Dart, 2, &[serde_json::json!({ "text": "void main() { int x = 1; }" })], None);
     assert!(change_res.is_ok(), "did_change after crash should restart and succeed");
 
     let mut got_reopen_diag = false;

@@ -83,7 +83,8 @@ pub fn mark_ready(ts_ms: u64) {
 pub fn bench_log(line: String) -> Result<(), String> {
     let out_var = std::env::var("PETAK_BENCH_OUT").ok();
     let is_bench = std::env::var("PETAK_BENCH").is_ok();
-    let is_test = std::env::var("PETAK_TEST_P15").is_ok()
+    let is_test = std::env::var("PETAK_TEST_P22").is_ok()
+        || std::env::var("PETAK_TEST_P15").is_ok()
         || std::env::var("PETAK_TEST_P14").is_ok()
         || std::env::var("PETAK_TEST_P12").is_ok()
         || std::env::var("PETAK_TEST").is_ok();
@@ -110,11 +111,22 @@ pub fn bench_mode() -> bool {
 
 #[tauri::command]
 pub fn test_mode() -> Option<String> {
-    std::env::var("PETAK_TEST_P15")
-        .ok()
-        .or_else(|| std::env::var("PETAK_TEST_P14").ok())
-        .or_else(|| std::env::var("PETAK_TEST").ok())
-        .or_else(|| std::env::var("PETAK_TEST_P12").ok())
+    if std::env::var("PETAK_TEST_P22").is_ok() {
+        return Some("P22".to_string());
+    }
+    if std::env::var("PETAK_TEST_P15").is_ok() {
+        return Some("P15".to_string());
+    }
+    if std::env::var("PETAK_TEST_P14").is_ok() {
+        return Some("P14".to_string());
+    }
+    if std::env::var("PETAK_TEST_P12").is_ok() {
+        return Some("P12".to_string());
+    }
+    if std::env::var("PETAK_TEST").is_ok() {
+        return Some("P12".to_string());
+    }
+    None
 }
 
 #[tauri::command]
@@ -300,4 +312,78 @@ pub fn resize_window(window: tauri::Window, width: f64, height: f64) -> Result<(
     window
         .set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }))
         .map_err(|e| e.to_string())
+}
+
+pub type AppRegistry = std::sync::Arc<petak_core::lsp::Registry>;
+
+#[tauri::command]
+pub async fn lsp_did_open(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    text: String,
+) -> Result<(), String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
+            registry
+                .did_open(p, lang, &text, None)
+                .map_err(|e| format!("{:?}", e))?;
+        }
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn lsp_did_change(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    version: i32,
+    changes: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
+            let _ = registry.did_change(p, lang, version, &changes, None);
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn lsp_did_save(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+    text: Option<String>,
+) -> Result<(), String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
+            let _ = registry.did_save(p, lang, text.as_deref(), None);
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn lsp_did_close(
+    state: tauri::State<'_, AppRegistry>,
+    path: String,
+) -> Result<(), String> {
+    let registry = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&path);
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
+            let _ = registry.did_close(p, lang, None);
+        }
+    });
+    Ok(())
 }
