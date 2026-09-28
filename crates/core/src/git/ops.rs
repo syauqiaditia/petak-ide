@@ -317,6 +317,16 @@ pub fn revert(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, G
     })
 }
 
+fn validate_branch_name(name: &str) -> Result<(), GitError> {
+    if name.is_empty() || name.starts_with('-') {
+        return Err(GitError {
+            exit_code: None,
+            message: format!("invalid branch name: '{}'", name),
+        });
+    }
+    Ok(())
+}
+
 pub fn branch_create(
     exec: &dyn Exec,
     repo: &Path,
@@ -324,15 +334,17 @@ pub fn branch_create(
     at_sha: &str,
     checkout: bool,
 ) -> Result<(), GitError> {
+    validate_branch_name(name)?;
     if checkout {
         git(exec, repo, &["checkout", "-b", name, at_sha])?;
     } else {
-        git(exec, repo, &["branch", name, at_sha])?;
+        git(exec, repo, &["branch", "--", name, at_sha])?;
     }
     Ok(())
 }
 
 pub fn branch_checkout(exec: &dyn Exec, repo: &Path, name: &str) -> Result<(), GitError> {
+    validate_branch_name(name)?;
     git(exec, repo, &["checkout", name])?;
     Ok(())
 }
@@ -343,12 +355,15 @@ pub fn branch_delete(
     name: &str,
     force: bool,
 ) -> Result<(), GitError> {
+    validate_branch_name(name)?;
     let flag = if force { "-D" } else { "-d" };
-    git(exec, repo, &["branch", flag, name])?;
+    git(exec, repo, &["branch", flag, "--", name])?;
     Ok(())
 }
 
 pub fn branch_rename(exec: &dyn Exec, repo: &Path, old: &str, new: &str) -> Result<(), GitError> {
-    git(exec, repo, &["branch", "-m", old, new])?;
+    validate_branch_name(old)?;
+    validate_branch_name(new)?;
+    git(exec, repo, &["branch", "-m", old, "--", new])?;
     Ok(())
 }

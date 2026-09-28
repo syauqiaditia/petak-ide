@@ -420,7 +420,8 @@ pub async fn git_branch_create(
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
         let repo = std::path::Path::new(&root);
-        petak_core::git::branch_create(&exec, repo, &name, start_point.as_deref())
+        let at_sha = start_point.as_deref().unwrap_or("HEAD");
+        petak_core::git::branch_create(&exec, repo, &name, at_sha, false)
             .map_err(|e| e.to_string())
     })
     .await

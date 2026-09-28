@@ -116,7 +116,7 @@ Sesuai dengan arsitektur bertahap Petak, fitur AI Agent yang membutuhkan agen in
 2. **Keamanan Autentikasi Remote:**  
    Pengujian remote `git fetch/pull/push` pada Fase 3 diverifikasi menggunakan remote bare lokal (`file://`). Integrasi Keychain macOS untuk push ke repositori privat GitLab (`code.istar.id`) dialokasikan pada Fase 6 dengan izin eksplisit dari UQi demi menjaga keamanan kredensial.
 3. **Penolakan Nama Cabang Diawali Dash (`-`):**  
-   Untuk mencegah injeksi opsi CLI Git (`argument injection`), seluruh nama cabang dan path diverifikasi dan dilewatkan dengan separator `--` eksplisit.
+   Untuk mencegah injeksi opsi CLI Git (`argument injection`), seluruh nama cabang diverifikasi di layer core (`validate_branch_name` menolak nama yang diawali `-` atau kosong sebelum git dipanggil), separator `--` eksplisit disematkan pada subperintah git yang mendukungnya (`branch`, `branch -d/-D`, `branch -m`), dan path file diverifikasi serta dilewatkan dengan separator `--` eksplisit.
 4. **Repositori Tanpa Commit (Unborn HEAD):**  
    Status repositori baru tanpa commit (`git init`) ditangani secara elegan: tidak memicu crash, log menampilkan pesan informatif, dan Commit panel siap menerima initial commit pertama.
 

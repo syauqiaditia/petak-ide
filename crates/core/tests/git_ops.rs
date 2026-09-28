@@ -6,8 +6,9 @@ use std::path::Path;
 use common::gitrepo::TestRepo;
 use petak_core::exec::SystemExec;
 use petak_core::git::{
-    commit, diff_commit, diff_staged, diff_worktree, last_commit_message, stage_files, stage_hunk,
-    status, unstage_files, unstage_hunk, FileState,
+    branch_checkout, branch_create, branch_delete, branch_rename, commit, diff_commit,
+    diff_staged, diff_worktree, last_commit_message, stage_files, stage_hunk, status,
+    unstage_files, unstage_hunk, FileState,
 };
 
 #[test]
@@ -284,4 +285,67 @@ fn test_diff_commit_and_untracked() {
         untracked_diff[0].hunks[0].lines[0].text,
         "new untracked content"
     );
+}
+
+#[test]
+fn test_branch_name_validation_rejects_dash_injection() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    repo.write_file("file.txt", "content\n");
+    repo.commit("initial commit");
+
+    let head = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    // 1. branch_create rejected if name starts with '-' or is empty
+    let err_dash = branch_create(&exec, repo.path(), "-f", &head, false);
+    assert!(err_dash.is_err(), "branch_create with -f should fail");
+    assert!(err_dash.unwrap_err().message.contains("invalid branch name"));
+
+    let err_flag = branch_create(&exec, repo.path(), "--force", &head, true);
+    assert!(err_flag.is_err(), "branch_create with --force should fail");
+    assert!(err_flag.unwrap_err().message.contains("invalid branch name"));
+
+    let err_empty = branch_create(&exec, repo.path(), "", &head, false);
+    assert!(err_empty.is_err(), "branch_create with empty name should fail");
+    assert!(err_empty.unwrap_err().message.contains("invalid branch name"));
+
+    // 2. branch_checkout rejected
+    let err_checkout = branch_checkout(&exec, repo.path(), "-f");
+    assert!(err_checkout.is_err(), "branch_checkout with -f should fail");
+    assert!(err_checkout.unwrap_err().message.contains("invalid branch name"));
+
+    let err_checkout_empty = branch_checkout(&exec, repo.path(), "");
+    assert!(err_checkout_empty.is_err(), "branch_checkout with empty name should fail");
+    assert!(err_checkout_empty.unwrap_err().message.contains("invalid branch name"));
+
+    // 3. branch_delete rejected
+    let err_del = branch_delete(&exec, repo.path(), "-d", false);
+    assert!(err_del.is_err(), "branch_delete with -d should fail");
+    assert!(err_del.unwrap_err().message.contains("invalid branch name"));
+
+    let err_del_empty = branch_delete(&exec, repo.path(), "", false);
+    assert!(err_del_empty.is_err(), "branch_delete with empty name should fail");
+    assert!(err_del_empty.unwrap_err().message.contains("invalid branch name"));
+
+    // 4. branch_rename rejected
+    branch_create(&exec, repo.path(), "safe-branch", &head, false).unwrap();
+    let err_ren_new = branch_rename(&exec, repo.path(), "safe-branch", "-f");
+    assert!(err_ren_new.is_err(), "branch_rename to -f should fail");
+    assert!(err_ren_new.unwrap_err().message.contains("invalid branch name"));
+
+    let err_ren_old = branch_rename(&exec, repo.path(), "-f", "new-branch");
+    assert!(err_ren_old.is_err(), "branch_rename from -f should fail");
+    assert!(err_ren_old.unwrap_err().message.contains("invalid branch name"));
+
+    let err_ren_empty = branch_rename(&exec, repo.path(), "safe-branch", "");
+    assert!(err_ren_empty.is_err(), "branch_rename to empty should fail");
+    assert!(err_ren_empty.unwrap_err().message.contains("invalid branch name"));
+
+    // 5. Valid branch operations still succeed
+    branch_create(&exec, repo.path(), "valid-feature", &head, false).unwrap();
+    branch_rename(&exec, repo.path(), "valid-feature", "renamed-feature").unwrap();
+    branch_checkout(&exec, repo.path(), "renamed-feature").unwrap();
+    branch_checkout(&exec, repo.path(), "main").unwrap();
+    branch_delete(&exec, repo.path(), "renamed-feature", false).unwrap();
 }
