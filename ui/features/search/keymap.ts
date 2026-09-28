@@ -50,6 +50,14 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
         return;
       }
 
+      // Cmd-Shift-F: Find in project (text)
+      if (e.shiftKey && key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        callbacks.openPalette('text');
+        return;
+      }
+
       // Cmd-Shift-O or Cmd-P: Find files
       if ((e.shiftKey && key === 'o') || (!e.shiftKey && key === 'p')) {
         e.preventDefault();

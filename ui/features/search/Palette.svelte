@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { api, type FileMatch } from '../../lib/api';
+  import { api, type FileMatch, type Hit } from '../../lib/api';
   import type { SearchMode, ActionItem } from './keymap';
 
   let {
@@ -25,8 +25,13 @@
   let selectedIndex = $state(0);
   let isSearching = $state(false);
 
+  // Text search options
+  let isRegex = $state(false);
+  let caseSensitive = $state(false);
+
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let fileResults = $state<FileMatch[]>([]);
+  let textHits = $state<Hit[]>([]);
 
   // Sync mode prop to currentMode
   $effect(() => {
@@ -37,13 +42,14 @@
 
   interface SearchItem {
     id: string;
-    type: 'action' | 'file' | 'recent';
+    type: 'action' | 'file' | 'recent' | 'hit';
     title: string;
     subtitle?: string;
     shortcut?: string;
     indices?: number[];
     action?: ActionItem;
     fileMatch?: FileMatch;
+    hit?: Hit;
     filePath?: string;
   }
 
@@ -69,16 +75,56 @@
     }
   }
 
+  async function performTextSearch(q: string, reg: boolean, cs: boolean) {
+    if (!q.trim() || !folderPath) {
+      textHits = [];
+      return;
+    }
+    isSearching = true;
+    try {
+      const hits = await api.grep(folderPath, q.trim(), reg, cs, 100);
+      textHits = hits;
+    } catch (e) {
+      console.warn('grep error:', e);
+      textHits = [];
+    } finally {
+      isSearching = false;
+    }
+  }
+
   $effect(() => {
     const q = query;
     const m = currentMode;
-    if (m === 'files' || m === 'everywhere') {
+    const reg = isRegex;
+    const cs = caseSensitive;
+
+    if (m === 'text') {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        performTextSearch(q, reg, cs);
+      }, 150);
+    } else if (m === 'files' || m === 'everywhere') {
       if (searchTimer) clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         performFileSearch(q);
       }, 50);
     }
   });
+
+  function groupHitsByPath(hits: Hit[]): { path: string; hits: Hit[] }[] {
+    const groups: { path: string; hits: Hit[] }[] = [];
+    const map = new Map<string, { path: string; hits: Hit[] }>();
+    for (const h of hits) {
+      let g = map.get(h.path);
+      if (!g) {
+        g = { path: h.path, hits: [] };
+        map.set(h.path, g);
+        groups.push(g);
+      }
+      g.hits.push(h);
+    }
+    return groups;
+  }
 
   let sections = $derived.by<Section[]>(() => {
     const q = query.trim().toLowerCase();
@@ -128,6 +174,20 @@
         };
       });
       return [{ items }];
+    }
+
+    if (currentMode === 'text') {
+      const groups = groupHitsByPath(textHits);
+      return groups.map((g) => ({
+        name: `${g.path} (${g.hits.length})`,
+        items: g.hits.map((h) => ({
+          id: `${h.path}:${h.line}:${h.col}`,
+          type: 'hit',
+          title: h.text,
+          hit: h,
+          filePath: h.path,
+        })),
+      }));
     }
 
     if (currentMode === 'everywhere') {
@@ -259,6 +319,35 @@
     return chunks;
   }
 
+  function highlightHit(text: string, q: string, reg: boolean, cs: boolean): { text: string; match: boolean }[] {
+    if (!q.trim()) return [{ text, match: false }];
+    try {
+      const flags = cs ? 'g' : 'gi';
+      const pattern = reg ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(pattern, flags);
+      const chunks: { text: string; match: boolean }[] = [];
+      let lastIndex = 0;
+      let m: RegExpExecArray | null;
+
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > lastIndex) {
+          chunks.push({ text: text.slice(lastIndex, m.index), match: false });
+        }
+        chunks.push({ text: m[0], match: true });
+        lastIndex = m.index + m[0].length;
+        if (m[0].length === 0) {
+          re.lastIndex++;
+        }
+      }
+      if (lastIndex < text.length) {
+        chunks.push({ text: text.slice(lastIndex), match: false });
+      }
+      return chunks.length > 0 ? chunks : [{ text, match: false }];
+    } catch {
+      return [{ text, match: false }];
+    }
+  }
+
   function handleSelect(item: SearchItem) {
     if (item.type === 'action' && item.action) {
       onClose();
@@ -272,6 +361,13 @@
       onClose();
     } else if (item.type === 'recent' && item.filePath) {
       onOpenFile(item.filePath);
+      onClose();
+    } else if (item.type === 'hit' && item.hit) {
+      const fullPath =
+        folderPath && !item.hit.path.startsWith('/')
+          ? `${folderPath}/${item.hit.path}`
+          : item.hit.path;
+      onOpenFile(fullPath, item.hit.line, item.hit.col);
       onClose();
     }
   }
@@ -397,6 +493,28 @@
       autocomplete="off"
       spellcheck="false"
     />
+    {#if currentMode === 'text'}
+      <div class="toggle-buttons">
+        <button
+          type="button"
+          class="toggle-btn"
+          class:active={caseSensitive}
+          onclick={() => (caseSensitive = !caseSensitive)}
+          title="Match Case (Aa)"
+        >
+          Aa
+        </button>
+        <button
+          type="button"
+          class="toggle-btn"
+          class:active={isRegex}
+          onclick={() => (isRegex = !isRegex)}
+          title="Match Regular Expression (.*)"
+        >
+          .*
+        </button>
+      </div>
+    {/if}
   </div>
 
   <div class="palette-list">
@@ -463,6 +581,19 @@
                 {#if item.subtitle}
                   <span class="item-subtitle">{item.subtitle}</span>
                 {/if}
+              </div>
+            {:else if item.type === 'hit' && item.hit}
+              <div class="hit-row">
+                <span class="hit-loc">{item.hit.line}:{item.hit.col}</span>
+                <span class="hit-content">
+                  {#each highlightHit(item.hit.text, query, isRegex, caseSensitive) as chunk}
+                    {#if chunk.match}
+                      <span class="match-highlight">{chunk.text}</span>
+                    {:else}
+                      <span>{chunk.text}</span>
+                    {/if}
+                  {/each}
+                </span>
               </div>
             {/if}
           </div>
@@ -568,6 +699,35 @@
     color: #5b5f68;
   }
 
+  .toggle-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .toggle-btn {
+    font-size: 11px;
+    font-family: inherit;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #2c2e34;
+    background: #202227;
+    color: #8b8f98;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .toggle-btn:hover {
+    background: #282a32;
+    color: #bcbec4;
+  }
+
+  .toggle-btn.active {
+    background: #2b3b55;
+    color: #6ea8ff;
+    border-color: #3e5f8a;
+  }
+
   .palette-list {
     max-height: 380px;
     overflow-y: auto;
@@ -635,6 +795,29 @@
     border-radius: 4px;
     border: 1px solid #2c2e34;
     flex-shrink: 0;
+  }
+
+  .hit-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .hit-loc {
+    font-size: 11px;
+    color: #8b8f98;
+    min-width: 48px;
+    flex-shrink: 0;
+  }
+
+  .hit-content {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+    font-size: 12.5px;
   }
 
   .match-highlight {

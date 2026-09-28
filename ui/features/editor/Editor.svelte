@@ -7,8 +7,10 @@
     highlightActiveLineGutter,
     drawSelection,
     keymap,
+    Decoration,
+    type DecorationSet,
   } from '@codemirror/view';
-  import { EditorState } from '@codemirror/state';
+  import { EditorState, StateEffect, StateField } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { vim } from '@replit/codemirror-vim';
   import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
@@ -82,9 +84,36 @@
         color: '#d8d9dc',
         backgroundColor: 'transparent',
       },
+      '.cm-flash-line': {
+        backgroundColor: '#2b3b55 !important',
+      },
     },
     { dark: true }
   );
+
+  export const setFlashLine = StateEffect.define<number | null>();
+
+  export const flashLineField = StateField.define<DecorationSet>({
+    create() {
+      return Decoration.none;
+    },
+    update(deco, tr) {
+      for (const e of tr.effects) {
+        if (e.is(setFlashLine)) {
+          if (e.value === null) {
+            return Decoration.none;
+          }
+          const lineNum = Math.max(1, Math.min(e.value, tr.state.doc.lines));
+          const line = tr.state.doc.line(lineNum);
+          return Decoration.set([
+            Decoration.line({ attributes: { class: 'cm-flash-line' } }).range(line.from),
+          ]);
+        }
+      }
+      return deco.map(tr.changes);
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
 
   function createEditorState(content: string, filename: string): EditorState {
     return EditorState.create({
@@ -101,6 +130,7 @@
         highlightTheme,
         filenameFacet.of(filename),
         treeSitterPlugin,
+        flashLineField,
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active) {
@@ -139,8 +169,14 @@
     view.dispatch({
       selection: { anchor: pos, head: pos },
       scrollIntoView: true,
+      effects: [setFlashLine.of(lineNum)],
     });
     view.focus();
+    setTimeout(() => {
+      view?.dispatch({
+        effects: [setFlashLine.of(null)],
+      });
+    }, 1200);
   }
 
   export async function handleSave() {
