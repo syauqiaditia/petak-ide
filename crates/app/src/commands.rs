@@ -1,4 +1,11 @@
+use std::sync::Mutex;
+use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
+
+#[derive(Clone, serde::Serialize)]
+struct FsChangedPayload {
+    paths: Vec<String>,
+}
 
 #[tauri::command]
 pub fn list_dir(path: String) -> Result<Vec<petak_core::fs::Entry>, String> {
@@ -8,6 +15,28 @@ pub fn list_dir(path: String) -> Result<Vec<petak_core::fs::Entry>, String> {
 #[tauri::command]
 pub fn read_file(path: String) -> Result<String, String> {
     petak_core::fs::read_file(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_file(path: String, content: String) -> Result<(), String> {
+    petak_core::fs::save_file(&path, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn watch_root(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Mutex<Option<notify::RecommendedWatcher>>>,
+    root: String,
+) -> Result<(), String> {
+    let app_handle = app.clone();
+    let watcher = petak_core::watch::watch(std::path::Path::new(&root), move |paths| {
+        let _ = app_handle.emit("fs-changed", FsChangedPayload { paths });
+    })
+    .map_err(|e| e.to_string())?;
+
+    let mut lock = state.lock().map_err(|e| e.to_string())?;
+    *lock = Some(watcher);
+    Ok(())
 }
 
 #[tauri::command]

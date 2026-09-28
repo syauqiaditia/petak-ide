@@ -1,9 +1,16 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+
+export type { UnlistenFn };
 
 export interface Entry {
   name: string;
   path: string;
   is_dir: boolean;
+}
+
+export interface FsChangedPayload {
+  paths: string[];
 }
 
 export const api = {
@@ -13,6 +20,18 @@ export const api = {
 
   readFile(path: string): Promise<string> {
     return invoke<string>('read_file', { path });
+  },
+
+  saveFile(path: string, content: string): Promise<void> {
+    return invoke('save_file', { path, content });
+  },
+
+  watchRoot(root: string): Promise<void> {
+    return invoke('watch_root', { root });
+  },
+
+  onFsChanged(cb: (payload: FsChangedPayload) => void): Promise<UnlistenFn> {
+    return listen<FsChangedPayload>('fs-changed', (event) => cb(event.payload));
   },
 
   pickFolder(): Promise<string | null> {

@@ -372,27 +372,6 @@ class CheckoutViewModel @Inject constructor(
         }
       } catch (_) {}
     }
-
-    // Periodic file open trigger from /tmp/petak_open.txt
-    const checkOpenTarget = async () => {
-      if (isBench) return;
-      try {
-        const p = await api.readFile('/tmp/petak_open.txt');
-        if (p && p.trim()) {
-          const target = p.trim();
-          if (target !== activeFilePath) {
-            const text = await api.readFile(target);
-            editorContent = text;
-            activeFilename = target.split('/').pop() || target;
-            activeFilePath = target;
-          }
-        }
-      } catch (_) {}
-    };
-
-    checkOpenTarget();
-    const interval = setInterval(checkOpenTarget, 500);
-    return () => clearInterval(interval);
   });
 </script>
 
