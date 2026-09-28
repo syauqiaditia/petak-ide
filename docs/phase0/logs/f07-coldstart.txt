@@ -1,0 +1,21 @@
+=== Cold Start Benchmark Log (F0.7 Re-verification) ===
+Command: node scripts/measure-coldstart.mjs
+Binary: /Users/uqi/petak/target/release/bundle/macos/Petak.app/Contents/MacOS/petak-app
+Date: 2026-09-28 02:30 UTC
+Machine: Mac M2 (macOS 26.5 / Sequoia, 8 GB RAM)
+Screen state: Unlocked (verified via ioreg + screencapture)
+
+=== Cold Start Benchmark ===
+--- Run 0: First Launch ---
+First Launch: 1635 ms (wall: 1656 ms)
+--- Runs 1..5: Subsequent Launches ---
+Run 1: 675 ms (wall: 679 ms)
+Run 2: 641 ms (wall: 657 ms)
+Run 3: 588 ms (wall: 610 ms)
+Run 4: 566 ms (wall: 578 ms)
+Run 5: 624 ms (wall: 630 ms)
+
+Results:
+First launch: 1635 ms
+Subsequent runs: 566, 588, 624, 641, 675 ms
+Median cold start: 624 ms
