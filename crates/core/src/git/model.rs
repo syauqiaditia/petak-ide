@@ -202,3 +202,91 @@ pub struct LogFilter {
 pub struct GraphState {
     pub active_lanes: Vec<Option<String>>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RebaseAction {
+    Pick,
+    Reword,
+    Edit,
+    Squash,
+    Fixup,
+    Drop,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseItem {
+    pub sha: String,
+    pub action: RebaseAction,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebasePlan {
+    pub base: String,
+    pub items: Vec<RebaseItem>,
+    pub backup: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StopKind {
+    Conflict,
+    Edit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StopReason {
+    pub kind: StopKind,
+    pub sha: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpResult {
+    pub ok: bool,
+    pub backup_ref: Option<String>,
+    pub stopped_at: Option<StopReason>,
+    pub new_head: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupRef {
+    pub name: String,
+    pub sha: String,
+    pub created_at: String,
+    pub op: String,
+    pub subject: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResetMode {
+    Soft,
+    Mixed,
+    Hard,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RebaseStateKind {
+    None,
+    Rebase,
+    Merge,
+    CherryPick,
+    Revert,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseState {
+    pub kind: RebaseStateKind,
+    pub step: Option<(u32, u32)>,
+    pub head_name: Option<String>,
+    pub onto_name: Option<String>,
+    pub current_commit: Option<String>,
+}

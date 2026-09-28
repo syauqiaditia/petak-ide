@@ -1,7 +1,8 @@
 use std::path::Path;
 
-use crate::exec::{git, git_with_stdin, Exec, GitError};
-use crate::git::model::{DiffFile, DiffLineKind};
+use crate::exec::{git, git_raw, git_with_stdin, Exec, GitError};
+use crate::git::backup::backup_create;
+use crate::git::model::{DiffFile, DiffLineKind, OpResult, ResetMode, StopKind, StopReason};
 
 pub fn stage_files(exec: &dyn Exec, repo: &Path, paths: &[&str]) -> Result<(), GitError> {
     if paths.is_empty() {
@@ -154,4 +155,200 @@ pub fn last_commit_message(exec: &dyn Exec, repo: &Path) -> Result<Option<String
             }
         }
     }
+}
+
+pub fn reset(
+    exec: &dyn Exec,
+    repo: &Path,
+    sha: &str,
+    mode: ResetMode,
+) -> Result<OpResult, GitError> {
+    let backup_ref = if mode == ResetMode::Hard {
+        Some(backup_create(exec, repo, "reset")?)
+    } else {
+        None
+    };
+
+    let flag = match mode {
+        ResetMode::Soft => "--soft",
+        ResetMode::Mixed => "--mixed",
+        ResetMode::Hard => "--hard",
+    };
+
+    git(exec, repo, &["reset", flag, sha])?;
+    let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+
+    Ok(OpResult {
+        ok: true,
+        backup_ref,
+        stopped_at: None,
+        new_head,
+    })
+}
+
+pub fn cherry_pick(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, GitError> {
+    if shas.is_empty() {
+        let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+        return Ok(OpResult {
+            ok: true,
+            backup_ref: None,
+            stopped_at: None,
+            new_head,
+        });
+    }
+
+    let status_out = git(exec, repo, &["status", "--porcelain"])?;
+    if !status_out.trim().is_empty() {
+        return Err(GitError {
+            exit_code: None,
+            message: "cannot cherry-pick: working tree has uncommitted changes".to_string(),
+        });
+    }
+
+    for sha in shas {
+        let res = git_raw(exec, repo, &["cherry-pick", sha], None)?;
+        if !res.status.success() {
+            let status = crate::git::status::status(exec, repo)?;
+            let is_conflict = status.entries.iter().any(|e| e.conflicted);
+            let stopped_sha = sha.to_string();
+            let new_head = git(exec, repo, &["rev-parse", "HEAD"])
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+
+            if is_conflict {
+                return Ok(OpResult {
+                    ok: false,
+                    backup_ref: None,
+                    stopped_at: Some(StopReason {
+                        kind: StopKind::Conflict,
+                        sha: stopped_sha,
+                    }),
+                    new_head,
+                });
+            } else {
+                let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
+                return Err(GitError {
+                    exit_code: res.status.code(),
+                    message: if stderr.is_empty() {
+                        String::from_utf8_lossy(&res.stdout).trim().to_string()
+                    } else {
+                        stderr
+                    },
+                });
+            }
+        }
+    }
+
+    let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    Ok(OpResult {
+        ok: true,
+        backup_ref: None,
+        stopped_at: None,
+        new_head,
+    })
+}
+
+pub fn revert(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, GitError> {
+    if shas.is_empty() {
+        let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+        return Ok(OpResult {
+            ok: true,
+            backup_ref: None,
+            stopped_at: None,
+            new_head,
+        });
+    }
+
+    let status_out = git(exec, repo, &["status", "--porcelain"])?;
+    if !status_out.trim().is_empty() {
+        return Err(GitError {
+            exit_code: None,
+            message: "cannot revert: working tree has uncommitted changes".to_string(),
+        });
+    }
+
+    for sha in shas {
+        let res = git_raw(
+            exec,
+            repo,
+            &["-c", "core.editor=true", "revert", "--no-edit", sha],
+            None,
+        )?;
+        if !res.status.success() {
+            let status = crate::git::status::status(exec, repo)?;
+            let is_conflict = status.entries.iter().any(|e| e.conflicted);
+            let stopped_sha = sha.to_string();
+            let new_head = git(exec, repo, &["rev-parse", "HEAD"])
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+
+            if is_conflict {
+                return Ok(OpResult {
+                    ok: false,
+                    backup_ref: None,
+                    stopped_at: Some(StopReason {
+                        kind: StopKind::Conflict,
+                        sha: stopped_sha,
+                    }),
+                    new_head,
+                });
+            } else {
+                let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
+                return Err(GitError {
+                    exit_code: res.status.code(),
+                    message: if stderr.is_empty() {
+                        String::from_utf8_lossy(&res.stdout).trim().to_string()
+                    } else {
+                        stderr
+                    },
+                });
+            }
+        }
+    }
+
+    let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    Ok(OpResult {
+        ok: true,
+        backup_ref: None,
+        stopped_at: None,
+        new_head,
+    })
+}
+
+pub fn branch_create(
+    exec: &dyn Exec,
+    repo: &Path,
+    name: &str,
+    at_sha: &str,
+    checkout: bool,
+) -> Result<(), GitError> {
+    if checkout {
+        git(exec, repo, &["checkout", "-b", name, at_sha])?;
+    } else {
+        git(exec, repo, &["branch", name, at_sha])?;
+    }
+    Ok(())
+}
+
+pub fn branch_checkout(exec: &dyn Exec, repo: &Path, name: &str) -> Result<(), GitError> {
+    git(exec, repo, &["checkout", name])?;
+    Ok(())
+}
+
+pub fn branch_delete(
+    exec: &dyn Exec,
+    repo: &Path,
+    name: &str,
+    force: bool,
+) -> Result<(), GitError> {
+    let flag = if force { "-D" } else { "-d" };
+    git(exec, repo, &["branch", flag, name])?;
+    Ok(())
+}
+
+pub fn branch_rename(exec: &dyn Exec, repo: &Path, old: &str, new: &str) -> Result<(), GitError> {
+    git(exec, repo, &["branch", "-m", old, new])?;
+    Ok(())
 }

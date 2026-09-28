@@ -1,10 +1,13 @@
+pub mod backup;
 pub mod diff;
 pub mod graph;
 pub mod log;
 pub mod model;
 pub mod ops;
+pub mod rebase;
 pub mod status;
 
+pub use backup::{backup_create, backup_delete, backup_list, backup_restore};
 pub use diff::{diff_commit, diff_staged, diff_worktree, parse_diff};
 pub use graph::layout;
 pub use log::{
@@ -12,13 +15,19 @@ pub use log::{
     parse_log_output, parse_tracking,
 };
 pub use model::{
-    BranchInfo, BranchList, Commit, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind, FileState,
-    GraphRow, GraphState, Hunk, LocalBranch, LogFilter, LogPage, RefKind, RefLabel, RemoteBranch,
-    RepoStatus, StatusEntry, TagRef,
+    BackupRef, BranchInfo, BranchList, Commit, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind,
+    FileState, GraphRow, GraphState, Hunk, LocalBranch, LogFilter, LogPage, OpResult, RebaseAction,
+    RebaseItem, RebasePlan, RebaseState, RebaseStateKind, RefKind, RefLabel, RemoteBranch,
+    RepoStatus, ResetMode, StatusEntry, StopKind, StopReason, TagRef,
 };
 pub use ops::{
-    build_hunk_patch, commit, last_commit_message, stage_files, stage_hunk, unstage_files,
+    branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,
+    commit, last_commit_message, reset, revert, stage_files, stage_hunk, unstage_files,
     unstage_hunk,
+};
+pub use rebase::{
+    drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,
+    rebase_state, rebase_todo, reword, squash,
 };
 pub use status::{parse_status, status};
 

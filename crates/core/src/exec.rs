@@ -100,10 +100,21 @@ pub fn git_raw(
     args: &[&str],
     stdin: Option<&[u8]>,
 ) -> Result<Output, GitError> {
+    git_raw_with_env(exec, repo, args, &[], stdin)
+}
+
+pub fn git_raw_with_env(
+    exec: &dyn Exec,
+    repo: &Path,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+    stdin: Option<&[u8]>,
+) -> Result<Output, GitError> {
     let repo_str = repo.to_str().unwrap_or(".");
     let mut full_args = vec!["-C", repo_str, "-c", "core.quotepath=off"];
     full_args.extend_from_slice(args);
-    let envs = [("LC_ALL", "C"), ("GIT_TERMINAL_PROMPT", "0")];
+    let mut envs = vec![("LC_ALL", "C"), ("GIT_TERMINAL_PROMPT", "0")];
+    envs.extend_from_slice(extra_env);
     exec.run(repo, "git", &full_args, &envs, stdin)
         .map_err(|e| GitError {
             exit_code: None,
