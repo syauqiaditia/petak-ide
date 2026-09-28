@@ -15,6 +15,7 @@
   let rootEntries = $state<Entry[]>([]);
   let recentFolders = $state<string[]>([]);
   let statusText = $state('Ready');
+  let branchName = $state<string | null>(null);
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
 
@@ -163,6 +164,7 @@
       recentFolders = await api.addRecentFolder(folderPath);
       await api.watchRoot(folderPath);
       api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
+      api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
     } catch (e) {
       console.error('Failed to open folder:', folderPath, e);
@@ -875,7 +877,7 @@
 <div class="app-layout">
   <TitleBar
     projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
-    branchName="main"
+    {branchName}
     onPickFolder={handlePickFolder}
   />
 
@@ -912,7 +914,7 @@
   </div>
 
   <StatusBar
-    branchName="main"
+    {branchName}
     {statusText}
     {isBench}
     {fileType}
