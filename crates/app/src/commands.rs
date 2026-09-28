@@ -81,3 +81,8 @@ pub fn bench_log(line: String) -> Result<(), String> {
 pub fn bench_mode() -> bool {
     std::env::var("PETAK_BENCH").is_ok()
 }
+
+#[tauri::command]
+pub fn test_mode() -> Option<String> {
+    std::env::var("PETAK_TEST_P12").ok()
+}

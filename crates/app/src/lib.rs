@@ -56,6 +56,7 @@ pub fn run() {
             commands::mark_ready,
             commands::bench_log,
             commands::bench_mode,
+            commands::test_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -57,4 +57,8 @@ export const api = {
   benchMode(): Promise<boolean> {
     return invoke<boolean>('bench_mode');
   },
+
+  testMode(): Promise<string | null> {
+    return invoke<string | null>('test_mode');
+  },
 };

@@ -27,7 +27,7 @@
     folderPath ? folderPath.split('/').filter(Boolean).pop() || 'Project' : 'No Folder Open'
   );
 
-  async function toggleFolder(entry: Entry) {
+  export async function toggleFolder(entry: Entry) {
     const path = entry.path;
     if (expanded[path]) {
       expanded[path] = false;

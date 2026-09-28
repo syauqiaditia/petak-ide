@@ -388,6 +388,65 @@
     }
   }
 
+  async function runP12AutoTest() {
+    console.log('[PETAK_TEST] Running P1.2 automated test sequence...');
+    try {
+      if (!currentFolderPath) {
+        currentFolderPath = '/Users/uqi/petak-sample';
+        await openFolder(currentFolderPath);
+      }
+
+      // Expand folders in tree
+      await fileTreeComponent?.toggleFolder({
+        path: currentFolderPath + '/lib',
+        name: 'lib',
+        is_dir: true,
+      });
+      await fileTreeComponent?.toggleFolder({
+        path: currentFolderPath + '/android',
+        name: 'android',
+        is_dir: true,
+      });
+      await fileTreeComponent?.toggleFolder({
+        path: currentFolderPath + '/ios',
+        name: 'ios',
+        is_dir: true,
+      });
+
+      // Open 3 files: dart, kotlin, swift
+      await handleSelectFile({
+        path: currentFolderPath + '/lib/main.dart',
+        name: 'main.dart',
+        is_dir: false,
+      });
+      await handleSelectFile({
+        path: currentFolderPath + '/android/app/src/main/kotlin/com/money/expense/money_expense/MainActivity.kt',
+        name: 'MainActivity.kt',
+        is_dir: false,
+      });
+      await handleSelectFile({
+        path: currentFolderPath + '/ios/Runner/AppDelegate.swift',
+        name: 'AppDelegate.swift',
+        is_dir: false,
+      });
+
+      // Active tab is AppDelegate.swift. Make an edit so it becomes dirty
+      const view = editorComponent?.getEditorView();
+      if (view) {
+        view.dispatch({
+          changes: { from: 0, insert: '// Petak dirty test: edited in editor\n' },
+        });
+      }
+
+      statusText = 'P1.2 test setup ready';
+      await api.benchLog('P12_SETUP_READY');
+      console.log('[PETAK_TEST] P1.2 setup ready with 3 tabs and 1 dirty dot.');
+    } catch (e) {
+      console.error('[PETAK_TEST] Error during P1.2 test:', e);
+      await api.benchLog(`P12_ERROR: ${e}`);
+    }
+  }
+
   onMount(async () => {
     // 1. Listen for filesystem events
     try {
@@ -411,6 +470,16 @@
       }
     } catch (e) {
       console.warn('Failed to load recent folders:', e);
+    }
+
+    // 3. Automated P1.2 test if PETAK_TEST_P12 is set
+    try {
+      const tm = await api.testMode();
+      if (tm) {
+        setTimeout(() => runP12AutoTest(), 400);
+      }
+    } catch (e) {
+      console.warn('api.testMode error:', e);
     }
   });
 
