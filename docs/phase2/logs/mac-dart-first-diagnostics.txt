@@ -1,0 +1,31 @@
+=== Benchmarking Dart First Diagnostics (< 3000 ms) ===
+Target project: /tmp/petak_bench_dart_diag
+Target file: /tmp/petak_bench_dart_diag/lib/main.dart
+
+Run 1:
+  didOpen -> publishDiagnostics: 272.36 ms
+  spawn -> publishDiagnostics:   526.39 ms
+  diagnostics count:             2 items
+  first diagnostic:              "A value of type 'String' can't be assigned to a variable of type 'int'.
+Try changing the type of the variable, or casting the right-hand type to 'int'."
+Run 2:
+  didOpen -> publishDiagnostics: 236.79 ms
+  spawn -> publishDiagnostics:   410.00 ms
+  diagnostics count:             2 items
+  first diagnostic:              "A value of type 'String' can't be assigned to a variable of type 'int'.
+Try changing the type of the variable, or casting the right-hand type to 'int'."
+Run 3:
+  didOpen -> publishDiagnostics: 242.46 ms
+  spawn -> publishDiagnostics:   391.55 ms
+  diagnostics count:             2 items
+  first diagnostic:              "A value of type 'String' can't be assigned to a variable of type 'int'.
+Try changing the type of the variable, or casting the right-hand type to 'int'."
+
+--- Summary ---
+Run 1: 272.36 ms (spawn: 526.39 ms)
+Run 2: 236.79 ms (spawn: 410.00 ms)
+Run 3: 242.46 ms (spawn: 391.55 ms)
+
+Average didOpen -> publishDiagnostics: 250.54 ms
+Average spawn -> publishDiagnostics:   442.64 ms
+Budget Target: < 3000 ms -> PASS (LOLOS)

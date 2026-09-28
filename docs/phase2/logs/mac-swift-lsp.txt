@@ -1,0 +1,8 @@
+P2.M live Swift sourcekit-lsp (Mac M2, Xcode toolchain) — cargo test -p petak-core --test lsp_real_swift -- --nocapture
+fixture: spike/fixtures/swift (let count: Int = "hello")
+
+Swift first diagnostics after 3.6334935s: "Cannot convert value of type 'String' to specified type 'Int'" (line 2, col 17-24, severity 1, source SourceKit)
+Swift completion: 200 items in 886.123709ms
+test test_real_swift_lsp_diagnostics_completion ... ok
+
+sourcekit-lsp peak RSS during the test (ps sampled every 0.7s): 61744 KB (~60 MB)

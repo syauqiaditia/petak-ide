@@ -71,8 +71,8 @@ Semua angka di bawah diperoleh dari eksekusi nyata pada lingkungan pengujian:
 | **RAM App Idle (tanpa LSP)** | < 150 MB | Baseline Fase 1: **134.83 MB** (App: 89.7 MB, WebContent: 45.2 MB) | **PASS (Mac di P2.M)** | `docs/phase1/logs/idle-measurement.txt` |
 | **RAM Dart LS (steady)** | Dicatat di report | **103.1 MB** (105,548 KB) | **TERCATAT** | `docs/phase2/logs/lsp-ram.txt` |
 | **RAM Kotlin LS fwcd (steady)**| Dicatat di report | **607.0 MB** (621,604 KB) | **TERCATAT** | `docs/phase2/logs/lsp-ram.txt` |
-| **RAM Swift sourcekit-lsp** | Dicatat di report | **76 – 137 MB** (baseline F0.3 Mac M2, re-verify di P2.M) | **TERCATAT** | `docs/phase0/logs/f03-swift.txt` |
-| **Cold Start App** | $\le$ 759 ms (+10% dari baseline ~690 ms) | Baseline Fase 1: **690 – 692 ms** (pengujian app release Mac di P2.M) | **DEFERRED (P2.M)** | `docs/phase1/logs/coldstart-recheck.txt` |
+| **RAM Swift sourcekit-lsp** | Dicatat di report | **~60 MB** peak (P2.M live test Mac M2; baseline F0.3: 76 – 137 MB) | **TERCATAT** | `docs/phase2/logs/mac-swift-lsp.txt` |
+| **Cold Start App** | $\le$ 759 ms (+10% dari baseline ~690 ms) | **Mac release P2.M: median 587 ms** (535/578/587/589/597; first launch 1,671 ms) | **PASS (LOLOS)** | `docs/phase2/logs/mac-coldstart.txt` |
 | **LSP Idle Kill Timeout** | Buktikan proses mati via config env | `PETAK_LSP_IDLE_SECS=3` $\to$ proses PID otomatis di-kill setelah 3.2s idle | **PASS (LOLOS)** | `docs/phase2/logs/idle-kill.txt`, `registry_idle_kill_with_env_override` |
 
 ---
@@ -104,3 +104,19 @@ Seluruh tangkapan layar antarmuka dihasilkan secara presisi pada resolusi 1440×
    Karena Mac UQi sedang offline saat pengerjaan Fase 2, task Tauri bundle build macOS, eksekusi visual di app asli Mac, benchmarking cold start di macOS, serta instalasi `/Applications/Petak.app` didelegasikan ke task tunggal **P2.M Verifikasi di Mac**. Script otomatisasi siap-pakai telah disediakan di `scripts/phase2-mac-verify.sh`.
 3. **Placeholder "Ask agent":**  
    Tombol *"Ask agent"* pada lint popup sengaja dinonaktifkan (*disabled*) sesuai brief dan arsitektur, karena modul Agent ACP dijadwalkan secara bertahap pada Fase 5.
+
+---
+
+## 6. Verifikasi Mac M2 (P2.M)
+
+Dijalankan di Mac M2 asli (Darwin 25.5.0), app release `.app` hasil `npm run tauri -- build`.
+
+1. **BUG ditemukan & diperbaiki: app release blank (window hitam kosong).** Build pertama bundle P2.4 membuka window kosong dan tidak pernah emit `PETAK_READY`. Root cause: `codeAction.ts`, `nav.ts`, `rename.ts` pakai rune Svelte 5 (`$state`) di file `.ts` biasa, jadi tidak dikompilasi Svelte dan bundle crash saat load (`ReferenceError: $state is not defined`). Fix: rename ke `.svelte.ts` (pola sama dengan `diagnostics.svelte.ts`) + guard `scripts/test_no_runes_in_plain_ts.mjs` (RED 3 file, lalu GREEN). Preview browser & unit test sebelumnya tidak menangkap ini karena tidak memuat bundle produksi utuh.
+2. **cargo test -p petak-core:** 69/69 lolos di Mac + test baru `lsp_real_swift.rs` lolos (`mac-cargo-test.txt`, `mac-swift-lsp.txt`).
+3. **Ukuran bundle:** Petak.app 14.86 MiB (< 20 MB), dmg 4.82 MiB (`mac-build.txt`).
+4. **Bench di Mac (LSP nyala):** ketik 10k p50 0.83 ms / p95 1.19 ms; Dart first diagnostics avg 250.5 ms (didOpen) / 442.6 ms (spawn); completion p50 5.40 ms / p95 11.52 ms; RAM Dart LS 171 MB; idle kill PASS. Kotlin LS tidak terpasang di Mac, jadi RAM Kotlin tetap angka server.
+5. **Swift sourcekit-lsp live:** diagnostics type mismatch 3.63 s setelah open (cold, termasuk indexing), completion 200 item dalam 886 ms, RSS ~60 MB.
+6. **App asli (mode `PETAK_TEST_P24`, fixture Flutter di HOME sementara):** buka project, `main.dart`, 17 code action dari Dart LS, *Wrap with Padding* ter-apply di editor. Latensi code action pertama 3,039 ms (request pertama saat analyzer masih indexing Flutter SDK). RSS petak-app 62 MB + WebContent 31 MB selama test (`mac-inapp-p24.txt`).
+7. **Screenshot window macOS asli:** `docs/phase2/screens/mac-p24-real-app.png` (squiggle merah di `int x = "abc"`, gutter dot, lightbulb, badge status bar 1 error / 1 warning, kode sudah terbungkus `Padding`).
+8. **Install:** `ditto` ke `/Applications/Petak.app` (petak-app tidak sedang jalan), dibuka ulang dan emit `PETAK_READY`.
+9. **Catatan skrip:** bench script sebelumnya hardcode path server (`/home/uqi`, `/mnt/storage`), sekarang pakai `os.homedir()` / path relatif repo; Kotlin di-skip kalau binary tidak ada. `phase2-mac-verify.sh` butuh `dart` di PATH (Flutter SDK); ssh non-interaktif tidak load `.zshrc`.

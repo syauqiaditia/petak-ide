@@ -1,0 +1,8 @@
+=== Benchmarking LSP Idle Timeout & Kill ===
+Testing PETAK_LSP_IDLE_SECS=3 configuration with real Dart LS process
+Dart LS spawned with PID 26565. Alive: true
+Simulating idle monitoring (idle timeout = 3000 ms)...
+t = 1s: still active (elapsed 1002 ms). Alive: true
+t = 3.2s: elapsed 3204 ms >= idle_timeout (3000 ms). Triggering idle kill...
+Process PID 26565 alive after idle kill: false
+Idle kill verification: PASS (LOLOS)

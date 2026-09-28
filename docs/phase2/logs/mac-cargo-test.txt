@@ -1,0 +1,94 @@
+
+running 56 tests
+test fs::tests::test_save_file_nonexistent_folder_fails_cleanly ... ok
+test fs::tests::test_read_file ... ok
+test git::tests::test_branch_detached_head ... ok
+test git::tests::test_branch_empty_head ... ok
+test fs::tests::test_save_file_failure_leaves_original_intact ... ok
+test git::tests::test_branch_no_git ... ok
+test lsp::edit::tests::adjacent_edits_ok ... ok
+test git::tests::test_branch_ref_head ... ok
+test git::tests::test_branch_ref_main ... ok
+test fs::tests::test_list_dir_sorting_and_filtering ... ok
+test lsp::edit::tests::edit_at_end_of_file ... ok
+test lsp::edit::tests::empty_edits ... ok
+test lsp::edit::tests::insert_and_delete ... ok
+test lsp::edit::tests::multi_edit_one_line ... ok
+test lsp::edit::tests::multiline_edit ... ok
+test lsp::edit::tests::overlap_errors ... ok
+test lsp::edit::tests::single_replace ... ok
+test lsp::edit::tests::random_input_order ... ok
+test lsp::pos::tests::cjk ... ok
+test lsp::pos::tests::accent_e ... ok
+test lsp::pos::tests::ascii ... ok
+test lsp::pos::tests::emoji_surrogate_pair ... ok
+test lsp::pos::tests::crlf ... ok
+test lsp::pos::tests::empty_text ... ok
+test lsp::pos::tests::end_of_line_and_file ... ok
+test lsp::pos::tests::out_of_bounds ... ok
+test fs::tests::test_list_dir_parent_gitignore_applied_to_subfolder ... ok
+test lsp::registry::tests::test_find_root_fallback_workspace_and_parent ... ok
+test lsp::edit::tests::test_apply_to_file ... ok
+test lsp::registry::tests::test_find_root_kotlin_build_gradle_fallback ... ok
+test lsp::registry::tests::test_find_root_kotlin_settings_wins_over_build_gradle ... ok
+test lsp::registry::tests::test_find_root_dart ... ok
+test git::tests::test_branch_worktree ... ok
+test fs::tests::test_list_dir_respects_gitignore ... ok
+test lsp::registry::tests::test_uri_roundtrip ... ok
+test lsp::rpc::tests::empty_stream_returns_eof ... ok
+test lsp::rpc::tests::case_insensitive_header ... ok
+test lsp::rpc::tests::encode_decode_roundtrip ... ok
+test lsp::rpc::tests::extra_content_type_header ... ok
+test lsp::registry::tests::test_find_root_swift_package ... ok
+test lsp::rpc::tests::truncated_message_errors ... ok
+test recent::tests::test_load_nonexistent ... ok
+test lsp::rpc::tests::multiple_messages_in_stream ... ok
+test lsp::registry::tests::test_find_root_swift_xcodeproj ... ok
+test search::tests::test_ranking ... ok
+test search::tests::test_line_col_1_based ... ok
+test search::tests::test_grep_fallback_directly ... ok
+test recent::tests::test_push_and_dedupe ... ok
+test fs::tests::test_save_file_writes_new_content ... ok
+test search::tests::test_index_respects_gitignore ... ok
+test recent::tests::test_max_10 ... ok
+test watch::tests::test_watch_detects_file_write ... ok
+test search::tests::test_skip_binary ... ok
+test watch::tests::test_watch_ignores_git_and_temp_files ... ok
+test search::tests::test_grep_literal_regex_case ... ok
+test term::tests::test_term_session_echo_and_resize ... ok
+
+test result: ok. 56 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+
+running 9 tests
+test server_responds_to_server_initiated_requests ... ok
+test server_request_response ... ok
+test server_receives_diagnostics_on_did_open ... ok
+test server_start_and_shutdown ... ok
+test registry_crash_restart_on_did_change ... ok
+test registry_crash_restart_reopens_docs ... ok
+test registry_idle_kill_with_env_override ... ok
+test registry_lazy_start ... ok
+test registry_idle_kill ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+
+running 3 tests
+test test_real_dart_lsp_diagnostics_and_did_change ... ok
+test test_real_dart_lsp_p24_code_actions ... ok
+test test_real_dart_lsp_p23_features ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.73s
+
+
+running 1 test
+test test_real_kotlin_lsp_diagnostics_completion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
