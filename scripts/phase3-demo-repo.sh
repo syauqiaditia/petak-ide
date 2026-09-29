@@ -242,6 +242,7 @@ cat << 'EOF' > src/config.json
 EOF
 git add src/config.json
 git commit -m "feat(config): use dracula dark theme and 3s timeout" >/dev/null
+git branch demo/conflict feature/conflict-branch >/dev/null 2>&1
 
 # Kembali ke main, buat perubahan kontras pada baris yang sama di src/config.json
 git checkout main >/dev/null 2>&1

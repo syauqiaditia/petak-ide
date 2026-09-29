@@ -62,18 +62,21 @@ Buka Petak, lalu buka folder tersebut via menu **File → Open Folder**.
 
 ---
 
-### Langkah 5: Squash 2 Commit & Batalkan Lewat Undo
+### Langkah 5: Squash 2 Commit di Working Tree Kotor & Batalkan Lewat Undo
 1. Di panel kiri **Branches**, double-click cabang `feature/voucher` untuk beralih ke cabang tersebut.
-2. Di tabel Log, kamu akan melihat 2 commit kerja sementara berturut-turut:
+2. Perhatikan kondisi working tree saat ini sedang kotor (ada file staged di `src/app.ts`, perubahan unstaged di `README.md`, dan file untracked `notes-todo.md`).
+3. Di tabel Log, kamu akan melihat 2 commit kerja sementara berturut-turut:
    - `wip checkout: adjust voucher layout and padding`
    - `wip: voucher validation logic`
-3. Klik kanan pada commit `wip checkout`, lalu pilih menu **Squash into previous**.
-4. Muncul dialog konfirmasi pesan squash. Klik **Apply**.
-5. Kedua commit kini menyatu menjadi satu commit rapi!
-6. **Mencoba Fitur Undo / Restore Backup:**
+4. Seleksi kedua commit tersebut (klik satu lalu `Shift+klik` commit kedua).
+5. Klik kanan, lalu pilih menu **Squash Commits…** (atau shortcut `Cmd+Shift+S` / `Ctrl+Shift+S`).
+6. Muncul dialog konfirmasi pesan squash. Masukkan pesan lalu klik **Squash Commits**.
+7. Kedua commit kini menyatu menjadi satu commit rapi!
+   - Berkat dukungan `--autostash`, proses squash berhasil tanpa hambatan dan ketiga perubahan lokal (`src/app.ts`, `README.md`, `notes-todo.md`) tetap ada persis di tempatnya tanpa kehilangan data apa pun.
+8. **Mencoba Fitur Undo / Restore Backup:**
    - Di panel kiri Git, buka accordion **Backups** (ikon jam riwayat).
    - Di situ tercatat otomatis backup snapshot bertuliskan `squash`.
-   - Klik tombol **Restore** di samping backup tersebut.
+   - Klik tombol **Restore** di samping backup tersebut (atau klik tombol **Undo** pada floating toast).
    - Seketika riwayat kembali pulih seperti sebelum di-squash (2 commit terpisah kembali utuh, tanpa kehilangan data).
 
 ---
@@ -116,12 +119,19 @@ Buka Petak, lalu buka folder tersebut via menu **File → Open Folder**.
 ---
 
 ### Langkah 9: Simulasi Konflik Merge & Editor 3 Kolom
-1. Di panel **Branches**, cari branch `feature/conflict-branch`.
-2. Klik kanan pada branch tersebut, lalu pilih **Merge into current**.
-3. Karena cabang ini mengubah baris konfigurasi yang sama dengan `main` pada `src/config.json`, Git akan mendeteksi konflik:
-   - Muncul banner peringatan oranye di bagian atas: *"Merging in progress — 1 conflicting file"*.
-   - Sub-tab otomatis beralih ke **Conflict**.
-4. Klik file `src/config.json` pada daftar file berkonflik.
+1. Di panel **Branches**, cari branch `demo/conflict` (atau `feature/conflict-branch`).
+2. Klik kanan pada branch tersebut. Perhatikan menu context branch sekarang memiliki:
+   - **Checkout**
+   - **Merge into current**
+   - **Rebase current onto**
+   - **New Branch from…**
+   - **Rename…**
+   - **Delete Branch**
+3. Pilih **Merge into current** (atau coba juga **Rebase current onto**).
+4. Karena cabang ini mengubah baris konfigurasi yang sama dengan `main` pada `src/config.json`, Git akan mendeteksi konflik:
+   - Muncul banner peringatan oranye di bagian atas: *"Merging (atau Rebasing) — 1 file in conflict"*.
+   - Sub-tab otomatis beralih ke **Conflicts**.
+5. Klik file `src/config.json` pada daftar file berkonflik.
 5. Tampilan editor 3 kolom akan terbuka:
    - **Kolom Kiri (Yours / main):** tema `nord-frost-blue`, timeout `8000`.
    - **Kolom Tengah (Result):** editor hasil penggabungan yang bisa diedit langsung.
