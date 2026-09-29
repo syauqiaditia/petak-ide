@@ -1,5 +1,4 @@
-=== Petak Phase 4 macOS Build ===
-Target: release
-Bundle App: /Users/uqi/petak/target/release/bundle/macos/Petak.app (18.07 MiB)
-Bundle DMG: /Users/uqi/petak/target/release/bundle/dmg/Petak_0.1.0_aarch64.dmg (5.55 MiB)
-Budget (< 20 MB): PASS
+Finished 2 bundles at:
+    /Users/uqi/petak/target/release/bundle/macos/Petak.app (18.16 MiB)
+    /Users/uqi/petak/target/release/bundle/dmg/Petak_0.1.0_aarch64.dmg (5.56 MiB)
+MD5 (/Applications/Petak.app/Contents/MacOS/petak-app) = b045a99cae6af0fdd384ab4518dac674
