@@ -6,6 +6,11 @@ pub mod ios;
 pub mod logs;
 pub mod toolchain;
 
+pub use android::{
+    find_application_id, find_launcher_activity, gradle_daemon_running, gradle_stop, install,
+    is_valid_app_id, is_valid_gradle_module, is_valid_gradle_variant, launch, parse_gradle_status,
+    pidof, sync,
+};
 pub use config::{
     auto_detect_run_configs, is_valid_flavor, load_run_config, save_run_config, validate_target,
     RunConfig, RunConfigError, RunConfigFile, RunKind,
@@ -19,5 +24,10 @@ pub use device::{
 pub use flutter::{
     extract_devtools_url, parse_build_error, parse_flutter_daemon_line, AppState, BuildError,
     FlutterDaemonMessage, FlutterRun, FlutterRunError, OutputStream, ReloadResult, RunEvent,
+};
+pub use ios::{parse_devicectl_devices, parse_simctl_devices, simctl_boot};
+pub use logs::{
+    filter, parse_ios_log_line, parse_logcat_line, stack_links, LogLine, LogLevel, Logcat,
+    StackLink,
 };
 pub use toolchain::{detect, Tool, Toolchain};

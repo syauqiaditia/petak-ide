@@ -319,7 +319,7 @@ fn resolve_emulator_binary() -> String {
     "emulator".to_string()
 }
 
-fn resolve_adb_binary() -> String {
+pub(crate) fn resolve_adb_binary() -> String {
     if let Ok(home) = std::env::var("ANDROID_HOME") {
         let p = Path::new(&home).join("platform-tools").join("adb");
         if p.exists() {
