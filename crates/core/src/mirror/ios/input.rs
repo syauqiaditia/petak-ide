@@ -255,7 +255,7 @@ mod tests {
         let res = send_simulator_input(&fake, "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90", &ev);
         assert!(res.is_err());
         let err_msg = res.unwrap_err().to_string();
-        assert!(err_msg.contains("Accessibility permissions") || err_msg.contains("idb CLI"));
+        assert!(err_msg.contains("Accessibility permission") || err_msg.contains("idb CLI"));
     }
 
     #[test]
