@@ -13,6 +13,11 @@ export interface KeymapCallbacks {
   isPaletteOpen: () => boolean;
   showIntentions?: () => void;
   toggleTerminal?: () => void;
+  onTreeNew?: () => void;
+  onTreeRename?: () => void;
+  onTreeDelete?: () => void;
+  onTreeCopyPath?: () => void;
+  onTreeReveal?: () => void;
 }
 
 export function showIntentions() {
@@ -38,6 +43,25 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
         showIntentions();
       }
       return;
+    }
+
+    // Option-F1: Reveal in Finder (when tree or editor has focus)
+    if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'F1') {
+      e.preventDefault();
+      e.stopPropagation();
+      callbacks.onTreeReveal?.();
+      return;
+    }
+
+    // Shift-F6: Rename (when tree has focus)
+    if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'F6') {
+      const isTree = typeof document !== 'undefined' && !!document.activeElement?.closest('.file-tree');
+      if (isTree) {
+        e.preventDefault();
+        e.stopPropagation();
+        callbacks.onTreeRename?.();
+        return;
+      }
     }
 
     // Escape closes palette if open
@@ -101,6 +125,34 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
         e.stopPropagation();
         callbacks.openPalette('recent');
         return;
+      }
+
+      // Tree shortcuts (only when tree is focused)
+      const isTree = typeof document !== 'undefined' && !!document.activeElement?.closest('.file-tree');
+      if (isTree) {
+        // Cmd-N: New
+        if (!e.shiftKey && key === 'n') {
+          e.preventDefault();
+          e.stopPropagation();
+          callbacks.onTreeNew?.();
+          return;
+        }
+
+        // Cmd-Backspace: Delete
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          e.stopPropagation();
+          callbacks.onTreeDelete?.();
+          return;
+        }
+
+        // Shift-Cmd-C: Copy Path
+        if (e.shiftKey && key === 'c') {
+          e.preventDefault();
+          e.stopPropagation();
+          callbacks.onTreeCopyPath?.();
+          return;
+        }
       }
     }
   }

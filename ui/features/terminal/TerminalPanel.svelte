@@ -49,7 +49,7 @@
   let resizeObserver: ResizeObserver | null = null;
   let tabCounter = 1;
 
-  export async function createNewTab(customName?: string): Promise<number> {
+  export async function createNewTab(customName?: string, cwd?: string): Promise<number> {
     if (!bodyElement) return -1;
 
     const container = document.createElement('div');
@@ -97,7 +97,7 @@
     const cols = term.cols || 80;
     const rows = term.rows || 24;
 
-    const id = await api.termOpen(folderPath || null, cols, rows);
+    const id = await api.termOpen(cwd || folderPath || null, cols, rows);
 
     term.onData((data) => {
       api.termWrite(id, data);

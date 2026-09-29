@@ -93,6 +93,52 @@ class TabsManager {
     this.recentFiles = [path, ...this.recentFiles.filter((p) => p !== path)];
   }
 
+  renamePath(oldPath: string, newPath: string) {
+    for (const tab of this.tabs) {
+      if (tab.path === oldPath) {
+        tab.path = newPath;
+        tab.name = newPath.split('/').pop() || newPath;
+        if (this.activePath === oldPath) {
+          this.activePath = newPath;
+        }
+      } else if (tab.path.startsWith(oldPath + '/')) {
+        const rest = tab.path.slice(oldPath.length);
+        tab.path = newPath + rest;
+        tab.name = tab.path.split('/').pop() || tab.path;
+        if (this.activePath.startsWith(oldPath + '/')) {
+          this.activePath = newPath + rest;
+        }
+      }
+    }
+  }
+
+  closeOthers(keepPath: string): boolean {
+    const toClose = this.tabs.filter((t) => t.path !== keepPath);
+    for (const tab of toClose) {
+      if (!this.closeTab(tab.path)) return false;
+    }
+    this.setActive(keepPath);
+    return true;
+  }
+
+  closeToRight(targetPath: string): boolean {
+    const idx = this.tabs.findIndex((t) => t.path === targetPath);
+    if (idx === -1) return false;
+    const toClose = this.tabs.slice(idx + 1);
+    for (const tab of toClose) {
+      if (!this.closeTab(tab.path)) return false;
+    }
+    return true;
+  }
+
+  closeAll(): boolean {
+    const copy = [...this.tabs];
+    for (const tab of copy) {
+      if (!this.closeTab(tab.path)) return false;
+    }
+    return true;
+  }
+
   clearAll() {
     this.tabs = [];
     this.activePath = '';

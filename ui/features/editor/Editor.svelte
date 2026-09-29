@@ -9,8 +9,10 @@
     keymap,
     Decoration,
     type DecorationSet,
+    gutter,
+    GutterMarker,
   } from '@codemirror/view';
-  import { EditorState, StateEffect, StateField } from '@codemirror/state';
+  import { EditorState, StateEffect, StateField, Compartment } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { vim } from '@replit/codemirror-vim';
   import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
@@ -33,17 +35,45 @@
   import { triggerCodeActions, queueLightbulbCheck } from './lsp/codeAction.svelte';
   import CodeActionPopup from './lsp/CodeActionPopup.svelte';
   import { applyWorkspaceEdit } from './lsp/applyEdit';
+  import ContextMenu, { type MenuItem } from '../../shell/ContextMenu.svelte';
+  import ComparePickerModal from '../../shell/ComparePickerModal.svelte';
+  import LocalHistoryModal from '../../shell/LocalHistoryModal.svelte';
+  import DiffModal from '../../shell/DiffModal.svelte';
+  import {
+    formatCopyPath,
+    canCopyPackageImport,
+    getRelativePath,
+    canCloseOthers,
+    canCloseToRight,
+  } from '../../shell/contextMenuLogic';
+  import { createDiffFileFromTexts } from '../../shell/diffUtils';
+  import { gitStore } from '../git/git.svelte.ts';
+  import type { GitDiffFile, GitBlameLine } from '../git/types';
 
   let {
+    folderPath = '',
     onReady,
     onCursorChange,
     onStatusChange,
     onOpenUsages,
+    onTabSave: onTabSaveProp,
+    onSelectInTree,
+    onOpenTerminal,
+    onOpenSearch,
+    onOpenGitLog,
+    onOpenCommitPanel,
   } = $props<{
+    folderPath?: string;
     onReady?: (view: EditorView) => void;
     onCursorChange?: (cursorText: string) => void;
     onStatusChange?: (statusText: string) => void;
     onOpenUsages?: () => void;
+    onTabSave?: (path: string, content: string) => void;
+    onSelectInTree?: (path: string) => void;
+    onOpenTerminal?: (cwd?: string) => void;
+    onOpenSearch?: (mode: string, initialQuery?: string, scope?: string) => void;
+    onOpenGitLog?: (pathOrSha?: string) => void;
+    onOpenCommitPanel?: (path?: string) => void;
   }>();
 
   let container: HTMLDivElement;
@@ -136,11 +166,302 @@
     provide: (f) => EditorView.decorations.from(f),
   });
 
+  let currentCursorLine = $state(1);
+  let annotateActive = $state(false);
+  let blameMenuVisible = $state(false);
+  let blameMenuPos = $state({ x: 0, y: 0 });
+  let blameMenuItems = $state<MenuItem[]>([]);
+  const blameCompartment = new Compartment();
+
+  let tabContextMenuVisible = $state(false);
+  let tabContextMenuPos = $state({ x: 0, y: 0 });
+  let tabContextMenuItems = $state<MenuItem[]>([]);
+  let tabContextMenuTitle = $state('');
+
+  let comparePickerOpen = $state(false);
+  let compareTargetFile = $state<{ name: string; rel: string } | null>(null);
+
+  let localHistoryOpen = $state(false);
+  let localHistoryTarget = $state<{ rel: string; abs: string; isDir: boolean } | null>(null);
+
+  let diffModalOpen = $state(false);
+  let modalDiffFile = $state<GitDiffFile | null>(null);
+  let modalDiffTitle = $state('');
+
+  function formatBlameTime(unix: number): string {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = Math.max(0, now - unix);
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    const days = Math.floor(diff / 86400);
+    if (days < 30) return `${days}d`;
+    const d = new Date(unix * 1000);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  class BlameMarker extends GutterMarker {
+    text: string;
+    tooltip: string;
+    sha: string;
+
+    constructor(text: string, tooltip: string, sha: string) {
+      super();
+      this.text = text;
+      this.tooltip = tooltip;
+      this.sha = sha;
+    }
+
+    toDOM() {
+      const el = document.createElement('div');
+      el.className = 'cm-blame-cell';
+      el.textContent = this.text;
+      el.title = this.tooltip;
+
+      el.onclick = (e) => {
+        e.stopPropagation();
+        if (this.sha) {
+          onOpenGitLog?.(this.sha);
+        }
+      };
+
+      el.oncontextmenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        blameMenuItems = [
+          {
+            label: 'Copy Revision Number',
+            action: () => {
+              if (this.sha) navigator.clipboard.writeText(this.sha);
+            },
+          },
+          {
+            label: 'Show Commit in Git Log',
+            action: () => {
+              if (this.sha) onOpenGitLog?.(this.sha);
+            },
+          },
+          { separator: true },
+          {
+            label: 'Close Annotations',
+            action: () => {
+              toggleAnnotate();
+            },
+          },
+        ];
+        blameMenuPos = { x: e.clientX, y: e.clientY };
+        blameMenuVisible = true;
+      };
+
+      return el;
+    }
+  }
+
+  function makeBlameGutter(map: Map<number, GitBlameLine>) {
+    return gutter({
+      class: 'cm-blame-gutter',
+      lineMarker(view, line) {
+        const b = map.get(line.number);
+        if (!b) {
+          return new BlameMarker('...', '', '');
+        }
+        const shortSha = b.sha ? b.sha.slice(0, 7) : '';
+        const author = b.author || 'Unknown';
+        const timeStr = b.timeUnix ? formatBlameTime(b.timeUnix) : '';
+        const text = `${author} · ${timeStr}`;
+        const tooltip = `${shortSha} — ${author} (${b.timeUnix ? new Date(b.timeUnix * 1000).toLocaleString() : ''}): ${b.summary}`;
+        return new BlameMarker(text, tooltip, b.sha);
+      },
+      initialSpacer() {
+        return new BlameMarker('Author · 99d', '', '');
+      },
+    });
+  }
+
+  export async function toggleAnnotate() {
+    if (annotateActive) {
+      annotateActive = false;
+      view?.dispatch({
+        effects: blameCompartment.reconfigure([]),
+      });
+    } else {
+      const active = tabsManager.activeTab;
+      if (!active || !folderPath) return;
+      const rel = getRelativePath(active.path, folderPath);
+      try {
+        const lines = await api.gitBlame(folderPath, rel);
+        const map = new Map<number, GitBlameLine>();
+        for (const l of lines) {
+          map.set(l.line, l);
+        }
+        annotateActive = true;
+        view?.dispatch({
+          effects: blameCompartment.reconfigure(makeBlameGutter(map)),
+        });
+      } catch (e) {
+        console.warn('Failed to fetch blame:', e);
+        alert('Blame unavailable for untracked file or directory.');
+      }
+    }
+  }
+
+  function handleTabContextMenu(e: MouseEvent, tab: TabItem, idx: number) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const isRepo = !!(gitStore.status && !gitStore.error);
+    const rel = getRelativePath(tab.path, folderPath);
+    const totalTabs = tabsManager.tabs.length;
+    const canOthers = canCloseOthers(totalTabs);
+    const canRight = canCloseToRight(idx, totalTabs);
+
+    tabContextMenuTitle = tab.name;
+    const items: MenuItem[] = [
+      {
+        label: 'Close',
+        shortcut: '⌘W',
+        action: () => {
+          onTabClose(tab.path);
+          tabsManager.closeTab(tab.path);
+        },
+      },
+      {
+        label: 'Close Others',
+        disabled: !canOthers,
+        action: () => {
+          tabsManager.closeOthers(tab.path);
+        },
+      },
+      {
+        label: 'Close All',
+        action: () => {
+          tabsManager.closeAll();
+        },
+      },
+      {
+        label: 'Close to the Right',
+        disabled: !canRight,
+        action: () => {
+          tabsManager.closeToRight(tab.path);
+        },
+      },
+      { separator: true },
+      {
+        label: 'Copy Path/Reference',
+        items: [
+          {
+            label: 'Absolute Path',
+            shortcut: '⌥⇧⌘C',
+            action: () => navigator.clipboard.writeText(formatCopyPath('absolute', tab.path, folderPath)),
+          },
+          {
+            label: 'Path from Content Root',
+            action: () => navigator.clipboard.writeText(formatCopyPath('relative', tab.path, folderPath)),
+          },
+          {
+            label: 'File Name',
+            action: () => navigator.clipboard.writeText(formatCopyPath('name', tab.path, folderPath)),
+          },
+          {
+            label: 'File Name without Extension',
+            action: () => navigator.clipboard.writeText(formatCopyPath('stem', tab.path, folderPath)),
+          },
+          {
+            label: 'Path with Line Number',
+            action: () => navigator.clipboard.writeText(formatCopyPath('line', tab.path, folderPath, currentCursorLine)),
+          },
+          ...(canCopyPackageImport(rel)
+            ? [
+                {
+                  label: "Copy as 'package:' Import",
+                  action: () => navigator.clipboard.writeText(formatCopyPath('package', tab.path, folderPath)),
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        label: 'Reveal in Finder',
+        shortcut: '⌥F1',
+        action: () => api.osReveal(tab.path),
+      },
+      {
+        label: 'Select in Project Tree',
+        action: () => onSelectInTree?.(tab.path),
+      },
+    ];
+
+    if (isRepo) {
+      items.push({ separator: true });
+      items.push({
+        label: 'Git',
+        icon: 'git',
+        items: [
+          {
+            label: 'Show Diff',
+            shortcut: '⌘D',
+            icon: 'diff',
+            action: async () => {
+              const diffs = await api.gitDiffPath(folderPath, rel, 'head').catch(() => []);
+              if (diffs && diffs.length > 0) {
+                modalDiffFile = diffs[0];
+                modalDiffTitle = `Git Diff (HEAD): ${tab.name}`;
+                diffModalOpen = true;
+              } else {
+                alert('No uncommitted changes in this file.');
+              }
+            },
+          },
+          {
+            label: 'Compare with Branch…',
+            action: () => {
+              compareTargetFile = { name: tab.name, rel };
+              comparePickerOpen = true;
+            },
+          },
+          {
+            label: 'Show History',
+            action: () => onOpenGitLog?.(rel),
+          },
+          {
+            label: 'Annotate / Blame',
+            action: () => toggleAnnotate(),
+          },
+        ],
+      });
+    }
+
+    items.push({
+      label: 'Local History',
+      icon: 'clock',
+      items: [
+        {
+          label: 'Show History',
+          action: () => {
+            localHistoryTarget = { rel, abs: tab.path, isDir: false };
+            localHistoryOpen = true;
+          },
+        },
+        {
+          label: 'Put Label…',
+          action: () => {
+            localHistoryTarget = { rel, abs: tab.path, isDir: false };
+            localHistoryOpen = true;
+          },
+        },
+      ],
+    });
+
+    tabContextMenuItems = items;
+    tabContextMenuPos = { x: e.clientX, y: e.clientY };
+    tabContextMenuVisible = true;
+  }
+
   function createEditorState(content: string, filename: string): EditorState {
     return EditorState.create({
       doc: content,
       extensions: [
         vim(),
+        blameCompartment.of([]),
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightActiveLine(),
@@ -171,6 +492,7 @@
           if (update.selectionSet || update.docChanged) {
             const head = update.state.selection.main.head;
             const line = update.state.doc.lineAt(head);
+            currentCursorLine = line.number;
             onCursorChange?.(`Ln ${line.number}, Col ${head - line.from + 1}`);
             if (view && currentSwappedPath) {
               queueLightbulbCheck(view, currentSwappedPath);
@@ -420,6 +742,24 @@
         onTabOpen(active.path, active.savedContent);
         applyStoredDiagnosticsToView(view, active.path);
 
+        if (annotateActive && folderPath) {
+          const rel = getRelativePath(active.path, folderPath);
+          api
+            .gitBlame(folderPath, rel)
+            .then((lines) => {
+              const map = new Map<number, GitBlameLine>();
+              for (const l of lines) map.set(l.line, l);
+              view?.dispatch({
+                effects: blameCompartment.reconfigure(makeBlameGutter(map)),
+              });
+            })
+            .catch(() => {
+              view?.dispatch({
+                effects: blameCompartment.reconfigure([]),
+              });
+            });
+        }
+
         const head = active.state.selection.main.head;
         const line = active.state.doc.lineAt(head);
         onCursorChange?.(`Ln ${line.number}, Col ${head - line.from + 1}`);
@@ -435,14 +775,15 @@
 
 <div class="editor-wrapper">
   <!-- Tab bar (36px) -->
-  <div class="tabs-bar">
-    {#each tabsManager.tabs as tab (tab.path)}
+  <div class="tabs-bar" oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+    {#each tabsManager.tabs as tab, idx (tab.path)}
       {@const isActive = tab.path === tabsManager.activePath}
       <div
         class="tab"
         class:active={isActive}
         class:dirty={tab.dirty}
         onclick={() => tabsManager.setActive(tab.path)}
+        oncontextmenu={(e) => handleTabContextMenu(e, tab, idx)}
         role="button"
         tabindex="0"
         onkeydown={(e) => {
@@ -539,9 +880,108 @@
       </div>
     </div>
   {/if}
+
+  {#if tabContextMenuVisible}
+    <ContextMenu
+      x={tabContextMenuPos.x}
+      y={tabContextMenuPos.y}
+      title={tabContextMenuTitle}
+      items={tabContextMenuItems}
+      onclose={() => (tabContextMenuVisible = false)}
+    />
+  {/if}
+
+  {#if blameMenuVisible}
+    <ContextMenu
+      x={blameMenuPos.x}
+      y={blameMenuPos.y}
+      items={blameMenuItems}
+      onclose={() => (blameMenuVisible = false)}
+    />
+  {/if}
+
+  {#if comparePickerOpen && compareTargetFile}
+    <ComparePickerModal
+      fileName={compareTargetFile.name}
+      relPath={compareTargetFile.rel}
+      {folderPath}
+      onclose={() => (comparePickerOpen = false)}
+      onselect={async (ref) => {
+        try {
+          const diffs = await api.gitDiffPath(folderPath, compareTargetFile!.rel, ref);
+          if (diffs && diffs.length > 0) {
+            modalDiffFile = diffs[0];
+          } else {
+            const fileRef = await api.gitFileAtRef(folderPath, ref, compareTargetFile!.rel);
+            const currentText = await api.readFile(`${folderPath}/${compareTargetFile!.rel}`).catch(() => '');
+            modalDiffFile = createDiffFileFromTexts(
+              `${ref}:${compareTargetFile!.rel}`,
+              compareTargetFile!.rel,
+              fileRef || '',
+              currentText
+            );
+          }
+          modalDiffTitle = `Compare: ${compareTargetFile!.name} vs ${ref}`;
+          diffModalOpen = true;
+        } catch (err: any) {
+          alert('Failed to compare: ' + (err?.message || String(err)));
+        }
+      }}
+    />
+  {/if}
+
+  {#if localHistoryOpen && localHistoryTarget}
+    <LocalHistoryModal
+      {folderPath}
+      relPath={localHistoryTarget.rel}
+      absPath={localHistoryTarget.abs}
+      isDir={localHistoryTarget.isDir}
+      onclose={() => (localHistoryOpen = false)}
+      onrevert={async (revPath) => {
+        const content = await api.readFile(revPath).catch(() => '');
+        tabsManager.markSaved(revPath, content);
+        if (view && currentSwappedPath === revPath) {
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: content },
+          });
+        }
+      }}
+    />
+  {/if}
+
+  {#if diffModalOpen}
+    <DiffModal
+      diffFile={modalDiffFile}
+      title={modalDiffTitle}
+      onclose={() => (diffModalOpen = false)}
+    />
+  {/if}
 </div>
 
 <style>
+  :global(.cm-blame-gutter) {
+    background-color: #17181c !important;
+    border-right: 1px solid #26282d !important;
+    color: #8b8f98 !important;
+  }
+  :global(.cm-blame-cell) {
+    width: 110px;
+    height: 22px;
+    line-height: 22px;
+    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #8b8f98;
+    padding: 0 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+  :global(.cm-blame-cell:hover) {
+    color: #d8d9dc;
+    background-color: #1f2228;
+  }
   .editor-wrapper {
     flex: 1;
     display: flex;

@@ -148,6 +148,37 @@
     editorComponent?.focus();
   }
 
+  async function handleOpenTerminal(cwd?: string) {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.createNewTab(undefined, cwd);
+    }, 50);
+  }
+
+  function handleOpenSearch(mode: any, initialQuery: string = '', scope?: string) {
+    openPalette(mode, initialQuery);
+  }
+
+  function handleOpenGitLog(path?: string) {
+    activeRailTab = 'git';
+    gitStore.activeSubTab = 'log';
+    if (path) {
+      gitStore.setLogFilter({ path });
+    }
+  }
+
+  function handleOpenCommitPanel(path?: string) {
+    activeRailTab = 'git';
+    gitStore.activeSubTab = 'commit';
+    if (path) {
+      gitStore.selectedFile = { path, kind: 'worktree' };
+    }
+  }
+
   async function handleOpenFile(filePath: string, line?: number, col?: number) {
     try {
       const existing = tabsManager.tabs.find((t) => t.path === filePath);
@@ -1213,6 +1244,26 @@
         statusText = 'Alt-Enter / Quick Actions (Phase 2)';
       },
       toggleTerminal: () => toggleTerminal(),
+      onTreeNew: () => {
+        const el = document.querySelector('.file-tree') as HTMLElement;
+        el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true }));
+      },
+      onTreeRename: () => {
+        const el = document.querySelector('.file-tree') as HTMLElement;
+        el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F6', shiftKey: true }));
+      },
+      onTreeDelete: () => {
+        const el = document.querySelector('.file-tree') as HTMLElement;
+        el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', metaKey: true }));
+      },
+      onTreeCopyPath: () => {
+        const el = document.querySelector('.file-tree') as HTMLElement;
+        el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', shiftKey: true, metaKey: true }));
+      },
+      onTreeReveal: () => {
+        const el = document.querySelector('.file-tree') as HTMLElement;
+        el?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', altKey: true }));
+      },
     });
 
     // 4. Automated test if testMode is set
@@ -1320,15 +1371,26 @@
             onPickFolder={handlePickFolder}
             onSelectFile={handleSelectFile}
             onOpenRecent={openFolder}
+            onOpenTerminal={handleOpenTerminal}
+            onOpenSearch={handleOpenSearch}
+            onOpenGitLog={handleOpenGitLog}
+            onOpenCommitPanel={handleOpenCommitPanel}
+            onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
           />
         {/if}
         <Editor
           bind:this={editorComponent}
+          folderPath={currentFolderPath}
           onReady={onEditorReady}
           onCursorChange={(c) => (cursorInfo = c)}
           onStatusChange={(s) => (statusText = s)}
           onOpenUsages={openUsages}
           onTabSave={handleTabSave}
+          onSelectInTree={(p) => fileTreeComponent?.selectOpenedFile(p)}
+          onOpenTerminal={handleOpenTerminal}
+          onOpenSearch={handleOpenSearch}
+          onOpenGitLog={handleOpenGitLog}
+          onOpenCommitPanel={handleOpenCommitPanel}
         />
       </div>
 

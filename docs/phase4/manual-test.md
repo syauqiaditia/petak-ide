@@ -86,3 +86,77 @@ Buka Petak, lalu buka folder tersebut via menu **File → Open Folder** (`/tmp/p
 1. Setelah selesai mencoba, klik tombol **Stop** (ikon kotak merah) di TitleBar.
 2. Petak akan mengirim sinyal penghentian ke daemon dan mematikan proses aplikasi secara bersih.
 3. Status Bar kembali menunjukkan status `Stopped`. Tab Logcat otomatis menghentikan streaming.
+
+---
+
+## 3. Panduan Pengujian Context Menu (File Tree & Tab Editor)
+
+### Langkah 1: Bebas WebView Reload Menu (Root Cause Solved)
+1. Klik kanan pada sembarang file di File Tree sidebar, pada baris folder, pada tab editor, maupun pada area kosong di bawah file tree.
+2. **Hasil yang diharapkan:** Menu bawaan sistem WebView dengan satu tulisan "Reload" **tidak pernah muncul lagi**. Seluruh area menampilkan context menu kustom Petak yang rapi dan sesuai desain token.
+
+### Langkah 2: Single File / Folder Context Menu
+1. Klik kanan pada sebuah file Dart (misal `lib/main.dart`):
+   - Muncul menu: **New ▸**, **Cut**, **Copy**, **Paste** (disabled), **Duplicate**, **Rename…**, **Delete…**, **Copy Path/Reference ▸**, **Open in ▸**, **Find in Folder…** (disabled pada file), **Compare With…**, **Compare with Clipboard**, **Reload from Disk**, **Select Opened File**, **Git ▸**, **Local History ▸**.
+2. Tes **Copy Path/Reference ▸**:
+   - Klik **Path from Content Root**: tersalin `lib/main.dart`.
+   - Klik **Copy as 'package:' Import**: tersalin `import 'package:<pubspec>/main.dart';`.
+3. Tes **Open in ▸**:
+   - Klik **Reveal in Finder** (`⌥F1`): Finder macOS membuka dan menyorot file tersebut.
+   - Klik **Open in Terminal**: panel terminal bawah terbuka dengan direktori aktif file/folder tersebut.
+
+### Langkah 3: Inline Rename (Shift+F6)
+1. Pilih file `lib/main.dart`, lalu tekan **`Shift+F6`** (atau klik menu **Rename…**).
+2. Label file langsung berubah menjadi input text field inline:
+   - Karakter stem `main` otomatis terseleksi; ekstensi `.dart` berada di samping kanan tanpa terseleksi.
+   - Ketik nama baru, misalnya `main_app`, lalu tekan **`Enter`**.
+   - Nama file di disk ter-rename aman, dan tab editor yang sedang membuka file tersebut otomatis terupdate path & namanya!
+3. Coba ketik nama file yang sudah ada: muncul tooltip merah peringatan *"A file with this name already exists"*.
+4. Tekan **`Escape`** untuk membatalkan inline rename.
+
+### Langkah 4: Dialog New File / Folder (Cmd+N)
+1. Tekan **`Cmd+N`** pada direktori yang dipilih (atau klik kanan **New ▸ File / Folder / Dart / Kotlin / Swift**).
+2. Muncul modal dialog New File:
+   - Coba ketik nested path, misal: `features/auth/login_screen.dart`.
+   - Klik **Create** (atau tekan **`Enter`**).
+   - Folder `features/auth/` otomatis terbuat jika belum ada, file baru langsung dibuka di tab editor aktif dan kursor siap mengetik!
+
+### Langkah 5: Multi-Selection di File Tree
+1. Gunakan **`Cmd+Click`** atau **`Shift+Click`** untuk memilih 2 file berbeda.
+2. Klik kanan salah satu file yang terseleksi:
+   - Header menu menampilkan: `2 items selected`.
+   - Item **Rename…** otomatis tidak aktif (*disabled*).
+   - Muncul item **Compare 2 Files…**: klik item ini, DiffView modal langsung terbuka membandingkan file A vs file B secara side-by-side!
+3. Tes **Delete…** (`Cmd+Backspace`):
+   - Muncul modal konfirmasi *"Move 2 items to Trash?"*.
+   - File dipindahkan ke Trash sistem operasi secara aman tanpa permanent deletion.
+
+### Langkah 6: Git Submenu & Rollback dengan Local History Snapshot
+1. Pada file yang memiliki uncommitted changes, klik kanan **Git ▸ Show Diff**:
+   - Modal DiffView menampilkan perubahan terhadap HEAD secara side-by-side.
+2. Klik kanan **Git ▸ Rollback Changes…**:
+   - Muncul modal konfirmasi proteksi keamanan: *"A Local History snapshot will be created automatically before rollback so you can undo"*.
+   - Saat dikonfirmasi, snapshot Local History dibuat terlebih dahulu, lalu perubahan di-revert ke HEAD.
+
+### Langkah 7: Dialog Local History (Show History)
+1. Klik kanan sembarang file, pilih **Local History ▸ Show History**:
+   - Jendela 2 kolom terbuka:
+     - **Kolom Kiri:** Daftar snapshot (User Save, External Change, Before Rollback, User Label) dengan timestamp dan badge warna.
+     - **Kolom Kanan:** DiffView side-by-side membandingkan snapshot terpilih vs kondisi file terkini di working tree.
+2. Klik tombol **Put Label…**: sematkan label custom (misal `sebelum refactor payment`), label langsung muncul dengan badge kuning `🏷`.
+3. Klik tombol **Revert**: file lokal dikembalikan ke isi snapshot tersebut.
+
+### Langkah 8: Blame Gutter di Editor (Annotate)
+1. Di tab editor, klik kanan tab file lalu pilih **Git ▸ Annotate** (atau via Git submenu).
+2. Di sebelah kiri nomor baris kode, muncul kolom **Gutter Blame** (lebar 110px) menampilkan nama author dan waktu relatif (misal `UQi · 2h`).
+3. Hover pada baris blame menampilkan tooltip lengkap (commit hash, email, tanggal, commit message).
+4. Klik baris blame: otomatis membuka tab Git Log dan menyorot commit tersebut di graph.
+5. Klik kanan pada baris blame: muncul menu mini untuk **Copy Revision Number** atau **Close Annotations**.
+
+### Langkah 9: Tab Editor Context Menu
+1. Buka 3 file di editor.
+2. Klik kanan tab di tengah:
+   - **Close Others**: menutup semua tab kecuali tab tersebut.
+   - **Close to the Right**: menutup tab-tab di sebelah kanan.
+   - **Close All**: menutup seluruh tab.
+   - **Select in Project Tree**: menyorot dan scroll otomatis ke posisi file tersebut di File Tree sidebar.
