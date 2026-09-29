@@ -7,6 +7,9 @@
   import ProblemsPanel from '../problems/ProblemsPanel.svelte';
   import { diagnosticsStore } from '../editor/lsp/diagnostics.svelte';
   import { usagesStore } from '../editor/lsp/nav.svelte';
+  import RunPanel from '../run/RunPanel.svelte';
+  import BuildPanel from '../run/BuildPanel.svelte';
+  import { runStore } from '../run/runStore.svelte';
 
   let {
     folderPath = '',
@@ -28,7 +31,13 @@
 
   let tabs = $state<TabItem[]>([]);
   let activeTabId = $state<number | null>(null);
-  let activeSection = $state<'problems' | 'usages' | 'terminal'>('terminal');
+  let activeSection = $state<'run' | 'build' | 'problems' | 'usages' | 'terminal'>(
+    typeof window !== 'undefined' && window.location.search.includes('tab=run')
+      ? 'run'
+      : typeof window !== 'undefined' && window.location.search.includes('tab=build')
+      ? 'build'
+      : 'terminal'
+  );
 
   let bodyElement: HTMLDivElement;
   let unlistenOutput: UnlistenFn | null = null;
@@ -190,6 +199,14 @@
     return tabs.map((t) => ({ id: t.id, name: t.name }));
   }
 
+  export function openRun() {
+    activeSection = 'run';
+  }
+
+  export function openBuild() {
+    activeSection = 'build';
+  }
+
   export function openProblems() {
     activeSection = 'problems';
   }
@@ -275,6 +292,36 @@
 <div class="terminal-panel">
   <div class="panel-header">
     <div class="tabs-list">
+      <!-- Run Tab -->
+      <div
+        class="panel-tab run-tab"
+        class:active={activeSection === 'run'}
+        onclick={() => (activeSection = 'run')}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') activeSection = 'run'; }}
+      >
+        <span class="tab-label">Run</span>
+        {#if runStore.state === 'running' || runStore.state === 'reloading' || runStore.state === 'building'}
+          <span class="tab-badge run-dot" style:background={runStore.state === 'running' ? '#7fc98f' : '#e8b45a'}></span>
+        {/if}
+      </div>
+
+      <!-- Build Tab -->
+      <div
+        class="panel-tab build-tab"
+        class:active={activeSection === 'build'}
+        onclick={() => (activeSection = 'build')}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') activeSection = 'build'; }}
+      >
+        <span class="tab-label">Build</span>
+        {#if runStore.buildErrors.length > 0}
+          <span class="tab-badge is-error">{runStore.buildErrors.length}</span>
+        {/if}
+      </div>
+
       <div
         class="panel-tab problems-tab"
         class:active={activeSection === 'problems'}
@@ -373,6 +420,18 @@
       </button>
     </div>
   </div>
+
+  {#if activeSection === 'run'}
+    <div class="panel-body run-body">
+      <RunPanel />
+    </div>
+  {/if}
+
+  {#if activeSection === 'build'}
+    <div class="panel-body build-body">
+      <BuildPanel onSelectFile={onSelectProblem} />
+    </div>
+  {/if}
 
   <div
     class="panel-body terminal-body"
@@ -498,8 +557,22 @@
     margin: 0 4px;
   }
 
-  .problems-body {
+  .problems-body,
+  .run-body,
+  .build-body {
     padding: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .run-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    padding: 0;
+    display: inline-block;
   }
 
   .terminal-tab {

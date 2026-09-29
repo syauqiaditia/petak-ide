@@ -1,6 +1,8 @@
 <script lang="ts">
   import { diagnosticsStore } from '../features/editor/lsp/diagnostics.svelte';
   import { gitStore } from '../features/git/git.svelte.ts';
+  import { runStore } from '../features/run/runStore.svelte';
+  import { formatAppState } from '../features/run/logic';
 
   let {
     branchName = '',
@@ -36,10 +38,39 @@
       {/if}
     </span>
   {/if}
+
   <span class="status-indicator">
     <span class="dot"></span>
     {statusText}
   </span>
+
+  {#if runStore.state !== 'stopped'}
+    {@const stateInfo = formatAppState(runStore.state)}
+    <span class="run-status-indicator" style:color={stateInfo.color}>
+      <span class="dot" style:background={stateInfo.dotColor}></span>
+      {stateInfo.label}
+      {#if runStore.lastReloadMs !== null}
+        <span class="ms-tag">⚡ {runStore.lastReloadMs}ms</span>
+      {/if}
+    </span>
+  {/if}
+
+  {#if runStore.gradleDaemon}
+    <span class="gradle-tag">
+      <span class="dot gradle-dot"></span>
+      Gradle daemon
+      <button class="stop-daemon-btn" onclick={() => runStore.stopGradle()} title="Stop Gradle Daemon">
+        Stop
+      </button>
+    </span>
+  {/if}
+
+  {#if runStore.selectedDevice}
+    <span class="device-tag">{runStore.selectedDevice.name} connected</span>
+  {:else}
+    <span class="device-tag no-device">No device</span>
+  {/if}
+
   {#if diagnosticsStore.totalCount > 0}
     <div
       class="problems-badge-group"
@@ -118,6 +149,46 @@
     align-items: center;
     gap: 6px;
     color: #7fc98f;
+  }
+  .run-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+  .ms-tag {
+    font-size: 11px;
+    color: #e8b45a;
+    background: #2e2717;
+    padding: 0 5px;
+    border-radius: 3px;
+  }
+  .gradle-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #7fc98f;
+  }
+  .gradle-dot {
+    background: #7fc98f;
+  }
+  .stop-daemon-btn {
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    color: #f07a74;
+    background: #2a1d1e;
+    border: 1px solid #4a2629;
+    cursor: pointer;
+  }
+  .stop-daemon-btn:hover {
+    background: #4a2629;
+  }
+  .device-tag {
+    color: #8b8f98;
+  }
+  .device-tag.no-device {
+    color: #5b5f68;
   }
   .problems-badge-group {
     display: flex;

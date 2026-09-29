@@ -1,9 +1,73 @@
 <script lang="ts">
-  let { projectName = 'petak', branchName = '', onPickFolder } = $props<{
+  import { runStore } from '../features/run/runStore.svelte';
+  import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
+  import DevicePicker from '../features/run/DevicePicker.svelte';
+
+  let {
+    projectName = 'petak',
+    branchName = '',
+    onPickFolder,
+    onOpenDevicesPanel,
+    onStartRun,
+  } = $props<{
     projectName?: string;
     branchName?: string | null;
     onPickFolder?: () => void;
+    onOpenDevicesPanel?: () => void;
+    onStartRun?: () => void;
   }>();
+
+  let isRunning = $derived(
+    runStore.state === 'running' ||
+    runStore.state === 'reloading' ||
+    runStore.state === 'building' ||
+    runStore.state === 'installing'
+  );
+
+  let hasConfig = $derived(runStore.selectedConfig !== null);
+  let hasDevice = $derived(runStore.selectedDevice !== null);
+  let isGradle = $derived(runStore.selectedConfig?.kind === 'gradle');
+
+  let runDisabled = $derived(!hasConfig || !hasDevice || isRunning);
+  let runTooltip = $derived(
+    !hasConfig
+      ? 'Pilih run config terlebih dahulu'
+      : !hasDevice
+      ? 'Pilih device terlebih dahulu (saat ini No device)'
+      : `Run ${runStore.selectedConfig?.name} on ${runStore.selectedDevice?.name}`
+  );
+
+  let syncDisabled = $derived(!isGradle || isRunning || runStore.isSyncing);
+  let syncTooltip = $derived(
+    !isGradle
+      ? 'Sync hanya untuk Gradle project'
+      : isRunning
+      ? 'Tidak bisa sync saat app berjalan'
+      : runStore.isSyncing
+      ? 'Sedang sync Gradle...'
+      : `Sync Gradle (${runStore.selectedConfig?.name})`
+  );
+
+  let debugTooltip = $derived(
+    runStore.devtoolsUri
+      ? 'Buka Flutter DevTools di browser'
+      : 'Breakpoint debugger belum tersedia (runs with DevTools)'
+  );
+
+  async function handleRunClick() {
+    if (runDisabled) return;
+    onStartRun?.();
+    await runStore.startRun();
+  }
+
+  async function handleDebugClick() {
+    if (runStore.devtoolsUri) {
+      await runStore.openDevTools();
+    } else if (!isRunning && !runDisabled) {
+      onStartRun?.();
+      await runStore.startRun();
+    }
+  }
 </script>
 
 <div class="titlebar" data-tauri-drag-region>
@@ -46,24 +110,104 @@
 
   <div class="spacer" data-tauri-drag-region></div>
 
-  <button class="action-btn" aria-label="Sync" title="Belum tersedia (fase 4)" disabled>
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path></svg>
+  <!-- Run config & Device selector group -->
+  <div class="run-config-group">
+    <RunConfigPicker />
+    <div class="group-divider"></div>
+    <DevicePicker {onOpenDevicesPanel} />
+  </div>
+
+  <!-- Sync Gradle button -->
+  <button
+    class="action-btn"
+    class:spinning={runStore.isSyncing}
+    aria-label="Sync Gradle"
+    title={syncTooltip}
+    disabled={syncDisabled}
+    onclick={() => runStore.syncGradle()}
+  >
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
+    </svg>
   </button>
-  <button class="action-btn run-btn" aria-label="Run" title="Belum tersedia (fase 4)" disabled>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg>
+
+  <!-- Run / Reload controls -->
+  {#if isRunning}
+    <!-- When running: show Hot Reload + Hot Restart -->
+    <button
+      class="action-btn reload-btn"
+      aria-label="Hot Reload"
+      title="Hot Reload (r)"
+      disabled={runStore.isReloading}
+      onclick={() => runStore.reload(false)}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+      </svg>
+    </button>
+
+    <button
+      class="action-btn restart-btn"
+      aria-label="Hot Restart"
+      title="Hot Restart (R)"
+      disabled={runStore.isReloading}
+      onclick={() => runStore.reload(true)}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+      </svg>
+    </button>
+  {:else}
+    <!-- When idle: show Run button -->
+    <button
+      class="action-btn run-btn"
+      aria-label="Run"
+      title={runTooltip}
+      disabled={runDisabled}
+      onclick={handleRunClick}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M7 5l12 7-12 7z"></path>
+      </svg>
+    </button>
+  {/if}
+
+  <!-- Debug / DevTools button -->
+  <button
+    class="action-btn debug-btn"
+    class:has-devtools={!!runStore.devtoolsUri}
+    aria-label="Debug"
+    title={debugTooltip}
+    disabled={!runStore.devtoolsUri && runDisabled}
+    onclick={handleDebugClick}
+  >
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="8" y="7" width="8" height="12" rx="4"></rect>
+      <path d="M12 7V4M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 18l3-2M19 18l-3-2"></path>
+    </svg>
   </button>
-  <button class="action-btn" aria-label="Debug" title="Belum tersedia (fase 4)" disabled>
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="7" width="8" height="12" rx="4"></rect><path d="M12 7V4M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 18l3-2M19 18l-3-2"></path></svg>
-  </button>
-  <button class="action-btn stop-btn" aria-label="Stop" title="Belum tersedia (fase 4)" disabled>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+
+  <!-- Stop button -->
+  <button
+    class="action-btn stop-btn"
+    aria-label="Stop"
+    title={isRunning ? `Stop (${runStore.selectedConfig?.name || 'app'})` : 'App tidak sedang berjalan'}
+    disabled={!isRunning}
+    onclick={() => runStore.stopRun()}
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+    </svg>
   </button>
 
   <div class="spacer" data-tauri-drag-region></div>
 
   <!-- Search -->
   <button class="search-btn">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <circle cx="11" cy="11" r="6"></circle>
+      <path d="M20 20l-4.5-4.5"></path>
+    </svg>
     <span>Search everywhere</span>
     <span class="search-shortcut">⇧⇧</span>
   </button>
@@ -78,7 +222,7 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     padding: 0 12px 0 12px;
     background: #111215;
     border-bottom: 1px solid #26282d;
@@ -133,6 +277,9 @@
     font-weight: 500;
     color: #d8d9dc;
     transition: background 0.15s;
+    background: transparent;
+    border: none;
+    cursor: pointer;
   }
   .project-btn:hover {
     background: #1e2025;
@@ -146,6 +293,9 @@
     border-radius: 7px;
     color: #b9bcc3;
     transition: background 0.15s;
+    background: transparent;
+    border: none;
+    cursor: pointer;
   }
   .branch-btn:hover {
     background: #1e2025;
@@ -154,6 +304,20 @@
     flex-grow: 1;
     height: 100%;
   }
+  .run-config-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+    border: 1px solid #2c2e34;
+    border-radius: 8px;
+    background: #17181c;
+  }
+  .group-divider {
+    width: 1px;
+    height: 18px;
+    background: #2c2e34;
+  }
   .action-btn {
     width: 32px;
     height: 32px;
@@ -161,6 +325,9 @@
     display: grid;
     place-items: center;
     color: #b9bcc3;
+    background: transparent;
+    border: none;
+    cursor: pointer;
     transition: background 0.15s;
   }
   .action-btn:hover {
@@ -187,8 +354,29 @@
   .run-btn:disabled:hover {
     background: #1f3325;
   }
+  .reload-btn {
+    background: #1f3325;
+    color: #7fc98f;
+  }
+  .reload-btn:hover {
+    background: #284431;
+  }
+  .restart-btn {
+    background: #1a2936;
+    color: #6ea8ff;
+  }
+  .restart-btn:hover {
+    background: #22374c;
+  }
+  .debug-btn.has-devtools {
+    color: #6ea8ff;
+    background: #192334;
+  }
   .stop-btn {
     color: #f07a74;
+  }
+  .stop-btn:hover {
+    background: #2a1d1e;
   }
   .stop-btn:disabled {
     opacity: 0.35;
@@ -196,6 +384,13 @@
   }
   .stop-btn:disabled:hover {
     background: transparent;
+  }
+  .spinning svg {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   .search-btn {
     display: flex;
@@ -208,6 +403,7 @@
     color: #8b8f98;
     width: 190px;
     background: #16171a;
+    cursor: pointer;
   }
   .search-shortcut {
     margin-left: auto;

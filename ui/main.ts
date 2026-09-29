@@ -403,6 +403,72 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       if (cmd === 'read_file') return '// Sample file content\n';
       if (cmd === 'bench_mode') return false;
       if (cmd === 'test_mode') return null;
+      if (cmd === 'run_configs_load') {
+        return {
+          selected: 'app',
+          configs: [
+            {
+              name: 'app',
+              kind: 'gradle',
+              module: 'app',
+              variant: 'debug',
+            },
+            {
+              name: 'jconnect_flutter',
+              kind: 'flutter',
+              target: 'lib/main.dart',
+              flavor: 'dev',
+            },
+          ],
+        };
+      }
+      if (cmd === 'run_configs_save') return null;
+      if (cmd === 'devices_list') {
+        if (typeof window !== 'undefined' && window.location.search.includes('no-device')) {
+          return [];
+        }
+        return [
+          {
+            id: 'emulator-5554',
+            name: 'Pixel 8',
+            platform: 'android',
+            kind: 'emulator',
+            state: 'online',
+            sdk: '35',
+          },
+          {
+            id: '00008101-001234',
+            name: 'iPhone 15 Pro',
+            platform: 'ios',
+            kind: 'simulator',
+            state: 'offline',
+            sdk: '17.5',
+          },
+        ];
+      }
+      if (cmd === 'devices_watch') return null;
+      if (cmd === 'avd_list') {
+        return [
+          { name: 'Pixel_8_API_35' },
+          { name: 'Pixel_7_Pro_API_34' },
+          { name: 'Medium_Phone_API_35' },
+        ];
+      }
+      if (cmd === 'emulator_start') return null;
+      if (cmd === 'run_start') return 101;
+      if (cmd === 'run_reload') {
+        return {
+          fullRestart: args?.full || false,
+          ok: true,
+          ms: 240,
+          message: 'Reloaded 1 of 652 libraries in 240ms',
+        };
+      }
+      if (cmd === 'run_stop') return null;
+      if (cmd === 'gradle_status') return true;
+      if (cmd === 'gradle_sync') return 'BUILD SUCCESSFUL in 2s';
+      if (cmd === 'gradle_stop') return null;
+      if (cmd === 'open_url') return null;
       if (cmd.startsWith('plugin:event|')) return 1;
       return null;
     },

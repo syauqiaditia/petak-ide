@@ -14,6 +14,8 @@
   import { applyWorkspaceEdit } from './features/editor/lsp/applyEdit';
   import { gitStore } from './features/git/git.svelte.ts';
   import GitView from './features/git/GitView.svelte';
+  import { runStore } from './features/run/runStore.svelte';
+  import DevicesPanel from './features/run/DevicesPanel.svelte';
 
   let currentFolderPath = $state('');
   let rootEntries = $state<Entry[]>([]);
@@ -22,14 +24,20 @@
   let branchName = $state<string | null>(null);
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
+  let isPreview = $state(
+    typeof window !== 'undefined' &&
+    (window.location.search.includes('preview') || !(window as any).__TAURI_IPC__)
+  );
   let activeRailTab = $state(
     typeof window !== 'undefined' && (window.location.search.includes('git') || window.location.search.includes('tab=git'))
       ? 'git'
+      : typeof window !== 'undefined' && (window.location.search.includes('devices') || window.location.search.includes('tab=devices'))
+      ? 'devices'
       : 'project'
   );
 
-  let editorComponent: any = null;
-  let fileTreeComponent: any = null;
+  let editorComponent = $state<any>(null);
+  let fileTreeComponent = $state<any>(null);
   let unlistenFs: UnlistenFn | null = null;
   let indexDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -55,6 +63,28 @@
     }
   }
 
+  async function openRun() {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openRun?.();
+    }, 20);
+  }
+
+  async function openBuild() {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openBuild?.();
+    }, 20);
+  }
+
   async function openProblems() {
     if (!TerminalPanelComponent) {
       const mod = await import('./features/terminal/TerminalPanel.svelte');
@@ -75,6 +105,12 @@
     setTimeout(() => {
       terminalComponent?.openUsages?.();
     }, 20);
+  }
+
+  async function handleTabSave(path: string, _content: string) {
+    if (runStore.hotReloadOnSave && runStore.state === 'running' && runStore.runId !== null) {
+      await runStore.reload(false);
+    }
   }
 
   async function openPalette(mode: SearchMode, initialQuery: string = '') {
@@ -227,6 +263,7 @@
       api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
       api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
       gitStore.refresh(folderPath).catch((e) => console.warn('gitStore refresh error:', e));
+      runStore.init(folderPath).catch((e) => console.warn('runStore init error:', e));
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
     } catch (e) {
       console.error('Failed to open folder:', folderPath, e);
@@ -1154,9 +1191,47 @@
     } catch (e) {
       console.warn('api.testMode error:', e);
     }
+
+    // 5. Initialize runStore and handle preview query params
+    setTimeout(() => {
+      const initialRoot = currentFolderPath || (recentFolders && recentFolders[0]) || '/workspace';
+      runStore.init(initialRoot).catch((e) => console.warn('runStore init error:', e));
+
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('running') || window.location.search.includes('preview-running')) {
+          runStore.state = 'running';
+          runStore.runId = 101;
+          runStore.lastReloadMs = 240;
+          runStore.lastReloadOk = true;
+          runStore.devtoolsUri = 'http://127.0.0.1:9100?uri=http://127.0.0.1:8181';
+          runStore.gradleDaemon = true;
+          runStore.outputLines = [
+            { id: 1, stream: 'stdout', line: 'Launching lib/main.dart on Pixel 8 in debug mode...' },
+            { id: 2, stream: 'stdout', line: 'Running Gradle task assembleDebug...' },
+            { id: 3, stream: 'stdout', line: '✓ Built build/app/outputs/flutter-apk/app-debug.apk' },
+            { id: 4, stream: 'stdout', line: 'Connecting to VM Service at ws://127.0.0.1:8181/ws' },
+            { id: 5, stream: 'stdout', line: 'The Flutter DevTools debugger and profiler is available at: http://127.0.0.1:9100?uri=http://127.0.0.1:8181' },
+            { id: 6, stream: 'stdout', line: '⚡ To hot reload changes while running, press "r" or use TitleBar.' },
+          ];
+        }
+        if (params.has('build-error') || window.location.search.includes('tab=build')) {
+          runStore.buildErrors = [
+            { file: 'lib/features/checkout/CheckoutScreen.kt', line: 48, col: 12, message: 'Unresolved reference: applyVoucher' },
+            { file: 'lib/features/cart/CartRepository.kt', line: 102, col: 4, message: 'Type mismatch: inferred type is Double? but Double was expected' },
+          ];
+        }
+        if (window.location.search.includes('tab=run')) {
+          openRun();
+        } else if (window.location.search.includes('tab=build')) {
+          openBuild();
+        }
+      }
+    }, 50);
   });
 
   onDestroy(() => {
+    runStore.destroy();
     if (unregisterKeymap) {
       unregisterKeymap();
       unregisterKeymap = null;
@@ -1177,28 +1252,35 @@
     projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
     {branchName}
     onPickFolder={handlePickFolder}
+    onOpenDevicesPanel={() => (activeRailTab = 'devices')}
+    onStartRun={openRun}
   />
 
   <div class="main-body">
     <Rail bind:activeTab={activeRailTab} />
     <div class="center-area">
-      <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
-        <FileTree
-          bind:this={fileTreeComponent}
-          {rootEntries}
-          folderPath={currentFolderPath}
-          {activeFilePath}
-          {recentFolders}
-          onPickFolder={handlePickFolder}
-          onSelectFile={handleSelectFile}
-          onOpenRecent={openFolder}
-        />
+      <div class="workspace-area" class:hidden-view={activeRailTab !== 'project' && activeRailTab !== 'devices'}>
+        {#if activeRailTab === 'devices'}
+          <DevicesPanel />
+        {:else}
+          <FileTree
+            bind:this={fileTreeComponent}
+            {rootEntries}
+            folderPath={currentFolderPath}
+            {activeFilePath}
+            {recentFolders}
+            onPickFolder={handlePickFolder}
+            onSelectFile={handleSelectFile}
+            onOpenRecent={openFolder}
+          />
+        {/if}
         <Editor
           bind:this={editorComponent}
           onReady={onEditorReady}
           onCursorChange={(c) => (cursorInfo = c)}
           onStatusChange={(s) => (statusText = s)}
           onOpenUsages={openUsages}
+          onTabSave={handleTabSave}
         />
       </div>
 
@@ -1225,6 +1307,10 @@
     {cursorInfo}
     onOpenProblems={openProblems}
   />
+
+  {#if isPreview}
+    <div class="preview-badge">PREVIEW — BUKAN APP (DUMMY DATA)</div>
+  {/if}
 
   {#if paletteOpen && PaletteComponent}
     <PaletteComponent
@@ -1270,5 +1356,20 @@
   }
   .hidden-view {
     display: none !important;
+  }
+  .preview-badge {
+    position: fixed;
+    bottom: 28px;
+    right: 12px;
+    background: rgba(232, 180, 90, 0.15);
+    border: 1px solid #e8b45a;
+    color: #e8b45a;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    z-index: 9999;
   }
 </style>
