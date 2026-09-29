@@ -30,6 +30,7 @@
 //
 
 import Foundation
+import AppKit
 import CoreMedia
 import VideoToolbox
 import CoreGraphics
@@ -589,6 +590,8 @@ func createPixelBuffer(from image: CGImage, width: Int, height: Int) -> CVPixelB
 // MARK: - Main Teardown & RunLoop
 
 var sigSource: DispatchSourceSignal?
+var activeSimulatorCapture: Any?
+var activePhysicalCapture: Any?
 
 func setupSignalHandlers() {
     signal(SIGINT, SIG_IGN)
@@ -610,6 +613,7 @@ func setupSignalHandlers() {
 }
 
 func main() {
+    _ = NSApplication.shared
     setupSignalHandlers()
     let config = parseArguments()
 
@@ -619,6 +623,7 @@ func main() {
     case "physical":
         #if canImport(AVFoundation) && canImport(CoreMediaIO)
         let phys = PhysicalDeviceCapture(config: config)
+        activePhysicalCapture = phys
         phys.start()
         #else
         emitStatus(["status": "error", "message": "AVFoundation / CoreMediaIO not available on this platform"])
@@ -634,6 +639,7 @@ func main() {
         #if canImport(ScreenCaptureKit)
         if #available(macOS 12.3, *) {
             let sim = SimulatorCapture(config: config)
+            activeSimulatorCapture = sim
             sim.start()
         } else {
             startSimctlScreenshotFallback(config: config)
