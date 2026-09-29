@@ -1,0 +1,48 @@
+[{"event":"daemon.connected","params":{"version":"0.6.1","pid":701994}}]
+[{"event":"app.start","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","deviceId":"emulator-5554","directory":"/mnt/storage/uqi-cache/petak-samples/petak_flutter_sample","supportsRestart":true,"launchMode":"run","mode":"debug"}}]
+Launching lib/main_dev.dart on sdk gphone64 x86 64 in debug mode...
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"0","progressId":null,"message":"Running Gradle task 'assembleDebug'...","finished":false}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"0","progressId":null,"finished":true}}]
+✓ Built build/app/outputs/flutter-apk/app-debug.apk
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"1","progressId":null,"message":"Installing build/app/outputs/flutter-apk/app-debug.apk...","finished":false}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"1","progressId":null,"finished":true}}]
+D/FlutterJNI( 4669): Beginning load of flutter...
+D/FlutterJNI( 4669): flutter (null) was loaded normally!
+I/flutter ( 4669): [IMPORTANT:flutter/shell/platform/android/android_context_gl_impeller.cc(104)] Using the Impeller rendering backend (OpenGLES).
+W/_flutter_sample( 4669): Accessing hidden method Landroid/view/accessibility/AccessibilityNodeInfo;->getSourceNodeId()J (unsupported,test-api, reflection, allowed)
+W/_flutter_sample( 4669): Accessing hidden method Landroid/view/accessibility/AccessibilityRecord;->getSourceNodeId()J (unsupported, reflection, allowed)
+W/_flutter_sample( 4669): Accessing hidden field Landroid/view/accessibility/AccessibilityNodeInfo;->mChildNodeIds:Landroid/util/LongArray; (unsupported, reflection, allowed)
+W/_flutter_sample( 4669): Accessing hidden method Landroid/util/LongArray;->get(I)J (unsupported, reflection, allowed)
+[{"event":"app.debugPort","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","port":40507,"wsUri":"ws://127.0.0.1:40507/cO5MglK8a5E=/ws","baseUri":"file:///data/user/0/id.petak.petak_flutter_sample/code_cache/petak_flutter_sampleXWJRLZ/petak_flutter_sample/"}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"2","progressId":"devFS.update","message":"Syncing files to device sdk gphone64 x86 64...","finished":false}}]
+W/HWUI    ( 4669): Unknown dataspace 0
+I/flutter ( 4669): PETAK_HELLO
+I/Choreographer( 4669): Skipped 548 frames!  The application may be doing too much work on its main thread.
+I/WindowExtensionsImpl( 4669): Initializing Window Extensions, vendor API level=6, activity embedding enabled=true
+I/_flutter_sample( 4669): Compiler allocated 5174KB to compile void android.view.ViewRootImpl.performTraversals()
+I/_flutter_sample( 4669): Compiler allocated 5417KB to compile void android.view.ViewRootImpl.performTraversals()
+W/HWUI    ( 4669): Failed to initialize 101010-2 format, error = EGL_SUCCESS
+I/Gralloc4( 4669): mapper 4.x is not supported
+I/Choreographer( 4669): Skipped 127 frames!  The application may be doing too much work on its main thread.
+I/HWUI    ( 4669): Davey! duration=766ms; Flags=1, FrameTimelineVsyncId=20171, IntendedVsync=391769786205, Vsync=391769786205, InputEventId=0, HandleInputStart=391780499117, AnimationStart=391780502421, PerformTraversalsStart=391780506433, DrawStart=391785748031, FrameDeadline=391786452871, FrameInterval=391780489091, FrameStartTime=16666666, SyncQueued=391787841980, SyncStart=391837886304, IssueDrawCommandsStart=391840501884, SwapBuffers=392012720979, FrameCompleted=392586690601, DequeueBufferDuration=1030175, QueueBufferDuration=253060, GpuCompleted=392586690601, SwapBuffersCompleted=392585919139, DisplayPresentTime=72904454231359566, CommandSubmissionCompleted=392012720979, 
+D/ProfileInstaller( 4669): Installing profile for id.petak.petak_flutter_sample
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"2","progressId":"devFS.update","finished":true}}]
+[{"event":"app.started","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49"}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"3","progressId":"hot.reload","message":"Performing hot reload...","finished":false}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"4","progressId":"devFS.update","message":"Syncing files to device sdk gphone64 x86 64...","finished":false}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"4","progressId":"devFS.update","finished":true}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"3","progressId":"hot.reload","finished":true}}]
+Reloaded 1 of 733 libraries in 3,299ms (compile: 2644 ms, reload: 250 ms, reassemble: 116 ms).
+[{"id":1,"result":{"code":0,"message":"Reloaded 1 of 733 libraries"}}]
+D/EGL_emulation( 4669): app_time_stats: avg=4148.10ms min=83.70ms max=11552.49ms count=3
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"5","progressId":"hot.restart","message":"Performing hot restart...","finished":false}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"6","progressId":"devFS.update","message":"Syncing files to device sdk gphone64 x86 64...","finished":false}}]
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"6","progressId":"devFS.update","finished":true}}]
+I/flutter ( 4669): PETAK_HELLO
+[{"event":"app.progress","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49","id":"5","progressId":"hot.restart","finished":true}}]
+Restarted application in 4,383ms.
+[{"id":2,"result":{"code":0,"message":""}}]
+Application finished.
+[{"id":3,"result":true}]
+[{"event":"app.stop","params":{"appId":"dea87405-e74b-4fc4-b809-f37b75d2ff49"}}]
+[EXIT] Some(0)
