@@ -279,6 +279,14 @@ pub fn run() {
             commands::git_unstage_paths,
             commands::git_commit_selected,
             commands::git_delete_untracked,
+            // Batch 3 - Ghost-text & Settings
+            commands::suggest_index_build,
+            commands::suggest_index_update,
+            commands::suggest_query,
+            commands::setting_get,
+            commands::setting_set,
+            commands::editor_ghost_text_get,
+            commands::editor_ghost_text_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -10,6 +10,7 @@ pub mod run;
 pub mod search;
 pub mod term;
 pub mod toolchain;
+pub mod suggest;
 pub mod watch;
 
 pub use notify;

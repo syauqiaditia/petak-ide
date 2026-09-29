@@ -54,7 +54,7 @@ pub fn save_file(app: tauri::AppHandle, path: String, content: String) -> Result
     petak_core::fs::save_file(&path, &content).map_err(|e| e.to_string())?;
 
     let app_handle = app.clone();
-    let file_path = path;
+    let file_path = path.clone();
     let content_bytes = content.into_bytes();
 
     std::thread::spawn(move || {
@@ -88,12 +88,23 @@ pub fn save_file(app: tauri::AppHandle, path: String, content: String) -> Result
                 let rel = if let Ok(r) = p.strip_prefix(root_p) {
                     r.to_string_lossy().to_string()
                 } else {
-                    file_path
+                    file_path.clone()
                 };
                 let _ = petak_core::local_history::snapshot(&store, &rel, &content_bytes, "save");
             }
         }
     });
+
+    if path.ends_with(".dart") {
+        let path_obj = std::path::PathBuf::from(path);
+        std::thread::spawn(move || {
+            if let Ok(mut lock) = petak_core::suggest::global_suggest_index().write() {
+                if let Some(ref mut idx) = *lock {
+                    let _ = idx.update_file(&path_obj);
+                }
+            }
+        });
+    }
 
     Ok(())
 }
@@ -147,6 +158,13 @@ pub async fn watch_root(
                             }
                             snapshot_file_if_small(&store, p, &rel_str, "external");
                         }
+                        if p_str.ends_with(".dart") {
+                            if let Ok(mut lock) = petak_core::suggest::global_suggest_index().write() {
+                                if let Some(ref mut idx) = *lock {
+                                    let _ = idx.update_file(p);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -160,6 +178,12 @@ pub async fn watch_root(
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())?;
+
+    let app_for_bg_suggest = app.clone();
+    let root_for_bg_suggest = root.clone();
+    std::thread::spawn(move || {
+        let _ = suggest_index_build(app_for_bg_suggest, Some(root_for_bg_suggest));
+    });
 
     let mut lock = state.lock().map_err(|e| e.to_string())?;
     *lock = Some(watcher);
@@ -2911,4 +2935,139 @@ pub async fn git_delete_untracked(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// ──────────── Batch 3 Ghost-text suggest & Settings ────────────
+
+pub fn suggest_app_data_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    app.path().app_data_dir().ok().or_else(petak_core::suggest::default_app_data_dir)
+}
+
+#[tauri::command]
+pub async fn suggest_index_build(
+    app: tauri::AppHandle,
+    root: Option<String>,
+) -> Result<(), String> {
+    let resolved_root = resolve_cmd_root(&app, root)?;
+    let app_data = suggest_app_data_dir(&app);
+
+    std::thread::spawn(move || {
+        let root_p = std::path::Path::new(&resolved_root);
+        let mut index = petak_core::suggest::SuggestIndex::load_from_disk(root_p, app_data.as_deref())
+            .unwrap_or_else(|_| {
+                let mut idx = petak_core::suggest::SuggestIndex::new(root_p);
+                if let Some(ref dir) = app_data {
+                    idx.set_app_data_dir(dir.clone());
+                }
+                idx
+            });
+
+        let _ = index.build();
+
+        if let Ok(mut lock) = petak_core::suggest::global_suggest_index().write() {
+            *lock = Some(index);
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn suggest_index_update(
+    app: tauri::AppHandle,
+    path: String,
+    root: Option<String>,
+) -> Result<(), String> {
+    let resolved_root = resolve_cmd_root(&app, root).ok();
+    let app_data = suggest_app_data_dir(&app);
+
+    std::thread::spawn(move || {
+        let path_obj = std::path::Path::new(&path);
+        {
+            if let Ok(mut lock) = petak_core::suggest::global_suggest_index().write() {
+                if let Some(ref mut idx) = *lock {
+                    let _ = idx.update_file(path_obj);
+                    return;
+                }
+            }
+        }
+
+        if let Some(ref r) = resolved_root {
+            let root_p = std::path::Path::new(r);
+            if let Ok(mut idx) = petak_core::suggest::SuggestIndex::load_from_disk(root_p, app_data.as_deref()) {
+                let _ = idx.update_file(path_obj);
+                if let Ok(mut lock) = petak_core::suggest::global_suggest_index().write() {
+                    *lock = Some(idx);
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn suggest_query(
+    app: tauri::AppHandle,
+    prefix: String,
+    lang: Option<String>,
+    limit: Option<usize>,
+    root: Option<String>,
+) -> Result<Vec<petak_core::suggest::SuggestItem>, String> {
+    let app_data = suggest_app_data_dir(&app);
+    if !petak_core::suggest::get_editor_ghost_text(app_data.as_deref()) {
+        return Ok(Vec::new());
+    }
+
+    {
+        if let Ok(lock) = petak_core::suggest::global_suggest_index().read() {
+            if let Some(ref idx) = *lock {
+                return Ok(idx.suggest_query(&prefix, lang.as_deref(), limit));
+            }
+        }
+    }
+
+    if let Ok(resolved_root) = resolve_cmd_root(&app, root) {
+        let root_p = std::path::Path::new(&resolved_root);
+        if let Ok(idx) = petak_core::suggest::SuggestIndex::load_from_disk(root_p, app_data.as_deref()) {
+            let res = idx.suggest_query(&prefix, lang.as_deref(), limit);
+            if let Ok(mut lock) = petak_core::suggest::global_suggest_index().write() {
+                *lock = Some(idx);
+            }
+            return Ok(res);
+        }
+    }
+
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+pub fn setting_get(
+    app: tauri::AppHandle,
+    key: String,
+) -> Result<Option<serde_json::Value>, String> {
+    let app_data = suggest_app_data_dir(&app);
+    Ok(petak_core::suggest::get_setting(app_data.as_deref(), &key))
+}
+
+#[tauri::command]
+pub fn setting_set(
+    app: tauri::AppHandle,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let app_data = suggest_app_data_dir(&app);
+    petak_core::suggest::set_setting(app_data.as_deref(), &key, value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn editor_ghost_text_get(app: tauri::AppHandle) -> Result<bool, String> {
+    let app_data = suggest_app_data_dir(&app);
+    Ok(petak_core::suggest::get_editor_ghost_text(app_data.as_deref()))
+}
+
+#[tauri::command]
+pub fn editor_ghost_text_set(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let app_data = suggest_app_data_dir(&app);
+    petak_core::suggest::set_editor_ghost_text(app_data.as_deref(), enabled).map_err(|e| e.to_string())
 }
