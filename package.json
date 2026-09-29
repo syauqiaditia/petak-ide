@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test --experimental-strip-types tests/mirror_logic.test.mjs tests/editor_keymap_snippets.test.mjs tests/batch2_logic.test.mjs tests/batch3_logic.test.mjs",
+    "test": "node --test --experimental-strip-types tests/mirror_logic.test.mjs tests/editor_keymap_snippets.test.mjs tests/batch2_logic.test.mjs tests/batch3_logic.test.mjs tests/ghost_text_logic.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

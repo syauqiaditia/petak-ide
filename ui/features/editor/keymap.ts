@@ -15,6 +15,7 @@ import {
 } from '@codemirror/autocomplete';
 import { indentMore, indentLess } from '@codemirror/commands';
 import { getCM } from '@replit/codemirror-vim';
+import { acceptGhostText, dismissGhostText } from './ghostText.ts';
 
 /**
  * Returns true if Vim mode is active AND NOT in insert mode (i.e. normal or visual mode).
@@ -76,19 +77,24 @@ export function createEditorKeyBindings(): KeyBinding[] {
           return true;
         }
 
-        // 2. Advance to next snippet tabstop if active
+        // 2. Accept inline ghost text if present
+        if (acceptGhostText(view)) {
+          return true;
+        }
+
+        // 3. Advance to next snippet tabstop if active
         if (hasNextSnippetField(view.state)) {
           if (nextSnippetField(view)) {
             return true;
           }
         }
 
-        // 3. In Vim normal/visual mode, let Vim handle Tab (jumplist)
+        // 4. In Vim normal/visual mode, let Vim handle Tab (jumplist)
         if (isVimInNormalOrVisualMode(view)) {
           return false;
         }
 
-        // 4. In insert mode or standard editor: indent
+        // 5. In insert mode or standard editor: indent
         handleTabIndent(view);
         // ALWAYS return true to prevent browser default focus movement
         return true;
@@ -133,8 +139,12 @@ export function createEditorKeyBindings(): KeyBinding[] {
     {
       key: 'Escape',
       run: (view: EditorView) => {
-        // Close completion popup if open
+        // 1. Close completion popup if open
         if (closeCompletion(view)) {
+          return true;
+        }
+        // 2. Dismiss inline ghost-text if active
+        if (dismissGhostText(view)) {
           return true;
         }
         // Fall through so Vim exits insert mode to normal mode or clears selection

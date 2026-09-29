@@ -506,6 +506,22 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       if (cmd === 'git_commit_selected') {
         return { sha: '5e44a0b1234567890abcdef1234567890abcdef1' };
       }
+      if (cmd === 'suggest_query') {
+        const prefix = (args?.prefix || '').trim();
+        if (prefix === 'ITextF' || prefix.toLowerCase().startsWith('itextf')) {
+          return [
+            {
+              text: 'ieldPin(',
+              freq: 5,
+              argsTemplate: 'controller: , focusNode: ,',
+            },
+          ];
+        }
+        return [];
+      }
+      if (cmd === 'suggest_index_build' || cmd === 'suggest_index_update') {
+        return null;
+      }
       if (cmd === 'devices_watch') return null;
       if (cmd === 'avd_list') {
         return [
@@ -696,6 +712,58 @@ if (typeof window !== 'undefined') {
     setTimeout(async () => {
       const { runStore } = await import('./features/run/runStore.svelte');
       runStore.uiState = 'error';
+    }, 150);
+  }
+  if (window.location.search.includes('b3-ghost-suggest') || window.location.search.includes('ghost-suggest')) {
+    setTimeout(async () => {
+      const { tabsManager } = await import('./features/editor/tabs.svelte');
+      const { setGhostTextEffect } = await import('./features/editor/ghostText.ts');
+      const content = 'import "package:flutter/material.dart";\n\nclass PinInputPage extends StatelessWidget {\n  @override\n  Widget build(BuildContext context) {\n    final field = ITextF\n    return Container();\n  }\n}\n';
+      const pos = content.indexOf('ITextF') + 'ITextF'.length;
+      tabsManager.openTab('lib/widgets/pin_input.dart', 'pin_input.dart', content);
+
+      setTimeout(() => {
+        const view = (window as any).__PETAK_EDITOR_VIEW__;
+        if (view) {
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: content },
+            selection: { anchor: pos, head: pos },
+            effects: [setGhostTextEffect.of({ text: 'ieldPin(controller: , focusNode: ,)', from: pos })],
+          });
+          view.focus();
+        }
+      }, 100);
+    }, 150);
+  }
+  if (window.location.search.includes('b3-ghost-accepted')) {
+    setTimeout(async () => {
+      const { tabsManager } = await import('./features/editor/tabs.svelte');
+      const content = 'import "package:flutter/material.dart";\n\nclass PinInputPage extends StatelessWidget {\n  @override\n  Widget build(BuildContext context) {\n    final field = ITextFieldPin(controller: , focusNode: ,)\n    return Container();\n  }\n}\n';
+      const pos = content.indexOf('focusNode: ,)') + 'focusNode: ,)'.length;
+      tabsManager.openTab('lib/widgets/pin_input.dart', 'pin_input.dart', content);
+
+      setTimeout(() => {
+        const view = (window as any).__PETAK_EDITOR_VIEW__;
+        if (view) {
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: content },
+            selection: { anchor: pos, head: pos },
+          });
+          view.focus();
+        }
+      }, 100);
+    }, 150);
+  }
+  if (window.location.search.includes('b3-ghost-settings')) {
+    setTimeout(async () => {
+      const { toolchainStore } = await import('./features/toolchain/toolchainStore.svelte');
+      toolchainStore.settingsModalOpen = true;
+      setTimeout(() => {
+        const el = document.querySelector('.toggle-setting');
+        if (el) {
+          el.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+      }, 150);
     }, 150);
   }
 }

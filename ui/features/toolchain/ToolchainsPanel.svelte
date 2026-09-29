@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { toolchainStore, type LspState } from './toolchainStore.svelte';
   import { api, type KotlinLsStatus, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
+  import { editorSettings } from '../editor/editorSettings.svelte';
 
   let {
     root = '',
@@ -11,7 +12,10 @@
     onOpenSettings?: () => void;
   }>();
 
-  let showConfigEditor = $state(false);
+  let showConfigEditor = $state(
+    typeof window !== 'undefined' &&
+    (window.location.search.includes('settings') || window.location.search.includes('b3-ghost-settings'))
+  );
   let flutterSdkInput = $state('');
   let androidSdkInput = $state('');
   let kotlinLsInput = $state('');
@@ -173,6 +177,23 @@
             bind:value={kotlinLsInput}
           />
         </div>
+
+        <div class="card-title" style="margin-top: 16px;">EDITOR SETTINGS</div>
+        <div class="setting-row">
+          <label class="toggle-setting" for="toggle-ghost-text">
+            <input
+              id="toggle-ghost-text"
+              type="checkbox"
+              checked={editorSettings.ghostText}
+              onchange={(e) => editorSettings.setGhostText((e.currentTarget as HTMLInputElement).checked)}
+            />
+            <div class="setting-text">
+              <span class="setting-label">Enable Inline Ghost-Text Suggestions (editor.ghostText)</span>
+              <span class="setting-subtext">Shows gray inline completions from local frequency index. Press Tab to accept, Esc to dismiss.</span>
+            </div>
+          </label>
+        </div>
+
         <div class="settings-footer">
           {#if saveFeedback}
             <span class="feedback-text">{saveFeedback}</span>
@@ -529,6 +550,38 @@
   }
   .save-btn:hover {
     background: #395582;
+  }
+  .setting-row {
+    margin-bottom: 12px;
+  }
+  .toggle-setting {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-setting input[type="checkbox"] {
+    margin-top: 3px;
+    accent-color: #56a8f5;
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+  }
+  .setting-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .setting-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #e6e7ea;
+  }
+  .setting-subtext {
+    font-size: 11px;
+    color: #8b8f98;
+    line-height: 1.4;
   }
   .lsp-grid {
     display: grid;

@@ -3,8 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 
-const distDir = '/mnt/storage/uqi-projects/petak-p4m-wt/t_999f9e14/dist';
-const outDir = '/mnt/storage/uqi-projects/petak-p4m-wt/t_999f9e14/docs/batch3/screens';
+const distDir = path.resolve(process.cwd(), 'dist');
+const outDir = path.resolve(process.cwd(), 'docs/batch3/screens');
 const chromeBin = '/mnt/storage/uqi-cache/ms-playwright/chromium-1243/chrome-linux64/chrome';
 
 if (!fs.existsSync(outDir)) {
@@ -101,6 +101,18 @@ server.listen(41746, '127.0.0.1', async () => {
     {
       name: '10-git-file-context-menu.png',
       url: 'http://127.0.0.1:41746/?tab=git&ctx-menu',
+    },
+    {
+      name: '11-ghost-text-suggest.png',
+      url: 'http://127.0.0.1:41746/?b3-ghost-suggest',
+    },
+    {
+      name: '12-ghost-text-tab-accepted.png',
+      url: 'http://127.0.0.1:41746/?b3-ghost-accepted',
+    },
+    {
+      name: '13-ghost-text-settings-toggle.png',
+      url: 'http://127.0.0.1:41746/?b3-ghost-settings&tab=toolchains',
     },
   ];
 

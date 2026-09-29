@@ -32,6 +32,9 @@
     if (activeRailTab === 'git' && !GitViewComponent) {
       import('./features/git/GitView.svelte').then((m) => (GitViewComponent = m.default));
     }
+    if (activeRailTab === 'settings') {
+      openToolchains();
+    }
     if (panelStore.activeRightPanel === 'devices' && !DevicesPanelComponent) {
       import('./features/run/DevicesPanel.svelte').then((m) => (DevicesPanelComponent = m.default));
     }
@@ -379,6 +382,7 @@
       recentFolders = await api.addRecentFolder(folderPath);
       api.recentProjectsAdd(folderPath).catch(() => {});
       api.lspRestart(folderPath).catch(() => {});
+      api.suggestIndexBuild(folderPath).catch(() => {});
       if (watchedRoot !== folderPath) {
         await api.watchRoot(folderPath);
         watchedRoot = folderPath;
