@@ -1,0 +1,32 @@
+=== Running P4.5 Run Logic Tests ===
+✓ Initial state verified
+✓ Reducer state transitions verified
+✓ Reducer buildError accumulation verified
+✓ Reducer output lines and capping verified
+✓ mapBuildErrorToLink verified
+✓ parseBuildErrorLine verified
+✓ formatAppState verified
+All P4.5 logic tests passed!
+=== Running P4.6 Logcat Logic & Benchmark Tests ===
+
+1. Testing Ring Buffer...
+✓ Ring buffer capacity, FIFO eviction, and clearing verified
+
+2. Testing Filter Logic...
+✓ Level, tag, text, and package:mine filters verified
+
+3. Testing Stack Trace Link Parsing...
+✓ Dart package, file URI, relative, and JVM stack links verified
+
+4. Running Throughput Benchmark (2,000 lines/sec for 5 seconds = 10,000 lines)...
+Pre-filling buffer to 40,000 lines to test worst-case buffer size...
+Buffer final size: 50,000 lines
+Total batches: 100 (100 lines/batch = 10,000 lines total)
+Total execution time: 69.66 ms
+Min time per batch:   0.472 ms
+Avg time per batch:   0.696 ms
+P95 time per batch:   1.490 ms
+Max time per batch:   3.174 ms
+✓ 2,000 lines/sec throughput benchmark passed comfortably under frame budget
+
+=== All P4.6 Logcat Tests Passed Successfully ===
