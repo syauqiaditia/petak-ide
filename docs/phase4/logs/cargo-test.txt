@@ -1,0 +1,257 @@
+
+running 130 tests
+test exec::tests::test_exec_git_failure ... ok
+test exec::tests::test_exec_git_stdin ... ok
+test exec::tests::test_exec_git_success ... ok
+test fs::tests::test_read_file ... ok
+test fs::tests::test_save_file_nonexistent_folder_fails_cleanly ... ok
+test fs::tests::test_save_file_failure_leaves_original_intact ... ok
+test git::conflict::tests::test_custom_marker_length ... ok
+test git::conflict::tests::test_parse_and_resolve_crlf ... ok
+test git::conflict::tests::test_parse_and_resolve_no_trailing_newline ... ok
+test git::conflict::tests::test_parse_diff3_base ... ok
+test git::conflict::tests::test_parse_multiple_blocks ... ok
+test exec::tests::test_system_spawn_stdin_and_kill ... ok
+test git::conflict::tests::test_parse_single_block ... ok
+test exec::tests::test_system_spawn_stdout_stderr_exit ... ok
+test git::conflict::tests::test_resolve_out_of_bounds_returns_original ... ok
+test git::diff::tests::test_parse_diff_binary ... ok
+test git::conflict::tests::test_resolve_choices ... ok
+test git::diff::tests::test_parse_diff_deleted_file ... ok
+test git::diff::tests::test_parse_diff_modified_file_with_hunk_no_count ... ok
+test git::diff::tests::test_parse_diff_new_file ... ok
+test git::diff::tests::test_parse_diff_no_newline_at_eof ... ok
+test git::diff::tests::test_parse_diff_rename ... ok
+test git::diff::tests::test_parse_name_status ... ok
+test git::graph::tests::test_graph_branch_and_merge ... ok
+test git::graph::tests::test_graph_linear ... ok
+test git::graph::tests::test_graph_octopus_merge_3_parents ... ok
+test git::graph::tests::test_graph_two_roots ... ok
+test git::graph::tests::test_graph_paging_continuous ... ok
+test git::log::tests::test_parse_branches_output ... ok
+test git::log::tests::test_parse_log_output_unicode_and_root ... ok
+test git::log::tests::test_parse_tracking ... ok
+test git::status::tests::test_parse_status_branch_attached_with_tracking ... ok
+test git::status::tests::test_parse_status_branch_detached ... ok
+test git::remote::tests::test_parse_remotes_output ... ok
+test git::status::tests::test_parse_status_entries_all_types ... ok
+test git::status::tests::test_parse_status_unborn_head ... ok
+test git::tests::test_branch_no_git ... ok
+test git::tests::test_branch_detached_head ... ok
+test git::tests::test_branch_empty_head ... ok
+test git::tests::test_branch_ref_head ... ok
+test lsp::edit::tests::adjacent_edits_ok ... ok
+test lsp::edit::tests::edit_at_end_of_file ... ok
+test lsp::edit::tests::empty_edits ... ok
+test lsp::edit::tests::insert_and_delete ... ok
+test git::tests::test_branch_ref_main ... ok
+test lsp::edit::tests::multi_edit_one_line ... ok
+test lsp::edit::tests::multiline_edit ... ok
+test lsp::edit::tests::overlap_errors ... ok
+test lsp::edit::tests::random_input_order ... ok
+test lsp::edit::tests::single_replace ... ok
+test lsp::pos::tests::accent_e ... ok
+test lsp::pos::tests::ascii ... ok
+test git::tests::test_branch_worktree ... ok
+test lsp::pos::tests::cjk ... ok
+test lsp::pos::tests::crlf ... ok
+test lsp::pos::tests::emoji_surrogate_pair ... ok
+test lsp::pos::tests::empty_text ... ok
+test lsp::pos::tests::end_of_line_and_file ... ok
+test lsp::pos::tests::out_of_bounds ... ok
+test lsp::edit::tests::test_apply_to_file ... ok
+test lsp::registry::tests::test_find_root_fallback_workspace_and_parent ... ok
+test lsp::registry::tests::test_find_root_dart ... ok
+test lsp::registry::tests::test_find_root_kotlin_build_gradle_fallback ... ok
+test lsp::registry::tests::test_uri_roundtrip ... ok
+test lsp::rpc::tests::case_insensitive_header ... ok
+test lsp::rpc::tests::empty_stream_returns_eof ... ok
+test lsp::rpc::tests::encode_decode_roundtrip ... ok
+test lsp::registry::tests::test_find_root_swift_xcodeproj ... ok
+test lsp::rpc::tests::extra_content_type_header ... ok
+test lsp::registry::tests::test_find_root_kotlin_settings_wins_over_build_gradle ... ok
+test lsp::registry::tests::test_find_root_swift_package ... ok
+test lsp::rpc::tests::truncated_message_errors ... ok
+test lsp::rpc::tests::multiple_messages_in_stream ... ok
+test recent::tests::test_load_nonexistent ... ok
+test run::android::tests::test_parse_gradle_status ... ok
+test run::android::tests::test_pidof_not_running ... ok
+test run::android::tests::test_pidof_parsing ... ok
+test fs::tests::test_save_file_writes_new_content ... ok
+test fs::tests::test_list_dir_sorting_and_filtering ... ok
+test fs::tests::test_list_dir_parent_gitignore_applied_to_subfolder ... ok
+test fs::tests::test_list_dir_respects_gitignore ... ok
+test recent::tests::test_push_and_dedupe ... ok
+test run::config::tests::test_auto_detect_android_gradle_one_config ... ok
+test run::config::tests::test_load_invalid_json_returns_clear_error ... ok
+test run::config::tests::test_validations ... ok
+test run::config::tests::test_save_and_reload_run_config ... ok
+test run::device::tests::test_build_emulator_args ... ok
+test run::device::tests::test_list_avds_mock ... ok
+test run::android::tests::test_validations ... ok
+test run::device::tests::test_parse_emulator_avds ... ok
+test run::config::tests::test_auto_detect_flutter_two_configs ... ok
+test run::device::tests::test_parse_flutter_devices ... ok
+test run::device::tests::test_parse_adb_devices ... ok
+test run::device::tests::test_parse_track_devices_frame ... ok
+test run::device::tests::test_validations ... ok
+test run::flutter::tests::test_parse_flutter_daemon_line_event_app_debug_port ... ok
+test run::flutter::tests::test_parse_flutter_daemon_line_event_app_start ... ok
+test run::flutter::tests::test_parse_flutter_daemon_line_response_reload ... ok
+test run::flutter::tests::test_parse_flutter_daemon_line_response_stop ... ok
+test run::flutter::tests::test_validation_rejects_bad_args ... ok
+test run::flutter::tests::test_parse_real_daemon_fixture ... ok
+test run::ios::tests::test_parse_devicectl_devices_fixture ... ok
+test run::ios::tests::test_parse_simctl_devices_fixture ... ok
+test recent::tests::test_max_10 ... ok
+test run::logs::tests::test_filter_logs ... ok
+test run::logs::tests::test_parse_ios_log_line_fixture ... ok
+test run::ios::tests::test_simctl_boot_success_and_validation ... ok
+test run::logs::tests::test_parse_logcat_ignores_boundary_headers ... ok
+test run::logs::tests::test_parse_logcat_threadtime_basic ... ok
+test run::logs::tests::test_parse_logcat_threadtime_various_levels ... ok
+test run::toolchain::tests::test_detect_fake_exec ... ok
+test run::flutter::tests::test_parse_build_error_dart ... ok
+test run::flutter::tests::test_extract_devtools_url ... ok
+test search::tests::test_grep_fallback_directly ... ok
+test search::tests::test_index_respects_gitignore ... ok
+test run::android::tests::test_find_application_id_and_launcher_activity ... ok
+test run::flutter::tests::test_parse_build_error_kotlin ... ok
+test search::tests::test_ranking ... ok
+test search::tests::test_skip_binary ... ok
+test search::tests::test_grep_literal_regex_case ... ok
+test search::tests::test_line_col_1_based ... ok
+test watch::tests::test_watch_filter_git_paths_unit ... ok
+test run::logs::tests::test_stack_links_dart_and_kotlin ... ok
+test watch::tests::test_watch_allows_important_git_files ... ok
+test watch::tests::test_watch_detects_file_write ... ok
+test watch::tests::test_watch_ignores_git_and_temp_files ... ok
+test run::logs::tests::test_benchmark_10k_synthetic_log_lines ... ok
+test term::tests::test_term_session_echo_and_resize ... ok
+test run::flutter::tests::test_flutter_run_mock_lifecycle_reload_and_stop ... ok
+test run::toolchain::tests::test_detect_real_toolchain_on_server ... ok
+
+test result: ok. 130 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+
+running 1 test
+test test_android_and_flutter_logcat_e2e_real_emulator ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test test_device_watch_real_emulator ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test test_flutter_run_e2e_real_emulator ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 4 tests
+test test_conflict_deleted_in_ours ... ok
+test test_cherry_pick_conflict_resolve_continue_and_abort ... ok
+test test_rebase_conflict_resolve_continue_and_abort ... ok
+test test_merge_conflict_conflicts_resolve_continue_and_abort ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+
+running 1 test
+test test_git_log_and_branches_integration ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+
+running 6 tests
+test test_diff_commit_and_untracked ... ok
+test test_branch_name_validation_rejects_dash_injection ... ok
+test test_commit_and_amend ... ok
+test test_stage_and_unstage_files ... ok
+test test_stage_and_unstage_hunk ... ok
+test test_git_status_all_types ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 13 tests
+test test_backup_crud_and_collision ... ok
+test test_rebase_conflict_stop_and_abort ... ok
+test test_branch_operations ... ok
+test test_rebase_dirty_worktree_rejected ... ok
+test test_cherry_pick_and_revert ... ok
+test test_rebase_drop ... ok
+test test_rebase_fixup_into_previous ... ok
+test test_rebase_reorder_independent_commits ... ok
+test test_rebase_reword ... ok
+test test_rebase_root ... ok
+test test_reset_hard_auto_backup_and_restore ... ok
+test test_rebase_squash_middle_commits ... ok
+test test_generate_no_data_loss_evidence_report ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s
+
+
+running 3 tests
+Initialized empty Git repository in /tmp/.tmpU8uJUr/
+Initialized empty Git repository in /tmp/.tmpDtZfq8/
+test test_remotes_list ... ok
+[main e0ddde1] r2 change
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+[main c76bd19] r2 commit
+ 1 file changed, 1 insertion(+)
+ create mode 100644 file2.txt
+[main b8c3dcc] r2 diverged commit
+ 1 file changed, 1 insertion(+)
+ create mode 100644 file_r2_div.txt
+test test_pull_conflict_stops_at_conflict ... ok
+[main 7ca70bb] r2 stale commit
+ 1 file changed, 1 insertion(+)
+ create mode 100644 r2_stale.txt
+test test_remote_fetch_pull_push_and_force_with_lease_flow ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+
+running 9 tests
+test server_request_response ... ok
+test server_receives_diagnostics_on_did_open ... ok
+test server_responds_to_server_initiated_requests ... ok
+test server_start_and_shutdown ... ok
+test registry_crash_restart_reopens_docs ... ok
+test registry_crash_restart_on_did_change ... ok
+test registry_idle_kill ... ok
+test registry_idle_kill_with_env_override ... ok
+test registry_lazy_start ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+
+running 3 tests
+test test_real_dart_lsp_diagnostics_and_did_change ... ok
+test test_real_dart_lsp_p24_code_actions ... ok
+test test_real_dart_lsp_p23_features ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.50s
+
+
+running 1 test
+test test_real_kotlin_lsp_diagnostics_completion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.62s
+
+
+running 1 test
+test test_real_swift_lsp_diagnostics_completion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
