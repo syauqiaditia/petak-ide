@@ -15,6 +15,7 @@
   import { gitStore } from './features/git/git.svelte.ts';
   import { runStore } from './features/run/runStore.svelte';
   import { mirrorStore } from './features/mirror/mirrorStore.svelte';
+  import { getSnippetCompletionsForLanguage } from './features/editor/snippets';
 
   let GitViewComponent = $state<any>(null);
   let DevicesPanelComponent = $state<any>(null);
@@ -1101,6 +1102,17 @@
         // Test definition
         const defRes = await api.lsp.definition(testFilePath, 10, 5);
         await api.benchLog(`P23_DEFINITION_OK: ${defRes !== null}`);
+
+        // Test snippet stful / stless and Tab keymap
+        try {
+          const dartSnippets = getSnippetCompletionsForLanguage('dart');
+          const hasStful = dartSnippets.some((s) => s.label === 'stful');
+          const hasStless = dartSnippets.some((s) => s.label === 'stless');
+          await api.benchLog(`P23_SNIPPET_STFUL_OK: ${hasStful}`);
+          await api.benchLog(`P23_SNIPPET_STLESS_OK: ${hasStless}`);
+        } catch (snipErr) {
+          console.warn('[PETAK_TEST] Snippet check error:', snipErr);
+        }
       }
 
       await api.benchLog('P23_SCREENSHOT_READY');
