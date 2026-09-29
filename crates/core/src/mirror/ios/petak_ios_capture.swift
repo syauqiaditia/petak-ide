@@ -522,11 +522,13 @@ func startSimctlScreenshotFallback(config: CaptureConfig) {
         emitStatus(["status": "error", "message": "Failed to create fallback encoder"])
         exit(1)
     }
+    activeEncoder = encoder
 
     var frameCount: Int64 = 0
     let tempPath = "/tmp/petak-sim-fallback-\(udid)-\(ProcessInfo.processInfo.processIdentifier).png"
 
     let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+    activeTimer = timer
     timer.schedule(deadline: .now(), repeating: interval)
 
     timer.setEventHandler {
@@ -592,6 +594,8 @@ func createPixelBuffer(from image: CGImage, width: Int, height: Int) -> CVPixelB
 var sigSource: DispatchSourceSignal?
 var activeSimulatorCapture: Any?
 var activePhysicalCapture: Any?
+var activeTimer: DispatchSourceTimer?
+var activeEncoder: H264Encoder?
 
 func setupSignalHandlers() {
     signal(SIGINT, SIG_IGN)
