@@ -30,8 +30,8 @@ pub use model::{
 };
 pub use ops::{
     branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,
-    commit, last_commit_message, reset, revert, stage_files, stage_hunk, unstage_files,
-    unstage_hunk,
+    commit, last_commit_message, merge, rebase_onto, reset, revert, stage_files, stage_hunk,
+    unstage_files, unstage_hunk,
 };
 pub use rebase::{
     drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,

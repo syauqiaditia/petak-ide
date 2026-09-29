@@ -3,8 +3,8 @@ mod common;
 use common::gitrepo::TestRepo;
 use petak_core::exec::SystemExec;
 use petak_core::git::{
-    conflict_write, conflicts, op_abort, op_continue, op_state, resolve_block, Choice,
-    ConflictSide, RebaseStateKind,
+    conflict_write, conflicts, merge, op_abort, op_continue, op_state, rebase_onto, resolve_block,
+    Choice, ConflictSide, RebaseStateKind,
 };
 
 #[test]
@@ -232,4 +232,160 @@ fn test_conflict_deleted_in_ours() {
         op_state(&SystemExec, r.path()).unwrap().kind,
         RebaseStateKind::None
     );
+}
+
+#[test]
+fn test_merge_clean() {
+    let r = TestRepo::new();
+    let exec = SystemExec;
+
+    r.write_file("main.txt", "main content\n");
+    r.commit("initial main commit");
+
+    r.git(&["checkout", "-b", "feature"]);
+    r.write_file("feature.txt", "feature content\n");
+    r.commit("feature commit");
+
+    r.git(&["checkout", "main"]);
+    r.write_file("main2.txt", "second main content\n");
+    r.commit("second main commit");
+
+    let res = merge(&exec, r.path(), "feature").expect("merge succeeds");
+    assert!(res.ok);
+    assert!(!res.stash_conflict);
+    assert!(res.backup_ref.is_some());
+
+    // Merge commit has 2 parents
+    let parents = r.git(&["rev-parse", "HEAD^@"]);
+    assert_eq!(parents.lines().count(), 2);
+
+    // Both files exist
+    assert_eq!(r.read_file("main.txt"), "main content\n");
+    assert_eq!(r.read_file("feature.txt"), "feature content\n");
+}
+
+#[test]
+fn test_merge_conflict_then_continue() {
+    let r = TestRepo::new();
+    let exec = SystemExec;
+
+    r.write_file("file.txt", "line 1\nline 2\nline 3\n");
+    r.commit("initial commit");
+
+    r.git(&["checkout", "-b", "feature"]);
+    r.write_file("file.txt", "line 1\nline 2 feature\nline 3\n");
+    r.commit("feature edit");
+
+    r.git(&["checkout", "main"]);
+    r.write_file("file.txt", "line 1\nline 2 main\nline 3\n");
+    r.commit("main edit");
+
+    let res = merge(&exec, r.path(), "feature").expect("merge returns OpResult");
+    assert!(!res.ok, "merge should stop on conflict");
+    assert!(res.stopped_at.is_some());
+
+    let state = op_state(&exec, r.path()).expect("read op_state");
+    assert_eq!(state.kind, RebaseStateKind::Merge);
+
+    let conf_files = conflicts(&exec, r.path()).expect("conflicts");
+    assert_eq!(conf_files.len(), 1);
+
+    let resolved = resolve_block(&conf_files[0].merged, 0, Choice::Both);
+    conflict_write(&exec, r.path(), "file.txt", &resolved, true).expect("conflict_write");
+
+    let cont_res = op_continue(&exec, r.path()).expect("op_continue");
+    assert!(cont_res.ok);
+
+    let final_parents = r.git(&["rev-parse", "HEAD^@"]);
+    assert_eq!(final_parents.lines().count(), 2, "merge commit should have 2 parents");
+
+    let final_state = op_state(&exec, r.path()).expect("op_state final");
+    assert_eq!(final_state.kind, RebaseStateKind::None);
+}
+
+#[test]
+fn test_merge_conflict_abort() {
+    let r = TestRepo::new();
+    let exec = SystemExec;
+
+    r.write_file("file.txt", "line 1\nline 2\nline 3\n");
+    r.commit("initial commit");
+
+    r.git(&["checkout", "-b", "feature"]);
+    r.write_file("file.txt", "line 1\nline 2 feature\nline 3\n");
+    r.commit("feature edit");
+
+    r.git(&["checkout", "main"]);
+    r.write_file("file.txt", "line 1\nline 2 main\nline 3\n");
+    r.commit("main edit");
+    let main_sha = r.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    let res = merge(&exec, r.path(), "feature").expect("merge returns OpResult");
+    assert!(!res.ok);
+
+    op_abort(&exec, r.path()).expect("op_abort");
+    let after_abort_sha = r.git(&["rev-parse", "HEAD"]).trim().to_string();
+    assert_eq!(after_abort_sha, main_sha);
+
+    let state = op_state(&exec, r.path()).expect("op_state");
+    assert_eq!(state.kind, RebaseStateKind::None);
+    assert!(r.git(&["status", "--porcelain"]).trim().is_empty());
+}
+
+#[test]
+fn test_merge_on_dirty_tree_autostash() {
+    let r = TestRepo::new();
+    let exec = SystemExec;
+
+    r.write_file("file1.txt", "base file 1\n");
+    r.commit("c1");
+
+    r.git(&["checkout", "-b", "feature"]);
+    r.write_file("file2.txt", "feature file 2\n");
+    r.commit("c2");
+
+    r.git(&["checkout", "main"]);
+    // Dirty worktree
+    r.write_file("file1.txt", "base file 1 dirty\n");
+
+    let res = merge(&exec, r.path(), "feature").expect("merge with autostash succeeds");
+    assert!(res.ok);
+    assert!(!res.stash_conflict);
+
+    // Verify both changes present
+    assert_eq!(r.read_file("file1.txt"), "base file 1 dirty\n");
+    assert_eq!(r.read_file("file2.txt"), "feature file 2\n");
+}
+
+#[test]
+fn test_rebase_onto_conflict_abort() {
+    let r = TestRepo::new();
+    let exec = SystemExec;
+
+    r.write_file("file.txt", "line 1\n");
+    r.commit("initial commit");
+
+    r.git(&["checkout", "-b", "feature"]);
+    r.write_file("file.txt", "line 1 from feature\n");
+    r.commit("feature edit");
+    let feat_sha = r.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    r.git(&["checkout", "main"]);
+    r.write_file("file.txt", "line 1 from main\n");
+    r.commit("main edit");
+
+    r.git(&["checkout", "feature"]);
+    let res = rebase_onto(&exec, r.path(), "main").expect("rebase_onto returns OpResult");
+    assert!(!res.ok, "rebase_onto should stop on conflict");
+
+    let state = op_state(&exec, r.path()).expect("op_state");
+    assert_eq!(state.kind, RebaseStateKind::Rebase);
+
+    op_abort(&exec, r.path()).expect("op_abort");
+    let after_abort_sha = r.git(&["rev-parse", "HEAD"]).trim().to_string();
+    assert_eq!(after_abort_sha, feat_sha);
+
+    let final_state = op_state(&exec, r.path()).expect("op_state final");
+    assert_eq!(final_state.kind, RebaseStateKind::None);
+    assert!(r.git(&["status", "--porcelain"]).trim().is_empty());
 }

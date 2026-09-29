@@ -258,6 +258,8 @@ pub struct OpResult {
     pub backup_ref: Option<String>,
     pub stopped_at: Option<StopReason>,
     pub new_head: String,
+    #[serde(default)]
+    pub stash_conflict: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

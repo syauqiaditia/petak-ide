@@ -299,6 +299,7 @@ pub fn op_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
                             sha: head.clone(),
                         }),
                         new_head: head,
+                        stash_conflict: false,
                     });
                 }
                 let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
@@ -317,6 +318,7 @@ pub fn op_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
                 backup_ref: None,
                 stopped_at: None,
                 new_head,
+                stash_conflict: false,
             })
         }
         RebaseStateKind::CherryPick => {
@@ -355,6 +357,7 @@ pub fn op_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
                             sha,
                         }),
                         new_head: head,
+                        stash_conflict: false,
                     });
                 }
                 let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
@@ -373,6 +376,7 @@ pub fn op_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
                 backup_ref: None,
                 stopped_at: None,
                 new_head,
+                stash_conflict: false,
             })
         }
         RebaseStateKind::Revert => {
@@ -411,6 +415,7 @@ pub fn op_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
                             sha,
                         }),
                         new_head: head,
+                        stash_conflict: false,
                     });
                 }
                 let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
@@ -429,6 +434,7 @@ pub fn op_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
                 backup_ref: None,
                 stopped_at: None,
                 new_head,
+                stash_conflict: false,
             })
         }
         RebaseStateKind::None => Err(GitError {

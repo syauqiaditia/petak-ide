@@ -111,6 +111,7 @@ pub fn pull(exec: &dyn Exec, repo: &Path, mode: PullMode) -> Result<OpResult, Gi
                     sha: stopped_sha,
                 }),
                 new_head: head,
+                stash_conflict: false,
             });
         }
 
@@ -131,6 +132,7 @@ pub fn pull(exec: &dyn Exec, repo: &Path, mode: PullMode) -> Result<OpResult, Gi
         backup_ref: None,
         stopped_at: None,
         new_head,
+        stash_conflict: false,
     })
 }
 
@@ -173,6 +175,7 @@ pub fn push(
         backup_ref: None,
         stopped_at: None,
         new_head,
+        stash_conflict: false,
     })
 }
 

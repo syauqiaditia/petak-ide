@@ -59,6 +59,11 @@ impl TestRepo {
         fs::write(full, content).expect("write file");
     }
 
+    #[allow(dead_code)]
+    pub fn read_file(&self, rel_path: &str) -> String {
+        fs::read_to_string(self.path().join(rel_path)).expect("read file")
+    }
+
     pub fn commit(&self, msg: &str) -> String {
         self.git(&["add", "-A"]);
         self.git(&["commit", "-m", msg])
