@@ -1,6 +1,166 @@
-use std::io;
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::Output;
+use std::process::{Child, ChildStdin, Command, Output, Stdio};
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+pub trait Spawn: Send + Sync {
+    fn spawn(
+        &self,
+        cwd: &Path,
+        program: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        tx: Sender<ProcLine>,
+    ) -> io::Result<Box<dyn Proc>>;
+}
+
+pub trait Proc: Send {
+    fn stdin_write(&mut self, data: &[u8]) -> io::Result<()>;
+    fn kill(&mut self) -> io::Result<()>;
+    fn pid(&self) -> Option<u32>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcLine {
+    Stdout(String),
+    Stderr(String),
+    Exit(Option<i32>),
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SystemSpawn;
+
+pub struct SystemProc {
+    pid: u32,
+    stdin: Option<ChildStdin>,
+    child: Arc<Mutex<Option<Child>>>,
+}
+
+impl Proc for SystemProc {
+    fn stdin_write(&mut self, data: &[u8]) -> io::Result<()> {
+        if let Some(stdin) = &mut self.stdin {
+            stdin.write_all(data)?;
+            stdin.flush()?;
+            Ok(())
+        } else {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "stdin is closed"))
+        }
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        let mut guard = self.child.lock().unwrap();
+        if let Some(child) = guard.as_mut() {
+            match child.kill() {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::InvalidInput || e.raw_os_error() == Some(3) => {
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    fn pid(&self) -> Option<u32> {
+        Some(self.pid)
+    }
+}
+
+impl Spawn for SystemSpawn {
+    fn spawn(
+        &self,
+        cwd: &Path,
+        program: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+        tx: Sender<ProcLine>,
+    ) -> io::Result<Box<dyn Proc>> {
+        let mut cmd = Command::new(program);
+        cmd.current_dir(cwd).args(args);
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        cmd.stdin(Stdio::piped());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()?;
+        let pid = child.id();
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let stdin = child.stdin.take();
+
+        let child_arc = Arc::new(Mutex::new(Some(child)));
+        let child_for_waiter = Arc::clone(&child_arc);
+
+        let tx_out = tx.clone();
+        let stdout_handle = thread::spawn(move || {
+            if let Some(stdout) = stdout {
+                let mut reader = BufReader::new(stdout);
+                loop {
+                    let mut line = String::new();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+                            if tx_out.send(ProcLine::Stdout(trimmed)).is_err() {
+                                // Channel dropped: drain remaining so child doesn't get SIGPIPE
+                                let mut raw = reader.into_inner();
+                                let _ = std::io::copy(&mut raw, &mut std::io::sink());
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        });
+
+        let tx_err = tx.clone();
+        let stderr_handle = thread::spawn(move || {
+            if let Some(stderr) = stderr {
+                let mut reader = BufReader::new(stderr);
+                loop {
+                    let mut line = String::new();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(&['\r', '\n'][..]).to_string();
+                            if tx_err.send(ProcLine::Stderr(trimmed)).is_err() {
+                                let mut raw = reader.into_inner();
+                                let _ = std::io::copy(&mut raw, &mut std::io::sink());
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        });
+
+        let tx_exit = tx;
+        thread::spawn(move || {
+            let _ = stdout_handle.join();
+            let _ = stderr_handle.join();
+
+            let exit_code = if let Some(mut child) = child_for_waiter.lock().unwrap().take() {
+                child.wait().ok().and_then(|s| s.code())
+            } else {
+                None
+            };
+            let _ = tx_exit.send(ProcLine::Exit(exit_code));
+        });
+
+        Ok(Box::new(SystemProc {
+            pid,
+            stdin,
+            child: child_arc,
+        }))
+    }
+}
 
 pub trait Exec: Send + Sync {
     fn run(
@@ -197,5 +357,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!(*fake.recorded_stdin.lock().unwrap(), b"my commit");
+    }
+
+    #[test]
+    fn test_system_spawn_stdout_stderr_exit() {
+        let spawn = SystemSpawn;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _proc = spawn
+            .spawn(
+                Path::new("."),
+                "sh",
+                &["-c", "echo a; echo b >&2; exit 3"],
+                &[],
+                tx,
+            )
+            .unwrap();
+
+        let mut lines = Vec::new();
+        while let Ok(line) = rx.recv() {
+            let is_exit = matches!(line, ProcLine::Exit(_));
+            lines.push(line);
+            if is_exit {
+                break;
+            }
+        }
+
+        assert!(lines.contains(&ProcLine::Stdout("a".to_string())));
+        assert!(lines.contains(&ProcLine::Stderr("b".to_string())));
+        assert_eq!(lines.last(), Some(&ProcLine::Exit(Some(3))));
+    }
+
+    #[test]
+    fn test_system_spawn_stdin_and_kill() {
+        let spawn = SystemSpawn;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut proc = spawn
+            .spawn(Path::new("."), "sleep", &["5"], &[], tx)
+            .unwrap();
+        assert!(proc.pid().is_some());
+        proc.kill().unwrap();
+
+        let mut exit_found = false;
+        while let Ok(line) = rx.recv_timeout(std::time::Duration::from_secs(2)) {
+            if matches!(line, ProcLine::Exit(_)) {
+                exit_found = true;
+                break;
+            }
+        }
+        assert!(exit_found);
     }
 }

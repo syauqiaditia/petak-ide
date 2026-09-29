@@ -3,6 +3,7 @@ pub mod fs;
 pub mod git;
 pub mod lsp;
 pub mod recent;
+pub mod run;
 pub mod search;
 pub mod term;
 pub mod watch;
