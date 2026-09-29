@@ -312,7 +312,7 @@
           />
         </div>
         <div class="bp-modal-footer">
-          <button class="bp-btn cancel" onclick={() => (newBranchModalOpen = false)}>Batal</button>
+          <button class="bp-btn cancel" onclick={() => (newBranchModalOpen = false)}>Cancel</button>
           <button class="bp-btn confirm" onclick={submitNewBranch} disabled={!newBranchName.trim()}>
             Create Branch
           </button>
@@ -342,7 +342,7 @@
           />
         </div>
         <div class="bp-modal-footer">
-          <button class="bp-btn cancel" onclick={() => (renameBranchModalOpen = false)}>Batal</button>
+          <button class="bp-btn cancel" onclick={() => (renameBranchModalOpen = false)}>Cancel</button>
           <button class="bp-btn confirm" onclick={submitRenameBranch} disabled={!renameBranchNewName.trim()}>
             Rename
           </button>
@@ -373,7 +373,7 @@
           </label>
         </div>
         <div class="bp-modal-footer">
-          <button class="bp-btn cancel" onclick={() => (deleteBranchModalOpen = false)}>Batal</button>
+          <button class="bp-btn cancel" onclick={() => (deleteBranchModalOpen = false)}>Cancel</button>
           <button class="bp-btn danger-btn" onclick={submitDeleteBranch}>
             Hapus Branch
           </button>
@@ -397,7 +397,7 @@
           <p class="bp-muted">Ini akan mengembalikan repositori ke kondisi tepat sebelum operasi {targetBackup.op} dijalankan.</p>
         </div>
         <div class="bp-modal-footer">
-          <button class="bp-btn cancel" onclick={() => (restoreBackupModalOpen = false)}>Batal</button>
+          <button class="bp-btn cancel" onclick={() => (restoreBackupModalOpen = false)}>Cancel</button>
           <button class="bp-btn confirm" onclick={submitRestoreBackup}>
             Reset ke Backup Ini
           </button>

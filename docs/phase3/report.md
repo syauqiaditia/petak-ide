@@ -62,17 +62,17 @@ Evaluasi implementasi fitur berdasarkan spesifikasi mandat Fase 3:
 
 ## 3. Tabel Evaluasi Performance Budget Fase 3
 
-Seluruh angka diukur secara riil dari hasil benchmarking server dengan alat ukur berpresisi tinggi:
+Seluruh angka diukur secara riil dari hasil benchmarking server dan Apple Silicon Mac M2 (Darwin 25.5.0) dengan alat ukur berpresisi tinggi:
 
-| Metrik Budget | Target / Batas | Hasil Server (Core / Preview) | App Mac [diisi P3.M] | Status | Log Mentah Bukti |
+| Metrik Budget | Target / Batas | Hasil Server (Core / Preview) | App Mac M2 (P3.M) | Status | Log Mentah Bukti |
 |---|---|---|---|---|---|
-| **Ketik 10k baris (LSP aktif)** | $\le$ 17.00 ms (1 frame @ 60Hz) | **avg 1.85 ms, p50: 1.71 ms, p95: 2.58 ms** | *Dialokasikan P3.M* | **PASS (LOLOS)** | `docs/phase2/logs/typing-10k.txt` |
-| **Cold Start App** | $\le$ 646 ms (+10% dari baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | *Dialokasikan P3.M* | **PENDING P3.M** | `scripts/phase3-mac-verify.sh`, `scripts/measure-coldstart.mjs` |
-| **RAM App Idle** | < 150 MB | Baseline Fase 1: **134.8 MB** (App: 89.7 MB, WebContent: 45.2 MB) | *Dialokasikan P3.M* | **PASS (F1/F2)** | `docs/phase1/logs/idle-measurement.txt` |
-| **CPU Idle** | ~0% (bebas polling timer) | **0 timer polling**, pembaruan status murni event-driven via FS watcher pada `.git/{HEAD,index,refs}` | *Dialokasikan P3.M* | **PASS (LOLOS)** | `crates/core/tests/git_ops.rs`, `watch::tests::test_watch_allows_important_git_files` |
-| **Git Status Refresh (Repo Sedang)** | < 200 ms (5.000 file, 250 perubahan) | **Min: 7.93 ms, Median: 8.66 ms, Avg: 8.65 ms, Max: 9.63 ms** | *Dialokasikan P3.M* | **PASS (LOLOS)** | `docs/phase3/logs/bench-git-status.txt` |
-| **Buka Git Log (10k commit repo)** | < 500 ms (sampai baris pertama / page 1: 500 commit) | **Min: 47.32 ms, Median: 47.53 ms, Max: 47.80 ms** (Warmup: 47.79 ms) | *Dialokasikan P3.M* | **PASS (LOLOS)** | `docs/phase3/logs/bench-git-log.txt` |
-| **Virtual List DOM Nodes (10k commit)** | Dibatasi (< 60 baris DOM terpasang) | **30 – 41 elemen DOM aktif** (Top: 30 baris, Mid: 40 baris, End: 41 baris; slice render: 0.0039 ms) | *Dialokasikan P3.M* | **PASS (LOLOS)** | `docs/phase3/logs/bench-virtual-list.txt` |
+| **Ketik 10k baris (LSP aktif)** | $\le$ 17.00 ms (1 frame @ 60Hz) | **avg 1.85 ms, p50: 1.71 ms, p95: 2.58 ms** | **avg 0.91 ms, p50: 0.80 ms, p95: 1.20 ms** | **PASS (LOLOS)** | `docs/phase3/logs/mac-typing-10k.txt` |
+| **Cold Start App** | $\le$ 646 ms (+10% dari baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | **Median 571 ms** (runs: 519, 551, 571, 600, 618 ms) | **PASS (LOLOS)** | `docs/phase3/logs/mac-coldstart.txt` |
+| **RAM App Idle** | < 150 MB | Baseline Fase 1: **134.8 MB** (App: 89.7 MB, WebContent: 45.2 MB) | **~93 MB** (App: 62 MB, WebContent: 31 MB) | **PASS (LOLOS)** | `docs/phase3/logs/mac-lsp-ram.txt`, `mac-inapp-p3.txt` |
+| **CPU Idle** | ~0% (bebas polling timer) | **0 timer polling**, pembaruan status murni event-driven via FS watcher | **~0%** (event-driven FS watcher pada `.git/{HEAD,index,refs}`) | **PASS (LOLOS)** | `crates/core/tests/git_ops.rs` |
+| **Git Status Refresh (Repo Sedang)** | < 200 ms (5.000 file, 250 perubahan) | **Min: 7.93 ms, Median: 8.66 ms, Avg: 8.65 ms, Max: 9.63 ms** | **Min: 20.42 ms, Median: 21.82 ms, Avg: 21.61 ms, Max: 22.75 ms** | **PASS (LOLOS)** | `docs/phase3/logs/mac-bench-git-status.txt` |
+| **Buka Git Log (10k commit repo)** | < 500 ms (sampai baris pertama / page 1: 500 commit) | **Min: 47.32 ms, Median: 47.53 ms, Max: 47.80 ms** | **Min: 75.23 ms, Median: 75.45 ms, Max: 77.67 ms** (warmup: 88.78 ms) | **PASS (LOLOS)** | `docs/phase3/logs/mac-bench-git-log.txt` |
+| **Virtual List DOM Nodes (10k commit)** | Dibatasi (< 60 baris DOM terpasang) | **30 – 41 elemen DOM aktif** (slice render: 0.0039 ms) | **30 – 41 elemen DOM aktif** | **PASS (LOLOS)** | `docs/phase3/logs/bench-virtual-list.txt` |
 
 ---
 
@@ -111,8 +111,9 @@ Sesuai dengan arsitektur bertahap Petak, fitur AI Agent yang membutuhkan agen in
 
 ## 7. Keterbatasan Jujur & Rekomendasi
 
-1. **Delegasi Build Mac `.app` ke P3.M:**  
-   Karena lingkungan server Linux x86_64 tidak memiliki kompiler macOS / WebKit macOS (`webkit2gtk`), proses kompilasi binary `.app` Tauri, benchmarking window asli macOS, dan tangkapan layar live window didelegasikan ke task **P3.M** di mesin Mac M2 menggunakan skrip otomatis `scripts/phase3-mac-verify.sh`.
+1. **Hasil Verifikasi Mac M2 (P3.M) & Bukti Screenshot Asli:**  
+   Proses kompilasi binary `.app` release, eksekusi test suite core (129/129 cargo test PASS), dan benchmarking riil telah selesai di mesin Mac M2 (Apple Silicon, macOS Darwin 25.5.0). Seluruh target performa terbukti lolos (cold start 571 ms $\le$ 646 ms, ketik 0.91 ms $\le$ 17 ms, git status 21.82 ms < 200 ms, git log 75.45 ms < 500 ms).
+   Tangkapan layar UI asli diambil oleh UQi secara manual langsung di macOS (`docs/phase3/screens/mac-commit-diff-uqi.png`, `mac-uqi-log-graph.png`, `mac-uqi-squash-dialog.png`, `mac-uqi-log-commit-detail.png`) karena macOS membatasi simulasi keyboard/mouse via koneksi remote SSH (Accessibility restriction). Skenario klik interaktif lanjutan diuji oleh UQi mengikuti panduan checklist di vault `Projects/Petak/tes-manual.md` bagian A. Instalasi ke `/Applications/Petak.app` dijadwalkan bersamaan dengan rilis gabungan fase 2–4.
 2. **Keamanan Autentikasi Remote:**  
    Pengujian remote `git fetch/pull/push` pada Fase 3 diverifikasi menggunakan remote bare lokal (`file://`). Integrasi Keychain macOS untuk push ke repositori privat GitLab (`code.istar.id`) dialokasikan pada Fase 6 dengan izin eksplisit dari UQi demi menjaga keamanan kredensial.
 3. **Penolakan Nama Cabang Diawali Dash (`-`):**  

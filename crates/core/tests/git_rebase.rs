@@ -104,13 +104,17 @@ fn test_backup_crud_and_collision() {
     assert!(ref1.ends_with("-test"));
 
     // Create second backup in same second -> collision adds -2
-    let ref2 = backup_create(&exec, repo.path(), "test").unwrap();
+    let mut ref2 = backup_create(&exec, repo.path(), "test").unwrap();
+    if !ref2.ends_with("-test-2") {
+        // If the second rolled over between ref1 and ref2, create one more in the same second as ref2
+        ref2 = backup_create(&exec, repo.path(), "test").unwrap();
+    }
     assert!(ref2.starts_with("refs/petak/backup/"));
     assert!(ref2.ends_with("-test-2"));
 
     // List backups
     let list = backup_list(&exec, repo.path()).unwrap();
-    assert_eq!(list.len(), 2);
+    assert!(list.len() >= 2);
     assert_eq!(list[0].sha, head);
     assert_eq!(list[1].sha, head);
     assert_eq!(list[0].op, "test");

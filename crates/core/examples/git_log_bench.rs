@@ -5,7 +5,20 @@ use petak_core::exec::SystemExec;
 use petak_core::git::{log, LogFilter};
 
 fn main() {
-    let repo_path = Path::new("/mnt/storage/uqi-cache/tmp/petak-git10k");
+    let default_path = std::env::var("PETAK_GIT_10K_REPO").unwrap_or_else(|_| {
+        let tmp = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
+        let p = format!("{}/petak-git10k", tmp.trim_end_matches('/'));
+        if Path::new(&p).exists() {
+            p
+        } else if Path::new("/mnt/storage/uqi-cache/tmp/petak-git10k").exists() {
+            "/mnt/storage/uqi-cache/tmp/petak-git10k".to_string()
+        } else {
+            p
+        }
+    });
+    let arg_path = std::env::args().nth(1);
+    let repo_path_buf = arg_path.map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from(default_path));
+    let repo_path = repo_path_buf.as_path();
     if !repo_path.exists() {
         eprintln!(
             "Error: dummy repo {} not found. Please run 'bash scripts/gen-git-10k.sh' first.",

@@ -484,11 +484,11 @@ pub async fn git_backup_list(root: String) -> Result<Vec<petak_core::git::Backup
 }
 
 #[tauri::command]
-pub async fn git_backup_restore(root: String, name: String) -> Result<(), String> {
+pub async fn git_backup_restore(root: String, name: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
         let repo = std::path::Path::new(&root);
-        petak_core::git::backup_restore(&exec, repo, &name).map_err(|e| e.to_string())
+        petak_core::git::backup_restore(&exec, repo, &name, false).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -534,7 +534,7 @@ pub async fn git_conflict_write(
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
         let repo = std::path::Path::new(&root);
-        petak_core::git::conflict_write(&exec, repo, &path, &content).map_err(|e| e.to_string())
+        petak_core::git::conflict_write(&exec, repo, &path, &content, true).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -654,6 +654,7 @@ pub fn mark_ready(ts_ms: u64) {
 #[tauri::command]
 pub fn bench_log(line: String) -> Result<(), String> {
     let out_var = std::env::var("PETAK_BENCH_OUT").ok();
+    let is_bench = std::env::var("PETAK_BENCH").is_ok();
     let is_test = std::env::var("PETAK_TEST_P3").is_ok()
         || std::env::var("PETAK_TEST_P24").is_ok()
         || std::env::var("PETAK_TEST_P23").is_ok()
