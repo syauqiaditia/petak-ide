@@ -287,7 +287,7 @@ EOF
 git add src/app.ts
 
 # b. Unstaged changes di README.md (2 hunk terpisah)
-sed -i '1s/^/# [PETAK DEMO WORKTREE EDIT]\n/' README.md
+(printf "# [PETAK DEMO WORKTREE EDIT]\n\n"; cat README.md) > README.tmp && mv README.tmp README.md
 cat << 'EOF' >> README.md
 
 ## Panduan Pengujian Singkat
