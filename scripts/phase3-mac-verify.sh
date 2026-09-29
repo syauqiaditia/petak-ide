@@ -21,7 +21,7 @@ echo "Host: $(hostname)"
 echo ""
 
 # 1. Environment & Pre-checks
-export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/Users/uqi/SDK/flutter_3.41.5/bin:${PATH}"
+export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 export CARGO_TARGET_DIR="${TARGET_DIR}"
 cd "${REPO_DIR}"
 
@@ -77,6 +77,7 @@ node scripts/measure-coldstart.mjs | tee "${LOG_DIR}/mac-coldstart.txt"
 # 7. Measure RAM Idle & Typing (Reuse from Phase 2)
 echo ""
 echo "=== 7. Measuring RAM Idle & Typing Benchmark ==="
+export PATH="/Users/uqi/SDK/flutter_3.41.5/bin:${PATH}"
 if [ -f "scripts/bench_typing_lsp.mjs" ]; then
   node scripts/bench_typing_lsp.mjs | tee "${LOG_DIR}/mac-typing-10k.txt" || echo "Note: typing bench skipped if fixture not present"
 fi
