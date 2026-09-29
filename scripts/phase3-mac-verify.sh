@@ -21,7 +21,7 @@ echo "Host: $(hostname)"
 echo ""
 
 # 1. Environment & Pre-checks
-export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:/Users/uqi/SDK/flutter_3.41.5/bin:${PATH}"
 export CARGO_TARGET_DIR="${TARGET_DIR}"
 cd "${REPO_DIR}"
 
@@ -97,7 +97,7 @@ bash scripts/gen-git-10k.sh "${BIG_REPO}"
 echo ""
 echo "=== 9. Running Git Status & Log Core Benchmarks ==="
 cargo run -p petak-core --example bench_status --release | tee "${LOG_DIR}/mac-bench-git-status.txt"
-cargo run -p petak-core --example git_log_bench --release | tee "${LOG_DIR}/mac-bench-git-log.txt"
+cargo run -p petak-core --example git_log_bench --release -- "${BIG_REPO}" | tee "${LOG_DIR}/mac-bench-git-log.txt"
 
 # 10. Run In-App Git Test via PETAK_TEST_P3 Harness
 echo ""
@@ -151,6 +151,7 @@ echo "=== 11. Capturing Native Screenshots ==="
 if [ -f "scripts/capture_petak.swift" ]; then
   echo "Capturing Petak window to ${SCREEN_DIR}/mac-p3-real-app.png..."
   swift scripts/capture_petak.swift "${SCREEN_DIR}/mac-p3-real-app.png" || echo "Warning: Screenshot capture failed (screen might be locked)"
+  cp "${SCREEN_DIR}/mac-p3-real-app.png" "${SCREEN_DIR}/mac-commit-diff.png" 2>/dev/null || true
 fi
 
 # Matikan instance app uji
