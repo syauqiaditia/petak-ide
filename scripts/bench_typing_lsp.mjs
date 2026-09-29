@@ -1,6 +1,6 @@
 import { Parser, Language, Query } from 'web-tree-sitter';
 import { EditorState, ChangeSet, Text } from '@codemirror/state';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -28,7 +28,26 @@ fs.writeFileSync(
 const testFile = path.join(projectDir, 'lib', 'Big10k.dart');
 fs.writeFileSync(testFile, codeText);
 
-const proc = spawn('dart', ['language-server', '--protocol=lsp'], {
+function getDartBin() {
+  if (process.env.DART_BIN) return process.env.DART_BIN;
+  try {
+    const p = execSync('which dart', { stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim();
+    if (p) return p;
+  } catch (_) {}
+  const candidates = [
+    '/Users/uqi/SDK/flutter_3.35.7/bin/dart',
+    path.join(os.homedir(), 'SDK/flutter_3.35.7/bin/dart'),
+    path.join(os.homedir(), 'flutter/bin/dart'),
+    '/mnt/storage/flutter-uqi/bin/dart',
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return 'dart';
+}
+
+const dartBin = getDartBin();
+const proc = spawn(dartBin, ['language-server', '--protocol=lsp'], {
   stdio: ['pipe', 'pipe', 'inherit'],
 });
 

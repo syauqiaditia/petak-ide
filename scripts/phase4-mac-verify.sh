@@ -21,7 +21,7 @@ echo "Host: $(hostname)"
 echo ""
 
 # 1. Environment & Pre-checks
-export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+export PATH="${HOME}/SDK/flutter_3.35.7/bin:${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
 export CARGO_TARGET_DIR="${TARGET_DIR}"
 cd "${REPO_DIR}"
 

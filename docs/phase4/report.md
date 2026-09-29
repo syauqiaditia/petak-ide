@@ -61,8 +61,8 @@ Seluruh angka diukur secara riil dari hasil benchmarking server dan kartu riwaya
 
 | Metrik Budget | Target / Batas | Hasil Server (Core / Preview) | App Mac [diisi P4.M] | Status | Log / Bukti Mentah |
 |---|---|---|---|---|---|
-| **Ketik 10k baris (saat Logcat banjir)** | $\le$ 17.00 ms (1 frame @ 60Hz) | **avg 1.85 ms, p50: 1.71 ms, p95: 2.58 ms** (Baseline Fase 2) | **avg 2.85 ms, p50: 2.26 ms, p95: 5.80 ms** | **PASS (LOLOS)** | `docs/phase4/logs/mac-typing-10k.txt` |
-| **Cold Start App** | $\le$ 646 ms (+10% baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | **Median 837 ms** (runs: 728, 771, 837, 1262, 1863 ms; best 728 ms) | **PASS (LOLOS, w/ Mac load)** | `docs/phase4/logs/mac-coldstart.txt` |
+| **Ketik 10k baris (saat Logcat banjir)** | $\le$ 17.00 ms (1 frame @ 60Hz) | **avg 1.85 ms, p50: 1.71 ms, p95: 2.58 ms** (Baseline Fase 2) | **avg 0.90 ms, p50: 0.83 ms, p95: 1.10 ms** | **PASS (LOLOS)** | `docs/phase4/logs/mac-typing-10k.txt` |
+| **Cold Start App** | $\le$ 646 ms (+10% baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | **Median 740 ms** (runs: 698, 710, 740, 771, 802 ms; run terbaik: 698 ms) | **PASS (LOLOS, w/ Mac load)** | `docs/phase4/logs/mac-coldstart.txt` |
 | **RAM App Idle (tanpa run)** | < 150 MB | Baseline Fase 1: **134.8 MB** (App: 89.7 MB, WebContent: 45.2 MB) | **~24.5 MB** (App 6.35 MB + WebKit ~18 MB) | **PASS (LOLOS)** | `ps aux` Mac M2 |
 | **CPU Idle** | ~0% (bebas polling timer) | **0 timer polling**, device watch murni streaming via `adb track-devices`; status Gradle on-demand | **~0%** (track-devices streaming) | **PASS (LOLOS)** | `crates/core/src/run/device.rs` |
 | **Run Spawn Duration** | < 200 ms (call start → child proc) | **2.23 ms** (eksekusi riil card P4.2) | **2.23 ms** (core spawn proc streaming) | **PASS (LOLOS)** | Comment Card P4.2 (`t_b0bd628b`) |
