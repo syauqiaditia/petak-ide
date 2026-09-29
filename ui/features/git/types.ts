@@ -169,6 +169,7 @@ export interface GitOpResult {
   backupRef?: string | null;
   stoppedAt?: GitStopReason | null;
   newHead: string;
+  stashConflict?: boolean;
 }
 
 export interface GitBackupRef {

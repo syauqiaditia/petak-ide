@@ -439,11 +439,9 @@ fn test_rebase_conflict_stop_and_abort() {
 }
 
 #[test]
-fn test_rebase_dirty_worktree_rejected() {
+fn test_rebase_dirty_worktree_autostashes() {
     let (repo, _shas) = setup_six_commit_repo();
     let exec = SystemExec;
-
-    let old_head = head_sha(&repo);
 
     // Dirty worktree
     repo.write_file("file1.txt", "dirty uncommitted changes\n");
@@ -451,16 +449,124 @@ fn test_rebase_dirty_worktree_rejected() {
     let c3_sha = repo.git(&["rev-parse", "HEAD~3"]).trim().to_string();
     let c4_sha = repo.git(&["rev-parse", "HEAD~2"]).trim().to_string();
 
-    let res = squash(&exec, repo.path(), &[&c3_sha, &c4_sha], "should fail");
-    assert!(res.is_err(), "Must reject rebase with dirty worktree");
-    let err = res.unwrap_err();
-    assert!(err.message.contains("working tree has uncommitted changes"));
+    let res = squash(&exec, repo.path(), &[&c3_sha, &c4_sha], "c3 and c4 squashed")
+        .expect("squash on dirty worktree succeeds with autostash");
+    assert!(res.ok);
+    assert!(!res.stash_conflict);
 
-    // Check HEAD unchanged
-    assert_eq!(head_sha(&repo), old_head);
-    // Check no backup refs created
+    // Check dirty worktree restored
+    assert_eq!(
+        repo.read_file("file1.txt"),
+        "dirty uncommitted changes\n"
+    );
+    // Check backup ref created
     let list = backup_list(&exec, repo.path()).unwrap();
-    assert_eq!(list.len(), 0);
+    assert!(list.iter().any(|b| b.op == "squash"));
+}
+
+#[test]
+fn test_squash_on_dirty_tree_autostashes() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    // 3 commits
+    repo.write_file("file1.txt", "c1 content\n");
+    repo.commit("c1: initial commit");
+    repo.write_file("file2.txt", "c2 content\n");
+    repo.commit("c2: add file 2");
+    let c2_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+    repo.write_file("file3.txt", "c3 content\n");
+    repo.commit("c3: add file 3");
+    let c3_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    assert_eq!(commit_count(&repo), 3);
+
+    // Tracked change
+    repo.write_file("file1.txt", "c1 modified dirty\n");
+    // Staged change
+    repo.write_file("staged.txt", "staged content\n");
+    repo.git(&["add", "staged.txt"]);
+    // Untracked change
+    repo.write_file("untracked.txt", "untracked content\n");
+
+    let res = squash(&exec, repo.path(), &[&c2_sha, &c3_sha], "c2 and c3 squashed")
+        .expect("squash succeeds with autostash");
+    assert!(res.ok);
+    assert!(!res.stash_conflict);
+
+    // Backup ref exists
+    let list = backup_list(&exec, repo.path()).unwrap();
+    assert!(list.iter().any(|b| b.op == "squash"));
+
+    // Commit count decreased by 1
+    assert_eq!(commit_count(&repo), 2);
+
+    // Verify all 3 local changes preserved exactly
+    assert_eq!(repo.read_file("file1.txt"), "c1 modified dirty\n");
+    assert_eq!(repo.read_file("staged.txt"), "staged content\n");
+    assert_eq!(repo.read_file("untracked.txt"), "untracked content\n");
+
+    let status = repo.git(&["status", "--porcelain"]);
+    assert!(status.contains("file1.txt"));
+    assert!(status.contains("staged.txt"));
+    assert!(status.contains("untracked.txt"));
+}
+
+#[test]
+fn test_reword_on_dirty_tree() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    repo.write_file("file1.txt", "line 1\n");
+    repo.commit("commit 1");
+    repo.write_file("file2.txt", "line 2\n");
+    repo.commit("commit 2");
+    let c2_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    // Dirty tracked change in file1
+    repo.write_file("file1.txt", "line 1 dirty edit\n");
+
+    let res = reword(&exec, repo.path(), &c2_sha, "commit 2 reworded")
+        .expect("reword succeeds with autostash");
+    assert!(res.ok);
+    assert!(!res.stash_conflict);
+
+    // Verify commit message
+    let last_msg = repo.git(&["log", "-1", "--pretty=%s"]);
+    assert_eq!(last_msg.trim(), "commit 2 reworded");
+
+    // Verify dirty change preserved
+    assert_eq!(repo.read_file("file1.txt"), "line 1 dirty edit\n");
+
+    // Backup ref exists
+    let list = backup_list(&exec, repo.path()).unwrap();
+    assert!(list.iter().any(|b| b.op == "reword"));
+}
+
+#[test]
+fn test_autostash_pop_conflict_reports_flag() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    repo.write_file("file1.txt", "base line\n");
+    repo.commit("c1: base");
+
+    repo.write_file("file1.txt", "modified by commit 2\n");
+    repo.commit("c2: edit file1");
+    let c2_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    // Local uncommitted change modifies the same line in file1.txt
+    repo.write_file("file1.txt", "modified locally dirty\n");
+
+    // Drop commit 2 -> rebase runs, drops c2. When autostash is popped on top of c1,
+    // "modified locally dirty\n" conflicts with "base line\n" (because autostash patch was based on c2)
+    let res = drop(&exec, repo.path(), &[&c2_sha]).expect("drop runs");
+    assert!(res.ok);
+    assert!(res.stash_conflict, "expected stash_conflict to be true when autostash pop conflicts");
+
+    // Stash is still in git stash list so no data is lost
+    let stash_list = repo.git(&["stash", "list"]);
+    assert!(!stash_list.trim().is_empty(), "stash must be preserved in stash list");
 }
 
 #[test]

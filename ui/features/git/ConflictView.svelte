@@ -58,7 +58,7 @@
         currentBlockIdx++;
       }
     } catch (e: any) {
-      gitStore.showToast(`Gagal resolve block: ${e}`, { type: 'error' });
+      gitStore.showToast(`Failed to resolve block: ${e}`, { type: 'error' });
     }
   }
 
@@ -67,11 +67,11 @@
     try {
       await api.gitConflictWrite(gitStore.root, currentFile.path, editableContent);
       await gitStore.stageFiles([currentFile.path]);
-      gitStore.showToast(`${currentFile.path} ditandai resolved`, { type: 'success' });
+      gitStore.showToast(`${currentFile.path} marked as resolved`, { type: 'success' });
       await gitStore.loadConflicts();
       await gitStore.loadOpState();
     } catch (e: any) {
-      gitStore.showToast(`Error saving resolved file: ${e}`, { type: 'error' });
+      gitStore.showToast(`Failed to save resolved file: ${e}`, { type: 'error' });
     }
   }
 
@@ -168,7 +168,7 @@
 
       <div class="files-list">
         {#if conflictFiles.length === 0}
-          <div class="empty-files">Semua konflik telah terselesaikan! ✓</div>
+          <div class="empty-files">All conflicts resolved! ✓</div>
         {:else}
           {#each conflictFiles as f, idx}
             {@const isSelected = selectedFileIdx === idx}
@@ -201,13 +201,13 @@
         </div>
         <div class="legend-row">
           <span class="dot suggested"></span>
-          <span>Suggested (Fase 5)</span>
+          <span>Suggested (Phase 5)</span>
         </div>
       </div>
 
       {#if gitStore.toast?.backupRef}
         <div class="backup-note">
-          Backup ref dibuat: <span class="mono">{gitStore.toast.backupRef}</span>
+          Backup ref created: <span class="mono">{gitStore.toast.backupRef}</span>
         </div>
       {/if}
     </div>
@@ -216,7 +216,7 @@
     <div class="editor-main">
       {#if !currentFile}
         <div class="empty-editor">
-          Tidak ada file berkonflik. Klik "Continue {opName}" untuk menyelesaikan.
+          No conflicted files remaining. Click "Continue {opName}" to complete.
         </div>
       {:else}
         <!-- Action Toolbar -->
@@ -226,7 +226,7 @@
             <span class="block-info">
               conflict {currentBlockIdx + 1}/{currentFile.blocks.length}
               {#if currentBlock}
-                · baris {currentBlock.startLine}
+                · line {currentBlock.startLine}
               {/if}
             </span>
           {/if}
@@ -297,7 +297,7 @@
                   </div>
                 {/each}
               {:else}
-                <div class="empty-block-hint">Pilih blok konflik untuk melihat perbandingan</div>
+                <div class="empty-block-hint">Select a conflict block to view comparison</div>
               {/if}
             </div>
           </div>
@@ -313,20 +313,20 @@
             <textarea
               class="result-textarea mono"
               bind:value={editableContent}
-              placeholder="Hasil resolusi konflik..."
+              placeholder="Conflict resolution result..."
             ></textarea>
 
-            <!-- Suggested Resolution Card (Fase 5 Placeholder Disabled) -->
+            <!-- Suggested Resolution Card (Phase 5 Placeholder Disabled) -->
             <div class="suggestion-card">
               <div class="suggestion-title">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
                 </svg>
                 <span>Suggested resolution</span>
-                <span class="phase-tag">Fase 5</span>
+                <span class="phase-tag">Phase 5</span>
               </div>
               <p class="suggestion-desc">
-                AI automated resolution akan hadir di Fase 5 (Agent integration).
+                AI automated resolution will be available in Phase 5 (Agent integration).
               </p>
               <div class="suggestion-actions">
                 <button class="sug-btn" disabled>Apply suggestion</button>
@@ -351,7 +351,7 @@
                   </div>
                 {/each}
               {:else}
-                <div class="empty-block-hint">Pilih blok konflik untuk melihat perbandingan</div>
+                <div class="empty-block-hint">Select a conflict block to view comparison</div>
               {/if}
             </div>
           </div>

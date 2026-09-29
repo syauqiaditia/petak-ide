@@ -3,7 +3,7 @@
   import type { LocalBranch, RemoteBranch, TagRef, GitBackupRef } from '../../lib/api';
 
   let { onSelectTab } = $props<{
-    onSelectTab?: (tab: 'commit' | 'log') => void;
+    onSelectTab?: (tab: 'commit' | 'log' | 'conflict') => void;
   }>();
 
   let branchList = $derived(gitStore.branches);
@@ -79,6 +79,22 @@
   async function handleCheckout(branchName: string) {
     branchContextMenuVisible = false;
     await gitStore.branchCheckout(branchName);
+  }
+
+  async function handleMerge(branchName: string) {
+    branchContextMenuVisible = false;
+    const res = await gitStore.merge(branchName);
+    if (!res.ok) {
+      onSelectTab?.('conflict');
+    }
+  }
+
+  async function handleRebaseOnto(branchName: string) {
+    branchContextMenuVisible = false;
+    const res = await gitStore.rebaseOnto(branchName);
+    if (!res.ok) {
+      onSelectTab?.('conflict');
+    }
   }
 
   function openNewBranchFrom(branchName: string) {
@@ -269,6 +285,20 @@
       </button>
       <button
         class="b-menu-item"
+        disabled={selectedBranch.isCurrent}
+        onclick={() => handleMerge(selectedBranch!.name)}
+      >
+        <span>Merge into current</span>
+      </button>
+      <button
+        class="b-menu-item"
+        disabled={selectedBranch.isCurrent}
+        onclick={() => handleRebaseOnto(selectedBranch!.name)}
+      >
+        <span>Rebase current onto</span>
+      </button>
+      <button
+        class="b-menu-item"
         onclick={() => openNewBranchFrom(selectedBranch!.name)}
       >
         <span>New Branch from…</span>
@@ -357,14 +387,14 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="bp-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
         <div class="bp-modal-header">
-          <span>Hapus Branch '{selectedBranch.name}'</span>
+          <span>Delete Branch '{selectedBranch.name}'</span>
           <button class="bp-close" onclick={() => (deleteBranchModalOpen = false)}>✕</button>
         </div>
         <div class="bp-modal-body">
-          <p>Yakin ingin menghapus branch <strong>{selectedBranch.name}</strong>?</p>
+          <p>Are you sure you want to delete branch <strong>{selectedBranch.name}</strong>?</p>
           {#if (selectedBranch.ahead ?? 0) > 0}
             <div class="bp-warn">
-              ⚠️ Branch ini memiliki {selectedBranch.ahead} commit yang belum di-push!
+              ⚠️ This branch has {selectedBranch.ahead} unpushed commit(s)!
             </div>
           {/if}
           <label class="bp-checkbox-lbl">
@@ -375,7 +405,7 @@
         <div class="bp-modal-footer">
           <button class="bp-btn cancel" onclick={() => (deleteBranchModalOpen = false)}>Cancel</button>
           <button class="bp-btn danger-btn" onclick={submitDeleteBranch}>
-            Hapus Branch
+            Delete Branch
           </button>
         </div>
       </div>
@@ -388,18 +418,18 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="bp-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
         <div class="bp-modal-header">
-          <span>Reset ke Backup Ref</span>
+          <span>Reset to Backup Ref</span>
           <button class="bp-close" onclick={() => (restoreBackupModalOpen = false)}>✕</button>
         </div>
         <div class="bp-modal-body">
-          <p>Reset HEAD branch aktif ke backup <strong>{targetBackup.name}</strong>?</p>
-          <p class="bp-muted">Operasi: <code>{targetBackup.op}</code> • Subject: {targetBackup.subject || '(tanpa subject)'}</p>
-          <p class="bp-muted">Ini akan mengembalikan repositori ke kondisi tepat sebelum operasi {targetBackup.op} dijalankan.</p>
+          <p>Reset active branch HEAD to backup <strong>{targetBackup.name}</strong>?</p>
+          <p class="bp-muted">Operation: <code>{targetBackup.op}</code> • Subject: {targetBackup.subject || '(no subject)'}</p>
+          <p class="bp-muted">This will restore the repository to the exact state before {targetBackup.op} was executed.</p>
         </div>
         <div class="bp-modal-footer">
           <button class="bp-btn cancel" onclick={() => (restoreBackupModalOpen = false)}>Cancel</button>
           <button class="bp-btn confirm" onclick={submitRestoreBackup}>
-            Reset ke Backup Ini
+            Reset to This Backup
           </button>
         </div>
       </div>

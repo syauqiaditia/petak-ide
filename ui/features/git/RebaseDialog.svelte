@@ -33,6 +33,9 @@
   let draggedIdx = $state<number | null>(null);
 
   let currentItem = $derived(items[selectedIdx] ?? null);
+  let showCommitMessageEditor = $derived(
+    currentItem?.action === 'squash' || currentItem?.action === 'reword'
+  );
   let summary = $derived(summarizeRebasePlan(items));
   let validation = $derived(validateRebasePlan(items));
 
@@ -143,7 +146,7 @@
 
   async function handleStartRebasing() {
     if (!validation.valid) {
-      error = validation.error ?? 'Rencana rebase tidak valid';
+      error = validation.error ?? 'Rebase plan is invalid';
       return;
     }
 
@@ -213,7 +216,7 @@
     <!-- Dialog Body -->
     <div class="dialog-body">
       <!-- Left List & Actions -->
-      <div class="list-section">
+      <div class="list-section" class:with-editor={showCommitMessageEditor}>
         <!-- Action Toolbar -->
         <div class="action-toolbar">
           <button
@@ -346,55 +349,57 @@
 
         <!-- Info note -->
         <div class="rebase-info-box">
-          Hasil: {summary.total} commit jadi {summary.resulting}. Drag baris buat ubah urutan.
+          Result: {summary.total} commit{summary.total > 1 ? 's' : ''} into {summary.resulting}. Drag rows to reorder.
           {#if summary.squashCount > 0}
-            ({summary.squashCount} commit di-squash)
+            ({summary.squashCount} commit{summary.squashCount > 1 ? 's' : ''} squashed)
           {/if}
           {#if summary.dropCount > 0}
-            ({summary.dropCount} commit di-drop)
+            ({summary.dropCount} commit{summary.dropCount > 1 ? 's' : ''} dropped)
           {/if}
         </div>
       </div>
 
       <!-- Right Message Editor -->
-      <div class="editor-section">
-        <div class="editor-header">
-          <label for="rebase-msg-input" class="editor-title">
-            {#if currentItem?.action === 'squash'}
-              SQUASHED COMMIT MESSAGE
-            {:else if currentItem?.action === 'reword'}
-              REWORD COMMIT MESSAGE
-            {:else}
-              COMMIT MESSAGE
-            {/if}
-          </label>
-          <button
-            class="agent-btn"
-            disabled
-            title="Tersedia di fase 5"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
-            </svg>
-            <span>Write with agent</span>
-            <span class="phase-tag">Fase 5</span>
-          </button>
-        </div>
+      {#if showCommitMessageEditor}
+        <div class="editor-section">
+          <div class="editor-header">
+            <label for="rebase-msg-input" class="editor-title">
+              {#if currentItem?.action === 'squash'}
+                SQUASHED COMMIT MESSAGE
+              {:else if currentItem?.action === 'reword'}
+                REWORD COMMIT MESSAGE
+              {:else}
+                COMMIT MESSAGE
+              {/if}
+            </label>
+            <button
+              class="agent-btn"
+              disabled
+              title="Available in Phase 5"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+                <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
+              </svg>
+              <span>Write with agent</span>
+              <span class="phase-tag">Phase 5</span>
+            </button>
+          </div>
 
-        <textarea
-          id="rebase-msg-input"
-          class="msg-textarea mono"
-          value={currentItem?.message ?? ''}
-          oninput={handleMessageChange}
-          placeholder="Commit message…"
-        ></textarea>
+          <textarea
+            id="rebase-msg-input"
+            class="msg-textarea mono"
+            value={currentItem?.message ?? ''}
+            oninput={handleMessageChange}
+            placeholder="Commit message…"
+          ></textarea>
 
-        <div class="editor-footer">
-          <span class="counter">
-            Subject {subjectLen}/50 · Conventional Commits
-          </span>
+          <div class="editor-footer">
+            <span class="counter">
+              Subject {subjectLen}/50 · Conventional Commits
+            </span>
+          </div>
         </div>
-      </div>
+      {/if}
     </div>
 
     <!-- Dialog Footer -->
@@ -508,8 +513,11 @@
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #2a2c32;
     min-width: 0;
+  }
+
+  .list-section.with-editor {
+    border-right: 1px solid #2a2c32;
   }
 
   .action-toolbar {

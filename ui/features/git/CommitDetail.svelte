@@ -114,7 +114,7 @@
 
       {#if selectedCommits.every((c) => !c.pushed)}
         <div class="notice-box">
-          Local only · not pushed yet. Squash aman, ga perlu force push.
+          Local only · not pushed yet. Safe to squash without force push.
         </div>
       {:else}
         <div class="notice-box warning">

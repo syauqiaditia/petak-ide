@@ -66,6 +66,9 @@ class GitStore {
   // Remotes
   remotes = $state<GitRemote[]>([]);
 
+  // Active sub tab ('commit' | 'log' | 'conflict')
+  activeSubTab = $state<'commit' | 'log' | 'conflict'>('commit');
+
   // Toast / notification banner with Undo support
   toast = $state<{
     message: string;
@@ -471,10 +474,10 @@ class GitStore {
     if (!this.root || !backupRef) return;
     try {
       await api.gitBackupRestore(this.root, backupRef);
-      this.showToast(`Berhasil restore ke backup ${backupRef}`, { type: 'success' });
+      this.showToast(`Restored to backup ${backupRef}`, { type: 'success' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Gagal restore backup: ${e}`, { type: 'error' });
+      this.showToast(`Restore backup failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -494,10 +497,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitBackupDelete(this.root, name);
-      this.showToast(`Backup ${name} dihapus`, { type: 'info' });
+      this.showToast(`Backup ${name} deleted`, { type: 'info' });
       await this.loadBackups();
     } catch (e: any) {
-      this.showToast(`Gagal menghapus backup: ${e}`, { type: 'error' });
+      this.showToast(`Delete backup failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -505,10 +508,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitBackupRestore(this.root, name);
-      this.showToast(`Branch berhasil di-reset ke backup ${name}`, { type: 'success' });
+      this.showToast(`Branch reset to backup ${name}`, { type: 'success' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Gagal reset ke backup: ${e}`, { type: 'error' });
+      this.showToast(`Reset to backup failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -530,14 +533,21 @@ class GitStore {
     try {
       const res = await api.gitOpContinue(this.root);
       if (res.ok) {
-        this.showToast('Operasi berhasil dilanjutkan', { type: 'success', backupRef: res.backupRef });
+        if (res.stashConflict) {
+          this.showToast(
+            'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+            { type: 'warning' }
+          );
+        } else {
+          this.showToast('Operation continued successfully', { type: 'success', backupRef: res.backupRef });
+        }
       } else {
-        this.showToast('Operasi terhenti karena ada konflik', { type: 'warning' });
+        this.showToast('Operation stopped due to conflicts', { type: 'warning' });
       }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Gagal continue: ${e}`, { type: 'error' });
+      this.showToast(`Continue failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -546,10 +556,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitOpAbort(this.root);
-      this.showToast('Operasi dibatalkan (aborted)', { type: 'info' });
+      this.showToast('Operation aborted', { type: 'info' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Gagal abort: ${e}`, { type: 'error' });
+      this.showToast(`Abort failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -578,10 +588,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitFetch(this.root, remote);
-      this.showToast('Fetch selesai: update remote diterima', { type: 'success' });
+      this.showToast('Fetch completed: remote updates received', { type: 'success' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Fetch error: ${e}`, { type: 'error' });
+      this.showToast(`Fetch failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -590,14 +600,14 @@ class GitStore {
     try {
       const res = await api.gitPull(this.root, mode);
       if (res.ok) {
-        this.showToast(`Pull (${mode}) berhasil`, { type: 'success' });
+        this.showToast(`Pull (${mode}) succeeded`, { type: 'success' });
       } else {
-        this.showToast(`Pull berhenti: ada konflik`, { type: 'warning' });
+        this.showToast(`Pull stopped: conflicts detected`, { type: 'warning' });
       }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Pull error: ${e}`, { type: 'error' });
+      this.showToast(`Pull failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -611,11 +621,11 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitPush(this.root, remote, branch, setUpstream, forceWithLease);
-      this.showToast(`Push ke ${remote}/${branch} berhasil`, { type: 'success' });
+      this.showToast(`Pushed to ${remote}/${branch}`, { type: 'success' });
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Push error: ${e}`, { type: 'error' });
+      this.showToast(`Push failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -627,7 +637,7 @@ class GitStore {
       this.showToast(`Switched to branch '${name}'`, { type: 'success' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Checkout error: ${e}`, { type: 'error' });
+      this.showToast(`Checkout failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -635,10 +645,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitBranchCreate(this.root, name, startPoint);
-      this.showToast(`Branch '${name}' berhasil dibuat`, { type: 'success' });
+      this.showToast(`Branch '${name}' created`, { type: 'success' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Create branch error: ${e}`, { type: 'error' });
+      this.showToast(`Create branch failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -646,10 +656,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitBranchDelete(this.root, name, force);
-      this.showToast(`Branch '${name}' dihapus`, { type: 'info' });
+      this.showToast(`Branch '${name}' deleted`, { type: 'info' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Delete branch error: ${e}`, { type: 'error' });
+      this.showToast(`Delete branch failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -657,10 +667,10 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitBranchRename(this.root, oldName, newName);
-      this.showToast(`Branch di-rename: '${oldName}' → '${newName}'`, { type: 'success' });
+      this.showToast(`Branch renamed: '${oldName}' → '${newName}'`, { type: 'success' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Rename branch error: ${e}`, { type: 'error' });
+      this.showToast(`Rename branch failed: ${e}`, { type: 'error' });
     }
   }
 
@@ -668,14 +678,21 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitSquash(this.root, shas, message);
-      this.showToast(`Berhasil squash ${shas.length} commit`, {
-        type: 'success',
-        backupRef: res.backupRef,
-      });
+      if (res.stashConflict) {
+        this.showToast(
+          'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+          { type: 'warning' }
+        );
+      } else {
+        this.showToast(`Squashed ${shas.length} commit(s)`, {
+          type: 'success',
+          backupRef: res.backupRef,
+        });
+      }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Squash error: ${e}`, { type: 'error' });
+      this.showToast(`Squash failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -684,14 +701,21 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitReword(this.root, sha, message);
-      this.showToast(`Commit message diubah`, {
-        type: 'success',
-        backupRef: res.backupRef,
-      });
+      if (res.stashConflict) {
+        this.showToast(
+          'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+          { type: 'warning' }
+        );
+      } else {
+        this.showToast(`Commit message updated`, {
+          type: 'success',
+          backupRef: res.backupRef,
+        });
+      }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Reword error: ${e}`, { type: 'error' });
+      this.showToast(`Reword failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -700,14 +724,21 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitFixup(this.root, sha);
-      this.showToast(`Fixup ke commit sebelumnya berhasil`, {
-        type: 'success',
-        backupRef: res.backupRef,
-      });
+      if (res.stashConflict) {
+        this.showToast(
+          'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+          { type: 'warning' }
+        );
+      } else {
+        this.showToast(`Fixed up into previous commit`, {
+          type: 'success',
+          backupRef: res.backupRef,
+        });
+      }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Fixup error: ${e}`, { type: 'error' });
+      this.showToast(`Fixup failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -716,14 +747,21 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitDrop(this.root, shas);
-      this.showToast(`${shas.length} commit dihapus (dropped)`, {
-        type: 'info',
-        backupRef: res.backupRef,
-      });
+      if (res.stashConflict) {
+        this.showToast(
+          'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+          { type: 'warning' }
+        );
+      } else {
+        this.showToast(`Dropped ${shas.length} commit(s)`, {
+          type: 'info',
+          backupRef: res.backupRef,
+        });
+      }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Drop error: ${e}`, { type: 'error' });
+      this.showToast(`Drop failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -732,14 +770,14 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitReset(this.root, sha, mode);
-      this.showToast(`Reset (${mode}) ke ${sha.slice(0, 7)} berhasil`, {
+      this.showToast(`Reset (${mode}) to ${sha.slice(0, 7)}`, {
         type: 'info',
         backupRef: res.backupRef,
       });
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Reset error: ${e}`, { type: 'error' });
+      this.showToast(`Reset failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -749,14 +787,14 @@ class GitStore {
     try {
       const res = await api.gitCherryPick(this.root, shas);
       if (res.ok) {
-        this.showToast(`Cherry-pick ${shas.length} commit berhasil`, { type: 'success' });
+        this.showToast(`Cherry-picked ${shas.length} commit(s)`, { type: 'success' });
       } else {
-        this.showToast(`Cherry-pick berhenti: ada konflik`, { type: 'warning' });
+        this.showToast(`Cherry-pick stopped: conflicts detected`, { type: 'warning' });
       }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Cherry-pick error: ${e}`, { type: 'error' });
+      this.showToast(`Cherry-pick failed: ${e}`, { type: 'error' });
       throw e;
     }
   }
@@ -766,14 +804,66 @@ class GitStore {
     try {
       const res = await api.gitRevert(this.root, shas);
       if (res.ok) {
-        this.showToast(`Revert ${shas.length} commit berhasil`, { type: 'success' });
+        this.showToast(`Reverted ${shas.length} commit(s)`, { type: 'success' });
       } else {
-        this.showToast(`Revert berhenti: ada konflik`, { type: 'warning' });
+        this.showToast(`Revert stopped: conflicts detected`, { type: 'warning' });
       }
       await this.refresh();
       return res;
     } catch (e: any) {
-      this.showToast(`Revert error: ${e}`, { type: 'error' });
+      this.showToast(`Revert failed: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async merge(branch: string): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitMerge(this.root, branch);
+      if (res.ok) {
+        if (res.stashConflict) {
+          this.showToast(
+            'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+            { type: 'warning' }
+          );
+        } else {
+          this.showToast(`Merged branch '${branch}'`, { type: 'success', backupRef: res.backupRef });
+        }
+      } else {
+        this.showToast('Merge stopped: conflicts detected', { type: 'warning' });
+        await this.loadConflicts();
+        this.activeSubTab = 'conflict';
+      }
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Merge failed: ${e}`, { type: 'error' });
+      throw e;
+    }
+  }
+
+  async rebaseOnto(upstream: string): Promise<GitOpResult> {
+    if (!this.root) throw new Error('No repository open');
+    try {
+      const res = await api.gitRebaseOnto(this.root, upstream);
+      if (res.ok) {
+        if (res.stashConflict) {
+          this.showToast(
+            'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
+            { type: 'warning' }
+          );
+        } else {
+          this.showToast(`Rebased onto '${upstream}'`, { type: 'success', backupRef: res.backupRef });
+        }
+      } else {
+        this.showToast('Rebase stopped: conflicts detected', { type: 'warning' });
+        await this.loadConflicts();
+        this.activeSubTab = 'conflict';
+      }
+      await this.refresh();
+      return res;
+    } catch (e: any) {
+      this.showToast(`Rebase failed: ${e}`, { type: 'error' });
       throw e;
     }
   }

@@ -151,6 +151,8 @@ pub fn run() {
             commands::git_reset,
             commands::git_cherry_pick,
             commands::git_revert,
+            commands::git_merge,
+            commands::git_rebase_onto,
             commands::git_branch_create,
             commands::git_branch_checkout,
             commands::git_branch_delete,

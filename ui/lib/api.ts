@@ -432,6 +432,14 @@ export const api = {
     return invoke<GitOpResult>('git_revert', { root, shas });
   },
 
+  gitMerge(root: string, branch: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_merge', { root, branch });
+  },
+
+  gitRebaseOnto(root: string, upstream: string): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_rebase_onto', { root, upstream });
+  },
+
   gitBranchCreate(root: string, name: string, startPoint?: string | null): Promise<void> {
     return invoke('git_branch_create', { root, name, startPoint: startPoint ?? null });
   },

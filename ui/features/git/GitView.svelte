@@ -29,6 +29,18 @@
   let pushError = $state<string | null>(null);
 
   $effect(() => {
+    if (gitStore.activeSubTab && gitStore.activeSubTab !== activeSubTab) {
+      activeSubTab = gitStore.activeSubTab;
+    }
+  });
+
+  $effect(() => {
+    if (activeSubTab && gitStore.activeSubTab !== activeSubTab) {
+      gitStore.activeSubTab = activeSubTab;
+    }
+  });
+
+  $effect(() => {
     if (folderPath && folderPath !== gitStore.root) {
       gitStore.refresh(folderPath);
     }
@@ -68,7 +80,7 @@
       ? 'Cherry-picking'
       : gitStore.opState?.kind === 'revert'
       ? 'Reverting'
-      : 'Operasi'
+      : 'Operation'
   );
 
   let opStepText = $derived(
@@ -215,7 +227,7 @@
       <span class="op-text">
         <strong>{opKindText}</strong> {opStepText}
         {#if conflictCount > 0}
-          — <span class="op-conflict-highlight">conflict di {conflictCount} file</span>
+          — <span class="op-conflict-highlight">{conflictCount} file{conflictCount > 1 ? 's' : ''} in conflict</span>
         {:else}
           — in progress
         {/if}
@@ -226,7 +238,7 @@
       </button>
       {#if conflictCount > 0}
         <button class="banner-btn conflicts" onclick={() => (activeSubTab = 'conflict')}>
-          Buka Conflicts
+          Open Conflicts
         </button>
       {/if}
       <button class="banner-btn continue" onclick={() => gitStore.opContinue()}>

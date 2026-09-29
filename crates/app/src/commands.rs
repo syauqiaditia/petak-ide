@@ -413,6 +413,34 @@ pub async fn git_revert(
 }
 
 #[tauri::command]
+pub async fn git_merge(
+    root: String,
+    branch: String,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::merge(&exec, repo, &branch).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_rebase_onto(
+    root: String,
+    upstream: String,
+) -> Result<petak_core::git::OpResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::rebase_onto(&exec, repo, &upstream).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn git_branch_create(
     root: String,
     name: String,

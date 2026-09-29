@@ -1,7 +1,8 @@
+use std::fs;
 use std::path::Path;
 
-use crate::exec::{git, git_raw, git_with_stdin, Exec, GitError};
-use crate::git::backup::backup_create;
+use crate::exec::{git, git_raw, git_raw_with_env, git_with_stdin, Exec, GitError};
+use crate::git::backup::{backup_create, git_dir};
 use crate::git::model::{DiffFile, DiffLineKind, OpResult, ResetMode, StopKind, StopReason};
 
 pub fn stage_files(exec: &dyn Exec, repo: &Path, paths: &[&str]) -> Result<(), GitError> {
@@ -183,6 +184,7 @@ pub fn reset(
         backup_ref,
         stopped_at: None,
         new_head,
+        stash_conflict: false,
     })
 }
 
@@ -194,6 +196,7 @@ pub fn cherry_pick(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResu
             backup_ref: None,
             stopped_at: None,
             new_head,
+            stash_conflict: false,
         });
     }
 
@@ -225,6 +228,7 @@ pub fn cherry_pick(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResu
                         sha: stopped_sha,
                     }),
                     new_head,
+                    stash_conflict: false,
                 });
             } else {
                 let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
@@ -246,6 +250,7 @@ pub fn cherry_pick(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResu
         backup_ref: None,
         stopped_at: None,
         new_head,
+        stash_conflict: false,
     })
 }
 
@@ -257,6 +262,7 @@ pub fn revert(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, G
             backup_ref: None,
             stopped_at: None,
             new_head,
+            stash_conflict: false,
         });
     }
 
@@ -293,6 +299,7 @@ pub fn revert(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, G
                         sha: stopped_sha,
                     }),
                     new_head,
+                    stash_conflict: false,
                 });
             } else {
                 let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
@@ -314,6 +321,150 @@ pub fn revert(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, G
         backup_ref: None,
         stopped_at: None,
         new_head,
+        stash_conflict: false,
+    })
+}
+
+pub fn merge(exec: &dyn Exec, repo: &Path, branch: &str) -> Result<OpResult, GitError> {
+    validate_branch_name(branch)?;
+    let backup_ref = Some(backup_create(exec, repo, "merge")?);
+
+    let envs = [("GIT_EDITOR", "true")];
+    let res = git_raw_with_env(
+        exec,
+        repo,
+        &["merge", "--autostash", "--no-edit", branch],
+        &envs,
+        None,
+    )?;
+
+    if !res.status.success() {
+        let status = crate::git::status::status(exec, repo)?;
+        let is_conflict = status.entries.iter().any(|e| e.conflicted);
+        let gdir = git_dir(repo);
+        let merge_head = gdir.join("MERGE_HEAD");
+        if is_conflict || merge_head.is_file() {
+            let stopped_sha = fs::read_to_string(&merge_head)
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let new_head = git(exec, repo, &["rev-parse", "HEAD"])
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let sha = if stopped_sha.is_empty() {
+                git(exec, repo, &["rev-parse", branch]).unwrap_or_else(|_| new_head.clone())
+            } else {
+                stopped_sha
+            };
+
+            return Ok(OpResult {
+                ok: false,
+                backup_ref,
+                stopped_at: Some(StopReason {
+                    kind: StopKind::Conflict,
+                    sha,
+                }),
+                new_head,
+                stash_conflict: false,
+            });
+        }
+
+        let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
+        return Err(GitError {
+            exit_code: res.status.code(),
+            message: if stderr.is_empty() {
+                String::from_utf8_lossy(&res.stdout).trim().to_string()
+            } else {
+                stderr
+            },
+        });
+    }
+
+    let combined_out = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&res.stdout),
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let stash_conflict = combined_out.contains("Applying autostash resulted in conflicts");
+    let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    Ok(OpResult {
+        ok: true,
+        backup_ref,
+        stopped_at: None,
+        new_head,
+        stash_conflict,
+    })
+}
+
+pub fn rebase_onto(exec: &dyn Exec, repo: &Path, upstream: &str) -> Result<OpResult, GitError> {
+    validate_branch_name(upstream)?;
+    let backup_ref = Some(backup_create(exec, repo, "rebase")?);
+
+    let envs = [("GIT_EDITOR", "true")];
+    let res = git_raw_with_env(
+        exec,
+        repo,
+        &["rebase", "--autostash", upstream],
+        &envs,
+        None,
+    )?;
+
+    let gdir = git_dir(repo);
+    let rebase_merge = gdir.join("rebase-merge");
+    if rebase_merge.is_dir() {
+        let status = crate::git::status::status(exec, repo)?;
+        let is_conflict = status.entries.iter().any(|e| e.conflicted);
+        let stopped_sha = fs::read_to_string(rebase_merge.join("stopped-sha"))
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let new_head = git(exec, repo, &["rev-parse", "HEAD"])
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        return Ok(OpResult {
+            ok: false,
+            backup_ref,
+            stopped_at: Some(StopReason {
+                kind: if is_conflict {
+                    StopKind::Conflict
+                } else {
+                    StopKind::Edit
+                },
+                sha: stopped_sha,
+            }),
+            new_head,
+            stash_conflict: false,
+        });
+    }
+
+    if !res.status.success() {
+        let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
+        return Err(GitError {
+            exit_code: res.status.code(),
+            message: if stderr.is_empty() {
+                String::from_utf8_lossy(&res.stdout).trim().to_string()
+            } else {
+                stderr
+            },
+        });
+    }
+
+    let combined_out = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&res.stdout),
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let stash_conflict = combined_out.contains("Applying autostash resulted in conflicts");
+    let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    Ok(OpResult {
+        ok: true,
+        backup_ref,
+        stopped_at: None,
+        new_head,
+        stash_conflict,
     })
 }
 

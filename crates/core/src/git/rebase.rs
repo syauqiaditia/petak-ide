@@ -60,14 +60,6 @@ pub fn rebase_run_with_op(
     plan: &RebasePlan,
     op_name: &str,
 ) -> Result<OpResult, GitError> {
-    let status_out = git(exec, repo, &["status", "--porcelain"])?;
-    if !status_out.trim().is_empty() {
-        return Err(GitError {
-            exit_code: None,
-            message: "cannot rebase: working tree has uncommitted changes".to_string(),
-        });
-    }
-
     let backup_ref = if plan.backup {
         Some(backup_create(exec, repo, op_name)?)
     } else {
@@ -81,6 +73,7 @@ pub fn rebase_run_with_op(
             backup_ref,
             stopped_at: None,
             new_head,
+            stash_conflict: false,
         });
     }
 
@@ -159,10 +152,9 @@ pub fn rebase_run_with_op(
     let mut args = vec![
         "-c",
         "rebase.autoSquash=false",
-        "-c",
-        "rebase.autoStash=false",
         "rebase",
         "-i",
+        "--autostash",
     ];
     if plan.base == "--root" {
         args.push("--root");
@@ -202,6 +194,7 @@ pub fn rebase_run_with_op(
                 sha: stopped_sha,
             }),
             new_head,
+            stash_conflict: false,
         });
     }
 
@@ -219,12 +212,19 @@ pub fn rebase_run_with_op(
     }
 
     let _ = fs::remove_dir_all(&petak_rebase);
+    let combined_out = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&res.stdout),
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let stash_conflict = combined_out.contains("Applying autostash resulted in conflicts");
     let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
     Ok(OpResult {
         ok: true,
         backup_ref,
         stopped_at: None,
         new_head,
+        stash_conflict,
     })
 }
 
@@ -258,6 +258,7 @@ pub fn rebase_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitErro
                 sha: stopped_sha,
             }),
             new_head,
+            stash_conflict: false,
         });
     }
 
@@ -274,12 +275,19 @@ pub fn rebase_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitErro
     }
 
     let _ = fs::remove_dir_all(gdir.join("petak-rebase"));
+    let combined_out = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&res.stdout),
+        String::from_utf8_lossy(&res.stderr)
+    );
+    let stash_conflict = combined_out.contains("Applying autostash resulted in conflicts");
     let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
     Ok(OpResult {
         ok: true,
         backup_ref: None,
         stopped_at: None,
         new_head,
+        stash_conflict,
     })
 }
 
@@ -575,6 +583,7 @@ pub fn drop(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, Git
             backup_ref: None,
             stopped_at: None,
             new_head,
+            stash_conflict: false,
         });
     }
 
