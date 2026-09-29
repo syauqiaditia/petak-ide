@@ -44,7 +44,16 @@ function createMockEditorView(initialDoc, cursorHead = 0) {
     state: currentState,
     dispatch,
     composing: false,
+    destroy: () => {},
   };
+
+  const unsub = editorSettings.onChange((enabled) => {
+    if (!enabled) {
+      view.dispatch({ effects: [clearGhostTextEffect.of()] });
+    }
+  });
+  view.destroy = unsub;
+
   return view;
 }
 
@@ -212,6 +221,30 @@ test('settings: when ghostText is off, suggestion queries are not activated', as
   // Verify ghost text is null
   assert.equal(getActiveGhostText(state), null);
   assert.equal(queried, false);
+});
+
+test('settings: toggling ghostText off while ghost is showing clears it immediately', () => {
+  editorSettings.setGhostText(true);
+  const pos = 16;
+  const view = createMockEditorView('final x = ITextF', pos);
+
+  // Set ghost text active
+  view.dispatch({
+    effects: [setGhostTextEffect.of({ text: 'ieldPin(', from: pos })],
+  });
+  assert.equal(getActiveGhostText(view.state)?.text, 'ieldPin(');
+  assert.equal(view.state.field(ghostStateField)?.text, 'ieldPin(');
+
+  // Toggle setting off while ghost is showing
+  editorSettings.setGhostText(false);
+
+  // Ghost text must be cleared immediately without further user interaction
+  assert.equal(getActiveGhostText(view.state), null);
+  assert.equal(view.state.field(ghostStateField), null);
+
+  // Clean up
+  editorSettings.setGhostText(true);
+  view.destroy();
 });
 
 // =============================================================================

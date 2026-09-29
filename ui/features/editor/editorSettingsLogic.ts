@@ -5,10 +5,16 @@
 
 export class EditorSettings {
   ghostText: boolean = true;
+  private listeners: Set<(enabled: boolean) => void> = new Set();
 
   constructor(initialGhostText: boolean = true) {
     this.ghostText = initialGhostText;
     this.loadFromStorage();
+  }
+
+  onChange(listener: (enabled: boolean) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   loadFromStorage(): void {
@@ -29,6 +35,13 @@ export class EditorSettings {
     if (typeof localStorage !== 'undefined') {
       try {
         localStorage.setItem('editor.ghostText', String(enabled));
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.listeners) {
+      try {
+        listener(enabled);
       } catch {
         // ignore
       }

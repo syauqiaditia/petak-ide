@@ -29,7 +29,7 @@
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
   import { createEditorKeymapExtension } from './keymap';
-  import { createGhostTextExtension } from './ghostText';
+  import { createGhostTextExtension, clearGhostTextEffect } from './ghostText';
   import { editorSettings } from './editorSettings.svelte';
   import { createLspHoverExtension } from './lsp/hover';
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
@@ -489,7 +489,10 @@
         createLspAutocompleteExtension(() => currentSwappedPath),
         createLspHoverExtension(() => currentSwappedPath),
         createLspNavExtension(() => currentSwappedPath, gotoLine),
-        createGhostTextExtension({ getPath: () => currentSwappedPath }),
+        createGhostTextExtension({
+          getPath: () => currentSwappedPath,
+          isEnabled: () => editorSettings.ghostText,
+        }),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active) {
@@ -730,6 +733,13 @@
     if (view) {
       view.destroy();
       view = null;
+    }
+  });
+
+  // Watch for ghost text setting changes and clear active ghost text when disabled
+  $effect(() => {
+    if (!editorSettings.ghostText && view) {
+      view.dispatch({ effects: [clearGhostTextEffect.of()] });
     }
   });
 

@@ -92,6 +92,9 @@ export const ghostDecorationField = StateField.define<DecorationSet>({
     return Decoration.none;
   },
   update(decorations, tr) {
+    if (!editorSettings.ghostText) {
+      return Decoration.none;
+    }
     const ghost = tr.state.field(ghostStateField, false);
     if (!ghost || !ghost.text) {
       return Decoration.none;
@@ -109,6 +112,9 @@ export const ghostDecorationField = StateField.define<DecorationSet>({
 
 export function getActiveGhostText(state: EditorState): GhostState | null {
   try {
+    if (!editorSettings.ghostText) {
+      return null;
+    }
     return state.field(ghostStateField, false) || null;
   } catch {
     return null;
@@ -180,15 +186,40 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
       private timer: any = null;
       private requestId = 0;
       private destroyed = false;
+      private unsubSettings: (() => void) | null = null;
 
       readonly view: EditorView;
 
       constructor(view: EditorView) {
         this.view = view;
+        this.unsubSettings = editorSettings.onChange((enabled) => {
+          if (!enabled) {
+            if (this.timer) {
+              clearTimeout(this.timer);
+              this.timer = null;
+            }
+            this.requestId++;
+            this.view.dispatch({ effects: [clearGhostTextEffect.of()] });
+          } else {
+            this.check(this.view);
+          }
+        });
         this.check(view);
       }
 
       update(update: ViewUpdate) {
+        for (const tr of update.transactions) {
+          for (const effect of tr.effects) {
+            if (effect.is(clearGhostTextEffect)) {
+              if (this.timer) {
+                clearTimeout(this.timer);
+                this.timer = null;
+              }
+              this.requestId++;
+              return;
+            }
+          }
+        }
         if (update.docChanged || update.selectionSet || update.focusChanged) {
           this.check(update.view);
         }
@@ -198,10 +229,15 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
         if (this.destroyed) return;
         const isEnabled = options.isEnabled ? options.isEnabled() : editorSettings.ghostText;
         if (!isEnabled) {
+          if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
+          }
+          this.requestId++;
           if (getActiveGhostText(view.state)) {
             queueMicrotask(() => {
               if (!this.destroyed) {
-                view.dispatch({ effects: [setGhostTextEffect.of(null)] });
+                view.dispatch({ effects: [clearGhostTextEffect.of()] });
               }
             });
           }
@@ -267,6 +303,8 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
           if (this.requestId !== reqId || this.destroyed) return;
           if (view.state.selection.main.head !== head) return;
           if (completionStatus(view.state) === 'active') return;
+          const isEnabledNow = options.isEnabled ? options.isEnabled() : editorSettings.ghostText;
+          if (!isEnabledNow) return;
 
           const path = options.getPath ? options.getPath() : null;
           const lang = path && path.endsWith('.dart') ? 'dart' : 'dart';
@@ -278,6 +316,8 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
             if (this.requestId !== reqId || this.destroyed) return;
             if (view.state.selection.main.head !== head) return;
             if (completionStatus(view.state) === 'active') return;
+            const isStillEnabled = options.isEnabled ? options.isEnabled() : editorSettings.ghostText;
+            if (!isStillEnabled) return;
 
             // Only results with freq >= 2 per contract
             const matching = (results || []).filter((r: SuggestItem) => r.freq >= 2);
@@ -321,6 +361,10 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
         if (this.timer) {
           clearTimeout(this.timer);
           this.timer = null;
+        }
+        if (this.unsubSettings) {
+          this.unsubSettings();
+          this.unsubSettings = null;
         }
       }
     }

@@ -2,24 +2,25 @@
  * Reactive Svelte 5 store for Petak editor settings (F4).
  */
 
-import { EditorSettings } from './editorSettingsLogic.ts';
+import { editorSettings as logicSettings } from './editorSettingsLogic.ts';
 
 class EditorSettingsStore {
-  private logic = new EditorSettings();
-  ghostText = $state<boolean>(true);
+  ghostText = $state<boolean>(logicSettings.ghostText);
 
   constructor() {
-    this.ghostText = this.logic.ghostText;
+    logicSettings.onChange((enabled) => {
+      this.ghostText = enabled;
+    });
   }
 
   setGhostText(enabled: boolean) {
-    this.logic.setGhostText(enabled);
-    this.ghostText = this.logic.ghostText;
+    logicSettings.setGhostText(enabled);
+    this.ghostText = logicSettings.ghostText;
   }
 
   toggleGhostText() {
-    this.logic.toggleGhostText();
-    this.ghostText = this.logic.ghostText;
+    logicSettings.toggleGhostText();
+    this.ghostText = logicSettings.ghostText;
   }
 }
 
