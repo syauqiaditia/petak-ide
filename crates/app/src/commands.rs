@@ -1502,8 +1502,9 @@ impl RunState {
                         }
                         if let Some(aid) = app_id {
                             let adb = petak_core::run::resolve_adb_binary();
-                            let _ = std::process::Command::new(&adb)
-                                .args(["-s", &device_id, "shell", "am", "force-stop", &aid])
+                            let mut c = std::process::Command::new(&adb);
+                            petak_core::toolchain::apply_env(&mut c);
+                            let _ = c.args(["-s", &device_id, "shell", "am", "force-stop", &aid])
                                 .status();
                         }
                     }
@@ -1572,6 +1573,16 @@ pub async fn toolchain_detect(root: String) -> Result<petak_core::run::Toolchain
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn toolchain_get_config() -> Result<petak_core::toolchain::ToolchainConfig, String> {
+    Ok(petak_core::toolchain::load_config())
+}
+
+#[tauri::command]
+pub async fn toolchain_save_config(config: petak_core::toolchain::ToolchainConfig) -> Result<(), String> {
+    petak_core::toolchain::save_config(&config).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1888,8 +1899,9 @@ pub async fn run_stop(
                     }
                     if let Some(aid) = app_id {
                         let adb = petak_core::run::resolve_adb_binary();
-                        let _ = std::process::Command::new(&adb)
-                            .args(["-s", &device_id, "shell", "am", "force-stop", &aid])
+                        let mut c = std::process::Command::new(&adb);
+                        petak_core::toolchain::apply_env(&mut c);
+                        let _ = c.args(["-s", &device_id, "shell", "am", "force-stop", &aid])
                             .status();
                     }
                     Ok::<(), String>(())

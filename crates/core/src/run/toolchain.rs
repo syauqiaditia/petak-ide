@@ -21,6 +21,12 @@ pub struct Toolchain {
     pub emulator: Option<Tool>,
     pub java: Option<Tool>,
     pub xcrun: Option<Tool>,
+    #[serde(default)]
+    pub kotlin_ls: Option<Tool>,
+    #[serde(default)]
+    pub sourcekit: Option<Tool>,
+    #[serde(default)]
+    pub effective_path: Option<String>,
 }
 
 /// Detect installed developer tools and SDKs.
@@ -39,6 +45,15 @@ pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
     // 4. xcrun (macOS only)
     let xcrun = detect_xcrun(root, exec);
 
+    // 5. Kotlin Language Server
+    let kotlin_ls = detect_kotlin_ls(root, exec);
+
+    // 6. SourceKit-LSP
+    let sourcekit = detect_sourcekit(root, exec);
+
+    // 7. Effective PATH
+    let effective_path = Some(crate::toolchain::effective_path_for_root(Some(root)));
+
     Toolchain {
         flutter,
         dart,
@@ -48,13 +63,29 @@ pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
         emulator,
         java,
         xcrun,
+        kotlin_ls,
+        sourcekit,
+        effective_path,
     }
 }
 
 fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Option<Tool>) {
-    let output = match exec.run(root, "flutter", &["--version", "--machine"], &[], None) {
+    let flutter_cmd = crate::toolchain::resolve_flutter(Some(root))
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "flutter".to_string());
+
+    let output = match exec.run(root, &flutter_cmd, &["--version", "--machine"], &[], None) {
         Ok(out) if out.status.success() => out,
-        _ => return (None, None),
+        _ => {
+            if flutter_cmd != "flutter" {
+                match exec.run(root, "flutter", &["--version", "--machine"], &[], None) {
+                    Ok(out) if out.status.success() => out,
+                    _ => return (None, None),
+                }
+            } else {
+                return (None, None);
+            }
+        }
     };
 
     let v: serde_json::Value = match serde_json::from_slice(&output.stdout) {
@@ -251,6 +282,38 @@ fn detect_xcrun(root: &Path, exec: &dyn Exec) -> Option<Tool> {
         }
         _ => None,
     }
+}
+
+fn detect_kotlin_ls(root: &Path, exec: &dyn Exec) -> Option<Tool> {
+    let p = crate::toolchain::resolve_kotlin_ls()?;
+    let path_str = p.to_string_lossy().to_string();
+    let version = match exec.run(root, &path_str, &["--version"], &[], None) {
+        Ok(out) if out.status.success() => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.lines().next().map(|l| l.trim().to_string())
+        }
+        _ => None,
+    };
+    Some(Tool {
+        path: path_str,
+        version,
+    })
+}
+
+fn detect_sourcekit(root: &Path, exec: &dyn Exec) -> Option<Tool> {
+    let p = crate::toolchain::resolve_sourcekit_lsp()?;
+    let path_str = p.to_string_lossy().to_string();
+    let version = match exec.run(root, &path_str, &["--version"], &[], None) {
+        Ok(out) if out.status.success() => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.lines().next().map(|l| l.trim().to_string())
+        }
+        _ => None,
+    };
+    Some(Tool {
+        path: path_str,
+        version,
+    })
 }
 
 #[cfg(test)]

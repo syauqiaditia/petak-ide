@@ -80,6 +80,7 @@ impl Spawn for SystemSpawn {
     ) -> io::Result<Box<dyn Proc>> {
         let mut cmd = Command::new(program);
         cmd.current_dir(cwd).args(args);
+        crate::toolchain::apply_env(&mut cmd);
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -190,6 +191,7 @@ impl Exec for SystemExec {
 
         let mut cmd = Command::new(program);
         cmd.current_dir(cwd).args(args);
+        crate::toolchain::apply_env(&mut cmd);
         for (k, v) in env {
             cmd.env(k, v);
         }

@@ -58,11 +58,12 @@ pub fn run() {
                                 }
                             }
                         }
-                        petak_core::lsp::ServerEvent::Status { state } => {
+                        petak_core::lsp::ServerEvent::Status { state, reason } => {
                             let _ = app_handle_for_events.emit("lsp-status", serde_json::json!({
                                 "lang": lang.as_str(),
                                 "root": root.to_string_lossy().to_string(),
                                 "state": state,
+                                "reason": reason,
                             }));
                         }
                         petak_core::lsp::ServerEvent::Crashed => {
@@ -70,6 +71,7 @@ pub fn run() {
                                 "lang": lang.as_str(),
                                 "root": root.to_string_lossy().to_string(),
                                 "state": "crashed",
+                                "reason": Some("server process died unexpectedly"),
                             }));
                         }
                         petak_core::lsp::ServerEvent::ApplyEdit { id, edit } => {
@@ -212,6 +214,8 @@ pub fn run() {
             commands::lsp_execute_command,
             commands::lsp_apply_edit_result,
             commands::toolchain_detect,
+            commands::toolchain_get_config,
+            commands::toolchain_save_config,
             commands::devices_list,
             commands::devices_watch,
             commands::avd_list,

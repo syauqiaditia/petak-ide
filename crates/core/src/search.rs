@@ -157,6 +157,7 @@ fn grep_rg<P: AsRef<Path>>(
 
     let root_path = root.as_ref();
     let mut cmd = Command::new("rg");
+    crate::toolchain::apply_env(&mut cmd);
     cmd.arg("--json");
     if !opts.regex {
         cmd.arg("-F");

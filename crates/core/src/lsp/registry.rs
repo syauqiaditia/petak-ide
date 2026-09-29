@@ -88,17 +88,45 @@ impl Lang {
 
     /// Default command and args. Can be overridden by PETAK_LSP_<LANG> env.
     pub fn default_command(&self) -> (String, Vec<String>) {
+        self.default_command_for_root(None)
+    }
+
+    /// Default command and args, taking into account project root (e.g. FVM).
+    pub fn default_command_for_root(&self, root: Option<&Path>) -> (String, Vec<String>) {
         match self {
-            Lang::Dart => ("dart".into(), vec!["language-server".into(), "--protocol=lsp".into()]),
+            Lang::Dart => {
+                let dart_bin = crate::toolchain::resolve_dart(root)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "dart".to_string());
+                (
+                    dart_bin,
+                    vec!["language-server".into(), "--protocol=lsp".into()],
+                )
+            }
             Lang::Kotlin => {
-                let local_path = "/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server";
-                if std::path::Path::new(local_path).exists() {
-                    (local_path.into(), vec![])
+                let kotlin_bin = crate::toolchain::resolve_kotlin_ls()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| {
+                        let local_path =
+                            "/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server";
+                        if std::path::Path::new(local_path).exists() {
+                            local_path.into()
+                        } else {
+                            "kotlin-language-server".into()
+                        }
+                    });
+                (kotlin_bin, vec![])
+            }
+            Lang::Swift => {
+                let swift_bin = crate::toolchain::resolve_sourcekit_lsp()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "xcrun".to_string());
+                if swift_bin.ends_with("xcrun") {
+                    ("xcrun".into(), vec!["sourcekit-lsp".into()])
                 } else {
-                    ("kotlin-language-server".into(), vec![])
+                    (swift_bin, vec![])
                 }
             }
-            Lang::Swift => ("xcrun".into(), vec!["sourcekit-lsp".into()]),
         }
     }
 
@@ -112,16 +140,21 @@ impl Lang {
 
     /// Get command, checking env override first.
     pub fn command(&self) -> (String, Vec<String>) {
+        self.command_for_root(None)
+    }
+
+    /// Get command for project root, checking env override first.
+    pub fn command_for_root(&self, root: Option<&Path>) -> (String, Vec<String>) {
         if let Ok(val) = std::env::var(self.env_override_key()) {
             let parts: Vec<&str> = val.split_whitespace().collect();
             if parts.is_empty() {
-                return self.default_command();
+                return self.default_command_for_root(root);
             }
             let cmd = parts[0].to_string();
             let args = parts[1..].iter().map(|s| s.to_string()).collect();
             return (cmd, args);
         }
-        self.default_command()
+        self.default_command_for_root(root)
     }
 }
 
@@ -478,7 +511,14 @@ impl Registry {
         for key in to_remove {
             if let Some(managed) = servers.remove(&key) {
                 managed.server.kill();
-                (self.event_callback)(key.lang, key.root, ServerEvent::Status { state: "stopped".into() });
+                (self.event_callback)(
+                    key.lang,
+                    key.root,
+                    ServerEvent::Status {
+                        state: "stopped".into(),
+                        reason: None,
+                    },
+                );
             }
         }
     }
@@ -488,7 +528,14 @@ impl Registry {
         let mut servers = self.servers.lock().unwrap();
         for (key, managed) in servers.drain() {
             managed.server.kill();
-            (self.event_callback)(key.lang, key.root, ServerEvent::Status { state: "stopped".into() });
+            (self.event_callback)(
+                key.lang,
+                key.root,
+                ServerEvent::Status {
+                    state: "stopped".into(),
+                    reason: None,
+                },
+            );
         }
     }
 
@@ -499,8 +546,16 @@ impl Registry {
 
     fn start_server(&self, lang: Lang, root: &Path) -> Result<ManagedServer, ServerError> {
         let root_buf = root.to_path_buf();
-        (self.event_callback)(lang, root_buf.clone(), ServerEvent::Status { state: "starting".into() });
-        let (cmd, args) = lang.command();
+        (self.event_callback)(
+            lang,
+            root_buf.clone(),
+            ServerEvent::Status {
+                state: "starting".into(),
+                reason: None,
+            },
+        );
+
+        let (cmd, args) = lang.command_for_root(Some(root));
         let root_uri = path_to_uri(root);
         let config = ServerConfig {
             command: cmd,
@@ -525,12 +580,45 @@ impl Registry {
         }) {
             Ok(s) => s,
             Err(e) => {
-                (self.event_callback)(lang, root_buf, ServerEvent::Status { state: "crashed".into() });
+                let reason = match &e {
+                    ServerError::Io(_) => match lang {
+                        Lang::Dart => "dart not found — set Flutter SDK in Settings".to_string(),
+                        Lang::Kotlin => {
+                            "kotlin-language-server not found — set Kotlin Language Server in Settings"
+                                .to_string()
+                        }
+                        Lang::Swift => {
+                            "sourcekit-lsp not found — check Xcode / Command Line Tools".to_string()
+                        }
+                    },
+                    ServerError::Timeout => format!("{} initialize timed out", lang.as_str()),
+                    ServerError::ServerDied => {
+                        format!("{} server died during startup", lang.as_str())
+                    }
+                    ServerError::ResponseError { code, message } => {
+                        format!("{} initialize error {}: {}", lang.as_str(), code, message)
+                    }
+                };
+                (self.event_callback)(
+                    lang,
+                    root_buf,
+                    ServerEvent::Status {
+                        state: "failed".into(),
+                        reason: Some(reason),
+                    },
+                );
                 return Err(e);
             }
         };
 
-        (self.event_callback)(lang, root_buf, ServerEvent::Status { state: "ready".into() });
+        (self.event_callback)(
+            lang,
+            root_buf,
+            ServerEvent::Status {
+                state: "ready".into(),
+                reason: None,
+            },
+        );
 
         Ok(ManagedServer {
             server,

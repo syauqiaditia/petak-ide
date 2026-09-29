@@ -46,6 +46,7 @@ impl TermSession {
             cmd.cwd(dir);
         }
         cmd.env("TERM", "xterm-256color");
+        crate::toolchain::apply_env_pty(&mut cmd);
 
         let child = pair
             .slave

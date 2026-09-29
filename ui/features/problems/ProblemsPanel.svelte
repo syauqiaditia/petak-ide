@@ -1,11 +1,19 @@
 <script lang="ts">
   import { diagnosticsStore, type FileDiagnostic } from '../editor/lsp/diagnostics.svelte';
+  import { toolchainStore } from '../toolchain/toolchainStore.svelte';
 
   let {
     onSelectProblem = (_path: string, _line: number, _col: number) => {},
   } = $props<{
     onSelectProblem?: (path: string, line: number, col: number) => void;
   }>();
+
+  // Toolchain / LSP failures
+  let lspFailures = $derived.by(() => {
+    return Object.values(toolchainStore.lspStates).filter(
+      (s) => s.state === 'failed' || s.state === 'crashed'
+    );
+  });
 
   // Grouped by file
   let fileEntries = $derived.by(() => {
@@ -21,7 +29,7 @@
 </script>
 
 <div class="problems-panel">
-  {#if fileEntries.length === 0}
+  {#if lspFailures.length === 0 && fileEntries.length === 0}
     <div class="empty-state">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5b5f68" stroke-width="1.5" stroke-linecap="round">
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
@@ -31,6 +39,45 @@
     </div>
   {:else}
     <div class="problems-list">
+      {#if lspFailures.length > 0}
+        <div class="file-group lsp-failure-group">
+          <div class="file-header">
+            <span class="file-name">Toolchains & Language Servers</span>
+            <span class="file-badge is-error">{lspFailures.length}</span>
+          </div>
+
+          <div class="file-items">
+            {#each lspFailures as failure}
+              <div class="problem-row is-error">
+                <div class="severity-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f07a74" stroke-width="2.2" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+
+                <div class="problem-text">
+                  <span class="problem-msg">
+                    <strong>{failure.lang.toUpperCase()} LSP:</strong> {failure.reason || 'Server failed to start'}
+                  </span>
+                  <span class="problem-source">[toolchain]</span>
+                </div>
+
+                <div class="problem-action">
+                  <button
+                    class="open-settings-btn"
+                    onclick={() => (toolchainStore.settingsModalOpen = true)}
+                  >
+                    Open Settings
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       {#each fileEntries as file (file.path)}
         <div class="file-group">
           <div class="file-header">
@@ -138,6 +185,24 @@
     border-radius: 10px;
     background: #23252b;
     color: #8b8f98;
+  }
+  .file-badge.is-error {
+    background: #441e20;
+    color: #f07a74;
+  }
+  .open-settings-btn {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #232a38;
+    border: 1px solid #374661;
+    color: #8eb7ff;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .open-settings-btn:hover {
+    background: #2e394d;
+    color: #b9d3ff;
   }
   .file-items {
     display: flex;

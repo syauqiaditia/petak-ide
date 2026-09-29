@@ -15,6 +15,7 @@
   import { gitStore } from './features/git/git.svelte.ts';
   import { runStore } from './features/run/runStore.svelte';
   import { mirrorStore } from './features/mirror/mirrorStore.svelte';
+  import { toolchainStore } from './features/toolchain/toolchainStore.svelte';
 
   let GitViewComponent = $state<any>(null);
   let DevicesPanelComponent = $state<any>(null);
@@ -146,6 +147,24 @@
       terminalComponent?.openUsages?.();
     }, 20);
   }
+
+  async function openToolchains() {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openToolchains?.();
+    }, 20);
+  }
+
+  $effect(() => {
+    if (toolchainStore.settingsModalOpen) {
+      toolchainStore.settingsModalOpen = false;
+      openToolchains();
+    }
+  });
 
   async function handleTabSave(path: string, _content: string) {
     if (runStore.hotReloadOnSave && runStore.state === 'running' && runStore.runId !== null) {
@@ -1232,6 +1251,9 @@
   }
 
   onMount(async () => {
+    // 0. Initialize toolchain store for real LSP status & configs
+    toolchainStore.init(currentFolderPath).catch(() => {});
+
     // 1. Listen for filesystem events
     try {
       unlistenFs = await api.onFsChanged((payload) => {
@@ -1525,6 +1547,7 @@
     {fileType}
     {cursorInfo}
     onOpenProblems={openProblems}
+    onOpenToolchains={openToolchains}
   />
 
   {#if isPreview}

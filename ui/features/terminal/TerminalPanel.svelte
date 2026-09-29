@@ -10,6 +10,8 @@
   import RunPanel from '../run/RunPanel.svelte';
   import BuildPanel from '../run/BuildPanel.svelte';
   import LogcatPanel from '../run/LogcatPanel.svelte';
+  import ToolchainsPanel from '../toolchain/ToolchainsPanel.svelte';
+  import { toolchainStore } from '../toolchain/toolchainStore.svelte';
   import { runStore } from '../run/runStore.svelte';
   import { logcatStore } from '../run/logcatStore.svelte';
 
@@ -33,13 +35,15 @@
 
   let tabs = $state<TabItem[]>([]);
   let activeTabId = $state<number | null>(null);
-  let activeSection = $state<'run' | 'build' | 'logcat' | 'problems' | 'usages' | 'terminal'>(
+  let activeSection = $state<'run' | 'build' | 'logcat' | 'problems' | 'usages' | 'terminal' | 'toolchains'>(
     typeof window !== 'undefined' && window.location.search.includes('tab=run')
       ? 'run'
       : typeof window !== 'undefined' && window.location.search.includes('tab=build')
       ? 'build'
       : typeof window !== 'undefined' && window.location.search.includes('tab=logcat')
       ? 'logcat'
+      : typeof window !== 'undefined' && window.location.search.includes('tab=toolchains')
+      ? 'toolchains'
       : 'terminal'
   );
 
@@ -223,6 +227,10 @@
     activeSection = 'usages';
   }
 
+  export function openToolchains() {
+    activeSection = 'toolchains';
+  }
+
   export function openTerminal() {
     activeSection = 'terminal';
     setTimeout(() => {
@@ -237,7 +245,7 @@
     }, 10);
   }
 
-  export function getActiveSection(): 'problems' | 'terminal' | 'run' | 'build' | 'logcat' | 'usages' {
+  export function getActiveSection(): 'problems' | 'terminal' | 'run' | 'build' | 'logcat' | 'usages' | 'toolchains' {
     return activeSection;
   }
 
@@ -383,6 +391,20 @@
         </div>
       {/if}
 
+      <div
+        class="panel-tab toolchains-tab"
+        class:active={activeSection === 'toolchains'}
+        onclick={() => (activeSection = 'toolchains')}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') activeSection = 'toolchains'; }}
+      >
+        <span class="tab-label">Toolchains</span>
+        {#if toolchainStore.currentLspSummary.state === 'failed'}
+          <span class="tab-badge is-error" title={toolchainStore.currentLspSummary.details}>!</span>
+        {/if}
+      </div>
+
       <div class="tab-divider"></div>
 
       {#each tabs as tab (tab.id)}
@@ -502,6 +524,12 @@
           </div>
         {/if}
       </div>
+    </div>
+  {/if}
+
+  {#if activeSection === 'toolchains'}
+    <div class="panel-body toolchains-body">
+      <ToolchainsPanel root={folderPath} />
     </div>
   {/if}
 </div>
