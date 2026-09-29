@@ -16,10 +16,10 @@
     {#if status === 'live'}
       <span class="device-badge-live" title="Full interactive control (touch, swipe, scroll, keyboard, navigation)">
         <span class="dot-live"></span>
-        Interactive
+        Android — Interactive
       </span>
     {:else if status === 'view-only'}
-      <span class="device-badge-viewonly" title="iOS screen mirroring (view only)">View only</span>
+      <span class="device-badge-viewonly" title="iOS screen mirroring (view only)">iOS — View only</span>
     {:else if status === 'connecting'}
       <span class="device-badge-connecting">
         <span class="dot-connecting"></span>
@@ -141,7 +141,6 @@
     border: 1px solid #4a3d22;
     padding: 1px 6px;
     border-radius: 4px;
-    text-transform: uppercase;
     letter-spacing: 0.3px;
   }
   .device-badge-connecting {
