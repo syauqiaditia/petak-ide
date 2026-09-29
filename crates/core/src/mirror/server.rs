@@ -229,4 +229,80 @@ mod tests {
         let abstract_name = format!("localabstract:scrcpy_{}", hex);
         assert_eq!(abstract_name, "localabstract:scrcpy_12345678");
     }
+
+    #[test]
+    fn test_scrcpy_server_drop_cleans_resources() {
+        use std::process::Output;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        struct MockProc {
+            killed: Arc<AtomicBool>,
+        }
+        impl Proc for MockProc {
+            fn stdin_write(&mut self, _data: &[u8]) -> io::Result<()> {
+                Ok(())
+            }
+            fn kill(&mut self) -> io::Result<()> {
+                self.killed.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+            fn pid(&self) -> Option<u32> {
+                Some(1234)
+            }
+        }
+
+        struct MockExec {
+            forward_removed: Arc<AtomicBool>,
+        }
+        impl Exec for MockExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<Output> {
+                if args.contains(&"forward") && args.contains(&"--remove") {
+                    self.forward_removed.store(true, Ordering::SeqCst);
+                }
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+                Ok(Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let killed = Arc::new(AtomicBool::new(false));
+        let forward_removed = Arc::new(AtomicBool::new(false));
+
+        let server = ScrcpyServer {
+            device: "emulator-5554".to_string(),
+            scid: 0x1234,
+            port: 27183,
+            server_proc: Box::new(MockProc {
+                killed: killed.clone(),
+            }),
+            exec: Box::new(MockExec {
+                forward_removed: forward_removed.clone(),
+            }),
+        };
+
+        // When dropped (or cleared from MirrorState on app quit),
+        // ScrcpyServer must kill the server proc and remove adb forward
+        drop(server);
+
+        assert!(
+            killed.load(Ordering::SeqCst),
+            "server process must be killed on drop"
+        );
+        assert!(
+            forward_removed.load(Ordering::SeqCst),
+            "adb forward must be removed on drop"
+        );
+    }
 }
