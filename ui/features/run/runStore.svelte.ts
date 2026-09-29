@@ -70,6 +70,10 @@ class RunStore {
     if (!folderPath) return;
     this.root = folderPath;
 
+    try {
+      if (await api.testEnv('PETAK_NO_RUNSTORE')) return;
+    } catch (_) {}
+
     // Load configs
     try {
       const file: RunConfigFile = await api.runConfigsLoad(folderPath);
@@ -87,6 +91,7 @@ class RunStore {
 
     // Load devices & start watch
     try {
+      if (await api.testEnv('PETAK_NO_DEVICES')) return;
       await api.devicesWatch();
       const list = await api.devicesList();
       this.updateDevices(list);

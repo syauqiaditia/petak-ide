@@ -1,0 +1,16 @@
+=== Cold Start Component Isolation Benchmark ===
+Date: 2026-09-29T07:55:22.390Z
+App: /tmp/Petak-p4-test.app
+Load: vm.loadavg: { 3.78 3.97 3.83 }
+Battery: Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=22937699)	89%; discharging; 4:43 remaining present: true
+Uptime: 14:53  up 1 day,  1:26, 2 users, load averages: 3.78 3.97 3.83
+
+| Komponen / Konfigurasi | Warmup (ms) | Runs (ms) | Median (ms) | Delta vs Eager |
+| --- | --- | --- | --- | --- |
+| 1. Eager Baseline (All eager) | 2011 | 519, 536, 577, 578, 658 | 577 | 0 ms |
+| 2. PETAK_NO_RUNSTORE=1 | 641 | 571, 596, 665, 1332, 1379 | 665 | +88 ms |
+| 3. PETAK_NO_DEVICES=1 | 1398 | 519, 611, 617, 651, 1032 | 617 | +40 ms |
+| 4. PETAK_NO_GIT=1 | 560 | 512, 518, 526, 557, 596 | 526 | -51 ms |
+| 5. PETAK_NO_AUTOOPEN=1 | 615 | 497, 540, 549, 582, 607 | 549 | -28 ms |
+| 6. Post-fix (Lazy + Deferred) | 503 | 531, 583, 600, 653, 727 | 600 | +23 ms |

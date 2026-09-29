@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-APP="/Users/uqi/petak/target/release/bundle/macos/Petak.app"
+APP="${PETAK_APP_PATH:-${APP:-/Users/uqi/petak/target/release/bundle/macos/Petak.app}}"
 OUT="/tmp/petak-coldstart.out"
 
 echo "=== Cold Start Benchmark ==="

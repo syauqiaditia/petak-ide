@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 
-const APP = '/Users/uqi/petak/target/release/bundle/macos/Petak.app';
+const APP = process.env.PETAK_APP_PATH || process.env.APP || process.argv[2] || '/Users/uqi/petak/target/release/bundle/macos/Petak.app';
 const OUT = '/tmp/petak-coldstart.out';
 
 function sleep(ms) {
@@ -21,7 +21,8 @@ async function measureOne() {
   fs.writeFileSync(OUT, '');
   const tStart = Date.now();
 
-  execSync(`open -n --stdout ${OUT} ${APP}`);
+  const extraArgs = process.env.OPEN_ARGS ? ` ${process.env.OPEN_ARGS} ` : ' ';
+  execSync(`open -n --stdout ${OUT}${extraArgs}"${APP}"`);
 
   let readyTime = null;
   const timeoutMs = 8000;

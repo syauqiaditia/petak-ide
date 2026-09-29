@@ -13,9 +13,18 @@
   import { registerKeymap, showIntentions, type SearchMode } from './features/search/keymap';
   import { applyWorkspaceEdit } from './features/editor/lsp/applyEdit';
   import { gitStore } from './features/git/git.svelte.ts';
-  import GitView from './features/git/GitView.svelte';
   import { runStore } from './features/run/runStore.svelte';
-  import DevicesPanel from './features/run/DevicesPanel.svelte';
+
+  let GitViewComponent = $state<any>(null);
+  let DevicesPanelComponent = $state<any>(null);
+
+  $effect(() => {
+    if (activeRailTab === 'git' && !GitViewComponent) {
+      import('./features/git/GitView.svelte').then((m) => (GitViewComponent = m.default));
+    } else if (activeRailTab === 'devices' && !DevicesPanelComponent) {
+      import('./features/run/DevicesPanel.svelte').then((m) => (DevicesPanelComponent = m.default));
+    }
+  });
 
   let currentFolderPath = $state('');
   let rootEntries = $state<Entry[]>([]);
@@ -264,6 +273,8 @@
     activeFilename ? 'Plain Text' : 'Empty'
   );
 
+  let isEditorReady = $state(false);
+
   async function openFolder(folderPath: string) {
     try {
       const list = await api.listDir(folderPath);
@@ -271,10 +282,18 @@
       rootEntries = list;
       recentFolders = await api.addRecentFolder(folderPath);
       await api.watchRoot(folderPath);
-      api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
-      api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
-      gitStore.refresh(folderPath).catch((e) => console.warn('gitStore refresh error:', e));
-      runStore.init(folderPath).catch((e) => console.warn('runStore init error:', e));
+      const isEager = !!(await api.testEnv('PETAK_EAGER_INIT'));
+      const noGit = !!(await api.testEnv('PETAK_NO_GIT'));
+      if (!noGit) {
+        api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
+      }
+      if (isEditorReady || isEager) {
+        api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
+        if (!noGit) {
+          gitStore.refresh(folderPath).catch((e) => console.warn('gitStore refresh error:', e));
+        }
+        runStore.init(folderPath).catch((e) => console.warn('runStore init error:', e));
+      }
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
     } catch (e) {
       console.error('Failed to open folder:', folderPath, e);
@@ -611,10 +630,26 @@
 
   async function onEditorReady(view: EditorView) {
     console.log('[PETAK] Editor ready.');
+    isEditorReady = true;
     try {
       await api.markReady(Date.now());
     } catch (e) {
       console.warn('api.markReady error:', e);
+    }
+
+    const initBackground = () => {
+      if (currentFolderPath) {
+        api.indexBuild(currentFolderPath).catch((e) => console.warn('indexBuild error:', e));
+        gitStore.refresh(currentFolderPath).catch((e) => console.warn('gitStore refresh error:', e));
+      }
+      const initialRoot = currentFolderPath || (recentFolders && recentFolders[0]) || '/workspace';
+      runStore.init(initialRoot).catch((e) => console.warn('runStore init error:', e));
+    };
+
+    if (typeof (window as any).requestIdleCallback === 'function') {
+      (window as any).requestIdleCallback(initBackground, { timeout: 1000 });
+    } else {
+      setTimeout(initBackground, 60);
     }
 
     try {
@@ -1153,6 +1188,7 @@
     // 2. Load recent folders and auto-open first recent folder if available (deferred so initial window/editor paint is instant)
     setTimeout(async () => {
       try {
+        if (await api.testEnv('PETAK_NO_AUTOOPEN')) return;
         const recents = await api.recentFolders();
         recentFolders = recents;
         if (recents && recents.length > 0) {
@@ -1203,11 +1239,8 @@
       console.warn('api.testMode error:', e);
     }
 
-    // 5. Initialize runStore and handle preview query params
+    // 5. Handle preview query params
     setTimeout(() => {
-      const initialRoot = currentFolderPath || (recentFolders && recentFolders[0]) || '/workspace';
-      runStore.init(initialRoot).catch((e) => console.warn('runStore init error:', e));
-
       if (typeof window !== 'undefined') {
         const params = new URLSearchParams(window.location.search);
         if (params.has('running') || window.location.search.includes('preview-running')) {
@@ -1274,7 +1307,9 @@
     <div class="center-area">
       <div class="workspace-area" class:hidden-view={activeRailTab !== 'project' && activeRailTab !== 'devices'}>
         {#if activeRailTab === 'devices'}
-          <DevicesPanel />
+          {#if DevicesPanelComponent}
+            <DevicesPanelComponent />
+          {/if}
         {:else}
           <FileTree
             bind:this={fileTreeComponent}
@@ -1297,8 +1332,8 @@
         />
       </div>
 
-      {#if activeRailTab === 'git'}
-        <GitView folderPath={currentFolderPath} />
+      {#if activeRailTab === 'git' && GitViewComponent}
+        <GitViewComponent folderPath={currentFolderPath} />
       {/if}
 
       {#if terminalOpen && TerminalPanelComponent}
