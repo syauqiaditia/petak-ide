@@ -51,6 +51,12 @@ pub fn parse_simctl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::E
                 _ => DeviceState::Booting,
             };
 
+            let flutter_id = if state == DeviceState::Online {
+                Some(item.udid.clone())
+            } else {
+                None
+            };
+
             devices.push(Device {
                 id: item.udid,
                 name: item.name,
@@ -58,6 +64,9 @@ pub fn parse_simctl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::E
                 kind: DeviceKind::Simulator,
                 state,
                 sdk: sdk.clone(),
+                flutter_id,
+                group: Some("simulator".to_string()),
+                transport: None,
             });
         }
     }
@@ -191,6 +200,20 @@ pub fn parse_devicectl_devices(json_str: &str) -> Result<Vec<Device>, serde_json
                 DeviceState::Offline
             };
 
+            let flutter_id = if state == DeviceState::Online {
+                Some(item.identifier.clone())
+            } else {
+                None
+            };
+            let transport = if name.to_lowercase().contains("wireless")
+                || name.to_lowercase().contains("wifi")
+                || item.identifier.contains(':')
+            {
+                Some("wifi".to_string())
+            } else {
+                Some("usb".to_string())
+            };
+
             devices.push(Device {
                 id: item.identifier,
                 name,
@@ -198,6 +221,9 @@ pub fn parse_devicectl_devices(json_str: &str) -> Result<Vec<Device>, serde_json
                 kind: DeviceKind::Physical,
                 state,
                 sdk,
+                flutter_id,
+                group: Some("physical".to_string()),
+                transport,
             });
         }
     }

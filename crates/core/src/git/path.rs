@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use serde::{Deserialize, Serialize};
 
 use crate::exec::{git, git_with_stdin, Exec, GitError};
 use crate::git::diff::{diff_staged, parse_diff};
@@ -341,6 +342,74 @@ pub fn commit_paths(
     let mut args = vec!["commit", "-F", "-", "--"];
     args.extend_from_slice(rels);
     git_with_stdin(exec, repo, &args, Some(message.as_bytes()))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommitSelectedResult {
+    pub sha: String,
+}
+
+/// Commits only selected paths using `git commit -m msg -- <paths>`.
+/// Stages the specified paths and commits only those paths.
+/// Returns the commit SHA.
+pub fn commit_selected(
+    exec: &dyn Exec,
+    repo: &Path,
+    message: &str,
+    paths: &[&str],
+) -> Result<CommitSelectedResult, GitError> {
+    if paths.is_empty() {
+        return Err(GitError {
+            exit_code: None,
+            message: "No paths specified for commit".to_string(),
+        });
+    }
+
+    // Ensure selected paths are staged
+    crate::git::ops::stage_files(exec, repo, paths)?;
+
+    let mut args = vec!["commit", "-F", "-", "--"];
+    args.extend_from_slice(paths);
+    git_with_stdin(exec, repo, &args, Some(message.as_bytes()))?;
+
+    let sha = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    Ok(CommitSelectedResult { sha })
+}
+
+/// Delete an untracked file, moving it to trash.
+/// Errors if the file is tracked in git or does not exist.
+pub fn delete_untracked(
+    exec: &dyn Exec,
+    repo: &Path,
+    rel: &str,
+) -> Result<(), GitError> {
+    crate::fsops::resolve_in_root(repo, rel).map_err(|e| GitError {
+        exit_code: None,
+        message: e.to_string(),
+    })?;
+
+    let full_path = repo.join(rel);
+    if !full_path.exists() {
+        return Err(GitError {
+            exit_code: None,
+            message: format!("File '{}' does not exist", rel),
+        });
+    }
+
+    // Verify it is not tracked in git
+    let ls_out = git(exec, repo, &["ls-files", "--", rel]).unwrap_or_default();
+    if !ls_out.trim().is_empty() {
+        return Err(GitError {
+            exit_code: None,
+            message: format!("Cannot delete '{}': file is tracked by git", rel),
+        });
+    }
+
+    // Trash the untracked file
+    crate::fsops::trash(repo, &[rel]).map_err(|e| GitError {
+        exit_code: None,
+        message: e.to_string(),
+    })
 }
 
 #[cfg(test)]

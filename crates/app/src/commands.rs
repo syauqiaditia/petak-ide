@@ -121,6 +121,8 @@ pub async fn watch_root(
         if let Ok(store) = lh_store_dir(&app_for_prune, &root_for_prune) {
             let _ = petak_core::local_history::prune(&store, 7, 200 * 1024 * 1024);
         }
+        let file = recent_projects_file_path(&app_for_prune);
+        let _ = petak_core::recent::recent_projects_add(&file, &root_for_prune);
     });
 
     let app_handle = app.clone();
@@ -164,9 +166,23 @@ pub async fn watch_root(
     Ok(())
 }
 
+pub fn recent_projects_file_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    if let Ok(app_data) = app.path().app_data_dir() {
+        app_data.join("recent_projects.json")
+    } else {
+        petak_core::recent::default_recent_projects_path()
+            .unwrap_or_else(|| std::path::PathBuf::from("recent_projects.json"))
+    }
+}
+
 #[tauri::command]
 pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let folder = app.dialog().file().blocking_pick_folder();
+    if let Some(ref p) = folder {
+        let p_str = p.to_string();
+        let file = recent_projects_file_path(&app);
+        let _ = petak_core::recent::recent_projects_add(&file, &p_str);
+    }
     Ok(folder.map(|p| p.to_string()))
 }
 
@@ -1733,9 +1749,19 @@ pub async fn run_start(
 
     match config.kind {
         petak_core::run::RunKind::Flutter => {
+            let check_dev_id = device_id.clone();
+            let runnable_id = tauri::async_runtime::spawn_blocking(move || {
+                let exec = petak_core::exec::SystemExec;
+                let snapshot = petak_core::run::devices_snapshot(&exec);
+                let runnable = petak_core::run::check_device_runnable(&snapshot, &check_dev_id)?;
+                Ok::<String, String>(runnable.flutter_id.clone().unwrap_or(check_dev_id))
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+
             let spawn = petak_core::exec::SystemSpawn;
             let root_path = std::path::PathBuf::from(&root);
-            let dev_id = device_id.clone();
+            let dev_id = runnable_id;
             let cfg = config.clone();
 
             let flutter_run = tauri::async_runtime::spawn_blocking(move || {
@@ -2329,6 +2355,10 @@ pub async fn git_rollback(
     tauri::async_runtime::spawn_blocking(move || {
         let store = lh_store_dir(&app, &root)?;
         let root_path = std::path::Path::new(&root);
+        let exec = petak_core::exec::SystemExec;
+
+        // Create backup ref if HEAD exists
+        let _ = petak_core::git::backup_create(&exec, root_path, "rollback");
 
         // 1. Snapshot each file before rollback
         for rel in &rels {
@@ -2738,6 +2768,146 @@ pub async fn git_unstage(root: String, path: String) -> Result<(), String> {
         let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
         petak_core::git::unstage_files(&exec, repo, &[path.as_str()])
             .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ──────────── Batch 3 commands ────────────
+
+fn resolve_cmd_root(app: &tauri::AppHandle, root_opt: Option<String>) -> Result<String, String> {
+    if let Some(r) = root_opt {
+        if !r.trim().is_empty() {
+            return Ok(r);
+        }
+    }
+    if let Some(curr_root_state) = app.try_state::<CurrentProjectRoot>() {
+        if let Ok(lock) = curr_root_state.0.lock() {
+            if let Some(ref r) = *lock {
+                return Ok(r.clone());
+            }
+        }
+    }
+    Err("Project root not specified and no project currently open".to_string())
+}
+
+#[tauri::command]
+pub async fn recent_projects_list(
+    app: tauri::AppHandle,
+) -> Result<Vec<petak_core::recent::RecentProject>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = recent_projects_file_path(&app);
+        petak_core::recent::recent_projects_list(&file).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn recent_projects_add(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<Vec<petak_core::recent::RecentProject>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = recent_projects_file_path(&app);
+        petak_core::recent::recent_projects_add(&file, &path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn recent_projects_remove(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<Vec<petak_core::recent::RecentProject>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = recent_projects_file_path(&app);
+        petak_core::recent::recent_projects_remove(&file, &path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stage_paths(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    let repo_root = resolve_cmd_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&repo_root);
+        for p in &paths {
+            let _ = petak_core::fsops::resolve_in_root(repo, p).map_err(|e| e.to_string())?;
+        }
+        let slices: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+        petak_core::git::stage_files(&exec, repo, &slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_unstage_paths(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    let repo_root = resolve_cmd_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&repo_root);
+        for p in &paths {
+            let _ = petak_core::fsops::resolve_in_root(repo, p).map_err(|e| e.to_string())?;
+        }
+        let slices: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+        petak_core::git::unstage_files(&exec, repo, &slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_commit_selected(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    message: String,
+    paths: Vec<String>,
+) -> Result<petak_core::git::CommitSelectedResult, String> {
+    let repo_root = resolve_cmd_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&repo_root);
+        for p in &paths {
+            let _ = petak_core::fsops::resolve_in_root(repo, p).map_err(|e| e.to_string())?;
+        }
+        let slices: Vec<&str> = paths.iter().map(|s| s.as_str()).collect();
+        petak_core::git::commit_selected(&exec, repo, &message, &slices).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_delete_untracked(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    path: String,
+) -> Result<(), String> {
+    let repo_root = resolve_cmd_root(&app, root)?;
+    let app_handle = app.clone();
+    let root_clone = repo_root.clone();
+    let path_clone = path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let root_p = std::path::Path::new(&root_clone);
+        let full_p = root_p.join(&path_clone);
+        if let Ok(store) = lh_store_dir(&app_handle, &root_clone) {
+            snapshot_file_if_small(&store, &full_p, &path_clone, "before_delete_untracked");
+        }
+        let exec = petak_core::exec::SystemExec;
+        petak_core::git::delete_untracked(&exec, root_p, &path_clone).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

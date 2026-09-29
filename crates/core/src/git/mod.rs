@@ -35,8 +35,9 @@ pub use ops::{
     stage_files, stage_hunk, unstage_files, unstage_hunk, CheckoutResult,
 };
 pub use path::{
-    add_to_gitignore, blame, commit_paths, diff_path_head, diff_path_staged, diff_path_vs_ref,
-    file_at_ref, parse_blame_porcelain, path_history, rollback_paths,
+    add_to_gitignore, blame, commit_paths, commit_selected, delete_untracked, diff_path_head,
+    diff_path_staged, diff_path_vs_ref, file_at_ref, parse_blame_porcelain, path_history,
+    rollback_paths, CommitSelectedResult,
 };
 pub use rebase::{
     drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,
