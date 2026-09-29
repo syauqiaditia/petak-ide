@@ -58,9 +58,10 @@ pub fn is_valid_device_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == ':' || c == '-')
 }
 
-/// Validate AVD name (regex: ^[A-Za-z0-9._:-]+$)
+/// Validate AVD name (regex: ^[A-Za-z0-9._:-]+$, cannot start with '-')
 pub fn is_valid_avd_name(name: &str) -> bool {
     !name.is_empty()
+        && !name.starts_with('-')
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == ':' || c == '-')
@@ -420,6 +421,8 @@ mod tests {
         assert!(is_valid_avd_name("Pixel_7_API_34"));
         assert!(!is_valid_avd_name(""));
         assert!(!is_valid_avd_name("avd; echo hacked"));
+        assert!(!is_valid_avd_name("--foo"));
+        assert!(!is_valid_avd_name("-avd"));
     }
 
     #[test]
@@ -557,6 +560,8 @@ emulator-5558          unauthorized transport_id:5
 
         let err = build_emulator_args("bad;injection", true);
         assert!(err.is_err());
+        let err_flag = build_emulator_args("--foo", true);
+        assert!(err_flag.is_err());
     }
 
     #[test]

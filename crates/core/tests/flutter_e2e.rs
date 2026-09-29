@@ -55,6 +55,7 @@ struct CleanupGuard {
 impl Drop for CleanupGuard {
     fn drop(&mut self) {
         println!("--- Running cleanup guard ---");
+        std::env::remove_var("PETAK_RECORD_DAEMON_FILE");
         if let Some(ref dev_id) = self.device_id {
             println!(
                 "Killing emulator {} via 'adb -s {} emu kill'...",
@@ -96,11 +97,14 @@ fn test_flutter_run_e2e_real_emulator() {
     let screens_dir = repo_root.join("docs/phase4/screens");
     fs::create_dir_all(&screens_dir).expect("Failed to create docs/phase4/screens directory");
 
-    let fixture_path = manifest_dir.join("tests/fixtures/flutter_machine.txt");
-    if let Some(parent) = fixture_path.parent() {
-        fs::create_dir_all(parent).expect("Failed to create fixtures directory");
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| repo_root.join("target"));
+    let record_path = target_dir.join("tmp/flutter_e2e_daemon.txt");
+    if let Some(parent) = record_path.parent() {
+        fs::create_dir_all(parent).expect("Failed to create daemon record directory");
     }
-    std::env::set_var("PETAK_RECORD_DAEMON_FILE", fixture_path.to_str().unwrap());
+    std::env::set_var("PETAK_RECORD_DAEMON_FILE", &record_path);
 
     let adb = resolve_adb();
     let main_dev_file = root_sample.join("lib/main_dev.dart");
