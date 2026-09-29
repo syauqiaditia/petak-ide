@@ -14,15 +14,27 @@
   import { applyWorkspaceEdit } from './features/editor/lsp/applyEdit';
   import { gitStore } from './features/git/git.svelte.ts';
   import { runStore } from './features/run/runStore.svelte';
+  import { mirrorStore } from './features/mirror/mirrorStore.svelte';
 
   let GitViewComponent = $state<any>(null);
   let DevicesPanelComponent = $state<any>(null);
+  let DeviceMirrorPanelComponent = $state<any>(null);
+  let isAgentPanelOpen = $state<boolean>(
+    typeof window !== 'undefined' &&
+    (window.location.search.includes('agent=true') || window.location.search.includes('preview-agent'))
+  );
 
   $effect(() => {
     if (activeRailTab === 'git' && !GitViewComponent) {
       import('./features/git/GitView.svelte').then((m) => (GitViewComponent = m.default));
     } else if (activeRailTab === 'devices' && !DevicesPanelComponent) {
       import('./features/run/DevicesPanel.svelte').then((m) => (DevicesPanelComponent = m.default));
+    }
+  });
+
+  $effect(() => {
+    if (mirrorStore.isOpen && !DeviceMirrorPanelComponent) {
+      import('./features/mirror/DeviceMirrorPanel.svelte').then((m) => (DeviceMirrorPanelComponent = m.default));
     }
   });
 
@@ -81,6 +93,14 @@
     setTimeout(() => {
       terminalComponent?.openRun?.();
     }, 20);
+
+    // Auto-show device mirror on run to mobile target if setting enabled
+    if (mirrorStore.autoShowOnRun) {
+      const dev = runStore.selectedDevice;
+      if (dev && (dev.platform === 'android' || dev.platform === 'ios')) {
+        mirrorStore.open(dev.id);
+      }
+    }
   }
 
   async function openBuild() {
@@ -1327,8 +1347,55 @@
         } else if (window.location.search.includes('tab=logcat')) {
           openLogcat();
         }
+
+        if (params.has('mirror') || window.location.search.includes('preview-mirror')) {
+          const stateParam = params.get('mirror-state') || 'live';
+          const devParam = params.get('mirror-device') || 'Pixel 8 · API 35';
+          const isViewOnlyParam = params.get('mirror-viewonly') === 'true' || stateParam === 'view-only';
+
+          mirrorStore.isOpen = true;
+          mirrorStore.deviceName = devParam;
+          mirrorStore.serial = 'emulator-5554';
+          mirrorStore.isViewOnly = isViewOnlyParam;
+
+          if (stateParam === 'empty') {
+            mirrorStore.status = 'empty';
+            mirrorStore.deviceName = 'No Device Selected';
+            mirrorStore.serial = '';
+          } else if (stateParam === 'connecting') {
+            mirrorStore.status = 'connecting';
+          } else if (stateParam === 'disconnected') {
+            mirrorStore.status = 'disconnected';
+            mirrorStore.disconnectReason = 'USB connection was lost or emulator exited. Re-plug device to resume stream.';
+          } else if (stateParam === 'error') {
+            mirrorStore.status = 'error';
+            mirrorStore.errorMessage = 'exit code 1: adb forward failed: device unauthorized. Please check USB debugging prompt on phone.';
+          } else if (stateParam === 'view-only') {
+            mirrorStore.status = 'view-only';
+            mirrorStore.deviceName = 'iPhone 15 Pro';
+            mirrorStore.isViewOnly = true;
+            mirrorStore.fps = 60;
+          } else {
+            mirrorStore.status = 'live';
+            mirrorStore.fps = 59;
+            mirrorStore.latencyMs = 38;
+          }
+        }
+
+        if (params.has('agent') || window.location.search.includes('preview-agent')) {
+          isAgentPanelOpen = true;
+        }
       }
     }, 50);
+
+    // Global keyboard shortcut for Mirror (Cmd-Shift-D / Ctrl-Shift-D)
+    const handleKeydownMirror = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        e.preventDefault();
+        mirrorStore.toggle();
+      }
+    };
+    window.addEventListener('keydown', handleKeydownMirror);
   });
 
   onDestroy(() => {
@@ -1411,6 +1478,44 @@
         />
       {/if}
     </div>
+
+    <!-- Slot: Phase 5 Agent Panel (reserved, collapsible, immediately LEFT of Device Mirror) -->
+    {#if isAgentPanelOpen}
+      <div class="agent-panel-slot">
+        <div class="agent-toolbar-top">
+          <span class="agent-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
+            </svg>
+            Claude Code
+          </span>
+          <span class="agent-badge">Working</span>
+          <button class="agent-close-btn" onclick={() => (isAgentPanelOpen = false)} aria-label="Close Agent Panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="agent-body-content">
+          <div class="agent-card">
+            <span class="agent-goal-label">Goal:</span> Fix discount calculation when voucher is applied.
+          </div>
+          <div class="agent-status-text">
+            Checking <code>CheckoutViewModel.kt</code> and running verification on Pixel 8.
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div class="agent-panel-slot-empty" style="display: none;" aria-hidden="true"></div>
+    {/if}
+
+    <!-- Outer Right Dock: Device Mirror Panel (full height) -->
+    {#if mirrorStore.isOpen && DeviceMirrorPanelComponent}
+      <DeviceMirrorPanelComponent
+        onSelectDevice={() => (activeRailTab = 'devices')}
+        onOpenLogcat={openLogcat}
+      />
+    {/if}
   </div>
 
   <StatusBar
@@ -1471,10 +1576,97 @@
   .hidden-view {
     display: none !important;
   }
+  .agent-panel-slot {
+    width: 390px;
+    flex-shrink: 0;
+    background: #141518;
+    border-left: 1px solid #26282d;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+    z-index: 4;
+  }
+  .agent-toolbar-top {
+    height: 40px;
+    flex-shrink: 0;
+    padding: 0 12px;
+    background: #141518;
+    border-bottom: 1px solid #26282d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .agent-title {
+    font-weight: 600;
+    color: #e8b45a;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .agent-badge {
+    font-size: 11px;
+    color: #e8b45a;
+    background: #2e2717;
+    border: 1px solid #4a3d22;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .agent-close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: #8b8f98;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    margin-left: auto;
+    transition: background 0.1s, color 0.1s;
+  }
+  .agent-close-btn:hover {
+    background: #23252b;
+    color: #e6e7ea;
+  }
+  .agent-body-content {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 12px;
+    color: #8b8f98;
+  }
+  .agent-card {
+    background: #1a1b1f;
+    border: 1px solid #26282d;
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .agent-goal-label {
+    color: #e6e7ea;
+    font-weight: 500;
+  }
+  .agent-status-text {
+    color: #d8d9dc;
+    line-height: 18px;
+  }
+  .agent-status-text code {
+    font-family: 'JetBrains Mono', monospace;
+    background: #1f2a3d;
+    color: #6ea8ff;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
   .preview-badge {
     position: fixed;
-    bottom: 28px;
-    right: 12px;
+    bottom: 32px;
+    left: 60px;
     background: rgba(232, 180, 90, 0.15);
     border: 1px solid #e8b45a;
     color: #e8b45a;

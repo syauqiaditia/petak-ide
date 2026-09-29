@@ -1,5 +1,6 @@
 <script lang="ts">
   import { runStore } from '../features/run/runStore.svelte';
+  import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
 
@@ -200,6 +201,23 @@
     </svg>
   </button>
 
+  <div class="divider"></div>
+
+  <!-- Device Mirror Toggle Button -->
+  <button
+    class="mirror-toggle-btn"
+    class:active={mirrorStore.isOpen}
+    aria-label="Toggle Device Mirror"
+    title="Toggle Device Mirror (⌘⇧D)"
+    onclick={() => mirrorStore.toggle()}
+  >
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <rect x="5" y="2" width="14" height="20" rx="3"></rect>
+      <path d="M10 18h4"></path>
+    </svg>
+    <span>Mirror</span>
+  </button>
+
   <div class="spacer" data-tauri-drag-region></div>
 
   <!-- Search -->
@@ -384,6 +402,30 @@
   }
   .stop-btn:disabled:hover {
     background: transparent;
+  }
+  .mirror-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #8b8f98;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mirror-toggle-btn:hover {
+    color: #d8d9dc;
+    background: #1e2025;
+  }
+  .mirror-toggle-btn.active {
+    background: #1f2a3d;
+    border-color: #2a3d5e;
+    color: #6ea8ff;
   }
   .spinning svg {
     animation: spin 1s linear infinite;

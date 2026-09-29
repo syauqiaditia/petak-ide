@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head><title>VideoDecoder Support Check</title></head>
+<body>
+<div id="result">Checking...</div>
+<script>
+async function check() {
+  const el = document.getElementById('result');
+  if (typeof VideoDecoder === 'undefined') {
+    el.innerText = 'VideoDecoder: UNDEFINED';
+    return;
+  }
+  const codecs = [
+    'avc1.42001f', // Baseline H.264
+    'avc1.4d001f', // Main H.264
+    'avc1.64002a', // High H.264
+    'vp8',
+    'vp09.00.10.08',
+    'av01.0.04M.08',
+    'hvc1.1.6.L93.B0' // HEVC/H.265
+  ];
+  const results = {};
+  for (const c of codecs) {
+    try {
+      const res = await VideoDecoder.isConfigSupported({ codec: c });
+      results[c] = res.supported;
+    } catch (e) {
+      results[c] = 'error: ' + e.message;
+    }
+  }
+  el.innerText = JSON.stringify(results, null, 2);
+  console.log('VIDEODECODER_CHECK_RESULT:', JSON.stringify(results));
+  window.__CHECK_RESULTS__ = results;
+}
+check();
+</script>
+</body>
+</html>
