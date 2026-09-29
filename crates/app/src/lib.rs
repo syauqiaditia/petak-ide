@@ -12,6 +12,7 @@ pub fn run() {
         .manage(Mutex::new(None::<petak_core::search::FileIndex>))
         .manage(commands::TermSessions::default())
         .manage(commands::TermCounter::new(1))
+        .manage(commands::RunState::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } = event {
                 if let Some(state) = window.try_state::<commands::TermSessions>() {
@@ -23,6 +24,9 @@ pub fn run() {
                 }
                 if let Some(reg) = window.try_state::<commands::AppRegistry>() {
                     reg.shutdown_all();
+                }
+                if let Some(run_state) = window.try_state::<commands::RunState>() {
+                    run_state.shutdown_all();
                 }
             }
         })
@@ -197,6 +201,22 @@ pub fn run() {
             commands::lsp_code_action_resolve,
             commands::lsp_execute_command,
             commands::lsp_apply_edit_result,
+            commands::toolchain_detect,
+            commands::devices_list,
+            commands::devices_watch,
+            commands::avd_list,
+            commands::emulator_start,
+            commands::run_configs_load,
+            commands::run_configs_save,
+            commands::run_start,
+            commands::run_reload,
+            commands::run_stop,
+            commands::logcat_start,
+            commands::logcat_stop,
+            commands::gradle_sync,
+            commands::gradle_status,
+            commands::gradle_stop,
+            commands::open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

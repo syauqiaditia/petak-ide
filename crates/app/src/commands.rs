@@ -1286,3 +1286,603 @@ pub async fn lsp_apply_edit_result(
     .await
     .map_err(|e| e.to_string())?
 }
+
+// -----------------------------------------------------------------------------
+// Run, Toolchain, Devices, Logcat State & Commands
+// -----------------------------------------------------------------------------
+
+pub enum ActiveRun {
+    Flutter(std::sync::Arc<Mutex<petak_core::run::FlutterRun>>),
+    Gradle {
+        device_id: String,
+        app_id: Option<String>,
+        proc: Option<std::sync::Arc<Mutex<Box<dyn petak_core::exec::Proc>>>>,
+    },
+}
+
+pub struct RunStateInner {
+    pub next_run_id: std::sync::atomic::AtomicU32,
+    pub runs: Mutex<std::collections::HashMap<u32, ActiveRun>>,
+    pub logcat: Mutex<Option<petak_core::run::Logcat>>,
+    pub device_watcher: Mutex<Option<Box<dyn petak_core::exec::Proc>>>,
+    pub cached_devices: Mutex<Vec<petak_core::run::Device>>,
+    pub spawned_emulators: Mutex<Vec<Box<dyn petak_core::exec::Proc>>>,
+}
+
+#[derive(Clone)]
+pub struct RunState {
+    pub inner: std::sync::Arc<RunStateInner>,
+}
+
+impl Default for RunState {
+    fn default() -> Self {
+        Self {
+            inner: std::sync::Arc::new(RunStateInner {
+                next_run_id: std::sync::atomic::AtomicU32::new(1),
+                runs: Mutex::new(std::collections::HashMap::new()),
+                logcat: Mutex::new(None),
+                device_watcher: Mutex::new(None),
+                cached_devices: Mutex::new(Vec::new()),
+                spawned_emulators: Mutex::new(Vec::new()),
+            }),
+        }
+    }
+}
+
+impl RunState {
+    pub fn shutdown_all(&self) {
+        if let Ok(mut runs) = self.inner.runs.lock() {
+            for (_, run) in runs.drain() {
+                match run {
+                    ActiveRun::Flutter(fr) => {
+                        if let Ok(mut f) = fr.lock() {
+                            let _ = f.stop();
+                        }
+                    }
+                    ActiveRun::Gradle { proc, device_id, app_id } => {
+                        if let Some(p) = proc {
+                            if let Ok(mut pr) = p.lock() {
+                                let _ = pr.kill();
+                            }
+                        }
+                        if let Some(aid) = app_id {
+                            let adb = petak_core::run::resolve_adb_binary();
+                            let _ = std::process::Command::new(&adb)
+                                .args(["-s", &device_id, "shell", "am", "force-stop", &aid])
+                                .status();
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Ok(mut lc) = self.inner.logcat.lock() {
+            if let Some(mut logcat) = lc.take() {
+                let _ = logcat.stop();
+            }
+        }
+
+        if let Ok(mut watcher) = self.inner.device_watcher.lock() {
+            if let Some(mut proc) = watcher.take() {
+                let _ = proc.kill();
+            }
+        }
+
+        if let Ok(mut emus) = self.inner.spawned_emulators.lock() {
+            for mut emu in emus.drain(..) {
+                let _ = emu.kill();
+            }
+        }
+    }
+}
+
+fn ensure_device_watcher(app: &tauri::AppHandle, state: &RunState) {
+    let mut watcher_guard = match state.inner.device_watcher.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if watcher_guard.is_some() {
+        return;
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<petak_core::run::Device>>();
+    let spawn = petak_core::exec::SystemSpawn;
+    match petak_core::run::watch_devices(&spawn, tx) {
+        Ok(proc) => {
+            *watcher_guard = Some(proc);
+            drop(watcher_guard);
+
+            let app_handle = app.clone();
+            let state_clone = state.clone();
+            std::thread::spawn(move || {
+                while let Ok(devices) = rx.recv() {
+                    if let Ok(mut cached) = state_clone.inner.cached_devices.lock() {
+                        *cached = devices.clone();
+                    }
+                    let _ = app_handle.emit("devices-changed", devices);
+                }
+            });
+        }
+        Err(e) => {
+            eprintln!("Warning: could not start device watcher: {}", e);
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn toolchain_detect(root: String) -> Result<petak_core::run::Toolchain, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        Ok(petak_core::run::detect(std::path::Path::new(&root), &exec))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn devices_list(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RunState>,
+) -> Result<Vec<petak_core::run::Device>, String> {
+    ensure_device_watcher(&app, &state);
+
+    let cached = state
+        .inner
+        .cached_devices
+        .lock()
+        .map(|c| c.clone())
+        .unwrap_or_default();
+
+    if !cached.is_empty() {
+        return Ok(cached);
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let adb = petak_core::run::resolve_adb_binary();
+        if let Ok(out) = exec.run(std::path::Path::new("."), &adb, &["devices", "-l"], &[], None) {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                return petak_core::run::parse_adb_devices(&stdout);
+            }
+        }
+        Vec::new()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn devices_watch(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RunState>,
+) -> Result<(), String> {
+    ensure_device_watcher(&app, &state);
+    if let Ok(cached) = state.inner.cached_devices.lock() {
+        if !cached.is_empty() {
+            let _ = app.emit("devices-changed", cached.clone());
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn avd_list() -> Result<Vec<petak_core::run::Avd>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        Ok(petak_core::run::list_avds(&exec))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn emulator_start(
+    state: tauri::State<'_, RunState>,
+    avd: String,
+    headless: Option<bool>,
+) -> Result<(), String> {
+    let state_inner = state.inner.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let is_headless = headless.unwrap_or_else(|| {
+            #[cfg(unix)]
+            {
+                std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err()
+            }
+            #[cfg(not(unix))]
+            {
+                false
+            }
+        });
+        let spawn = petak_core::exec::SystemSpawn;
+        let proc = petak_core::run::start_emulator(&spawn, &avd, is_headless)
+            .map_err(|e| e.to_string())?;
+
+        if let Ok(mut emus) = state_inner.spawned_emulators.lock() {
+            emus.push(proc);
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn run_configs_load(root: String) -> Result<petak_core::run::RunConfigFile, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::run::load_run_config(std::path::Path::new(&root))
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn run_configs_save(
+    root: String,
+    file: petak_core::run::RunConfigFile,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::run::save_run_config(std::path::Path::new(&root), &file)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunEventPayload {
+    pub run_id: u32,
+    pub event: petak_core::run::RunEvent,
+}
+
+#[tauri::command]
+pub async fn run_start(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RunState>,
+    root: String,
+    config: petak_core::run::RunConfig,
+    device_id: String,
+) -> Result<u32, String> {
+    let run_id = state
+        .inner
+        .next_run_id
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let app_handle = app.clone();
+
+    std::thread::spawn(move || {
+        while let Ok(event) = event_rx.recv() {
+            let _ = app_handle.emit(
+                "run-event",
+                RunEventPayload {
+                    run_id,
+                    event,
+                },
+            );
+        }
+    });
+
+    match config.kind {
+        petak_core::run::RunKind::Flutter => {
+            let spawn = petak_core::exec::SystemSpawn;
+            let root_path = std::path::PathBuf::from(&root);
+            let dev_id = device_id.clone();
+            let cfg = config.clone();
+
+            let flutter_run = tauri::async_runtime::spawn_blocking(move || {
+                petak_core::run::FlutterRun::start(&spawn, &root_path, &cfg, &dev_id, event_tx)
+                    .map_err(|e| e.to_string())
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+
+            if let Ok(mut runs) = state.inner.runs.lock() {
+                runs.insert(
+                    run_id,
+                    ActiveRun::Flutter(std::sync::Arc::new(Mutex::new(flutter_run))),
+                );
+            }
+            Ok(run_id)
+        }
+        petak_core::run::RunKind::Gradle => {
+            let root_path = std::path::PathBuf::from(&root);
+            let module = config.module.clone().unwrap_or_else(|| ":app".to_string());
+            let variant = config.variant.clone().unwrap_or_else(|| "debug".to_string());
+            let dev_id = device_id.clone();
+
+            let resolved_app_id = config
+                .application_id
+                .clone()
+                .or_else(|| petak_core::run::find_application_id(&root_path));
+            let resolved_activity = config
+                .activity
+                .clone()
+                .or_else(|| petak_core::run::find_launcher_activity(&root_path));
+
+            if let Ok(mut runs) = state.inner.runs.lock() {
+                runs.insert(
+                    run_id,
+                    ActiveRun::Gradle {
+                        device_id: dev_id.clone(),
+                        app_id: resolved_app_id.clone(),
+                        proc: None,
+                    },
+                );
+            }
+
+            std::thread::spawn(move || {
+                let spawn = petak_core::exec::SystemSpawn;
+                let exec = petak_core::exec::SystemExec;
+
+                let _ = event_tx.send(petak_core::run::RunEvent::State {
+                    state: petak_core::run::AppState::Installing,
+                });
+
+                match petak_core::run::install(&spawn, &root_path, &module, &variant, event_tx.clone()) {
+                    Ok(()) => {
+                        let _ = event_tx.send(petak_core::run::RunEvent::Output {
+                            stream: petak_core::run::OutputStream::Stdout,
+                            line: "Gradle install finished. Launching activity...".to_string(),
+                        });
+
+                        match petak_core::run::launch(
+                            &exec,
+                            &dev_id,
+                            resolved_app_id.as_deref(),
+                            resolved_activity.as_deref(),
+                            Some(&root_path),
+                        ) {
+                            Ok(()) => {
+                                let pid = resolved_app_id
+                                    .as_deref()
+                                    .and_then(|id| petak_core::run::pidof(&exec, &dev_id, id).ok().flatten());
+
+                                let _ = event_tx.send(petak_core::run::RunEvent::AppStarted {
+                                    app_id: resolved_app_id.clone(),
+                                    devtools_uri: None,
+                                    vm_service_uri: None,
+                                    pid,
+                                });
+
+                                let _ = event_tx.send(petak_core::run::RunEvent::State {
+                                    state: petak_core::run::AppState::Running,
+                                });
+                            }
+                            Err(e) => {
+                                let _ = event_tx.send(petak_core::run::RunEvent::Output {
+                                    stream: petak_core::run::OutputStream::Stderr,
+                                    line: format!("Failed to launch Android activity: {}", e),
+                                });
+                                let _ = event_tx.send(petak_core::run::RunEvent::Stopped {
+                                    code: Some(1),
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = event_tx.send(petak_core::run::RunEvent::Output {
+                            stream: petak_core::run::OutputStream::Stderr,
+                            line: format!("Gradle install failed: {}", e),
+                        });
+                        let _ = event_tx.send(petak_core::run::RunEvent::Stopped {
+                            code: Some(1),
+                        });
+                    }
+                }
+            });
+
+            Ok(run_id)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn run_reload(
+    state: tauri::State<'_, RunState>,
+    run_id: u32,
+    full: bool,
+) -> Result<petak_core::run::ReloadResult, String> {
+    let run_handle = {
+        let guard = state.inner.runs.lock().map_err(|e| e.to_string())?;
+        match guard.get(&run_id) {
+            Some(ActiveRun::Flutter(fr)) => fr.clone(),
+            Some(ActiveRun::Gradle { .. }) => {
+                return Err("Hot reload is only supported for Flutter applications".to_string());
+            }
+            None => return Err(format!("Run session {} not found", run_id)),
+        }
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut flutter = run_handle.lock().map_err(|e| e.to_string())?;
+        flutter.reload(full).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn run_stop(
+    state: tauri::State<'_, RunState>,
+    run_id: u32,
+) -> Result<(), String> {
+    let run_opt = {
+        let mut guard = state.inner.runs.lock().map_err(|e| e.to_string())?;
+        guard.runs.remove(&run_id)
+    };
+
+    if let Some(run) = run_opt {
+        match run {
+            ActiveRun::Flutter(fr) => {
+                tauri::async_runtime::spawn_blocking(move || {
+                    let mut flutter = fr.lock().map_err(|e| e.to_string())?;
+                    flutter.stop().map_err(|e| e.to_string())
+                })
+                .await
+                .map_err(|e| e.to_string())??;
+            }
+            ActiveRun::Gradle { proc, device_id, app_id } => {
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Some(p) = proc {
+                        if let Ok(mut pr) = p.lock() {
+                            let _ = pr.kill();
+                        }
+                    }
+                    if let Some(aid) = app_id {
+                        let adb = petak_core::run::resolve_adb_binary();
+                        let _ = std::process::Command::new(&adb)
+                            .args(["-s", &device_id, "shell", "am", "force-stop", &aid])
+                            .status();
+                    }
+                    Ok::<(), String>(())
+                })
+                .await
+                .map_err(|e| e.to_string())??;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn logcat_start(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RunState>,
+    device_id: String,
+    app_id: Option<String>,
+) -> Result<(), String> {
+    {
+        let mut lc_guard = state.inner.logcat.lock().map_err(|e| e.to_string())?;
+        if let Some(mut existing) = lc_guard.take() {
+            let _ = existing.stop();
+        }
+    }
+
+    let dev_id = device_id.clone();
+    let app_handle = app.clone();
+    let state_inner = state.inner.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let pid = if let Some(ref aid) = app_id {
+            if let Ok(p) = aid.parse::<u32>() {
+                Some(p)
+            } else if !aid.trim().is_empty() {
+                let exec = petak_core::exec::SystemExec;
+                let mut resolved = None;
+                for _ in 0..5 {
+                    if let Ok(Some(p)) = petak_core::run::pidof(&exec, &dev_id, aid) {
+                        resolved = Some(p);
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                resolved
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<petak_core::run::LogLine>>();
+        let spawn = petak_core::exec::SystemSpawn;
+        let logcat = petak_core::run::Logcat::start(&spawn, &dev_id, pid, tx)
+            .map_err(|e| e.to_string())?;
+
+        if let Ok(mut lc_guard) = state_inner.logcat.lock() {
+            *lc_guard = Some(logcat);
+        }
+
+        std::thread::spawn(move || {
+            while let Ok(batch) = rx.recv() {
+                let _ = app_handle.emit("logcat-batch", batch);
+            }
+        });
+
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn logcat_stop(state: tauri::State<'_, RunState>) -> Result<(), String> {
+    let mut lc_guard = state.inner.logcat.lock().map_err(|e| e.to_string())?;
+    if let Some(mut lc) = lc_guard.take() {
+        let _ = lc.stop();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn gradle_sync(root: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::run::sync(&exec, std::path::Path::new(&root))
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn gradle_status(
+    app: tauri::AppHandle,
+    root: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let running = petak_core::run::gradle_daemon_running(&exec, std::path::Path::new(&root))
+            .map_err(|e| e.to_string())?;
+        let _ = app.emit("gradle-daemon", serde_json::json!({ "running": running }));
+        Ok(running)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn gradle_stop(
+    app: tauri::AppHandle,
+    root: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::run::gradle_stop(&exec, std::path::Path::new(&root))
+            .map_err(|e| e.to_string())?;
+        let _ = app.emit("gradle-daemon", serde_json::json!({ "running": false }));
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("Invalid URL: only http and https protocols are allowed".to_string());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        let mut cmd = std::process::Command::new("open");
+        #[cfg(target_os = "windows")]
+        let mut cmd = {
+            let mut c = std::process::Command::new("cmd");
+            c.args(["/c", "start", ""]);
+            c
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        let mut cmd = std::process::Command::new("xdg-open");
+
+        cmd.arg(&url);
+        cmd.spawn()
+            .map_err(|e| format!("Failed to open URL: {}", e))?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

@@ -147,6 +147,132 @@ export interface LspStatusPayload {
   state: 'starting' | 'ready' | 'stopped' | 'crashed';
 }
 
+// -----------------------------------------------------------------------------
+// Run, Toolchain, Device, Logcat Types
+// -----------------------------------------------------------------------------
+
+export interface Tool {
+  path: string;
+  version?: string | null;
+}
+
+export interface Toolchain {
+  flutter?: Tool | null;
+  dart?: Tool | null;
+  fvm: boolean;
+  androidHome?: string | null;
+  adb?: Tool | null;
+  emulator?: Tool | null;
+  java?: Tool | null;
+  xcrun?: Tool | null;
+}
+
+export type DevicePlatform = 'android' | 'ios' | 'web' | 'desktop';
+export type DeviceKind = 'physical' | 'emulator' | 'simulator';
+export type DeviceState = 'online' | 'offline' | 'unauthorized' | 'booting';
+
+export interface Device {
+  id: string;
+  name: string;
+  platform: DevicePlatform;
+  kind: DeviceKind;
+  state: DeviceState;
+  sdk?: string | null;
+}
+
+export interface Avd {
+  name: string;
+}
+
+export type RunKind = 'flutter' | 'gradle';
+
+export interface RunConfig {
+  name: string;
+  kind: RunKind;
+  target?: string | null;
+  flavor?: string | null;
+  dartDefines?: string[];
+  module?: string | null;
+  variant?: string | null;
+  applicationId?: string | null;
+  activity?: string | null;
+}
+
+export interface RunConfigFile {
+  selected: string;
+  configs: RunConfig[];
+}
+
+export type AppState = 'building' | 'installing' | 'running' | 'reloading' | 'stopped';
+export type OutputStream = 'stdout' | 'stderr';
+
+export interface BuildError {
+  file: string;
+  line: number;
+  col?: number | null;
+  message: string;
+}
+
+export interface ReloadResult {
+  fullRestart: boolean;
+  ok: boolean;
+  ms: number;
+  message?: string | null;
+}
+
+export type RunEvent =
+  | { type: 'state'; state: AppState }
+  | { type: 'output'; stream: OutputStream; line: string }
+  | {
+      type: 'appStarted';
+      appId?: string | null;
+      devtoolsUri?: string | null;
+      vmServiceUri?: string | null;
+      pid?: number | null;
+    }
+  | { type: 'progress'; id: string; message: string; finished: boolean }
+  | {
+      type: 'reloaded';
+      fullRestart: boolean;
+      ok: boolean;
+      ms: number;
+      message?: string | null;
+    }
+  | {
+      type: 'buildError';
+      file: string;
+      line: number;
+      col?: number | null;
+      message: string;
+    }
+  | { type: 'stopped'; code?: number | null };
+
+export interface RunEventPayload {
+  runId: number;
+  event: RunEvent;
+}
+
+export type LogLevel = 'V' | 'D' | 'I' | 'W' | 'E' | 'F';
+
+export interface LogLine {
+  ts: string;
+  pid: number;
+  tid: number;
+  level: LogLevel;
+  tag: string;
+  msg: string;
+}
+
+export interface StackLink {
+  file: string;
+  line: number;
+  col?: number | null;
+}
+
+export interface GradleDaemonPayload {
+  running: boolean;
+}
+
 import type {
   GitRepoStatus,
   GitDiffOpts,
@@ -580,5 +706,151 @@ export const api = {
 
   onLspApplyEdit(cb: (payload: LspApplyEditPayload) => void): Promise<UnlistenFn> {
     return listen<LspApplyEditPayload>('lsp-apply-edit', (event) => cb(event.payload));
+  },
+
+  // ---------------------------------------------------------------------------
+  // Run, Toolchain, Device, Logcat Methods
+  // ---------------------------------------------------------------------------
+
+  toolchainDetect(root: string): Promise<Toolchain> {
+    return invoke<Toolchain>('toolchain_detect', { root });
+  },
+
+  devicesList(): Promise<Device[]> {
+    return invoke<Device[]>('devices_list');
+  },
+
+  devicesWatch(): Promise<void> {
+    return invoke('devices_watch');
+  },
+
+  avdList(): Promise<Avd[]> {
+    return invoke<Avd[]>('avd_list');
+  },
+
+  emulatorStart(avd: string, headless?: boolean): Promise<void> {
+    return invoke('emulator_start', { avd, headless: headless ?? null });
+  },
+
+  runConfigsLoad(root: string): Promise<RunConfigFile> {
+    return invoke<RunConfigFile>('run_configs_load', { root });
+  },
+
+  runConfigsSave(root: string, file: RunConfigFile): Promise<void> {
+    return invoke('run_configs_save', { root, file });
+  },
+
+  runStart(root: string, config: RunConfig, deviceId: string): Promise<number> {
+    return invoke<number>('run_start', { root, config, deviceId });
+  },
+
+  runReload(runId: number, full: boolean): Promise<ReloadResult> {
+    return invoke<ReloadResult>('run_reload', { runId, full });
+  },
+
+  runStop(runId: number): Promise<void> {
+    return invoke('run_stop', { runId });
+  },
+
+  logcatStart(deviceId: string, appId?: string): Promise<void> {
+    return invoke('logcat_start', { deviceId, appId: appId ?? null });
+  },
+
+  logcatStop(): Promise<void> {
+    return invoke('logcat_stop');
+  },
+
+  gradleSync(root: string): Promise<string> {
+    return invoke<string>('gradle_sync', { root });
+  },
+
+  gradleStatus(root: string): Promise<boolean> {
+    return invoke<boolean>('gradle_status', { root });
+  },
+
+  gradleStop(root: string): Promise<void> {
+    return invoke('gradle_stop', { root });
+  },
+
+  openUrl(url: string): Promise<void> {
+    return invoke('open_url', { url });
+  },
+
+  // Event Listeners
+  onRunEvent(cb: (payload: RunEventPayload) => void): Promise<UnlistenFn> {
+    return listen<RunEventPayload>('run-event', (event) => cb(event.payload));
+  },
+
+  onLogcatBatch(cb: (payload: LogLine[]) => void): Promise<UnlistenFn> {
+    return listen<LogLine[]>('logcat-batch', (event) => cb(event.payload));
+  },
+
+  onDevicesChanged(cb: (payload: Device[]) => void): Promise<UnlistenFn> {
+    return listen<Device[]>('devices-changed', (event) => cb(event.payload));
+  },
+
+  onGradleDaemon(cb: (payload: GradleDaemonPayload) => void): Promise<UnlistenFn> {
+    return listen<GradleDaemonPayload>('gradle-daemon', (event) => cb(event.payload));
+  },
+
+  // Aliases matching snake_case naming
+  run_start(root: string, config: RunConfig, deviceId: string): Promise<number> {
+    return api.runStart(root, config, deviceId);
+  },
+
+  run_reload(runId: number, full: boolean): Promise<ReloadResult> {
+    return api.runReload(runId, full);
+  },
+
+  run_stop(runId: number): Promise<void> {
+    return api.runStop(runId);
+  },
+
+  devices_watch(): Promise<void> {
+    return api.devicesWatch();
+  },
+
+  devices_list(): Promise<Device[]> {
+    return api.devicesList();
+  },
+
+  avd_list(): Promise<Avd[]> {
+    return api.avdList();
+  },
+
+  emulator_start(avd: string, headless?: boolean): Promise<void> {
+    return api.emulatorStart(avd, headless);
+  },
+
+  run_configs_load(root: string): Promise<RunConfigFile> {
+    return api.runConfigsLoad(root);
+  },
+
+  run_configs_save(root: string, file: RunConfigFile): Promise<void> {
+    return api.runConfigsSave(root, file);
+  },
+
+  gradle_sync(root: string): Promise<string> {
+    return api.gradleSync(root);
+  },
+
+  gradle_status(root: string): Promise<boolean> {
+    return api.gradleStatus(root);
+  },
+
+  gradle_stop(root: string): Promise<void> {
+    return api.gradleStop(root);
+  },
+
+  open_url(url: string): Promise<void> {
+    return api.openUrl(url);
+  },
+
+  logcat_start(deviceId: string, appId?: string): Promise<void> {
+    return api.logcatStart(deviceId, appId);
+  },
+
+  logcat_stop(): Promise<void> {
+    return api.logcatStop();
   },
 };

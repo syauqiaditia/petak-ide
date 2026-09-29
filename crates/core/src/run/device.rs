@@ -5,7 +5,7 @@ use std::thread;
 
 use serde::{Deserialize, Serialize};
 
-use crate::exec::{Proc, ProcLine, Spawn};
+use crate::exec::{Exec, Proc, ProcLine, Spawn};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -303,7 +303,7 @@ pub fn build_emulator_args(avd: &str, headless: bool) -> io::Result<Vec<String>>
     Ok(args)
 }
 
-fn resolve_emulator_binary() -> String {
+pub fn resolve_emulator_binary() -> String {
     if let Ok(home) = std::env::var("ANDROID_HOME") {
         let p = Path::new(&home).join("emulator").join("emulator");
         if p.exists() {
@@ -319,7 +319,7 @@ fn resolve_emulator_binary() -> String {
     "emulator".to_string()
 }
 
-pub(crate) fn resolve_adb_binary() -> String {
+pub fn resolve_adb_binary() -> String {
     if let Ok(home) = std::env::var("ANDROID_HOME") {
         let p = Path::new(&home).join("platform-tools").join("adb");
         if p.exists() {
@@ -333,6 +333,18 @@ pub(crate) fn resolve_adb_binary() -> String {
         }
     }
     "adb".to_string()
+}
+
+/// Query the list of installed Android Virtual Devices (AVDs).
+pub fn list_avds(exec: &dyn Exec) -> Vec<Avd> {
+    let emu_cmd = resolve_emulator_binary();
+    if let Ok(output) = exec.run(Path::new("."), &emu_cmd, &["-list-avds"], &[], None) {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return parse_emulator_avds(&stdout);
+        }
+    }
+    Vec::new()
 }
 
 /// Start an Android emulator with an AVD name and optional headless flags.
@@ -545,5 +557,36 @@ emulator-5558          unauthorized transport_id:5
 
         let err = build_emulator_args("bad;injection", true);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_list_avds_mock() {
+        struct MockEmuExec;
+        impl Exec for MockEmuExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                assert_eq!(args, &["-list-avds"]);
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+                #[cfg(windows)]
+                use std::os::windows::process::ExitStatusExt;
+
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: b"Pixel_7\njatim_dev\n".to_vec(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+        let avds = list_avds(&MockEmuExec);
+        assert_eq!(avds.len(), 2);
+        assert_eq!(avds[0].name, "Pixel_7");
+        assert_eq!(avds[1].name, "jatim_dev");
     }
 }

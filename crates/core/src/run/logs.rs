@@ -364,7 +364,7 @@ impl Logcat {
     pub fn start(
         spawn: &dyn Spawn,
         device: &str,
-        pid: u32,
+        pid: Option<u32>,
         tx: Sender<Vec<LogLine>>,
     ) -> io::Result<Self> {
         if !is_valid_device_id(device) {
@@ -376,12 +376,17 @@ impl Logcat {
 
         let adb_cmd = resolve_adb_binary();
         let (proc_tx, proc_rx) = std::sync::mpsc::channel();
-        let pid_arg = format!("--pid={}", pid);
+        let pid_arg = pid.map(|p| format!("--pid={}", p));
+
+        let mut args = vec!["-s", device, "logcat", "-v", "threadtime"];
+        if let Some(ref arg) = pid_arg {
+            args.push(arg.as_str());
+        }
 
         let proc = spawn.spawn(
             Path::new("."),
             &adb_cmd,
-            &["-s", device, "logcat", "-v", "threadtime", &pid_arg],
+            &args,
             &[],
             proc_tx,
         )?;

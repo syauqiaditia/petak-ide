@@ -227,7 +227,7 @@ fn test_android_and_flutter_logcat_e2e_real_emulator() {
     // Start Logcat stream filtered by pid
     println!("7. Streaming logcat for native PID {}...", n_pid);
     let (native_log_tx, native_log_rx) = mpsc::channel();
-    let mut native_logcat = Logcat::start(&SystemSpawn, &dev_id, n_pid, native_log_tx)
+    let mut native_logcat = Logcat::start(&SystemSpawn, &dev_id, Some(n_pid), native_log_tx)
         .expect("Failed to start Logcat for native sample");
 
     let log_deadline = Instant::now() + Duration::from_secs(20);
@@ -364,7 +364,7 @@ fn test_android_and_flutter_logcat_e2e_real_emulator() {
     // Start Logcat stream for flutter pid
     println!("11. Streaming logcat for flutter PID {}...", f_pid);
     let (flutter_log_tx, flutter_log_rx) = mpsc::channel();
-    let mut flutter_logcat = Logcat::start(&SystemSpawn, &dev_id, f_pid, flutter_log_tx)
+    let mut flutter_logcat = Logcat::start(&SystemSpawn, &dev_id, Some(f_pid), flutter_log_tx)
         .expect("Failed to start Logcat for flutter sample");
 
     let flutter_log_deadline = Instant::now() + Duration::from_secs(20);
