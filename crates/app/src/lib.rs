@@ -271,6 +271,14 @@ pub fn run() {
             commands::git_diff_revision,
             commands::git_stage,
             commands::git_unstage,
+            // Batch 3
+            commands::recent_projects_list,
+            commands::recent_projects_add,
+            commands::recent_projects_remove,
+            commands::git_stage_paths,
+            commands::git_unstage_paths,
+            commands::git_commit_selected,
+            commands::git_delete_untracked,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,8 +3,8 @@ mod common;
 use common::gitrepo::TestRepo;
 use petak_core::exec::SystemExec;
 use petak_core::git::{
-    add_to_gitignore, blame, commit_paths, diff_path_head, diff_path_staged, diff_path_vs_ref,
-    file_at_ref, path_history, rollback_paths,
+    add_to_gitignore, blame, commit_paths, commit_selected, delete_untracked, diff_path_head,
+    diff_path_staged, diff_path_vs_ref, file_at_ref, path_history, rollback_paths,
 };
 use petak_core::local_history::{list, read, snapshot};
 use std::fs;
@@ -253,4 +253,62 @@ fn test_commit_paths_isolated() {
     // file_b should still be modified in worktree
     let diff_b = diff_path_head(&exec, repo.path(), "file_b.txt").unwrap();
     assert_eq!(diff_b.len(), 1, "file_b should still have diff vs HEAD");
+}
+
+#[test]
+fn test_commit_selected_in_dummy_repo_3_files_commit_2_leaves_1_dirty() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    // Initial commit
+    repo.write_file("file1.txt", "v1-1\n");
+    repo.write_file("file2.txt", "v1-2\n");
+    repo.write_file("file3.txt", "v1-3\n");
+    repo.commit("initial commit");
+
+    // Modify all 3 files
+    repo.write_file("file1.txt", "v2-1 modified\n");
+    repo.write_file("file2.txt", "v2-2 modified\n");
+    repo.write_file("file3.txt", "v2-3 modified\n");
+
+    // Commit 2 files: file1.txt and file2.txt
+    let res = commit_selected(&exec, repo.path(), "commit file1 and file2", &["file1.txt", "file2.txt"])
+        .expect("commit_selected should succeed");
+    assert!(!res.sha.is_empty());
+
+    // Verify file1 and file2 are clean at HEAD
+    let diff1 = diff_path_head(&exec, repo.path(), "file1.txt").unwrap();
+    assert!(diff1.is_empty(), "file1.txt should be committed and clean");
+
+    let diff2 = diff_path_head(&exec, repo.path(), "file2.txt").unwrap();
+    assert!(diff2.is_empty(), "file2.txt should be committed and clean");
+
+    // Verify file3.txt is STILL DIRTY (uncommitted)
+    let diff3 = diff_path_head(&exec, repo.path(), "file3.txt").unwrap();
+    assert_eq!(diff3.len(), 1, "file3.txt must remain dirty/uncommitted");
+
+    // Check HEAD sha matches returned sha
+    let head_sha = petak_core::exec::git(&exec, repo.path(), &["rev-parse", "HEAD"]).unwrap();
+    assert_eq!(head_sha.trim(), res.sha);
+}
+
+#[test]
+fn test_delete_untracked_and_reject_tracked() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    repo.write_file("tracked.txt", "tracked content\n");
+    repo.commit("commit tracked.txt");
+
+    // 1. Attempting to delete a tracked file must fail
+    let err = delete_untracked(&exec, repo.path(), "tracked.txt").unwrap_err();
+    assert!(err.message.contains("tracked"));
+    assert!(repo.path().join("tracked.txt").exists());
+
+    // 2. Untracked file
+    repo.write_file("untracked_temp.txt", "scratch content\n");
+    assert!(repo.path().join("untracked_temp.txt").exists());
+
+    delete_untracked(&exec, repo.path(), "untracked_temp.txt").expect("should delete untracked file");
+    assert!(!repo.path().join("untracked_temp.txt").exists(), "untracked file must be deleted");
 }

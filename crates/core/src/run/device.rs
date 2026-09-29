@@ -16,6 +16,12 @@ pub struct Device {
     pub kind: DeviceKind,
     pub state: DeviceState,
     pub sdk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flutter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +113,26 @@ pub fn parse_adb_devices(output: &str) -> Vec<Device> {
         }
         let name = model_name.unwrap_or_else(|| id.to_string());
 
+        let group = if kind == DeviceKind::Emulator {
+            "emulator"
+        } else {
+            "physical"
+        };
+        let transport = if kind == DeviceKind::Physical {
+            if id.contains(':') {
+                Some("wifi".to_string())
+            } else {
+                Some("usb".to_string())
+            }
+        } else {
+            None
+        };
+        let flutter_id = if state == DeviceState::Online {
+            Some(id.to_string())
+        } else {
+            None
+        };
+
         devices.push(Device {
             id: id.to_string(),
             name,
@@ -114,6 +140,9 @@ pub fn parse_adb_devices(output: &str) -> Vec<Device> {
             kind,
             state,
             sdk: None,
+            flutter_id,
+            group: Some(group.to_string()),
+            transport,
         });
     }
     devices
@@ -121,7 +150,11 @@ pub fn parse_adb_devices(output: &str) -> Vec<Device> {
 
 /// Parse `flutter devices --machine` JSON output.
 pub fn parse_flutter_devices(json_str: &str) -> Result<Vec<Device>, serde_json::Error> {
-    let items: Vec<serde_json::Value> = serde_json::from_str(json_str)?;
+    let trimmed = json_str.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let items: Vec<serde_json::Value> = serde_json::from_str(trimmed)?;
     let mut devices = Vec::new();
 
     for item in items {
@@ -171,13 +204,67 @@ pub fn parse_flutter_devices(json_str: &str) -> Result<Vec<Device>, serde_json::
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let is_offline = item
+            .get("isSupported")
+            .and_then(|v| v.as_bool())
+            .map(|s| !s)
+            .unwrap_or(false)
+            || item
+                .get("state")
+                .and_then(|v| v.as_str())
+                .map(|s| s.eq_ignore_ascii_case("offline"))
+                .unwrap_or(false)
+            || item
+                .get("status")
+                .and_then(|v| v.as_str())
+                .map(|s| s.eq_ignore_ascii_case("offline"))
+                .unwrap_or(false)
+            || item
+                .get("isOffline")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+        let state = if is_offline {
+            DeviceState::Offline
+        } else {
+            DeviceState::Online
+        };
+
+        let flutter_id = if state == DeviceState::Online {
+            Some(id.clone())
+        } else {
+            None
+        };
+
+        let group = match (platform, kind) {
+            (DevicePlatform::Web, _) => "web".to_string(),
+            (DevicePlatform::Desktop, _) => "desktop".to_string(),
+            (_, DeviceKind::Emulator) => "emulator".to_string(),
+            (_, DeviceKind::Simulator) => "simulator".to_string(),
+            (_, DeviceKind::Physical) => "physical".to_string(),
+        };
+
+        let transport = if kind == DeviceKind::Physical {
+            let lower_name = name.to_lowercase();
+            if lower_name.contains("wireless") || lower_name.contains("wifi") || id.contains(':') {
+                Some("wifi".to_string())
+            } else {
+                Some("usb".to_string())
+            }
+        } else {
+            None
+        };
+
         devices.push(Device {
             id,
             name,
             platform,
             kind,
-            state: DeviceState::Online,
+            state,
             sdk,
+            flutter_id,
+            group: Some(group),
+            transport,
         });
     }
 
@@ -271,6 +358,26 @@ pub fn parse_track_devices_payload(payload: &str) -> Vec<Device> {
             DeviceKind::Physical
         };
 
+        let group = if kind == DeviceKind::Emulator {
+            "emulator"
+        } else {
+            "physical"
+        };
+        let transport = if kind == DeviceKind::Physical {
+            if id.contains(':') {
+                Some("wifi".to_string())
+            } else {
+                Some("usb".to_string())
+            }
+        } else {
+            None
+        };
+        let flutter_id = if state == DeviceState::Online {
+            Some(id.to_string())
+        } else {
+            None
+        };
+
         devices.push(Device {
             id: id.to_string(),
             name: id.to_string(),
@@ -278,6 +385,9 @@ pub fn parse_track_devices_payload(payload: &str) -> Vec<Device> {
             kind,
             state,
             sdk: None,
+            flutter_id,
+            group: Some(group.to_string()),
+            transport,
         });
     }
     devices
@@ -457,12 +567,30 @@ pub fn avd_stop(exec: &dyn Exec, avd: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Single device entry in unified devices snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotDevice {
+    pub id: String,
+    pub name: String,
+    pub platform: String,
+    pub state: String,
+    pub flutter_id: Option<String>,
+    pub group: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sdk: Option<String>,
+}
+
 /// Snapshot of all devices, grouped for the UI.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DevicesSnapshot {
     pub emulators: Vec<EmulatorInfo>,
     pub physical: Vec<PhysicalDevice>,
+    #[serde(default)]
+    pub devices: Vec<SnapshotDevice>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -473,6 +601,12 @@ pub struct EmulatorInfo {
     pub kind: String,  // "android-avd" | "ios-sim"
     pub state: String, // "running" | "stopped" | "booting"
     pub device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flutter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -482,16 +616,351 @@ pub struct PhysicalDevice {
     pub name: String,
     pub platform: String,  // "android" | "ios"
     pub transport: String, // "usb" | "wifi"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flutter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sdk: Option<String>,
 }
 
-/// Build a unified devices snapshot from all sources.
-pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
+/// Merge devices from multiple sources (`flutter devices --machine`, adb, simctl, devicectl, avds)
+/// with deduplication and state normalization.
+pub fn merge_devices(
+    flutter_devs: &[Device],
+    adb_devs: &[Device],
+    avds: &[Avd],
+    simctl_devs: &[Device],
+    devicectl_devs: &[Device],
+    running_avd_names: &std::collections::HashMap<String, String>,
+) -> DevicesSnapshot {
+    let mut unified: Vec<SnapshotDevice> = Vec::new();
+
+    // 1. Flutter devices
+    for dev in flutter_devs {
+        let platform_str = match dev.platform {
+            DevicePlatform::Android => "android",
+            DevicePlatform::Ios => "ios",
+            DevicePlatform::Web => "web",
+            DevicePlatform::Desktop => "desktop",
+        };
+        let state_str = match dev.state {
+            DeviceState::Online => "online",
+            DeviceState::Offline => "offline",
+            DeviceState::Booting => "booting",
+            DeviceState::Unauthorized => "offline",
+        };
+        let group_str = dev.group.clone().unwrap_or_else(|| match (dev.platform, dev.kind) {
+            (DevicePlatform::Web, _) => "web".to_string(),
+            (DevicePlatform::Desktop, _) => "desktop".to_string(),
+            (_, DeviceKind::Emulator) => "emulator".to_string(),
+            (_, DeviceKind::Simulator) => "simulator".to_string(),
+            (_, DeviceKind::Physical) => "physical".to_string(),
+        });
+        let flutter_id = if state_str == "online" {
+            Some(dev.id.clone())
+        } else {
+            None
+        };
+
+        unified.push(SnapshotDevice {
+            id: dev.id.clone(),
+            name: dev.name.clone(),
+            platform: platform_str.to_string(),
+            state: state_str.to_string(),
+            flutter_id,
+            group: group_str,
+            transport: dev.transport.clone(),
+            sdk: dev.sdk.clone(),
+        });
+    }
+
+    // 2. ADB devices
+    for dev in adb_devs {
+        if let Some(existing) = unified.iter_mut().find(|d| d.id == dev.id) {
+            match dev.state {
+                DeviceState::Offline | DeviceState::Unauthorized => {
+                    existing.state = "offline".to_string();
+                    existing.flutter_id = None;
+                }
+                DeviceState::Booting => {
+                    existing.state = "booting".to_string();
+                    existing.flutter_id = None;
+                }
+                DeviceState::Online => {
+                    existing.state = "online".to_string();
+                    if existing.flutter_id.is_none() {
+                        existing.flutter_id = Some(dev.id.clone());
+                    }
+                }
+            }
+            if existing.name == existing.id && dev.name != dev.id {
+                existing.name = dev.name.clone();
+            }
+        } else {
+            let is_emu = dev.id.starts_with("emulator-") || dev.kind == DeviceKind::Emulator;
+            let group_str = if is_emu { "emulator" } else { "physical" };
+            let state_str = match dev.state {
+                DeviceState::Online => "online",
+                DeviceState::Booting => "booting",
+                _ => "offline",
+            };
+            let flutter_id = if state_str == "online" {
+                Some(dev.id.clone())
+            } else {
+                None
+            };
+            let transport = if !is_emu {
+                if dev.id.contains(':')
+                    || dev.name.to_lowercase().contains("wireless")
+                    || dev.name.to_lowercase().contains("wifi")
+                {
+                    Some("wifi".to_string())
+                } else {
+                    Some("usb".to_string())
+                }
+            } else {
+                None
+            };
+            unified.push(SnapshotDevice {
+                id: dev.id.clone(),
+                name: dev.name.clone(),
+                platform: "android".to_string(),
+                state: state_str.to_string(),
+                flutter_id,
+                group: group_str.to_string(),
+                transport,
+                sdk: dev.sdk.clone(),
+            });
+        }
+    }
+
+    // 3. AVDs
+    for avd in avds {
+        let emu_id_opt = running_avd_names.get(&avd.name);
+        if let Some(emu_id) = emu_id_opt {
+            if let Some(existing) = unified.iter_mut().find(|d| d.id == *emu_id) {
+                existing.name = avd.name.clone();
+                existing.state = "online".to_string();
+                existing.flutter_id = Some(emu_id.clone());
+            } else {
+                unified.push(SnapshotDevice {
+                    id: emu_id.clone(),
+                    name: avd.name.clone(),
+                    platform: "android".to_string(),
+                    state: "online".to_string(),
+                    flutter_id: Some(emu_id.clone()),
+                    group: "emulator".to_string(),
+                    transport: None,
+                    sdk: None,
+                });
+            }
+        } else if !unified.iter().any(|d| d.id == avd.name || d.name == avd.name) {
+            unified.push(SnapshotDevice {
+                id: avd.name.clone(),
+                name: avd.name.clone(),
+                platform: "android".to_string(),
+                state: "offline".to_string(),
+                flutter_id: None,
+                group: "emulator".to_string(),
+                transport: None,
+                sdk: None,
+            });
+        }
+    }
+
+    // 4. iOS Simulators (simctl)
+    for sim in simctl_devs {
+        if let Some(existing) = unified.iter_mut().find(|d| d.id == sim.id) {
+            match sim.state {
+                DeviceState::Online => {
+                    existing.state = "online".to_string();
+                    existing.flutter_id = Some(sim.id.clone());
+                }
+                DeviceState::Booting => {
+                    existing.state = "booting".to_string();
+                    existing.flutter_id = None;
+                }
+                _ => {
+                    existing.state = "offline".to_string();
+                    existing.flutter_id = None;
+                }
+            }
+        } else {
+            let state_str = match sim.state {
+                DeviceState::Online => "online",
+                DeviceState::Booting => "booting",
+                _ => "offline",
+            };
+            let flutter_id = if state_str == "online" {
+                Some(sim.id.clone())
+            } else {
+                None
+            };
+            unified.push(SnapshotDevice {
+                id: sim.id.clone(),
+                name: sim.name.clone(),
+                platform: "ios".to_string(),
+                state: state_str.to_string(),
+                flutter_id,
+                group: "simulator".to_string(),
+                transport: None,
+                sdk: sim.sdk.clone(),
+            });
+        }
+    }
+
+    // 5. iOS Physical (devicectl)
+    for dev in devicectl_devs {
+        if let Some(existing) = unified.iter_mut().find(|d| d.id == dev.id) {
+            existing.state = "online".to_string();
+            if existing.flutter_id.is_none() {
+                existing.flutter_id = Some(dev.id.clone());
+            }
+            existing.group = "physical".to_string();
+            existing.platform = "ios".to_string();
+        } else {
+            let transport = if dev.name.to_lowercase().contains("wireless")
+                || dev.name.to_lowercase().contains("wifi")
+                || dev.id.contains(':')
+            {
+                Some("wifi".to_string())
+            } else {
+                Some("usb".to_string())
+            };
+            unified.push(SnapshotDevice {
+                id: dev.id.clone(),
+                name: dev.name.clone(),
+                platform: "ios".to_string(),
+                state: "online".to_string(),
+                flutter_id: Some(dev.id.clone()),
+                group: "physical".to_string(),
+                transport,
+                sdk: dev.sdk.clone(),
+            });
+        }
+    }
+
+    // Build emulators and physical lists for UI backwards compatibility
     let mut emulators = Vec::new();
     let mut physical = Vec::new();
 
+    // Add AVDs (running and stopped)
+    for avd in avds {
+        let emu_id_opt = running_avd_names.get(&avd.name);
+        let is_running = emu_id_opt.is_some();
+        let dev_id = emu_id_opt.cloned();
+        emulators.push(EmulatorInfo {
+            id: avd.name.clone(),
+            name: avd.name.clone(),
+            kind: "android-avd".to_string(),
+            state: if is_running { "running".to_string() } else { "stopped".to_string() },
+            device_id: dev_id.clone(),
+            flutter_id: dev_id,
+            group: Some("emulator".to_string()),
+            transport: None,
+        });
+    }
+
+    // Any remaining running android emulators not covered in avds
+    for d in &unified {
+        if d.group == "emulator" && !emulators.iter().any(|e| e.name == d.name || e.id == d.name) {
+            emulators.push(EmulatorInfo {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                kind: "android-avd".to_string(),
+                state: if d.state == "online" {
+                    "running".to_string()
+                } else if d.state == "booting" {
+                    "booting".to_string()
+                } else {
+                    "stopped".to_string()
+                },
+                device_id: if d.state == "online" {
+                    Some(d.id.clone())
+                } else {
+                    None
+                },
+                flutter_id: d.flutter_id.clone(),
+                group: Some("emulator".to_string()),
+                transport: d.transport.clone(),
+            });
+        }
+    }
+
+    // iOS simulators from unified
+    for d in &unified {
+        if d.group == "simulator" {
+            emulators.push(EmulatorInfo {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                kind: "ios-sim".to_string(),
+                state: if d.state == "online" {
+                    "running".to_string()
+                } else if d.state == "booting" {
+                    "booting".to_string()
+                } else {
+                    "stopped".to_string()
+                },
+                device_id: if d.state == "online" {
+                    Some(d.id.clone())
+                } else {
+                    None
+                },
+                flutter_id: d.flutter_id.clone(),
+                group: Some("simulator".to_string()),
+                transport: d.transport.clone(),
+            });
+        }
+    }
+
+    // Physical devices from unified
+    for d in &unified {
+        if d.group == "physical" {
+            physical.push(PhysicalDevice {
+                id: d.id.clone(),
+                name: d.name.clone(),
+                platform: d.platform.clone(),
+                transport: d.transport.clone().unwrap_or_else(|| "usb".to_string()),
+                state: Some(d.state.clone()),
+                flutter_id: d.flutter_id.clone(),
+                group: Some("physical".to_string()),
+                sdk: d.sdk.clone(),
+            });
+        }
+    }
+
+    DevicesSnapshot {
+        emulators,
+        physical,
+        devices: unified,
+    }
+}
+
+/// Build a unified devices snapshot from all sources (`flutter devices --machine`, adb, simctl, devicectl).
+pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
     let adb = resolve_adb_binary();
 
-    // 1. Android AVDs (emulator -list-avds) and running emulators (adb devices)
+    // 1. Flutter devices
+    let flutter_devices = if let Ok(out) = exec.run(
+        Path::new("."),
+        "flutter",
+        &["devices", "--machine"],
+        &[],
+        None,
+    ) {
+        if out.status.success() {
+            parse_flutter_devices(&String::from_utf8_lossy(&out.stdout)).unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    // 2. Android AVDs (emulator -list-avds) and running emulators (adb devices)
     let avds = list_avds(exec);
     let running_android = if let Ok(out) =
         exec.run(Path::new("."), &adb, &["devices", "-l"], &[], None)
@@ -507,83 +976,16 @@ pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
 
     // Map running emulator IDs to their names
     let mut avd_to_device_id = std::collections::HashMap::new();
-    let mut unmatched_emu_ids = Vec::new();
-
     for dev in &running_android {
         if dev.kind == DeviceKind::Emulator && dev.state == DeviceState::Online {
             if let Some(avd_name) = get_running_avd_name(exec, &adb, &dev.id) {
                 avd_to_device_id.insert(avd_name, dev.id.clone());
-            } else {
-                unmatched_emu_ids.push(dev.id.clone());
             }
         }
     }
 
-    for avd in &avds {
-        // Match specific running emulator by AVD name first
-        let device_id = if let Some(id) = avd_to_device_id.remove(&avd.name) {
-            Some(id)
-        } else if avd_to_device_id.is_empty() && !unmatched_emu_ids.is_empty() {
-            // Fallback if emu avd name query not available: consume at most one emulator per AVD
-            unmatched_emu_ids.pop()
-        } else {
-            None
-        };
-
-        let is_running = device_id.is_some();
-        emulators.push(EmulatorInfo {
-            id: avd.name.clone(),
-            name: avd.name.clone(),
-            kind: "android-avd".to_string(),
-            state: if is_running {
-                "running".to_string()
-            } else {
-                "stopped".to_string()
-            },
-            device_id,
-        });
-    }
-
-    // Any remaining running emulators that weren't in the avds list
-    for (avd_name, dev_id) in avd_to_device_id {
-        emulators.push(EmulatorInfo {
-            id: avd_name.clone(),
-            name: avd_name,
-            kind: "android-avd".to_string(),
-            state: "running".to_string(),
-            device_id: Some(dev_id),
-        });
-    }
-
-    for dev_id in unmatched_emu_ids {
-        emulators.push(EmulatorInfo {
-            id: dev_id.clone(),
-            name: dev_id.clone(),
-            kind: "android-avd".to_string(),
-            state: "running".to_string(),
-            device_id: Some(dev_id),
-        });
-    }
-
-    // Physical Android devices
-    for dev in &running_android {
-        if dev.kind == DeviceKind::Physical && dev.state == DeviceState::Online {
-            let transport = if dev.id.contains(':') {
-                "wifi"
-            } else {
-                "usb"
-            };
-            physical.push(PhysicalDevice {
-                id: dev.id.clone(),
-                name: dev.name.clone(),
-                platform: "android".to_string(),
-                transport: transport.to_string(),
-            });
-        }
-    }
-
-    // 2. iOS Simulators (xcrun simctl)
-    if let Ok(out) = exec.run(
+    // 3. iOS Simulators (xcrun simctl)
+    let simctl_devices = if let Ok(out) = exec.run(
         Path::new("."),
         "xcrun",
         &["simctl", "list", "devices", "available", "--json"],
@@ -592,31 +994,16 @@ pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
     ) {
         if out.status.success() {
             let json_str = String::from_utf8_lossy(&out.stdout);
-            if let Ok(sims) = crate::run::ios::parse_simctl_devices(&json_str) {
-                for sim in sims {
-                    let state = match sim.state {
-                        DeviceState::Online => "running",
-                        DeviceState::Booting => "booting",
-                        _ => "stopped",
-                    };
-                    emulators.push(EmulatorInfo {
-                        id: sim.id.clone(),
-                        name: sim.name,
-                        kind: "ios-sim".to_string(),
-                        state: state.to_string(),
-                        device_id: if state == "running" {
-                            Some(sim.id)
-                        } else {
-                            None
-                        },
-                    });
-                }
-            }
+            crate::run::ios::parse_simctl_devices(&json_str).unwrap_or_default()
+        } else {
+            Vec::new()
         }
-    }
+    } else {
+        Vec::new()
+    };
 
-    // 3. Physical iOS devices (xcrun devicectl)
-    if let Ok(out) = exec.run(
+    // 4. Physical iOS devices (xcrun devicectl)
+    let devicectl_devices = if let Ok(out) = exec.run(
         Path::new("."),
         "xcrun",
         &["devicectl", "list", "devices", "--json-output", "-"],
@@ -625,24 +1012,47 @@ pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
     ) {
         if out.status.success() {
             let json_str = String::from_utf8_lossy(&out.stdout);
-            if let Ok(devs) = crate::run::ios::parse_devicectl_devices(&json_str) {
-                for dev in devs {
-                    if dev.state == DeviceState::Online {
-                        physical.push(PhysicalDevice {
-                            id: dev.id,
-                            name: dev.name,
-                            platform: "ios".to_string(),
-                            transport: "usb".to_string(),
-                        });
-                    }
-                }
-            }
+            crate::run::ios::parse_devicectl_devices(&json_str).unwrap_or_default()
+        } else {
+            Vec::new()
         }
-    }
+    } else {
+        Vec::new()
+    };
 
-    DevicesSnapshot {
-        emulators,
-        physical,
+    merge_devices(
+        &flutter_devices,
+        &running_android,
+        &avds,
+        &simctl_devices,
+        &devicectl_devices,
+        &avd_to_device_id,
+    )
+}
+
+/// Validate whether a device ID can be used for `flutter run -d <device_id>`.
+/// Rejects non-online devices or devices with flutter_id == None with clear Indonesian error.
+pub fn check_device_runnable<'a>(
+    snapshot: &'a DevicesSnapshot,
+    device_id: &str,
+) -> Result<&'a SnapshotDevice, String> {
+    if let Some(dev) = snapshot
+        .devices
+        .iter()
+        .find(|d| d.id == device_id || d.flutter_id.as_deref() == Some(device_id))
+    {
+        if dev.state != "online" || dev.flutter_id.is_none() {
+            return Err(format!(
+                "Perangkat '{}' ({}) sedang {} (tidak online). Pilih perangkat yang aktif untuk menjalankan aplikasi.",
+                dev.name, dev.id, dev.state
+            ));
+        }
+        Ok(dev)
+    } else {
+        Err(format!(
+            "Perangkat dengan ID '{}' tidak ditemukan atau sedang offline. Pilih perangkat online dari daftar.",
+            device_id
+        ))
     }
 }
 
@@ -1023,5 +1433,217 @@ emulator-5558          unauthorized transport_id:5
         assert!(killed_5556.load(Ordering::SeqCst));
         // emulator-5554 was running Pixel_7, so it must NOT be killed!
         assert!(!killed_5554.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_parse_flutter_devices_screenshot_fixture() {
+        let fixture = r#"[
+  {
+    "name": "emulator-5554",
+    "id": "emulator-5554",
+    "isSupported": false,
+    "targetPlatform": "android-arm64",
+    "emulator": true,
+    "sdk": "unknown"
+  },
+  {
+    "name": "UQi (wireless)",
+    "id": "00008110-00012CCE0C09401E",
+    "isSupported": true,
+    "targetPlatform": "ios",
+    "emulator": false,
+    "sdk": "iOS 26.5 23F77"
+  },
+  {
+    "name": "iPhone 17 Pro",
+    "id": "DF9AF706-ED11-4FEC-91C5-588C843400FE",
+    "isSupported": true,
+    "targetPlatform": "ios",
+    "emulator": true,
+    "sdk": "com.apple.CoreSimulator.SimRuntime.iOS-26-4"
+  },
+  {
+    "name": "macOS",
+    "id": "macos",
+    "isSupported": true,
+    "targetPlatform": "darwin-arm64",
+    "emulator": false,
+    "sdk": "macOS 26.5.2 25F84 darwin-arm64"
+  }
+]"#;
+
+        let devs = parse_flutter_devices(fixture).expect("should parse fixture");
+        assert_eq!(devs.len(), 4);
+
+        // 1. Offline emulator
+        let emu = devs.iter().find(|d| d.id == "emulator-5554").unwrap();
+        assert_eq!(emu.state, DeviceState::Offline);
+        assert_eq!(emu.flutter_id, None);
+        assert_eq!(emu.group.as_deref(), Some("emulator"));
+        assert_eq!(emu.kind, DeviceKind::Emulator);
+        assert_eq!(emu.platform, DevicePlatform::Android);
+
+        // 2. Physical wireless iPhone "UQi"
+        let uqi = devs.iter().find(|d| d.id == "00008110-00012CCE0C09401E").unwrap();
+        assert_eq!(uqi.name, "UQi (wireless)");
+        assert_eq!(uqi.state, DeviceState::Online);
+        assert_eq!(uqi.flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
+        assert_eq!(uqi.group.as_deref(), Some("physical"));
+        assert_eq!(uqi.transport.as_deref(), Some("wifi"));
+        assert_eq!(uqi.platform, DevicePlatform::Ios);
+
+        // 3. iPhone 17 Pro Simulator
+        let sim = devs.iter().find(|d| d.id == "DF9AF706-ED11-4FEC-91C5-588C843400FE").unwrap();
+        assert_eq!(sim.name, "iPhone 17 Pro");
+        assert_eq!(sim.state, DeviceState::Online);
+        assert_eq!(sim.flutter_id.as_deref(), Some("DF9AF706-ED11-4FEC-91C5-588C843400FE"));
+        assert_eq!(sim.group.as_deref(), Some("simulator"));
+        assert_eq!(sim.platform, DevicePlatform::Ios);
+
+        // 4. macOS Desktop
+        let mac = devs.iter().find(|d| d.id == "macos").unwrap();
+        assert_eq!(mac.name, "macOS");
+        assert_eq!(mac.state, DeviceState::Online);
+        assert_eq!(mac.group.as_deref(), Some("desktop"));
+        assert_eq!(mac.flutter_id.as_deref(), Some("macos"));
+        assert_eq!(mac.platform, DevicePlatform::Desktop);
+    }
+
+    #[test]
+    fn test_merge_devices_dedupe() {
+        let flutter_fixture = r#"[
+  {
+    "name": "UQi (wireless)",
+    "id": "00008110-00012CCE0C09401E",
+    "isSupported": true,
+    "targetPlatform": "ios",
+    "emulator": false,
+    "sdk": "iOS 26.5 23F77"
+  },
+  {
+    "name": "iPhone 17 Pro",
+    "id": "DF9AF706-ED11-4FEC-91C5-588C843400FE",
+    "isSupported": true,
+    "targetPlatform": "ios",
+    "emulator": true,
+    "sdk": "com.apple.CoreSimulator.SimRuntime.iOS-26-4"
+  }
+]"#;
+        let flutter_devs = parse_flutter_devices(flutter_fixture).unwrap();
+
+        // ADB has emulator-5554 offline
+        let adb_fixture = "List of devices attached\nemulator-5554 offline\n";
+        let adb_devs = parse_adb_devices(adb_fixture);
+
+        // AVDs has stopped Pixel_7
+        let avds = vec![Avd { name: "Pixel_7".to_string() }];
+
+        // Simctl also has iPhone 17 Pro (duplicate of flutter devices)
+        let simctl_devs = vec![Device {
+            id: "DF9AF706-ED11-4FEC-91C5-588C843400FE".to_string(),
+            name: "iPhone 17 Pro".to_string(),
+            platform: DevicePlatform::Ios,
+            kind: DeviceKind::Simulator,
+            state: DeviceState::Online,
+            sdk: Some("iOS 26.4".to_string()),
+            flutter_id: Some("DF9AF706-ED11-4FEC-91C5-588C843400FE".to_string()),
+            group: Some("simulator".to_string()),
+            transport: None,
+        }];
+
+        // Devicectl also has UQi (duplicate of flutter devices)
+        let devicectl_devs = vec![Device {
+            id: "00008110-00012CCE0C09401E".to_string(),
+            name: "UQi (wireless)".to_string(),
+            platform: DevicePlatform::Ios,
+            kind: DeviceKind::Physical,
+            state: DeviceState::Online,
+            sdk: Some("iOS 26.5".to_string()),
+            flutter_id: Some("00008110-00012CCE0C09401E".to_string()),
+            group: Some("physical".to_string()),
+            transport: Some("wifi".to_string()),
+        }];
+
+        let running_avds = std::collections::HashMap::new();
+
+        let snapshot = merge_devices(
+            &flutter_devs,
+            &adb_devs,
+            &avds,
+            &simctl_devs,
+            &devicectl_devs,
+            &running_avds,
+        );
+
+        // Total deduplicated devices: UQi, iPhone 17 Pro, emulator-5554, Pixel_7 => 4
+        assert_eq!(snapshot.devices.len(), 4);
+
+        // Deduplication verified: UQi occurs exactly once
+        let uqi_matches: Vec<_> = snapshot.devices.iter().filter(|d| d.id == "00008110-00012CCE0C09401E").collect();
+        assert_eq!(uqi_matches.len(), 1);
+        assert_eq!(uqi_matches[0].group, "physical");
+        assert_eq!(uqi_matches[0].transport.as_deref(), Some("wifi"));
+        assert_eq!(uqi_matches[0].state, "online");
+        assert_eq!(uqi_matches[0].flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
+
+        // Deduplication verified: iPhone 17 Pro occurs exactly once
+        let sim_matches: Vec<_> = snapshot.devices.iter().filter(|d| d.id == "DF9AF706-ED11-4FEC-91C5-588C843400FE").collect();
+        assert_eq!(sim_matches.len(), 1);
+        assert_eq!(sim_matches[0].group, "simulator");
+        assert_eq!(sim_matches[0].state, "online");
+
+        // emulator-5554 is offline
+        let emu = snapshot.devices.iter().find(|d| d.id == "emulator-5554").unwrap();
+        assert_eq!(emu.state, "offline");
+        assert_eq!(emu.flutter_id, None);
+
+        // Pixel_7 is offline
+        let p7 = snapshot.devices.iter().find(|d| d.id == "Pixel_7").unwrap();
+        assert_eq!(p7.state, "offline");
+        assert_eq!(p7.flutter_id, None);
+    }
+
+    #[test]
+    fn test_check_device_runnable() {
+        let snapshot = DevicesSnapshot {
+            emulators: vec![],
+            physical: vec![],
+            devices: vec![
+                SnapshotDevice {
+                    id: "emulator-5554".to_string(),
+                    name: "emulator-5554".to_string(),
+                    platform: "android".to_string(),
+                    state: "offline".to_string(),
+                    flutter_id: None,
+                    group: "emulator".to_string(),
+                    transport: None,
+                    sdk: None,
+                },
+                SnapshotDevice {
+                    id: "00008110-00012CCE0C09401E".to_string(),
+                    name: "UQi (wireless)".to_string(),
+                    platform: "ios".to_string(),
+                    state: "online".to_string(),
+                    flutter_id: Some("00008110-00012CCE0C09401E".to_string()),
+                    group: "physical".to_string(),
+                    transport: Some("wifi".to_string()),
+                    sdk: Some("iOS 26.5".to_string()),
+                },
+            ],
+        };
+
+        // Offline device must be rejected with Indonesian error
+        let err1 = check_device_runnable(&snapshot, "emulator-5554").unwrap_err();
+        assert!(err1.contains("tidak online") || err1.contains("offline"));
+        assert!(err1.contains("emulator-5554"));
+
+        // Nonexistent device must be rejected with Indonesian error
+        let err2 = check_device_runnable(&snapshot, "nonexistent-id").unwrap_err();
+        assert!(err2.contains("tidak ditemukan") || err2.contains("offline"));
+
+        // Online device must be accepted
+        let ok_dev = check_device_runnable(&snapshot, "00008110-00012CCE0C09401E").unwrap();
+        assert_eq!(ok_dev.id, "00008110-00012CCE0C09401E");
+        assert_eq!(ok_dev.flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
     }
 }
