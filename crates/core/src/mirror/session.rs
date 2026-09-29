@@ -38,15 +38,22 @@ pub enum MirrorStatus {
     Error { message: String },
 }
 
+enum SessionBackend {
+    Android {
+        control_stream: Arc<Mutex<Option<TcpStream>>>,
+        // Handle to server resources — Drop kills server
+        _server: server::ScrcpyServer,
+        // Handle to video reader thread
+        _video_thread: Option<thread::JoinHandle<()>>,
+    },
+    Ios(crate::mirror::ios::IosSessionHandle),
+}
+
 /// A running mirror session for one device.
 pub struct MirrorSession {
     #[allow(dead_code)]
     device: String,
-    control_stream: Arc<Mutex<Option<TcpStream>>>,
-    // Handle to server resources — Drop kills server
-    _server: server::ScrcpyServer,
-    // Handle to video reader thread
-    _video_thread: Option<thread::JoinHandle<()>>,
+    backend: SessionBackend,
 }
 
 impl MirrorSession {
@@ -74,6 +81,20 @@ impl MirrorSession {
         exec: Box<dyn Exec>,
         spawn: Box<dyn Spawn>,
     ) -> io::Result<(MirrorInfo, Self, Receiver<Vec<u8>>, Receiver<MirrorStatus>)> {
+        if crate::mirror::ios::is_ios_device(serial) {
+            let (info, handle, frame_rx, status_rx) =
+                crate::mirror::ios::start_ios_mirror(serial, max_size, exec.as_ref())?;
+            return Ok((
+                info,
+                MirrorSession {
+                    device: serial.to_string(),
+                    backend: SessionBackend::Ios(handle),
+                },
+                frame_rx,
+                status_rx,
+            ));
+        }
+
         let (status_tx, status_rx) = mpsc::channel();
         let (frame_tx, frame_rx) = mpsc::channel();
 
@@ -168,9 +189,11 @@ impl MirrorSession {
             info,
             MirrorSession {
                 device: serial.to_string(),
-                control_stream: control_arc,
-                _server: scrcpy_server,
-                _video_thread: Some(video_thread),
+                backend: SessionBackend::Android {
+                    control_stream: control_arc,
+                    _server: scrcpy_server,
+                    _video_thread: Some(video_thread),
+                },
             },
             frame_rx,
             status_rx,
@@ -179,26 +202,37 @@ impl MirrorSession {
 
     /// Send an input event to the device.
     pub fn send_input(&self, ev: &InputEvent) -> io::Result<()> {
-        let guard = self.control_stream.lock().unwrap();
-        if let Some(stream) = guard.as_ref() {
-            let mut s = stream.try_clone()?;
-            control::serialize(ev, &mut s)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "control socket closed",
-            ))
+        match &self.backend {
+            SessionBackend::Android { control_stream, .. } => {
+                let guard = control_stream.lock().unwrap();
+                if let Some(stream) = guard.as_ref() {
+                    let mut s = stream.try_clone()?;
+                    control::serialize(ev, &mut s)
+                } else {
+                    Err(io::Error::new(
+                        io::ErrorKind::NotConnected,
+                        "control socket closed",
+                    ))
+                }
+            }
+            SessionBackend::Ios(handle) => {
+                let exec = crate::exec::SystemExec;
+                handle.send_input(&exec, ev)
+            }
         }
     }
 
-    /// Take a screenshot via adb screencap (not through scrcpy).
+    /// Take a screenshot via adb screencap or xcrun simctl/devicectl.
     pub fn screenshot(exec: &dyn Exec, serial: &str, path: Option<&str>) -> io::Result<String> {
         take_screenshot(exec, serial, path)
     }
 }
 
-/// Take a screenshot via `adb exec-out screencap -p`.
+/// Take a screenshot via `adb exec-out screencap -p` (Android) or `simctl/devicectl` (iOS).
 pub fn take_screenshot(exec: &dyn Exec, device: &str, path: Option<&str>) -> io::Result<String> {
+    if crate::mirror::ios::is_ios_device(device) {
+        return crate::mirror::ios::take_screenshot(exec, device, path);
+    }
     use crate::run::device::{is_valid_device_id, resolve_adb_binary};
 
     if !is_valid_device_id(device) {
