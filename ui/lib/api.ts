@@ -184,6 +184,13 @@ export interface ToolchainConfig {
   flutterSdk?: string | null;
   androidSdk?: string | null;
   kotlinLanguageServer?: string | null;
+  ghostText?: boolean | null;
+}
+
+export interface SuggestItem {
+  text: string;
+  freq: number;
+  argsTemplate?: string;
 }
 
 export type DevicePlatform = 'android' | 'ios' | 'web' | 'desktop';
@@ -1246,5 +1253,47 @@ export const api = {
       return path || '/tmp/petak-screencap.png';
     }
     return invoke<string>('mirror_screenshot', { serial, path: path ?? null });
+  },
+
+  // ---------------------------------------------------------------------------
+  // Ghost-text Index Methods (Phase 4.5 / Batch 3 F4)
+  // ---------------------------------------------------------------------------
+
+  async suggestQuery(prefix: string, lang: string = 'dart', limit: number = 3): Promise<SuggestItem[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      if (prefix === 'ITextF' || prefix.toLowerCase().startsWith('itextf')) {
+        return [
+          {
+            text: 'ieldPin(',
+            freq: 5,
+            argsTemplate: 'controller: , focusNode: ,',
+          },
+        ];
+      }
+      return [];
+    }
+    try {
+      return await invoke<SuggestItem[]>('suggest_query', { prefix, lang, limit });
+    } catch {
+      return [];
+    }
+  },
+
+  async suggestIndexBuild(root: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) return;
+    try {
+      await invoke('suggest_index_build', { root });
+    } catch {
+      // ignore
+    }
+  },
+
+  async suggestIndexUpdate(path: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) return;
+    try {
+      await invoke('suggest_index_update', { path });
+    } catch {
+      // ignore
+    }
   },
 };

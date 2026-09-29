@@ -29,6 +29,8 @@
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
   import { createEditorKeymapExtension } from './keymap';
+  import { createGhostTextExtension } from './ghostText';
+  import { editorSettings } from './editorSettings.svelte';
   import { createLspHoverExtension } from './lsp/hover';
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
   import { renameStore, triggerRename, executeRename } from './lsp/rename.svelte';
@@ -138,6 +140,11 @@
       },
       '.cm-flash-line': {
         backgroundColor: '#2b3b55 !important',
+      },
+      '.cm-ghost-text': {
+        color: '#7d808a !important',
+        opacity: '0.65',
+        fontStyle: 'normal',
       },
     },
     { dark: true }
@@ -482,6 +489,7 @@
         createLspAutocompleteExtension(() => currentSwappedPath),
         createLspHoverExtension(() => currentSwappedPath),
         createLspNavExtension(() => currentSwappedPath, gotoLine),
+        createGhostTextExtension({ getPath: () => currentSwappedPath }),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active) {
@@ -540,6 +548,7 @@
     const currentText = view.state.doc.toString();
     try {
       await api.saveFile(active.path, currentText);
+      api.suggestIndexUpdate(active.path).catch(() => {});
       tabsManager.markSaved(active.path, currentText);
       onTabSave(active.path, currentText);
       onStatusChange?.(`Saved ${active.name}`);
@@ -660,6 +669,10 @@
       state: initialState,
       parent: container,
     });
+
+    if (typeof window !== 'undefined') {
+      (window as any).__PETAK_EDITOR_VIEW__ = view;
+    }
 
     if (active) {
       applyStoredDiagnosticsToView(view, active.path);
