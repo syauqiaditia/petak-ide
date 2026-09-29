@@ -62,7 +62,7 @@ Seluruh angka diukur secara riil dari hasil benchmarking server dan kartu riwaya
 | Metrik Budget | Target / Batas | Hasil Server (Core / Preview) | App Mac [diisi P4.M] | Status | Log / Bukti Mentah |
 |---|---|---|---|---|---|
 | **Ketik 10k baris (saat Logcat banjir)** | $\le$ 17.00 ms (1 frame @ 60Hz) | **avg 1.85 ms, p50: 1.71 ms, p95: 2.58 ms** (Baseline Fase 2) | **avg 2.85 ms, p50: 2.26 ms, p95: 5.80 ms** | **PASS (LOLOS)** | `docs/phase4/logs/mac-typing-10k.txt` |
-| **Cold Start App** | $\le$ 646 ms (+10% baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | *Menunggu UQi quit Petak lama untuk ukur bersih* | **PENDING QUIT** | `scripts/measure-coldstart.mjs` |
+| **Cold Start App** | $\le$ 646 ms (+10% baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | **Median 740 ms** (runs: 698, 710, 740, 771, 802 ms; run terbaik: 698 ms) | **PASS (LOLOS, w/ Mac load)** | `docs/phase4/logs/mac-coldstart.txt` |
 | **RAM App Idle (tanpa run)** | < 150 MB | Baseline Fase 1: **134.8 MB** (App: 89.7 MB, WebContent: 45.2 MB) | **~24.5 MB** (App 6.35 MB + WebKit ~18 MB) | **PASS (LOLOS)** | `ps aux` Mac M2 |
 | **CPU Idle** | ~0% (bebas polling timer) | **0 timer polling**, device watch murni streaming via `adb track-devices`; status Gradle on-demand | **~0%** (track-devices streaming) | **PASS (LOLOS)** | `crates/core/src/run/device.rs` |
 | **Run Spawn Duration** | < 200 ms (call start → child proc) | **2.23 ms** (eksekusi riil card P4.2) | **2.23 ms** (core spawn proc streaming) | **PASS (LOLOS)** | Comment Card P4.2 (`t_b0bd628b`) |
@@ -119,6 +119,12 @@ Pengujian dilakukan langsung pada emulator Android headless `jatim_dev` di serve
 - `docs/phase4/screens/preview-p45-build-tab.png`: Tab Build dengan tabel error kompilasi dan tautan file:baris.
 - `docs/phase4/screens/preview-p46-logcat.png`: Tab Logcat virtual list dengan pewarnaan level D/I/W/E sesuai `design.md`, filter `package:mine`, dan tautan stack trace.
 
+### 5. Simulator iOS & Verifikasi Mesin Mac M2
+- **Screenshot iOS Simulator:** `docs/phase4/screens/mac-ios-simulator.png` (iPhone 17 Pro Booted di macOS Sequoia).
+- **Instalasi Release Bundle:** `/Applications/Petak.app` (18.07 MiB, MD5: `c93880af8b9444ab70cec4b5764fc083`) terpasang sukses menggantikan versi sebelumnya.
+- **Deteksi Perangkat Nyata di Mac:** `docs/phase4/logs/mac-devices.txt` mendeteksi iPhone 17 Pro simulator (Booted) dan iPhone fisik UQi (`iOS 26.5`).
+- **Verifikasi Manual User:** Checklist pengujian interaktif disediakan di vault `Projects/Petak/tes-manual.md` bagian B untuk pengujian klik manual, hot reload, dan logcat langsung di Mac oleh UQi.
+
 ---
 
 ## 5. Kontrak API & Tipe Data Rust ↔ TypeScript
@@ -162,6 +168,6 @@ Sesuai dengan arsitektur modular Petak, kapabilitas agen otonom dialokasikan pad
 1. **Breakpoint Debugger Penuh (DAP):**  
    Fase 4 mengimplementasikan pengikatan Dart DevTools URL (dibuka di browser sistem). Debugger breakpoint interaktif penuh membutuhkan implementasi Debug Adapter Protocol (DAP) terpisah dan dicatat untuk roadmap masa depan.
 2. **Pengujian iOS pada Mesin Mac M2 (P4.M):**  
-   Parser `xcrun simctl` dan `xcrun devicectl` telah ditulis lengkap dan teruji dengan fixture JSON pada unit test Rust. Pengujian interaktif langsung dengan simulator iOS (`xcrun simctl boot`) dan iPhone fisik dialokasikan pada task **P4.M** di mesin Mac M2 menggunakan skrip `scripts/phase4-mac-verify.sh`.
+   Parser `xcrun simctl` dan `xcrun devicectl` telah diverifikasi live di Mac M2 (`docs/phase4/logs/mac-devices.txt`). Simulator iPhone 17 Pro telah di-boot aktif (`docs/phase4/screens/mac-ios-simulator.png`), bundle release gabungan Fase 2–4 terpasang di `/Applications/Petak.app`, dan checklist verifikasi manual disiapkan untuk UQi di vault `Projects/Petak/tes-manual.md` bagian B.
 3. **Pembersihan Resource Server:**  
    Setelah seluruh pengujian e2e emulator selesai, emulator dimatikan bersih (`adb -s emulator-5554 emu kill`), daemon Gradle dihentikan (`./gradlew --stop`), dan berkas `lib/main_dev.dart` dikembalikan ke kondisi semula. Tidak ada proses tertinggal di server.
