@@ -106,15 +106,7 @@ impl Lang {
             Lang::Kotlin => {
                 let kotlin_bin = crate::toolchain::resolve_kotlin_ls()
                     .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| {
-                        let local_path =
-                            "/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server";
-                        if std::path::Path::new(local_path).exists() {
-                            local_path.into()
-                        } else {
-                            "kotlin-language-server".into()
-                        }
-                    });
+                    .unwrap_or_else(|| "kotlin-language-server".into());
                 (kotlin_bin, vec![])
             }
             Lang::Swift => {
@@ -584,7 +576,7 @@ impl Registry {
                     ServerError::Io(_) => match lang {
                         Lang::Dart => "dart not found — set Flutter SDK in Settings".to_string(),
                         Lang::Kotlin => {
-                            "kotlin-language-server not found — set Kotlin Language Server in Settings"
+                            "Kotlin Language Server belum terpasang. Klik 'Install Kotlin Language Server' di panel Toolchains."
                                 .to_string()
                         }
                         Lang::Swift => {

@@ -19,25 +19,70 @@ use crate::run::device::{is_valid_device_id, resolve_adb_binary};
 pub const SCRCPY_VERSION: &str = "4.1";
 const SERVER_REMOTE_PATH: &str = "/data/local/tmp/scrcpy-server.jar";
 
+/// Expected sha256 of scrcpy-server-v4.1
+const SCRCPY_SERVER_SHA256: &str = "deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae";
+
 /// Resolve the local path to the scrcpy-server jar.
-/// In dev: /mnt/storage/uqi-cache/scrcpy/scrcpy-server-v4.1
-/// In release: embedded via include_bytes! (future).
+/// Order: env PETAK_SCRCPY_SERVER -> Tauri resource dir -> app-support dir.
 pub fn resolve_server_jar() -> io::Result<String> {
-    let cache_path = format!(
-        "/mnt/storage/uqi-cache/scrcpy/scrcpy-server-v{}",
-        SCRCPY_VERSION
-    );
-    if Path::new(&cache_path).exists() {
-        return Ok(cache_path);
+    let jar_name = format!("scrcpy-server-v{}", SCRCPY_VERSION);
+
+    // 1. Env override
+    if let Ok(env_path) = std::env::var("PETAK_SCRCPY_SERVER") {
+        if Path::new(&env_path).is_file() {
+            return Ok(env_path);
+        }
     }
-    // Try relative to CARGO_MANIFEST_DIR for tests
+
+    // 2. Tauri resource dir (bundled in app)
+    //    At runtime the resource is next to the binary:
+    //    macOS: Petak.app/Contents/Resources/<jar>
+    //    Linux: <dir>/resources/<jar>  (or next to binary)
+    if let Ok(exe) = std::env::current_exe() {
+        // macOS bundle: exe is at .app/Contents/MacOS/Petak
+        if let Some(macos_dir) = exe.parent() {
+            let resources = macos_dir.join("../Resources").join(&jar_name);
+            if resources.is_file() {
+                return Ok(resources.to_string_lossy().to_string());
+            }
+            // Linux / dev: resources/ next to exe
+            let beside = macos_dir.join(&jar_name);
+            if beside.is_file() {
+                return Ok(beside.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    // 3. App-support dir: ~/Library/Application Support/Petak/scrcpy/
+    //    or ~/.local/share/Petak/scrcpy/ on Linux
+    if let Some(data) = dirs::data_dir() {
+        let app_support = data.join("Petak").join("scrcpy").join(&jar_name);
+        if app_support.is_file() {
+            return Ok(app_support.to_string_lossy().to_string());
+        }
+    }
+
     Err(io::Error::new(
         io::ErrorKind::NotFound,
         format!(
-            "scrcpy-server-v{} not found at {}",
-            SCRCPY_VERSION, cache_path
+            "scrcpy-server-v{} tidak ditemukan. Pastikan file sudah dibundle di app atau ada di ~/Library/Application Support/Petak/scrcpy/",
+            SCRCPY_VERSION
         ),
     ))
+}
+
+/// Verify sha256 of a jar file.
+pub fn verify_server_jar(path: &str) -> io::Result<()> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path)?;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    if hash != SCRCPY_SERVER_SHA256 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("scrcpy-server sha256 mismatch: expected {}, got {}", SCRCPY_SERVER_SHA256, hash),
+        ));
+    }
+    Ok(())
 }
 
 /// Push the scrcpy-server jar to the device.
@@ -208,17 +253,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_resolve_server_jar() {
-        // This test only works when the jar is cached
-        if Path::new(&format!(
-            "/mnt/storage/uqi-cache/scrcpy/scrcpy-server-v{}",
-            SCRCPY_VERSION
-        ))
-        .exists()
-        {
-            let path = resolve_server_jar().unwrap();
-            assert!(path.contains("scrcpy-server"));
-        }
+    fn test_resolve_server_jar_env() {
+        // Test env override path
+        std::env::set_var("PETAK_SCRCPY_SERVER", "/nonexistent/path");
+        let result = resolve_server_jar();
+        // Should not find it at /nonexistent/path, but should not panic
+        std::env::remove_var("PETAK_SCRCPY_SERVER");
+        // Jar may or may not be found depending on runtime location
+        let _ = result;
+    }
+
+    #[test]
+    fn test_verify_server_jar_bad_path() {
+        let result = verify_server_jar("/nonexistent/file");
+        assert!(result.is_err());
     }
 
     #[test]

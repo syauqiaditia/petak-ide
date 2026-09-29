@@ -579,13 +579,21 @@ fn collect_sourcekit_paths(dirs: &mut Vec<PathBuf>) {
 
 fn collect_kotlin_ls_paths(home: Option<&Path>, dirs: &mut Vec<PathBuf>) {
     let candidates = [
-        PathBuf::from("/mnt/storage/uqi-cache/lsp/server/bin"),
         PathBuf::from("/opt/homebrew/bin"),
     ];
 
     for c in &candidates {
         if c.exists() {
             dirs.push(c.clone());
+        }
+    }
+
+    // App-support dir: ~/Library/Application Support/Petak/lsp/server/bin (macOS)
+    // or ~/.local/share/Petak/lsp/server/bin (Linux)
+    if let Some(data) = dirs::data_dir() {
+        let app_support = data.join("Petak").join("lsp").join("server").join("bin");
+        if app_support.exists() {
+            dirs.push(app_support);
         }
     }
 
@@ -854,6 +862,217 @@ pub fn resolve_flutter_root(project_root: Option<&Path>) -> Option<String> {
     }
 
     std::env::var("FLUTTER_ROOT").ok()
+}
+
+/// Kotlin LS status info
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KotlinLsStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub java_ok: bool,
+    pub java_version: Option<String>,
+    pub message: String,
+}
+
+/// Check Kotlin Language Server and Java status.
+pub fn kotlin_ls_status() -> KotlinLsStatus {
+    let kls_path = resolve_kotlin_ls();
+    let installed = kls_path.is_some();
+
+    let version = kls_path.as_ref().and_then(|p| {
+        let out = std::process::Command::new(p)
+            .arg("--version")
+            .output()
+            .ok()?;
+        let s = String::from_utf8_lossy(&out.stdout);
+        let s2 = String::from_utf8_lossy(&out.stderr);
+        let combined = format!("{}{}", s.trim(), s2.trim());
+        if combined.is_empty() {
+            None
+        } else {
+            Some(combined.trim().to_string())
+        }
+    });
+
+    let (java_ok, java_version) = check_java();
+
+    let message = if !installed {
+        "Kotlin Language Server belum terpasang. Klik Install di panel Toolchains.".to_string()
+    } else if !java_ok {
+        "JDK belum terinstall. Kotlin LS butuh Java (JDK 11+). Install JDK dulu sebelum pakai Kotlin LS.".to_string()
+    } else {
+        "Kotlin Language Server siap dipakai.".to_string()
+    };
+
+    KotlinLsStatus {
+        installed,
+        version,
+        java_ok,
+        java_version,
+        message,
+    }
+}
+
+/// Check if Java is available and its version.
+fn check_java() -> (bool, Option<String>) {
+    let path = effective_path();
+    for dir in std::env::split_paths(&path) {
+        let java = dir.join("java");
+        if java.is_file() {
+            if let Ok(out) = std::process::Command::new(&java).arg("-version").output() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                // java -version outputs to stderr, e.g. "openjdk version \"21.0.3\""
+                let ver = stderr
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                return (true, Some(ver));
+            }
+        }
+    }
+    (false, None)
+}
+
+/// Install Kotlin Language Server from GitHub releases.
+/// Downloads server.zip, extracts to app-support dir, chmod +x, verify.
+/// Calls `progress` callback with (stage, percent, message).
+pub fn kotlin_ls_install<F>(progress: F) -> Result<(), String>
+where
+    F: Fn(&str, Option<f32>, &str),
+{
+    let data = dirs::data_dir().ok_or("Tidak bisa menentukan data directory")?;
+    let install_dir = data.join("Petak").join("lsp").join("server");
+
+    progress("downloading", Some(0.0), "Mengunduh Kotlin Language Server...");
+
+    // Use curl to download latest release
+    // ponytail: use shell curl, no HTTP lib dependency
+    let api_out = std::process::Command::new("curl")
+        .args([
+            "-sL",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "https://api.github.com/repos/fwcd/kotlin-language-server/releases/latest",
+        ])
+        .output()
+        .map_err(|e| format!("curl gagal: {}", e))?;
+
+    let api_json: serde_json::Value =
+        serde_json::from_slice(&api_out.stdout).map_err(|e| format!("JSON parse gagal: {}", e))?;
+
+    let assets = api_json["assets"]
+        .as_array()
+        .ok_or("Tidak ada assets di release")?;
+
+    let zip_url = assets
+        .iter()
+        .find(|a| {
+            a["name"]
+                .as_str()
+                .map(|n| n.starts_with("server") && n.ends_with(".zip"))
+                .unwrap_or(false)
+        })
+        .and_then(|a| a["browser_download_url"].as_str())
+        .ok_or("Tidak menemukan server.zip di release assets")?;
+
+    let tag = api_json["tag_name"].as_str().unwrap_or("unknown");
+
+    progress(
+        "downloading",
+        Some(10.0),
+        &format!("Mengunduh {} versi {}...", zip_url.split('/').last().unwrap_or("server.zip"), tag),
+    );
+
+    let tmp_dir = tempfile::tempdir().map_err(|e| format!("tmpdir gagal: {}", e))?;
+    let zip_path = tmp_dir.path().join("server.zip");
+
+    let dl = std::process::Command::new("curl")
+        .args(["-sL", "-o"])
+        .arg(&zip_path)
+        .arg(zip_url)
+        .status()
+        .map_err(|e| format!("Download gagal: {}", e))?;
+
+    if !dl.success() {
+        return Err("Download server.zip gagal".to_string());
+    }
+
+    progress("extracting", Some(50.0), "Mengekstrak server.zip...");
+
+    // Remove old install if exists
+    if install_dir.exists() {
+        let _ = std::fs::remove_dir_all(&install_dir);
+    }
+    std::fs::create_dir_all(&install_dir).map_err(|e| format!("Mkdir gagal: {}", e))?;
+
+    let unzip = std::process::Command::new("unzip")
+        .args(["-q", "-o"])
+        .arg(&zip_path)
+        .arg("-d")
+        .arg(&install_dir)
+        .status()
+        .map_err(|e| format!("Unzip gagal: {}", e))?;
+
+    if !unzip.success() {
+        return Err("Unzip server.zip gagal".to_string());
+    }
+
+    progress("verifying", Some(80.0), "Memverifikasi instalasi...");
+
+    // The zip extracts to server/ subdir. Find the bin.
+    let bin_path = install_dir.join("bin").join("kotlin-language-server");
+    let bin_alt = install_dir
+        .join("server")
+        .join("bin")
+        .join("kotlin-language-server");
+    let actual_bin = if bin_path.is_file() {
+        bin_path
+    } else if bin_alt.is_file() {
+        bin_alt
+    } else {
+        return Err(format!(
+            "kotlin-language-server binary tidak ditemukan setelah extract di {}",
+            install_dir.display()
+        ));
+    };
+
+    // chmod +x
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&actual_bin, std::fs::Permissions::from_mode(0o755));
+    }
+
+    // Verify it runs
+    let verify = std::process::Command::new(&actual_bin)
+        .arg("--version")
+        .output();
+    match verify {
+        Ok(out) if out.status.success() || !out.stderr.is_empty() => {
+            // OK — some versions print to stderr
+        }
+        Ok(out) => {
+            let msg = String::from_utf8_lossy(&out.stderr);
+            return Err(format!(
+                "kotlin-language-server --version gagal: {}",
+                msg.trim()
+            ));
+        }
+        Err(e) => {
+            return Err(format!("Gagal menjalankan kotlin-language-server: {}", e));
+        }
+    }
+
+    progress(
+        "done",
+        Some(100.0),
+        &format!("Kotlin Language Server {} berhasil diinstall.", tag),
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
