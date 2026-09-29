@@ -1,0 +1,1674 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak — Device Mirror Panel Design Spec (Phase 4.5)</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #101114;
+      color: #d8d9dc;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 32px;
+    }
+    button {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .spec-header {
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #26282d;
+    }
+    .spec-title {
+      font-size: 22px;
+      font-weight: 600;
+      color: #e6e7ea;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .spec-badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #1f2a3d;
+      color: #6ea8ff;
+      border: 1px solid #2a3d5e;
+    }
+    .spec-desc {
+      color: #8b8f98;
+      font-size: 13px;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e6e7ea;
+      margin: 32px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::before {
+      content: "";
+      width: 4px;
+      height: 16px;
+      background: #6ea8ff;
+      border-radius: 2px;
+    }
+
+    /* Container for 1440x900 mockups */
+    .viewport-frame {
+      width: 1440px;
+      height: 900px;
+      background: #16171a;
+      border: 1px solid #26282d;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    /* Title Bar */
+    .titlebar {
+      height: 46px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px 0 16px;
+      background: #111215;
+      border-bottom: 1px solid #26282d;
+      user-select: none;
+    }
+    .traffic-lights {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .traffic-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 6px;
+      background: #3a3c42;
+    }
+    .brand-logo {
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      background: #6ea8ff;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2px;
+      padding: 4px;
+      box-sizing: border-box;
+    }
+    .brand-logo div {
+      background: #111215;
+      border-radius: 1px;
+    }
+    .brand-logo .dim {
+      opacity: 0.4;
+    }
+    .brand-name {
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      color: #e6e7ea;
+    }
+    .v-divider {
+      width: 1px;
+      height: 18px;
+      background: #2c2e34;
+    }
+    .pill-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 7px;
+      color: #b9bcc3;
+      font-size: 13px;
+    }
+    .pill-btn:hover {
+      background: #1c1d22;
+      color: #e6e7ea;
+    }
+
+    /* Run Config Group in TitleBar */
+    .run-config-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px;
+      border: 1px solid #2c2e34;
+      border-radius: 9px;
+      background: #17181c;
+    }
+    .target-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 6px;
+      color: #e6e7ea;
+      font-weight: 500;
+    }
+    .badge-tag {
+      font-size: 10px;
+      font-weight: 600;
+      color: #101114;
+      background: #7fc98f;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .device-picker-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 6px;
+      color: #e6e7ea;
+    }
+    .dot-status {
+      width: 7px;
+      height: 7px;
+      border-radius: 4px;
+    }
+    .dot-live {
+      background: #7fc98f;
+      box-shadow: 0 0 6px rgba(127, 201, 143, 0.4);
+    }
+    .dot-amber {
+      background: #e8b45a;
+    }
+    .dot-danger {
+      background: #f07a74;
+    }
+    .dot-muted {
+      background: #8b8f98;
+    }
+    .action-icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 7px;
+      color: #b9bcc3;
+    }
+    .action-icon-btn:hover {
+      background: #23252b;
+      color: #e6e7ea;
+    }
+    .action-icon-btn.active {
+      background: #23252b;
+      color: #6ea8ff;
+      border: 1px solid #3a4f75;
+    }
+
+    /* Main Window Body */
+    .app-body {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* Rail (Leftmost navigation) */
+    .rail {
+      width: 48px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding-top: 8px;
+      background: #111215;
+      border-right: 1px solid #26282d;
+      user-select: none;
+    }
+    .rail-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      color: #8b8f98;
+    }
+    .rail-btn:hover {
+      background: #1c1d22;
+      color: #e6e7ea;
+    }
+    .rail-btn.active {
+      background: #23252b;
+      color: #e6e7ea;
+    }
+
+    /* Center Column (File Tree + Editor + Terminal) */
+    .center-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      background: #16171a;
+    }
+    .editor-tree-row {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    .file-tree {
+      width: 240px;
+      flex-shrink: 0;
+      background: #141518;
+      border-right: 1px solid #26282d;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+    .tree-header {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      color: #8b8f98;
+    }
+    .tree-item {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      padding-left: 12px;
+      font-size: 13px;
+      color: #d8d9dc;
+    }
+    .tree-item.selected {
+      background: #1f2a3d;
+      color: #9cc3ff;
+    }
+
+    /* Editor surface */
+    .editor-surface {
+      flex: 1;
+      background: #1a1b1f;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .tab-bar {
+      height: 36px;
+      background: #141518;
+      border-bottom: 1px solid #26282d;
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+    }
+    .editor-tab {
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #8b8f98;
+    }
+    .editor-tab.active {
+      background: #1a1b1f;
+      color: #e6e7ea;
+      font-weight: 500;
+      border-top: 2px solid #6ea8ff;
+    }
+    .code-lines {
+      padding: 12px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 22px;
+      color: #bcbec4;
+      overflow: hidden;
+    }
+    .code-gutter {
+      display: inline-block;
+      width: 32px;
+      text-align: right;
+      padding-right: 14px;
+      color: #5b5f68;
+      user-select: none;
+    }
+    .k { color: #cf8e6d; }
+    .s { color: #6aab73; }
+    .f { color: #56a8f5; }
+    .n { color: #2aacb8; }
+    .c { color: #7a7e85; font-style: italic; }
+
+    /* Bottom Panel (Terminal / Logcat / Run) */
+    .bottom-panel {
+      height: 232px;
+      flex-shrink: 0;
+      background: #141518;
+      border-top: 1px solid #26282d;
+      display: flex;
+      flex-direction: column;
+    }
+    .bottom-panel-header {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      border-bottom: 1px solid #222428;
+      gap: 4px;
+    }
+    .bottom-tab {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: #8b8f98;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .bottom-tab.active {
+      background: #23252b;
+      color: #e6e7ea;
+      font-weight: 500;
+    }
+    .logcat-content {
+      flex: 1;
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 20px;
+      overflow: hidden;
+      color: #8b8f98;
+    }
+
+    /* SLOT: Agent Panel (Phase 5) */
+    .agent-panel-slot {
+      width: 390px;
+      flex-shrink: 0;
+      background: #141518;
+      border-left: 1px solid #26282d;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Device Mirror Panel (Outer Right Dock - Full Height) */
+    .device-mirror-panel {
+      width: 380px;
+      flex-shrink: 0;
+      background: #141518;
+      border-left: 1px solid #26282d;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      user-select: none;
+    }
+
+    /* Resize Handle */
+    .resize-handle-left {
+      position: absolute;
+      top: 0;
+      left: -2px;
+      width: 5px;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 10;
+      transition: background 0.15s;
+    }
+    .resize-handle-left:hover {
+      background: #6ea8ff;
+    }
+
+    /* Device Toolbar (Top) */
+    .device-toolbar-top {
+      height: 40px;
+      flex-shrink: 0;
+      padding: 0 12px;
+      background: #141518;
+      border-bottom: 1px solid #26282d;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .device-title-info {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #e6e7ea;
+      min-width: 0;
+    }
+    .device-name-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .device-badge-live {
+      font-size: 10px;
+      font-weight: 600;
+      color: #7fc98f;
+      background: #16281e;
+      border: 1px solid #20402b;
+      padding: 1px 6px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .device-badge-viewonly {
+      font-size: 10px;
+      font-weight: 600;
+      color: #e8b45a;
+      background: #2e2717;
+      border: 1px solid #4a3d22;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .tool-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: #8b8f98;
+      display: grid;
+      place-items: center;
+      transition: background 0.1s, color 0.1s;
+    }
+    .tool-btn:hover {
+      background: #23252b;
+      color: #e6e7ea;
+    }
+
+    /* Device Mirror Stage Area */
+    .device-stage {
+      flex: 1;
+      min-height: 0;
+      background: #16171a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Slim Bezel Phone Frame */
+    .phone-bezel {
+      width: 326px;
+      height: 680px;
+      background: #111215;
+      border: 1px solid #2c2e34;
+      border-radius: 28px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .phone-bezel.focused {
+      border-color: #3a4f75;
+      box-shadow: 0 0 0 1px #3a4f75, 0 16px 40px rgba(0, 0, 0, 0.75);
+    }
+
+    /* Camera punch-hole */
+    .camera-punch {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 8px;
+      height: 8px;
+      background: #1a1b1f;
+      border-radius: 50%;
+      z-index: 20;
+    }
+
+    /* Screen display area */
+    .phone-screen {
+      flex: 1;
+      background: #000000;
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* App UI mockup inside screen */
+    .screen-content-mockup {
+      width: 100%;
+      height: 100%;
+      background: #141518;
+      display: flex;
+      flex-direction: column;
+      font-size: 11px;
+      color: #d8d9dc;
+    }
+    .phone-status-bar {
+      height: 24px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #8b8f98;
+      font-weight: 500;
+      background: #111215;
+    }
+    .phone-app-header {
+      height: 38px;
+      padding: 0 12px;
+      background: #1a1b1f;
+      border-bottom: 1px solid #26282d;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .phone-card {
+      margin: 10px;
+      padding: 12px;
+      background: #1a1b1f;
+      border: 1px solid #26282d;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .phone-btn-primary {
+      margin: auto 10px 14px;
+      height: 36px;
+      background: #6ea8ff;
+      color: #0e1a2e;
+      border-radius: 8px;
+      font-weight: 600;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+    }
+
+    /* Floating HUD (FPS + Latency) */
+    .screen-hud-pill {
+      position: absolute;
+      top: 30px;
+      right: 10px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 11px;
+      background: rgba(17, 18, 21, 0.85);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(44, 46, 52, 0.8);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #7fc98f;
+      z-index: 15;
+      user-select: none;
+      pointer-events: none;
+    }
+    .screen-hud-pill .latency {
+      color: #8b8f98;
+    }
+
+    /* Touch reticle feedback */
+    .touch-reticle {
+      position: absolute;
+      top: 260px;
+      left: 140px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid rgba(110, 168, 255, 0.9);
+      background: rgba(110, 168, 255, 0.25);
+      box-shadow: 0 0 12px rgba(110, 168, 255, 0.4);
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 25;
+    }
+
+    /* Focus helper notice */
+    .focus-helper-banner {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 3px 10px;
+      border-radius: 10px;
+      background: rgba(17, 18, 21, 0.9);
+      border: 1px solid #3a4f75;
+      font-size: 10px;
+      color: #9cc3ff;
+      white-space: nowrap;
+      user-select: none;
+      pointer-events: none;
+      z-index: 25;
+    }
+
+    /* Bottom Navigation Bar (Android) */
+    .device-toolbar-bottom {
+      height: 40px;
+      flex-shrink: 0;
+      background: #141518;
+      border-top: 1px solid #26282d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+    }
+    .nav-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      color: #8b8f98;
+      display: grid;
+      place-items: center;
+    }
+    .nav-btn:hover {
+      background: #23252b;
+      color: #e6e7ea;
+    }
+
+    /* Status Bar */
+    .app-statusbar {
+      height: 26px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 14px;
+      background: #111215;
+      border-top: 1px solid #26282d;
+      font-size: 12px;
+      color: #8b8f98;
+      user-select: none;
+    }
+
+    /* State Cards Showcase Grid */
+    .states-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 20px;
+      margin-bottom: 40px;
+    }
+    .state-card {
+      background: #141518;
+      border: 1px solid #26282d;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      height: 520px;
+    }
+    .state-card-header {
+      padding: 10px 14px;
+      background: #111215;
+      border-bottom: 1px solid #26282d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .state-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e6e7ea;
+    }
+    .state-stage {
+      flex: 1;
+      background: #16171a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+    }
+
+    /* State Content Modules */
+    .empty-state-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 260px;
+      gap: 12px;
+    }
+    .empty-icon-wrap {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background: #1f2a3d;
+      border: 1px solid #2a3d5e;
+      display: grid;
+      place-items: center;
+      color: #6ea8ff;
+    }
+    .empty-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e6e7ea;
+    }
+    .empty-desc {
+      font-size: 12px;
+      color: #8b8f98;
+      line-height: 18px;
+    }
+    .btn-primary {
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: #6ea8ff;
+      color: #0e1a2e;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .btn-secondary {
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: #23252b;
+      color: #d8d9dc;
+      border: 1px solid #2c2e34;
+      font-size: 12px;
+    }
+
+    /* Connecting Box */
+    .connecting-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+    }
+    .spinner-ring {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #26282d;
+      border-top-color: #6ea8ff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Disconnected Banner */
+    .disconnected-banner {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      padding: 10px 12px;
+      background: #2e2717;
+      border: 1px solid #4a3d22;
+      border-radius: 8px;
+      color: #e8b45a;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 30;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+    .disconnected-banner-title {
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Error Box */
+    .error-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 270px;
+      gap: 12px;
+      padding: 18px;
+      background: #2a1d1e;
+      border: 1px solid #4a2225;
+      border-radius: 10px;
+    }
+    .error-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f07a74;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .error-desc {
+      font-size: 11px;
+      color: #c9cbd0;
+      line-height: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      background: #1b1314;
+      padding: 6px 8px;
+      border-radius: 4px;
+      text-align: left;
+      width: 100%;
+    }
+
+    /* Spec details cards */
+    .spec-card {
+      background: #141518;
+      border: 1px solid #26282d;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    .spec-table th, .spec-table td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid #26282d;
+    }
+    .spec-table th {
+      color: #8b8f98;
+      font-weight: 600;
+      background: #111215;
+    }
+    .spec-table code {
+      font-family: 'JetBrains Mono', monospace;
+      color: #6ea8ff;
+      background: #1f2a3d;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="spec-header">
+    <div class="spec-title">
+      <span>Petak — UI/UX Specification: Device Mirror Panel (Phase 4.5)</span>
+      <span class="spec-badge">Design Handoff & Visual Reference</span>
+    </div>
+    <div class="spec-desc">
+      Right-docked full-height mobile device mirror for Android (scrcpy) and iOS (ScreenCaptureKit/QuickTime) with slim token bezel, real-time interactive HUD, input forwarding, and Phase 5 agent slot.
+    </div>
+  </div>
+
+  <!-- SECTION 1: 1440x900 FULL WINDOW WITH DEVICE MIRROR OPEN -->
+  <div class="section-title">1. Full IDE Viewport (1440 × 900) — Device Mirror Live Docked on Right</div>
+  <div class="viewport-frame" id="mockup-main-live">
+    
+    <!-- Titlebar -->
+    <div class="titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-dot"></div>
+        <div class="traffic-dot"></div>
+        <div class="traffic-dot"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-left: 10px">
+        <div class="brand-logo">
+          <div></div><div class="dim"></div><div class="dim"></div><div></div>
+        </div>
+        <span class="brand-name">Petak</span>
+      </div>
+      <div class="v-divider"></div>
+      
+      <!-- Project and Branch -->
+      <button class="pill-btn" style="font-weight: 500;">
+        shopee-lite
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <button class="pill-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>
+        feature/checkout <span style="color: #7fc98f; font-size: 11px">↑2</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+
+      <div style="flex-grow: 1"></div>
+
+      <!-- Run Config Group -->
+      <div class="run-config-group">
+        <button class="target-btn">
+          <span class="badge-tag">AND</span>
+          app
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="v-divider"></div>
+        <button class="device-picker-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          Pixel 8 · API 35
+          <span class="dot-status dot-live"></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+
+      <!-- Execution buttons -->
+      <button class="action-icon-btn" title="Sync Gradle">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>
+      </button>
+      <button class="action-icon-btn" style="background: #1f3325; color: #7fc98f" title="Run">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"/></svg>
+      </button>
+      <button class="action-icon-btn" title="Debug">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="7" width="8" height="12" rx="4"/><path d="M12 7V4M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 18l3-2M19 18l-3-2"/></svg>
+      </button>
+      <button class="action-icon-btn" style="color: #f07a74" title="Stop">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      </button>
+
+      <div style="flex-grow: 1"></div>
+
+      <!-- Device Mirror Toggle Button (active state) -->
+      <button class="action-icon-btn active" title="Toggle Device Mirror (⌘⇧D)" style="width: auto; padding: 0 8px; gap: 6px; height: 30px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M10 18h4"/></svg>
+        <span style="font-size: 11px; font-weight: 500;">Mirror</span>
+      </button>
+
+      <!-- Search and Avatar -->
+      <button class="pill-btn" style="border: 1px solid #2c2e34; width: 170px; height: 30px; color: #8b8f98;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+        Search everywhere
+        <span style="margin-left: auto; font-size: 10px;">⇧⇧</span>
+      </button>
+      <div style="width: 28px; height: 28px; border-radius: 14px; background: #2a3a55; color: #9cc3ff; display: grid; place-items: center; font-size: 11px; font-weight: 600;">U</div>
+    </div>
+
+    <!-- App Body -->
+    <div class="app-body">
+      
+      <!-- Rail -->
+      <div class="rail">
+        <button class="rail-btn active" aria-label="Project" title="Project">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h7l2 2h9v12H3z"/></svg>
+        </button>
+        <button class="rail-btn" aria-label="Git" title="Git">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>
+        </button>
+        <button class="rail-btn" aria-label="Agents" title="Agents">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+        </button>
+        <button class="rail-btn" aria-label="Devices" title="Devices">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+        </button>
+        <div style="flex-grow: 1"></div>
+        <button class="rail-btn" aria-label="Settings" title="Settings" style="margin-bottom: 8px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>
+        </button>
+      </div>
+
+      <!-- Center Column: File Tree + Editor + Logcat Bottom Panel (Narrows horizontally to 772px) -->
+      <div class="center-column">
+        
+        <div class="editor-tree-row">
+          <!-- File Tree (240px) -->
+          <div class="file-tree">
+            <div class="tree-header">PROJECT</div>
+            <div class="tree-item" style="padding-left: 12px; font-weight: 500">▾ shopee-lite</div>
+            <div class="tree-item" style="padding-left: 24px">▾ app</div>
+            <div class="tree-item" style="padding-left: 36px; color: #b9bcc3">▾ src/main/kotlin</div>
+            <div class="tree-item" style="padding-left: 48px">▾ checkout</div>
+            <div class="tree-item" style="padding-left: 64px; color: #7fc98f">CheckoutScreen.kt</div>
+            <div class="tree-item selected" style="padding-left: 64px">CheckoutViewModel.kt</div>
+            <div class="tree-item" style="padding-left: 64px">CheckoutState.kt</div>
+            <div class="tree-item" style="padding-left: 48px">▸ cart</div>
+            <div class="tree-item" style="padding-left: 48px">▸ auth</div>
+            <div class="tree-item" style="padding-left: 36px">AndroidManifest.xml</div>
+            <div class="tree-item" style="padding-left: 36px; color: #9cc3ff">build.gradle.kts</div>
+          </div>
+
+          <!-- Editor Surface -->
+          <div class="editor-surface">
+            <div class="tab-bar">
+              <div class="editor-tab active">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="#6ea8ff"><circle cx="12" cy="12" r="10"/></svg>
+                CheckoutViewModel.kt
+                <span style="font-size: 11px; color: #8b8f98">×</span>
+              </div>
+              <div class="editor-tab">
+                CheckoutScreen.kt
+              </div>
+            </div>
+            <div class="code-lines">
+              <div><span class="code-gutter">1</span><span class="k">package</span> id.shop.checkout</div>
+              <div><span class="code-gutter">2</span></div>
+              <div><span class="code-gutter">3</span><span class="k">class</span> <span class="f">CheckoutViewModel</span> : <span class="f">ViewModel</span>() {</div>
+              <div><span class="code-gutter">4</span>  <span class="k">private val</span> _state = <span class="f">MutableStateFlow</span>(<span class="f">CheckoutState</span>())</div>
+              <div><span class="code-gutter">5</span>  <span class="k">val</span> state: <span class="f">StateFlow</span>&lt;<span class="f">CheckoutState</span>&gt; = _state.<span class="f">asStateFlow</span>()</div>
+              <div><span class="code-gutter">6</span></div>
+              <div><span class="code-gutter">7</span>  <span class="k">fun</span> <span class="f">applyVoucher</span>(code: <span class="f">String</span>) = <span class="f">viewModelScope</span>.<span class="f">launch</span> {</div>
+              <div><span class="code-gutter">8</span>    <span class="k">val</span> res = repository.<span class="f">applyVoucher</span>(code)</div>
+              <div><span class="code-gutter">9</span>    <span class="k">if</span> (res.isSuccess) {</div>
+              <div><span class="code-gutter">10</span>      _state.<span class="f">update</span> { it.<span class="f">copy</span>(discount = res.amount, status = <span class="s">"Applied"</span>) }</div>
+              <div><span class="code-gutter">11</span>    }</div>
+              <div><span class="code-gutter">12</span>  }</div>
+              <div><span class="code-gutter">13</span>}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Panel: Logcat / Run (232px) — Does NOT overlap Device Panel -->
+        <div class="bottom-panel">
+          <div class="bottom-panel-header">
+            <div class="bottom-tab">Run</div>
+            <div class="bottom-tab active">
+              <span class="dot-status dot-live" style="width: 6px; height: 6px;"></span>
+              Logcat
+            </div>
+            <div class="bottom-tab">Terminal</div>
+            <div class="bottom-tab">Problems (0)</div>
+            <div class="bottom-tab">Build</div>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8b8f98;">
+              <span>Package: id.shop</span>
+              <span style="color: #6ea8ff">Level: Info+</span>
+            </div>
+          </div>
+          <div class="logcat-content">
+            <div><span style="color: #5b5f68">14:22:01.104</span> <span style="color: #7fc98f">I/id.shop.checkout</span>: Initializing CheckoutScreen compose hierarchy</div>
+            <div><span style="color: #5b5f68">14:22:01.320</span> <span style="color: #7fc98f">I/id.shop.checkout</span>: Cart summary loaded: 2 items, total Rp 145.000</div>
+            <div><span style="color: #5b5f68">14:22:02.890</span> <span style="color: #7fc98f">I/id.shop.checkout</span>: User applied voucher code: HEMAT20</div>
+            <div><span style="color: #5b5f68">14:22:03.115</span> <span style="color: #7fc98f">I/id.shop.checkout</span>: Voucher verified: discount Rp 20.000 applied</div>
+            <div><span style="color: #5b5f68">14:22:04.050</span> <span style="color: #e8b45a">W/ViewRootImpl</span>: Excessive touch events detected on device input canvas</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Outer Right Dock: Device Mirror Panel (380px, Full Height: 828px) -->
+      <div class="device-mirror-panel" style="width: 380px;">
+        <!-- Left Resize Handle -->
+        <div class="resize-handle-left" title="Drag to resize panel"></div>
+
+        <!-- Top Toolbar (40px) -->
+        <div class="device-toolbar-top">
+          <div class="device-title-info">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+            <span class="device-name-text">Pixel 8 · API 35</span>
+            <span class="device-badge-live">
+              <span class="dot-status dot-live" style="width: 5px; height: 5px;"></span>
+              LIVE
+            </span>
+          </div>
+
+          <!-- Toolbar action icons -->
+          <div class="toolbar-actions">
+            <button class="tool-btn" title="Rotate Screen (0° -> 90°)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            </button>
+            <button class="tool-btn" title="Take Screenshot (Save to disk & copy)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
+            <button class="tool-btn" title="Reconnect Mirror">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            <button class="tool-btn" title="Close Mirror Panel (⌘⇧D)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Stage Area (contains phone bezel) -->
+        <div class="device-stage">
+          
+          <!-- Slim Bezel Phone Frame (focused state) -->
+          <div class="phone-bezel focused">
+            <div class="camera-punch"></div>
+
+            <!-- Screen Area with Canvas / App Mockup -->
+            <div class="phone-screen">
+              
+              <!-- Real-time HUD overlay -->
+              <div class="screen-hud-pill">
+                <span>59 FPS</span>
+                <span class="latency">38 ms</span>
+              </div>
+
+              <!-- Interactive Touch Feedback Reticle -->
+              <div class="touch-reticle"></div>
+
+              <!-- Keyboard focus escape helper chip -->
+              <div class="focus-helper-banner">
+                Keys forwarded to device · ⇧Esc to release
+              </div>
+
+              <!-- Live Mobile App Interface -->
+              <div class="screen-content-mockup">
+                <div class="phone-status-bar">
+                  <span>14:22</span>
+                  <div style="display: flex; gap: 4px; align-items: center">
+                    <span>5G</span>
+                    <span>94%</span>
+                  </div>
+                </div>
+
+                <div class="phone-app-header">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                  <span>Checkout</span>
+                </div>
+
+                <div class="phone-card">
+                  <span style="color: #8b8f98; font-size: 10px;">DELIVERY ADDRESS</span>
+                  <span style="font-weight: 500;">UQi — Kantor istar.id</span>
+                  <span style="color: #8b8f98; font-size: 10px;">Jl. Basuki Rahmat No. 12, Surabaya</span>
+                </div>
+
+                <div class="phone-card">
+                  <div style="display: flex; justify-content: space-between;">
+                    <span>Order Summary (2 items)</span>
+                    <span style="font-weight: 600;">Rp 145.000</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; color: #7fc98f;">
+                    <span>Voucher Discount (HEMAT20)</span>
+                    <span>- Rp 20.000</span>
+                  </div>
+                  <div style="border-top: 1px solid #26282d; padding-top: 6px; display: flex; justify-content: space-between; font-weight: 600; color: #e6e7ea;">
+                    <span>Total Payment</span>
+                    <span style="color: #6ea8ff;">Rp 125.000</span>
+                  </div>
+                </div>
+
+                <div class="phone-card" style="border-color: #3a4f75; background: #1f2a3d;">
+                  <span style="color: #9cc3ff; font-weight: 500;">Payment Method</span>
+                  <span style="font-size: 10px; color: #d8d9dc;">Bank Jatim JConnect Virtual Account</span>
+                </div>
+
+                <button class="phone-btn-primary">
+                  Pay Now · Rp 125.000
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Bottom Navigation Bar (Android) -->
+        <div class="device-toolbar-bottom">
+          <button class="nav-btn" title="Back (Nav Key)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button class="nav-btn" title="Home (Nav Key)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/></svg>
+          </button>
+          <button class="nav-btn" title="Recents / Overview (Nav Key)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+          <div class="v-divider" style="height: 16px;"></div>
+          <button class="nav-btn" title="Volume Down">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
+          <button class="nav-btn" title="Volume Up">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
+          <button class="nav-btn" title="Power">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Status Bar -->
+    <div class="app-statusbar">
+      <span>feature/checkout ↑2</span>
+      <span style="color: #7fc98f">● Gradle synced</span>
+      <span>Kotlin LSP ready</span>
+      <span style="color: #6ea8ff">● Pixel 8 mirror live (59 fps · 38ms)</span>
+      <span style="margin-left: auto">Ln 10, Col 18</span>
+      <span>UTF-8</span>
+      <span>Kotlin</span>
+    </div>
+
+  </div>
+
+  <!-- SECTION 2: COLUMN ARCHITECTURE INCLUDING PHASE 5 AGENT SLOT -->
+  <div class="section-title">2. Multi-Dock Layout with Phase 5 Agent Slot (1440 × 900)</div>
+  <div class="viewport-frame" id="mockup-agent-slot">
+    
+    <!-- Titlebar -->
+    <div class="titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-dot"></div><div class="traffic-dot"></div><div class="traffic-dot"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-left: 10px">
+        <div class="brand-logo"><div></div><div class="dim"></div><div class="dim"></div><div></div></div>
+        <span class="brand-name">Petak</span>
+      </div>
+      <div class="v-divider"></div>
+      <button class="pill-btn" style="font-weight: 500;">shopee-lite</button>
+      <div style="flex-grow: 1"></div>
+      <div style="font-size: 11px; color: #e8b45a; background: #2e2717; padding: 2px 8px; border-radius: 4px; border: 1px solid #4a3d22;">
+        Layout Preview: [Rail 48px] + [Tree 200px] + [Editor 422px] + [Agent Panel 390px] + [Device Mirror 380px]
+      </div>
+      <div style="flex-grow: 1"></div>
+      <div style="width: 28px; height: 28px; border-radius: 14px; background: #2a3a55; color: #9cc3ff; display: grid; place-items: center; font-size: 11px; font-weight: 600;">U</div>
+    </div>
+
+    <!-- Body -->
+    <div class="app-body">
+      <!-- Rail (48px) -->
+      <div class="rail">
+        <button class="rail-btn active"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h7l2 2h9v12H3z"/></svg></button>
+        <button class="rail-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg></button>
+        <button class="rail-btn active" style="color: #e8b45a;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg></button>
+        <button class="rail-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg></button>
+      </div>
+
+      <!-- File Tree (200px) -->
+      <div class="file-tree" style="width: 200px;">
+        <div class="tree-header">PROJECT</div>
+        <div class="tree-item" style="padding-left: 12px;">▾ shopee-lite</div>
+        <div class="tree-item" style="padding-left: 24px;">▾ checkout</div>
+        <div class="tree-item selected" style="padding-left: 36px;">CheckoutViewModel.kt</div>
+      </div>
+
+      <!-- Center Editor (Flex: 1, min-width: 380px) -->
+      <div class="center-column" style="min-width: 380px;">
+        <div class="editor-surface" style="flex: 1;">
+          <div class="tab-bar">
+            <div class="editor-tab active">CheckoutViewModel.kt</div>
+          </div>
+          <div class="code-lines">
+            <div><span class="code-gutter">7</span>  <span class="k">fun</span> <span class="f">applyVoucher</span>(code: <span class="f">String</span>) = <span class="f">launch</span> {</div>
+            <div><span class="code-gutter">8</span>    <span class="k">val</span> res = repo.<span class="f">applyVoucher</span>(code)</div>
+            <div><span class="code-gutter">9</span>    <span class="k">if</span> (res.isSuccess) {</div>
+            <div><span class="code-gutter">10</span>      _state.<span class="f">update</span> { it.<span class="f">copy</span>(discount = res.amount) }</div>
+            <div><span class="code-gutter">11</span>    }</div>
+            <div><span class="code-gutter">12</span>  }</div>
+          </div>
+        </div>
+        <div class="bottom-panel" style="height: 180px;">
+          <div class="bottom-panel-header">
+            <div class="bottom-tab active">Logcat</div>
+          </div>
+          <div class="logcat-content">
+            <div><span style="color: #7fc98f">I/id.shop</span>: Logcat streaming active to mirror session</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLOT: Phase 5 Agent Panel (390px, to the LEFT of Device Mirror) -->
+      <div class="agent-panel-slot">
+        <div class="device-toolbar-top" style="background: #141518; border-color: #26282d;">
+          <span style="font-weight: 600; color: #e8b45a; display: flex; align-items: center; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+            Claude Code
+          </span>
+          <span style="font-size: 11px; color: #e8b45a; background: #2e2717; padding: 1px 6px; border-radius: 4px; margin-left: 6px;">Working</span>
+          <button class="tool-btn" style="margin-left: auto;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div style="padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 12px; color: #8b8f98;">
+          <div style="background: #1a1b1f; border: 1px solid #26282d; border-radius: 8px; padding: 10px;">
+            <span style="color: #e6e7ea; font-weight: 500;">Goal:</span> Fix discount calculation when voucher is applied.
+          </div>
+          <div style="color: #d8d9dc; line-height: 18px;">
+            Checking `CheckoutViewModel.kt` and running verification on Pixel 8.
+          </div>
+        </div>
+      </div>
+
+      <!-- Outer Right Dock: Device Mirror Panel (380px) -->
+      <div class="device-mirror-panel" style="width: 380px;">
+        <div class="device-toolbar-top">
+          <div class="device-title-info">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+            <span class="device-name-text">Pixel 8 · API 35</span>
+            <span class="device-badge-live">LIVE</span>
+          </div>
+          <div class="toolbar-actions">
+            <button class="tool-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></button>
+            <button class="tool-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+          </div>
+        </div>
+        <div class="device-stage">
+          <div class="phone-bezel" style="height: 650px; width: 310px;">
+            <div class="camera-punch"></div>
+            <div class="phone-screen">
+              <div class="screen-hud-pill"><span>59 FPS</span><span class="latency">38ms</span></div>
+              <div class="screen-content-mockup" style="justify-content: center; align-items: center; color: #8b8f98;">
+                <span>App Live Stream</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="device-toolbar-bottom">
+          <button class="nav-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <button class="nav-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/></svg></button>
+          <button class="nav-btn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Status Bar -->
+    <div class="app-statusbar">
+      <span>Ready</span>
+      <span style="color: #e8b45a">Claude Code working</span>
+      <span style="color: #6ea8ff">Pixel 8 live</span>
+    </div>
+
+  </div>
+
+  <!-- SECTION 3: THE 6 UI STATES SHOWCASE -->
+  <div class="section-title">3. The 6 UI States of Device Mirror Panel</div>
+  <div class="states-grid" id="mockup-states-grid">
+    
+    <!-- State 1: Empty State -->
+    <div class="state-card" id="state-empty">
+      <div class="state-card-header">
+        <span class="state-card-title">1. Empty State (No Device)</span>
+        <span style="font-size: 11px; color: #8b8f98">Idle / Closed</span>
+      </div>
+      <div class="device-toolbar-top" style="border-bottom: 1px solid #26282d;">
+        <span style="color: #8b8f98; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          No Device Connected
+        </span>
+      </div>
+      <div class="state-stage">
+        <div class="empty-state-box">
+          <div class="empty-icon-wrap">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          </div>
+          <div class="empty-title">No Device Selected</div>
+          <div class="empty-desc">
+            Connect an Android device via USB with USB debugging enabled, or start a local emulator.
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <button class="btn-primary">Select Device</button>
+            <button class="btn-secondary">Launch AVD</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- State 2: Connecting State -->
+    <div class="state-card" id="state-connecting">
+      <div class="state-card-header">
+        <span class="state-card-title">2. Connecting State</span>
+        <span style="font-size: 11px; color: #e8b45a">Pushing server jar</span>
+      </div>
+      <div class="device-toolbar-top" style="border-bottom: 1px solid #26282d;">
+        <span style="color: #d8d9dc; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          Pixel 8 · API 35
+        </span>
+        <span style="font-size: 10px; color: #e8b45a; background: #2e2717; border: 1px solid #4a3d22; padding: 1px 6px; border-radius: 4px; margin-left: auto;">
+          CONNECTING...
+        </span>
+      </div>
+      <div class="state-stage">
+        <div class="connecting-box">
+          <div class="spinner-ring"></div>
+          <div style="font-size: 14px; font-weight: 600; color: #e6e7ea;">Starting scrcpy Server…</div>
+          <div style="font-size: 12px; color: #8b8f98; max-width: 240px; line-height: 18px;">
+            Pushing server v4.1 to device, forwarding adb tunnel, and awaiting H.264 stream.
+          </div>
+          <button class="btn-secondary" style="margin-top: 8px;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- State 3: Live Interactive State -->
+    <div class="state-card" id="state-live">
+      <div class="state-card-header">
+        <span class="state-card-title">3. Live Interactive State</span>
+        <span style="font-size: 11px; color: #7fc98f">59 fps · 38ms</span>
+      </div>
+      <div class="device-toolbar-top" style="border-bottom: 1px solid #26282d;">
+        <span style="color: #d8d9dc; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          Pixel 8 · API 35
+        </span>
+        <span class="device-badge-live" style="margin-left: 6px;">LIVE</span>
+        <div class="toolbar-actions">
+          <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg></button>
+          <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+        </div>
+      </div>
+      <div class="state-stage" style="padding: 10px;">
+        <div class="phone-bezel focused" style="height: 380px; width: 190px; border-radius: 18px; padding: 6px 4px;">
+          <div class="phone-screen" style="border-radius: 14px;">
+            <div class="screen-hud-pill" style="top: 8px; right: 6px; font-size: 9px; height: 18px;"><span>59 FPS</span><span class="latency">38ms</span></div>
+            <div class="touch-reticle" style="top: 180px; left: 95px; width: 18px; height: 18px;"></div>
+            <div class="screen-content-mockup" style="background: #1a1b1f; padding: 12px 8px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 11px; font-weight: 600; color: #e6e7ea;">Checkout Screen</span>
+              <div style="background: #23252b; padding: 6px; border-radius: 4px; font-size: 9px; color: #8b8f98;">
+                Total: Rp 125.000
+              </div>
+              <div style="margin-top: auto; background: #6ea8ff; color: #0e1a2e; height: 26px; border-radius: 4px; font-weight: 600; display: grid; place-items: center; font-size: 10px;">
+                Pay Now
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="device-toolbar-bottom" style="height: 34px; padding: 0 14px;">
+        <button class="nav-btn" style="width: 26px; height: 26px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button class="nav-btn" style="width: 26px; height: 26px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/></svg></button>
+        <button class="nav-btn" style="width: 26px; height: 26px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+      </div>
+    </div>
+
+    <!-- State 4: Disconnected State (Device Dicabut) -->
+    <div class="state-card" id="state-disconnected">
+      <div class="state-card-header">
+        <span class="state-card-title">4. Disconnected State</span>
+        <span style="font-size: 11px; color: #e8b45a">USB Unplugged</span>
+      </div>
+      <div class="device-toolbar-top" style="border-bottom: 1px solid #26282d;">
+        <span style="color: #8b8f98; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          Pixel 8 (offline)
+        </span>
+        <span style="font-size: 10px; color: #8b8f98; background: #23252b; padding: 1px 6px; border-radius: 4px; margin-left: auto;">
+          OFFLINE
+        </span>
+      </div>
+      <div class="state-stage">
+        <!-- Warning Banner -->
+        <div class="disconnected-banner">
+          <div class="disconnected-banner-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Device Disconnected
+          </div>
+          <div>USB connection was lost or emulator exited. Re-plug device to resume stream.</div>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <button class="btn-primary" style="background: #e8b45a; height: 26px; font-size: 11px;">Reconnect</button>
+            <button class="btn-secondary" style="height: 26px; font-size: 11px;">Select Other</button>
+          </div>
+        </div>
+
+        <!-- Dimmed/blurred last frame -->
+        <div class="phone-bezel" style="height: 360px; width: 180px; opacity: 0.35; filter: grayscale(80%);">
+          <div class="phone-screen"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- State 5: Error State -->
+    <div class="state-card" id="state-error">
+      <div class="state-card-header">
+        <span class="state-card-title">5. Error State</span>
+        <span style="font-size: 11px; color: #f07a74">Connection / Codec Error</span>
+      </div>
+      <div class="device-toolbar-top" style="border-bottom: 1px solid #26282d;">
+        <span style="color: #f07a74; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Mirror Error
+        </span>
+      </div>
+      <div class="state-stage">
+        <div class="error-box">
+          <div class="error-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            Mirror Connection Failed
+          </div>
+          <div style="font-size: 12px; color: #d8d9dc;">
+            scrcpy server terminated prematurely during handshake.
+          </div>
+          <div class="error-desc">
+            exit code 1: adb forward failed: device unauthorized. Please check USB debugging prompt on phone.
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 6px;">
+            <button class="btn-primary" style="background: #f07a74; color: #1e0e0e;">Retry Handshake</button>
+            <button class="btn-secondary">View Logcat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- State 6: View-Only State (iOS Physical / Sim) -->
+    <div class="state-card" id="state-viewonly">
+      <div class="state-card-header">
+        <span class="state-card-title">6. View-Only State</span>
+        <span style="font-size: 11px; color: #e8b45a">iOS Simulator / iPhone</span>
+      </div>
+      <div class="device-toolbar-top" style="border-bottom: 1px solid #26282d;">
+        <span style="color: #d8d9dc; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          iPhone 15 Pro
+        </span>
+        <span class="device-badge-viewonly" style="margin-left: 6px;">VIEW ONLY</span>
+        <div class="toolbar-actions">
+          <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+        </div>
+      </div>
+      <div class="state-stage">
+        <!-- Advisory Notice -->
+        <div style="margin-bottom: 12px; padding: 6px 10px; background: #2e2717; border: 1px solid #4a3d22; border-radius: 6px; font-size: 11px; color: #e8b45a; max-width: 250px; line-height: 16px;">
+          Interactive touch and keyboard forwarding are restricted on iOS. Stream is display-only.
+        </div>
+        <div class="phone-bezel" style="height: 350px; width: 175px; border-radius: 20px;">
+          <div class="phone-screen" style="border-radius: 16px;">
+            <div class="screen-hud-pill" style="top: 8px; right: 6px; font-size: 9px; height: 18px;"><span>60 FPS</span></div>
+            <div class="screen-content-mockup" style="background: #111215; align-items: center; justify-content: center; color: #8b8f98;">
+              <span>iOS Mirror Stream</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SECTION 4: EXACT TOKEN SPECIFICATIONS TABLE -->
+  <div class="section-title">4. Token Specifications & Measurements Reference</div>
+  <div class="spec-card">
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th>UI Element</th>
+          <th>Design Token</th>
+          <th>Hex / Value</th>
+          <th>Role / Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Panel Background</td>
+          <td><code>bg-panel</code></td>
+          <td>#141518</td>
+          <td>Outer dock container, toolbar top and bottom</td>
+        </tr>
+        <tr>
+          <td>Stage Background</td>
+          <td><code>bg-app</code></td>
+          <td>#16171a</td>
+          <td>Area surrounding phone bezel</td>
+        </tr>
+        <tr>
+          <td>Phone Bezel Frame</td>
+          <td><code>bg-titlebar</code> + <code>border-normal</code></td>
+          <td>#111215 / border #2c2e34</td>
+          <td>Slim hardware bezel, radius 26-28px (NOT fake clip-art)</td>
+        </tr>
+        <tr>
+          <td>Phone Screen Canvas</td>
+          <td><code>pure-black</code></td>
+          <td>#000000</td>
+          <td>WebCodecs video output canvas, radius 18-20px</td>
+        </tr>
+        <tr>
+          <td>Bezel Focus Outline</td>
+          <td><code>border-focus</code> + <code>accent</code></td>
+          <td>#3a4f75 / rgba(110, 168, 255, 0.2)</td>
+          <td>Indicates keyboard focus is captured by phone screen</td>
+        </tr>
+        <tr>
+          <td>Touch Reticle</td>
+          <td><code>accent</code></td>
+          <td>rgba(110, 168, 255, 0.85)</td>
+          <td>24px circle showing mouse-down and drag touch position</td>
+        </tr>
+        <tr>
+          <td>HUD Pill (FPS / Latency)</td>
+          <td><code>bg-titlebar</code> (translucent) + <code>success</code></td>
+          <td>rgba(17, 18, 21, 0.85) / #7fc98f</td>
+          <td>Live performance metrics badge with 4px backdrop blur</td>
+        </tr>
+        <tr>
+          <td>View Only Badge</td>
+          <td><code>warning</code> pill</td>
+          <td>text #e8b45a / bg #2e2717 / border #4a3d22</td>
+          <td>Shown when iOS device/simulator has no input support</td>
+        </tr>
+        <tr>
+          <td>Disconnected Banner</td>
+          <td><code>warning</code> card</td>
+          <td>text #e8b45a / bg #2e2717 / border #4a3d22</td>
+          <td>Prominent alert when USB cable is detached</td>
+        </tr>
+        <tr>
+          <td>Error Card</td>
+          <td><code>danger</code> surface</td>
+          <td>text #f07a74 / bg #2a1d1e / border #4a2225</td>
+          <td>Actionable error with retry & logcat CTA</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</body>
+</html>
