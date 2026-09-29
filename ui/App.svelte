@@ -305,6 +305,16 @@
   );
 
   let isEditorReady = $state(false);
+  let lastBgInitFolder: string | null = null;
+  let watchedRoot: string | null = null;
+
+  function initBackgroundServices(folderPath: string) {
+    if (!folderPath || lastBgInitFolder === folderPath) return;
+    lastBgInitFolder = folderPath;
+    api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
+    gitStore.refresh(folderPath).catch((e) => console.warn('gitStore refresh error:', e));
+    runStore.init(folderPath).catch((e) => console.warn('runStore init error:', e));
+  }
 
   async function openFolder(folderPath: string) {
     try {
@@ -312,18 +322,13 @@
       currentFolderPath = folderPath;
       rootEntries = list;
       recentFolders = await api.addRecentFolder(folderPath);
-      await api.watchRoot(folderPath);
-      const isEager = !!(await api.testEnv('PETAK_EAGER_INIT'));
-      const noGit = !!(await api.testEnv('PETAK_NO_GIT'));
-      if (!noGit) {
-        api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
+      if (watchedRoot !== folderPath) {
+        await api.watchRoot(folderPath);
+        watchedRoot = folderPath;
       }
-      if (isEditorReady || isEager) {
-        api.indexBuild(folderPath).catch((e) => console.warn('indexBuild error:', e));
-        if (!noGit) {
-          gitStore.refresh(folderPath).catch((e) => console.warn('gitStore refresh error:', e));
-        }
-        runStore.init(folderPath).catch((e) => console.warn('runStore init error:', e));
+      api.gitBranch(folderPath).then((b) => (branchName = b)).catch((e) => console.warn('gitBranch error:', e));
+      if (isEditorReady) {
+        initBackgroundServices(folderPath);
       }
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
     } catch (e) {
@@ -669,12 +674,12 @@
     }
 
     const initBackground = () => {
-      if (currentFolderPath) {
-        api.indexBuild(currentFolderPath).catch((e) => console.warn('indexBuild error:', e));
-        gitStore.refresh(currentFolderPath).catch((e) => console.warn('gitStore refresh error:', e));
+      const target = currentFolderPath || (recentFolders && recentFolders[0]);
+      if (target) {
+        initBackgroundServices(target);
+      } else {
+        runStore.init('/workspace').catch((e) => console.warn('runStore init error:', e));
       }
-      const initialRoot = currentFolderPath || (recentFolders && recentFolders[0]) || '/workspace';
-      runStore.init(initialRoot).catch((e) => console.warn('runStore init error:', e));
     };
 
     if (typeof (window as any).requestIdleCallback === 'function') {
@@ -1219,7 +1224,6 @@
     // 2. Load recent folders and auto-open first recent folder if available (deferred so initial window/editor paint is instant)
     setTimeout(async () => {
       try {
-        if (await api.testEnv('PETAK_NO_AUTOOPEN')) return;
         const recents = await api.recentFolders();
         recentFolders = recents;
         if (recents && recents.length > 0) {

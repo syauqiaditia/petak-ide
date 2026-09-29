@@ -299,6 +299,7 @@
 
   // Inline Rename
   function startInlineRename(entry: Entry) {
+    if (entry.path === folderPath) return;
     renamingPath = entry.path;
     const name = entry.name;
     if (entry.is_dir) {
@@ -495,8 +496,10 @@
         shortcut: '⌘⌫',
         danger: true,
         action: () => {
-          deleteModalPaths = selectedArr;
-          deleteModalOpen = true;
+          deleteModalPaths = selectedArr.filter((p) => p !== folderPath);
+          if (deleteModalPaths.length > 0) {
+            deleteModalOpen = true;
+          }
         },
       });
 
@@ -681,8 +684,10 @@
         shortcut: '⌘⌫',
         danger: true,
         action: () => {
-          deleteModalPaths = [firstEntry.path];
-          deleteModalOpen = true;
+          if (firstEntry.path !== folderPath) {
+            deleteModalPaths = [firstEntry.path];
+            deleteModalOpen = true;
+          }
         },
       });
 
@@ -1010,8 +1015,9 @@
 
     if ((isCmd && e.key === 'Backspace') || e.key === 'Delete') {
       e.preventDefault();
-      if (selectedPaths.size > 0) {
-        deleteModalPaths = Array.from(selectedPaths);
+      const validPaths = Array.from(selectedPaths).filter((p) => p !== folderPath);
+      if (validPaths.length > 0) {
+        deleteModalPaths = validPaths;
         deleteModalOpen = true;
       }
       return;
@@ -1112,7 +1118,7 @@
       oncontextmenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        selectedPaths = new Set([folderPath]);
+        selectedPaths = new Set();
         openContextMenuForEmptyArea(e.clientX, e.clientY);
       }}
     >

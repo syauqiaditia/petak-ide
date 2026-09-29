@@ -7,6 +7,16 @@ use crate::git::diff::{diff_staged, parse_diff};
 use crate::git::log::{get_pushed_shas, get_refs_map, parse_log_output};
 use crate::git::model::{BlameLine, Commit, DiffFile};
 
+fn validate_ref_name(name: &str) -> Result<(), GitError> {
+    if name.is_empty() || name.starts_with('-') {
+        return Err(GitError {
+            exit_code: None,
+            message: format!("invalid git reference: '{}'", name),
+        });
+    }
+    Ok(())
+}
+
 /// Diffs a file or directory against a git reference (e.g. branch, tag, commit).
 pub fn diff_path_vs_ref(
     exec: &dyn Exec,
@@ -14,6 +24,7 @@ pub fn diff_path_vs_ref(
     git_ref: &str,
     rel: &str,
 ) -> Result<Vec<DiffFile>, GitError> {
+    validate_ref_name(git_ref)?;
     let mut args = vec!["diff", "--no-color", "--no-ext-diff", "-U3", git_ref];
     if !rel.is_empty() && rel != "." {
         args.extend_from_slice(&["--", rel]);
@@ -44,6 +55,9 @@ pub fn diff_path_staged(exec: &dyn Exec, repo: &Path, rel: &str) -> Result<Vec<D
 /// Returns file content at a specific git ref (`git show <ref>:<rel>`).
 /// Returns None if the path does not exist in that ref.
 pub fn file_at_ref(exec: &dyn Exec, repo: &Path, git_ref: &str, rel: &str) -> Option<String> {
+    if validate_ref_name(git_ref).is_err() {
+        return None;
+    }
     let norm = rel.replace('\\', "/").trim_start_matches('/').to_string();
     let spec = format!("{}:{}", git_ref, norm);
     git(exec, repo, &["show", &spec]).ok()

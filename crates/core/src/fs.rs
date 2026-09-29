@@ -63,6 +63,10 @@ pub fn read_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
 }
 
 pub fn save_file<P: AsRef<Path>>(path: P, content: &str) -> io::Result<()> {
+    save_file_bytes(path, content.as_bytes())
+}
+
+pub fn save_file_bytes<P: AsRef<Path>>(path: P, bytes: &[u8]) -> io::Result<()> {
     let target = path.as_ref();
     let parent = target.parent().unwrap_or_else(|| Path::new("."));
     let parent = if parent.as_os_str().is_empty() {
@@ -92,7 +96,7 @@ pub fn save_file<P: AsRef<Path>>(path: P, content: &str) -> io::Result<()> {
         if let Some(ref perms) = original_perms {
             let _ = file.set_permissions(perms.clone());
         }
-        file.write_all(content.as_bytes())?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         Ok(())
     })();
@@ -215,6 +219,11 @@ mod tests {
         // Overwrite existing file
         save_file(&file_path, "updated content").unwrap();
         assert_eq!(read_file(&file_path).unwrap(), "updated content");
+
+        // Save raw binary bytes (including non-utf8)
+        let bin_bytes = vec![0x00, 0xFF, 0xFE, 0x80, 0xAA];
+        save_file_bytes(&file_path, &bin_bytes).unwrap();
+        assert_eq!(fs::read(&file_path).unwrap(), bin_bytes);
     }
 
     #[test]

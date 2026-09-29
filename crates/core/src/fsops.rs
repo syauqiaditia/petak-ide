@@ -42,6 +42,14 @@ pub fn resolve_in_root(root: &Path, rel: &str) -> io::Result<PathBuf> {
         ));
     }
 
+    let trimmed = rel.trim();
+    if trimmed.is_empty() || trimmed == "." {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Target path cannot be empty or root",
+        ));
+    }
+
     let canonical_root = root.canonicalize()?;
     let mut normalized_rel = PathBuf::new();
 
@@ -66,10 +74,27 @@ pub fn resolve_in_root(root: &Path, rel: &str) -> io::Result<PathBuf> {
         }
     }
 
-    let tentative = canonical_root.join(&normalized_rel);
+    if normalized_rel.as_os_str().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Target path cannot be empty or root",
+        ));
+    }
 
-    // Find nearest existing ancestor
-    let mut curr = tentative.as_path();
+    let leaf = match normalized_rel.file_name() {
+        Some(f) => f.to_os_string(),
+        None => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Target path cannot be empty or root",
+            ))
+        }
+    };
+    let rel_parent = normalized_rel.parent().unwrap_or(Path::new(""));
+    let parent_tentative = canonical_root.join(rel_parent);
+
+    // Find nearest existing ancestor of parent
+    let mut curr = parent_tentative.as_path();
     while !curr.exists() && !curr.is_symlink() {
         if let Some(parent) = curr.parent() {
             curr = parent;
@@ -86,20 +111,22 @@ pub fn resolve_in_root(root: &Path, rel: &str) -> io::Result<PathBuf> {
         ));
     }
 
-    let remainder = tentative.strip_prefix(curr).unwrap_or(Path::new(""));
-    let resolved = if remainder.as_os_str().is_empty() {
+    let remainder = parent_tentative.strip_prefix(curr).unwrap_or(Path::new(""));
+    let canonical_parent = if remainder.as_os_str().is_empty() {
         canonical_ancestor
     } else {
         canonical_ancestor.join(remainder)
     };
-    if !resolved.starts_with(&canonical_root) {
+    if !canonical_parent.starts_with(&canonical_root) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "Resolved path escapes root",
         ));
     }
 
-    // If resolved itself exists or is symlink, check target
+    let resolved = canonical_parent.join(leaf);
+
+    // If resolved itself is symlink, check target
     if resolved.is_symlink() {
         let target = resolved.canonicalize()?;
         if !target.starts_with(&canonical_root) {
@@ -198,6 +225,23 @@ pub fn create_dir(root: &Path, rel: &str) -> io::Result<PathBuf> {
     Ok(target)
 }
 
+#[cfg(unix)]
+fn is_same_file(p1: &Path, p2: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::symlink_metadata(p1), fs::symlink_metadata(p2)) {
+        (Ok(m1), Ok(m2)) => m1.dev() == m2.dev() && m1.ino() == m2.ino(),
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn is_same_file(p1: &Path, p2: &Path) -> bool {
+    match (p1.canonicalize(), p2.canonicalize()) {
+        (Ok(c1), Ok(c2)) => c1 == c2,
+        _ => false,
+    }
+}
+
 /// Renames `from` to `to` within `root`. Never overwrites existing targets.
 /// Supports case-insensitive filesystem renames (e.g. `a.dart` -> `A.dart`) safely.
 pub fn rename(root: &Path, from: &str, to: &str) -> io::Result<()> {
@@ -236,6 +280,14 @@ pub fn rename(root: &Path, from: &str, to: &str) -> io::Result<()> {
 
     let is_case_only = src.to_string_lossy().to_lowercase() == dst.to_string_lossy().to_lowercase();
     if is_case_only {
+        let dst_exists = fs::symlink_metadata(&dst).is_ok();
+        if dst_exists && !is_same_file(&src, &dst) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Target already exists",
+            ));
+        }
+
         let parent = src.parent().unwrap_or(root);
         let tmp_name = format!(
             ".petak-rename-case-tmp-{}",
@@ -272,7 +324,11 @@ pub fn rename(root: &Path, from: &str, to: &str) -> io::Result<()> {
 /// Prevents moving a directory into itself or its descendant. Never overwrites.
 pub fn move_into(root: &Path, srcs: &[&str], dest_dir: &str) -> io::Result<Vec<String>> {
     let canonical_root = root.canonicalize()?;
-    let dest_path = resolve_in_root(root, dest_dir)?;
+    let dest_path = if dest_dir.is_empty() || dest_dir == "." {
+        canonical_root.clone()
+    } else {
+        resolve_in_root(root, dest_dir)?
+    };
     if !dest_path.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -379,7 +435,11 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
 /// If destination name conflicts, renames to `name copy.ext`, `name copy 2.ext`, etc.
 pub fn copy_into(root: &Path, srcs: &[&str], dest_dir: &str) -> io::Result<Vec<String>> {
     let canonical_root = root.canonicalize()?;
-    let dest_path = resolve_in_root(root, dest_dir)?;
+    let dest_path = if dest_dir.is_empty() || dest_dir == "." {
+        canonical_root.clone()
+    } else {
+        resolve_in_root(root, dest_dir)?
+    };
     if !dest_path.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -452,11 +512,43 @@ pub fn duplicate(root: &Path, rel: &str) -> io::Result<PathBuf> {
 
 /// Moves files/directories at `rels` to trash using `trash` crate.
 pub fn trash(root: &Path, rels: &[&str]) -> io::Result<()> {
+    let canonical_root = root.canonicalize()?;
     for rel in rels {
         let p = resolve_in_root(root, rel)?;
+        if p == canonical_root {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot trash root directory",
+            ));
+        }
         if p.exists() || p.is_symlink() {
             trash::delete(&p).map_err(|e| io::Error::other(e.to_string()))?;
         }
     }
     Ok(())
+}
+
+/// Returns true if the relative path matches common ignored patterns or .gitignore in root.
+pub fn is_ignored_path(root: &Path, rel: &str) -> bool {
+    for seg in rel.split(['/', '\\']).filter(|s| !s.is_empty()) {
+        if seg == ".git"
+            || seg == "node_modules"
+            || seg == "build"
+            || seg == ".dart_tool"
+            || seg == ".gradle"
+            || seg == "target"
+        {
+            return true;
+        }
+    }
+    let mut builder = ignore::gitignore::GitignoreBuilder::new(root);
+    builder.add(root.join(".gitignore"));
+    if let Ok(gi) = builder.build() {
+        let full = root.join(rel);
+        let is_dir = full.is_dir();
+        if gi.matched_path_or_any_parents(&full, is_dir).is_ignore() {
+            return true;
+        }
+    }
+    false
 }

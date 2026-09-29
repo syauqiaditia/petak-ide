@@ -65,74 +65,83 @@ class RunStore {
   private unlistenDevices: UnlistenFn | null = null;
   private unlistenGradleDaemon: UnlistenFn | null = null;
   private initialized = false;
+  private isWatchingDevices = false;
+  private initPromise: Promise<void> | null = null;
+  private currentInitFolder: string | null = null;
 
-  async init(folderPath: string) {
+  async init(folderPath: string): Promise<void> {
     if (!folderPath) return;
+    if (this.currentInitFolder === folderPath && this.initPromise) {
+      return this.initPromise;
+    }
+    this.currentInitFolder = folderPath;
     this.root = folderPath;
 
-    try {
-      if (await api.testEnv('PETAK_NO_RUNSTORE')) return;
-    } catch (_) {}
+    this.initPromise = (async () => {
+      // Load configs
+      try {
+        const file: RunConfigFile = await api.runConfigsLoad(folderPath);
+        if (file && Array.isArray(file.configs)) {
+          this.configs = file.configs;
+          if (file.selected && file.configs.some((c) => c.name === file.selected)) {
+            this.selectedConfigName = file.selected;
+          } else if (file.configs.length > 0) {
+            this.selectedConfigName = file.configs[0].name;
+          }
+        }
+      } catch (e) {
+        console.warn('[runStore] Failed to load run configs:', e);
+      }
 
-    // Load configs
-    try {
-      const file: RunConfigFile = await api.runConfigsLoad(folderPath);
-      if (file && Array.isArray(file.configs)) {
-        this.configs = file.configs;
-        if (file.selected && file.configs.some((c) => c.name === file.selected)) {
-          this.selectedConfigName = file.selected;
-        } else if (file.configs.length > 0) {
-          this.selectedConfigName = file.configs[0].name;
+      // Load devices & start watch (only watch once)
+      try {
+        if (!this.isWatchingDevices) {
+          this.isWatchingDevices = true;
+          await api.devicesWatch();
+        }
+        const list = await api.devicesList();
+        this.updateDevices(list);
+      } catch (e) {
+        console.warn('[runStore] Failed to watch/list devices:', e);
+      }
+
+      // Load AVDs
+      this.refreshAvds();
+
+      // Check Gradle daemon status on demand (not polling)
+      this.checkGradleStatus();
+
+      // Register event listeners once
+      if (!this.initialized) {
+        this.initialized = true;
+
+        try {
+          this.unlistenRunEvent = await api.onRunEvent((payload) => {
+            this.handleRunEvent(payload.event);
+          });
+        } catch (e) {
+          console.warn('[runStore] Failed to listen to run-event:', e);
+        }
+
+        try {
+          this.unlistenDevices = await api.onDevicesChanged((devices) => {
+            this.updateDevices(devices);
+          });
+        } catch (e) {
+          console.warn('[runStore] Failed to listen to devices-changed:', e);
+        }
+
+        try {
+          this.unlistenGradleDaemon = await api.onGradleDaemon((payload) => {
+            this.gradleDaemon = payload.running;
+          });
+        } catch (e) {
+          console.warn('[runStore] Failed to listen to gradle-daemon:', e);
         }
       }
-    } catch (e) {
-      console.warn('[runStore] Failed to load run configs:', e);
-    }
+    })();
 
-    // Load devices & start watch
-    try {
-      if (await api.testEnv('PETAK_NO_DEVICES')) return;
-      await api.devicesWatch();
-      const list = await api.devicesList();
-      this.updateDevices(list);
-    } catch (e) {
-      console.warn('[runStore] Failed to watch/list devices:', e);
-    }
-
-    // Load AVDs
-    this.refreshAvds();
-
-    // Check Gradle daemon status on demand (not polling)
-    this.checkGradleStatus();
-
-    // Register event listeners once
-    if (!this.initialized) {
-      this.initialized = true;
-
-      try {
-        this.unlistenRunEvent = await api.onRunEvent((payload) => {
-          this.handleRunEvent(payload.event);
-        });
-      } catch (e) {
-        console.warn('[runStore] Failed to listen to run-event:', e);
-      }
-
-      try {
-        this.unlistenDevices = await api.onDevicesChanged((devices) => {
-          this.updateDevices(devices);
-        });
-      } catch (e) {
-        console.warn('[runStore] Failed to listen to devices-changed:', e);
-      }
-
-      try {
-        this.unlistenGradleDaemon = await api.onGradleDaemon((payload) => {
-          this.gradleDaemon = payload.running;
-        });
-      } catch (e) {
-        console.warn('[runStore] Failed to listen to gradle-daemon:', e);
-      }
-    }
+    return this.initPromise;
   }
 
   updateDevices(list: Device[]) {
@@ -421,6 +430,9 @@ class RunStore {
       this.unlistenGradleDaemon = null;
     }
     this.initialized = false;
+    this.isWatchingDevices = false;
+    this.initPromise = null;
+    this.currentInitFolder = null;
   }
 }
 

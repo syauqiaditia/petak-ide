@@ -130,22 +130,29 @@ pub async fn watch_root(
         let app_handle_for_snap = app_handle.clone();
         let root_for_snap = root_path.clone();
 
-        petak_core::watch::watch(std::path::Path::new(&root_path), move |paths| {
-            let _ = app_handle_for_events.emit("fs-changed", FsChangedPayload { paths: paths.clone() });
-            let app_lh = app_handle_for_snap.clone();
-            let root_lh = root_for_snap.clone();
-            std::thread::spawn(move || {
-                if let Ok(store) = lh_store_dir(&app_lh, &root_lh) {
-                    let root_p = std::path::Path::new(&root_lh);
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<String>>();
+
+        std::thread::spawn(move || {
+            if let Ok(store) = lh_store_dir(&app_handle_for_snap, &root_for_snap) {
+                let root_p = std::path::Path::new(&root_for_snap);
+                while let Ok(paths) = rx.recv() {
                     for p_str in paths {
                         let p = std::path::Path::new(&p_str);
                         if let Ok(rel) = p.strip_prefix(root_p) {
                             let rel_str = rel.to_string_lossy().to_string();
+                            if petak_core::fsops::is_ignored_path(root_p, &rel_str) {
+                                continue;
+                            }
                             snapshot_file_if_small(&store, p, &rel_str, "external");
                         }
                     }
                 }
-            });
+            }
+        });
+
+        petak_core::watch::watch(std::path::Path::new(&root_path), move |paths| {
+            let _ = app_handle_for_events.emit("fs-changed", FsChangedPayload { paths: paths.clone() });
+            let _ = tx.send(paths);
         })
     })
     .await
@@ -855,7 +862,13 @@ pub fn test_repo_path() -> Option<String> {
 
 #[tauri::command]
 pub fn test_env(name: String) -> Option<String> {
-    std::env::var(name).ok()
+    #[cfg(debug_assertions)]
+    {
+        if name.starts_with("PETAK_") {
+            return std::env::var(name).ok();
+        }
+    }
+    None
 }
 
 #[tauri::command]
@@ -2044,14 +2057,18 @@ pub fn fs_create_dir(root: String, rel: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn fs_rename(app: tauri::AppHandle, root: String, from: String, to: String) -> Result<(), String> {
-    let root_path = std::path::Path::new(&root);
-    if let Ok(store) = lh_store_dir(&app, &root) {
-        if let Ok(src_path) = petak_core::fsops::resolve_in_root(root_path, &from) {
-            snapshot_file_if_small(&store, &src_path, &from, "before_rename");
+pub async fn fs_rename(app: tauri::AppHandle, root: String, from: String, to: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root_path = std::path::Path::new(&root);
+        if let Ok(store) = lh_store_dir(&app, &root) {
+            if let Ok(src_path) = petak_core::fsops::resolve_in_root(root_path, &from) {
+                snapshot_file_if_small(&store, &src_path, &from, "before_rename");
+            }
         }
-    }
-    petak_core::fsops::rename(root_path, &from, &to).map_err(|e| e.to_string())
+        petak_core::fsops::rename(root_path, &from, &to).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -2074,17 +2091,21 @@ pub fn fs_duplicate(root: String, rel: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn fs_trash(app: tauri::AppHandle, root: String, rels: Vec<String>) -> Result<(), String> {
-    let root_path = std::path::Path::new(&root);
-    if let Ok(store) = lh_store_dir(&app, &root) {
-        for rel in &rels {
-            if let Ok(p) = petak_core::fsops::resolve_in_root(root_path, rel) {
-                snapshot_file_if_small(&store, &p, rel, "before_delete");
+pub async fn fs_trash(app: tauri::AppHandle, root: String, rels: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root_path = std::path::Path::new(&root);
+        if let Ok(store) = lh_store_dir(&app, &root) {
+            for rel in &rels {
+                if let Ok(p) = petak_core::fsops::resolve_in_root(root_path, rel) {
+                    snapshot_file_if_small(&store, &p, rel, "before_delete");
+                }
             }
         }
-    }
-    let rel_refs: Vec<&str> = rels.iter().map(|s| s.as_str()).collect();
-    petak_core::fsops::trash(root_path, &rel_refs).map_err(|e| e.to_string())
+        let rel_refs: Vec<&str> = rels.iter().map(|s| s.as_str()).collect();
+        petak_core::fsops::trash(root_path, &rel_refs).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -2157,34 +2178,37 @@ pub fn lh_read(app: tauri::AppHandle, root: String, id: String) -> Result<String
 }
 
 #[tauri::command]
-pub fn lh_revert(app: tauri::AppHandle, root: String, id: String) -> Result<(), String> {
-    let store = lh_store_dir(&app, &root)?;
-    let entries = petak_core::local_history::list(&store, "")
-        .map_err(|e| e.to_string())?;
-    let entry = entries
-        .into_iter()
-        .find(|e| e.id == id)
-        .ok_or_else(|| format!("Entry '{}' not found", id))?;
+pub async fn lh_revert(app: tauri::AppHandle, root: String, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = lh_store_dir(&app, &root)?;
+        let entries = petak_core::local_history::list(&store, "")
+            .map_err(|e| e.to_string())?;
+        let entry = entries
+            .into_iter()
+            .find(|e| e.id == id)
+            .ok_or_else(|| format!("Entry '{}' not found", id))?;
 
-    let root_path = std::path::Path::new(&root);
-    let target = petak_core::fsops::resolve_in_root(root_path, &entry.path).map_err(|e| e.to_string())?;
-    let new_bytes = petak_core::local_history::read(&store, &id).map_err(|e| e.to_string())?;
+        let root_path = std::path::Path::new(&root);
+        let target = petak_core::fsops::resolve_in_root(root_path, &entry.path).map_err(|e| e.to_string())?;
+        let new_bytes = petak_core::local_history::read(&store, &id).map_err(|e| e.to_string())?;
 
-    // 1. Snapshot kondisi sekarang dulu
-    if target.exists() {
-        if let Ok(current_bytes) = std::fs::read(&target) {
-            let _ = petak_core::local_history::snapshot(&store, &entry.path, &current_bytes, "before_rollback");
+        // 1. Snapshot kondisi sekarang dulu
+        if target.exists() {
+            if let Ok(current_bytes) = std::fs::read(&target) {
+                let _ = petak_core::local_history::snapshot(&store, &entry.path, &current_bytes, "before_rollback");
+            }
         }
-    }
 
-    // 2. Tulis atomic
-    let content_str = String::from_utf8_lossy(&new_bytes).to_string();
-    petak_core::fs::save_file(&target, &content_str).map_err(|e| e.to_string())?;
+        // 2. Tulis atomic (bytes mentah)
+        petak_core::fs::save_file_bytes(&target, &new_bytes).map_err(|e| e.to_string())?;
 
-    // 3. Snapshot new content as save
-    let _ = petak_core::local_history::snapshot(&store, &entry.path, &new_bytes, "save");
+        // 3. Snapshot new content as save
+        let _ = petak_core::local_history::snapshot(&store, &entry.path, &new_bytes, "save");
 
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
