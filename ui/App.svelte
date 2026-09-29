@@ -85,6 +85,17 @@
     }, 20);
   }
 
+  async function openLogcat() {
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openLogcat?.();
+    }, 20);
+  }
+
   async function openProblems() {
     if (!TerminalPanelComponent) {
       const mod = await import('./features/terminal/TerminalPanel.svelte');
@@ -1225,6 +1236,8 @@
           openRun();
         } else if (window.location.search.includes('tab=build')) {
           openBuild();
+        } else if (window.location.search.includes('tab=logcat')) {
+          openLogcat();
         }
       }
     }, 50);

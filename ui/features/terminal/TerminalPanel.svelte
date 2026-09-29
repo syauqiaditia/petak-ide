@@ -9,7 +9,9 @@
   import { usagesStore } from '../editor/lsp/nav.svelte';
   import RunPanel from '../run/RunPanel.svelte';
   import BuildPanel from '../run/BuildPanel.svelte';
+  import LogcatPanel from '../run/LogcatPanel.svelte';
   import { runStore } from '../run/runStore.svelte';
+  import { logcatStore } from '../run/logcatStore.svelte';
 
   let {
     folderPath = '',
@@ -31,11 +33,13 @@
 
   let tabs = $state<TabItem[]>([]);
   let activeTabId = $state<number | null>(null);
-  let activeSection = $state<'run' | 'build' | 'problems' | 'usages' | 'terminal'>(
+  let activeSection = $state<'run' | 'build' | 'logcat' | 'problems' | 'usages' | 'terminal'>(
     typeof window !== 'undefined' && window.location.search.includes('tab=run')
       ? 'run'
       : typeof window !== 'undefined' && window.location.search.includes('tab=build')
       ? 'build'
+      : typeof window !== 'undefined' && window.location.search.includes('tab=logcat')
+      ? 'logcat'
       : 'terminal'
   );
 
@@ -207,6 +211,10 @@
     activeSection = 'build';
   }
 
+  export function openLogcat() {
+    activeSection = 'logcat';
+  }
+
   export function openProblems() {
     activeSection = 'problems';
   }
@@ -229,7 +237,7 @@
     }, 10);
   }
 
-  export function getActiveSection(): 'problems' | 'terminal' {
+  export function getActiveSection(): 'problems' | 'terminal' | 'run' | 'build' | 'logcat' | 'usages' {
     return activeSection;
   }
 
@@ -319,6 +327,23 @@
         <span class="tab-label">Build</span>
         {#if runStore.buildErrors.length > 0}
           <span class="tab-badge is-error">{runStore.buildErrors.length}</span>
+        {/if}
+      </div>
+
+      <!-- Logcat Tab -->
+      <div
+        class="panel-tab logcat-tab"
+        class:active={activeSection === 'logcat'}
+        onclick={() => (activeSection = 'logcat')}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') activeSection = 'logcat'; }}
+      >
+        <span class="tab-label">Logcat</span>
+        {#if logcatStore.isPaused}
+          <span class="tab-badge is-warning">pause</span>
+        {:else if logcatStore.filteredLines.length > 0}
+          <span class="tab-badge logcat-badge">{logcatStore.filteredLines.length > 999 ? '999+' : logcatStore.filteredLines.length}</span>
         {/if}
       </div>
 
@@ -430,6 +455,12 @@
   {#if activeSection === 'build'}
     <div class="panel-body build-body">
       <BuildPanel onSelectFile={onSelectProblem} />
+    </div>
+  {/if}
+
+  {#if activeSection === 'logcat'}
+    <div class="panel-body logcat-body">
+      <LogcatPanel onOpenFile={(file, line, col) => onSelectProblem(file, line, col || 1)} />
     </div>
   {/if}
 
@@ -559,12 +590,18 @@
 
   .problems-body,
   .run-body,
-  .build-body {
+  .build-body,
+  .logcat-body {
     padding: 0;
     flex: 1;
     min-height: 0;
     display: flex;
     overflow: hidden;
+  }
+
+  .logcat-badge {
+    background: #23344d !important;
+    color: #6ea8ff !important;
   }
 
   .run-dot {

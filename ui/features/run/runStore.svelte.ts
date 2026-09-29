@@ -181,9 +181,19 @@ class RunStore {
     this.buildErrors = next.buildErrors;
     this.outputLines = next.outputLines;
 
-    if (event.type === 'stopped') {
+    if (event.type === 'appStarted') {
+      const devId = this.selectedDeviceId;
+      if (devId) {
+        api.logcatStart(devId, this.appId || undefined).catch((e) => {
+          console.warn('[runStore] Failed to auto-start logcat:', e);
+        });
+      }
+    } else if (event.type === 'stopped') {
       this.runId = null;
       this.pid = null;
+      api.logcatStop().catch((e) => {
+        console.warn('[runStore] Failed to auto-stop logcat:', e);
+      });
     }
   }
 
@@ -202,7 +212,16 @@ class RunStore {
   }
 
   selectDevice(id: string) {
+    const prevId = this.selectedDeviceId;
     this.selectedDeviceId = id;
+    if (prevId !== id) {
+      api.logcatStop().catch(() => {});
+      if (this.state === 'running' && id) {
+        api.logcatStart(id, this.appId || undefined).catch((e) => {
+          console.warn('[runStore] Failed to restart logcat on device switch:', e);
+        });
+      }
+    }
   }
 
   async startRun() {
@@ -283,6 +302,7 @@ class RunStore {
   async stopRun() {
     if (!this.runId) {
       this.state = 'stopped';
+      api.logcatStop().catch(() => {});
       return;
     }
 
@@ -294,6 +314,7 @@ class RunStore {
       this.state = 'stopped';
       this.runId = null;
       this.pid = null;
+      api.logcatStop().catch(() => {});
     }
   }
 
@@ -381,6 +402,7 @@ class RunStore {
   }
 
   destroy() {
+    api.logcatStop().catch(() => {});
     if (this.unlistenRunEvent) {
       this.unlistenRunEvent();
       this.unlistenRunEvent = null;

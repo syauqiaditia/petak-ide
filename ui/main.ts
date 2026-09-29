@@ -468,6 +468,8 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       if (cmd === 'gradle_status') return true;
       if (cmd === 'gradle_sync') return 'BUILD SUCCESSFUL in 2s';
       if (cmd === 'gradle_stop') return null;
+      if (cmd === 'logcat_start') return null;
+      if (cmd === 'logcat_stop') return null;
       if (cmd === 'open_url') return null;
       if (cmd.startsWith('plugin:event|')) return 1;
       return null;
@@ -480,6 +482,8 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
 import { mount } from 'svelte';
 import App from './App.svelte';
 import { api } from './lib/api';
+import { logcatStore } from './features/run/logcatStore.svelte';
+import type { LogLine } from './lib/api';
 
 const formatArg = (a: any) => {
   if (a instanceof Error) {
@@ -523,5 +527,84 @@ console.error = (...args) => {
 const app = mount(App, {
   target: document.getElementById('app')!,
 });
+
+if (typeof window !== 'undefined') {
+  (window as any).__FRAME_TIMES__ = [];
+  let lastFrame = performance.now();
+  let frameCount = 0;
+  const trackFrames = () => {
+    const now = performance.now();
+    const dt = now - lastFrame;
+    lastFrame = now;
+    if (frameCount > 5) {
+      (window as any).__FRAME_TIMES__.push(dt);
+    }
+    frameCount++;
+    requestAnimationFrame(trackFrames);
+  };
+  requestAnimationFrame(trackFrames);
+
+  (window as any).__GET_PERF_METRICS__ = () => {
+    const times: number[] = (window as any).__FRAME_TIMES__ || [];
+    if (times.length === 0) return { avg: 16.6, min: 16.6, max: 16.6, p95: 16.6, count: 0 };
+    const sorted = [...times].sort((a, b) => a - b);
+    const avg = times.reduce((a, b) => a + b, 0) / times.length;
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const p95 = sorted[Math.floor(sorted.length * 0.95)];
+    return { avg, min, max, p95, count: times.length };
+  };
+}
+
+if (typeof window !== 'undefined' && (window.location.search.includes('tab=logcat') || window.location.search.includes('logcat'))) {
+  const dummyLogs: LogLine[] = [
+    { ts: '10:42:18.204', pid: 12345, tid: 12360, level: 'D', tag: 'Checkout', msg: 'applyVoucher(code=HEMAT50)' },
+    { ts: '10:42:18.377', pid: 12345, tid: 12362, level: 'I', tag: 'OkHttp', msg: '--> POST /v2/cart/voucher' },
+    { ts: '10:42:18.912', pid: 12345, tid: 12362, level: 'I', tag: 'OkHttp', msg: '<-- 200 OK (534ms, 0-byte body)' },
+    { ts: '10:42:19.020', pid: 12345, tid: 12360, level: 'W', tag: 'Checkout', msg: 'voucher response empty, retrying with fallback' },
+    { ts: '10:42:19.311', pid: 12345, tid: 12345, level: 'E', tag: 'AndroidRuntime', msg: 'FATAL EXCEPTION: main — IllegalStateException: voucher must not be null' },
+    { ts: '10:42:19.315', pid: 12345, tid: 12345, level: 'E', tag: 'AndroidRuntime', msg: '    at id.shop.checkout.CartRepository.applyVoucher(CartRepository.kt:48)' },
+    { ts: '10:42:19.316', pid: 12345, tid: 12345, level: 'E', tag: 'AndroidRuntime', msg: '    at id.shop.checkout.CheckoutCubit.submit(CheckoutCubit.kt:112)' },
+    { ts: '10:42:19.320', pid: 12345, tid: 12345, level: 'E', tag: 'AndroidRuntime', msg: '    at android.os.Handler.dispatchMessage(Handler.java:106)' },
+    { ts: '10:42:19.410', pid: 12345, tid: 12365, level: 'I', tag: 'Flutter', msg: 'package:id_shop/features/checkout.dart:42:10 Flutter exception handled' },
+    { ts: '10:42:19.415', pid: 12345, tid: 12365, level: 'D', tag: 'Flutter', msg: 'lib/features/cart.dart:15:3 rebuild completed' },
+    { ts: '10:42:19.500', pid: 12345, tid: 12360, level: 'I', tag: 'ActivityManager', msg: 'Displayed id.shop.lite/.MainActivity: +412ms' },
+  ];
+  setTimeout(() => {
+    logcatStore.handleBatch(dummyLogs);
+  }, 100);
+
+  if (window.location.search.includes('feed=synthetic') || window.location.search.includes('bench-feed')) {
+    let feedCounter = 1;
+    const interval = setInterval(() => {
+      const batch: LogLine[] = [];
+      const tags = ['OkHttp', 'Checkout', 'Flutter', 'AndroidRuntime', 'ActivityManager', 'SurfaceView'];
+      const levels: Array<'V' | 'D' | 'I' | 'W' | 'E'> = ['D', 'I', 'I', 'W', 'D'];
+      const now = new Date();
+      const ts = `${now.toTimeString().split(' ')[0]}.${String(now.getMilliseconds()).padStart(3, '0')}`;
+      for (let i = 0; i < 100; i++) {
+        const idx = feedCounter++;
+        const lvl = idx % 20 === 0 ? 'E' : levels[idx % levels.length];
+        const tag = idx % 20 === 0 ? 'AndroidRuntime' : tags[idx % tags.length];
+        const msg = idx % 20 === 0
+          ? `FATAL ERROR at id.shop.checkout.CartRepository.applyVoucher(CartRepository.kt:48) event #${idx}`
+          : idx % 15 === 0
+          ? `package:id_shop/features/checkout.dart:42:10 stream packet #${idx}`
+          : `Processed network event batch item #${idx} payload OK`;
+        batch.push({
+          ts,
+          pid: 12345,
+          tid: 12360,
+          level: lvl,
+          tag,
+          msg,
+        });
+      }
+      logcatStore.handleBatch(batch);
+    }, 50);
+
+    setTimeout(() => clearInterval(interval), 10000);
+  }
+}
 
 export default app;
