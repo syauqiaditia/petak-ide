@@ -5,7 +5,8 @@ export function drawCanvasMockApp(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  isViewOnly = false
+  isViewOnly = false,
+  isInteracted = false
 ) {
   // 1. Background
   ctx.fillStyle = '#141518';
@@ -43,12 +44,77 @@ export function drawCanvasMockApp(
   ctx.fillStyle = '#e6e7ea';
   ctx.font = `600 ${Math.round(13 * scale)}px 'Geist', sans-serif`;
   ctx.textAlign = 'left';
-  ctx.fillText(isViewOnly ? 'Flutter Gallery (iOS)' : 'Shopee Lite — Checkout', 14 * scale, headerY + headerH / 2);
+  ctx.fillText(
+    isViewOnly
+      ? 'iOS Simulator · View Only'
+      : isInteracted
+      ? 'Payment Completed'
+      : 'Shopee Lite — Checkout',
+    14 * scale,
+    headerY + headerH / 2
+  );
+
+  const cardW = width - 24 * scale;
+  const cardX = 12 * scale;
+
+  if (isInteracted) {
+    // Render interacted state (success receipt after tap on Pay button)
+    const successY = headerY + headerH + 20 * scale;
+    ctx.fillStyle = '#223829';
+    ctx.strokeStyle = '#396144';
+    ctx.beginPath();
+    ctx.roundRect(cardX, successY, cardW, 110 * scale, 8 * scale);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#7fc98f';
+    ctx.font = `700 ${Math.round(14 * scale)}px 'Geist', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('✓ Payment Successful!', width / 2, successY + 30 * scale);
+
+    ctx.fillStyle = '#d8d9dc';
+    ctx.font = `500 ${Math.round(11 * scale)}px 'Geist', sans-serif`;
+    ctx.fillText('Transaction Ref: JATIM-8921841', width / 2, successY + 58 * scale);
+
+    ctx.fillStyle = '#9da1ab';
+    ctx.font = `400 ${Math.round(10 * scale)}px 'Geist', sans-serif`;
+    ctx.fillText('Amount: Rp 125.000 (Paid via Virtual Account)', width / 2, successY + 80 * scale);
+
+    // Detail card
+    const detailY = successY + 124 * scale;
+    ctx.fillStyle = '#1a1b1f';
+    ctx.strokeStyle = '#26282d';
+    ctx.beginPath();
+    ctx.roundRect(cardX, detailY, cardW, 90 * scale, 8 * scale);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9cc3ff';
+    ctx.font = `600 ${Math.round(11 * scale)}px 'Geist', sans-serif`;
+    ctx.fillText('Order #ORD-2026-904', cardX + 12 * scale, detailY + 20 * scale);
+    ctx.fillStyle = '#8b8f98';
+    ctx.font = `400 ${Math.round(10.5 * scale)}px 'Geist', sans-serif`;
+    ctx.fillText('Merchant: Bank Jatim Merchant Portal', cardX + 12 * scale, detailY + 42 * scale);
+    ctx.fillText('Status: Confirmed & Shipping Prepared', cardX + 12 * scale, detailY + 62 * scale);
+
+    // Back to merchant button
+    const btnH = 40 * scale;
+    const btnY = height - 20 * scale - btnH;
+    ctx.fillStyle = '#343842';
+    ctx.beginPath();
+    ctx.roundRect(cardX, btnY, cardW, btnH, 8 * scale);
+    ctx.fill();
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `600 ${Math.round(12 * scale)}px 'Geist', sans-serif`;
+    ctx.fillText('Back to Home', width / 2, btnY + btnH / 2);
+    return;
+  }
 
   // 4. Cards
   const card1Y = headerY + headerH + 14 * scale;
-  const cardW = width - 24 * scale;
-  const cardX = 12 * scale;
   const card1H = 90 * scale;
 
   ctx.fillStyle = '#1a1b1f';

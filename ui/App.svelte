@@ -1374,12 +1374,40 @@
             { file: 'lib/features/cart/CartRepository.kt', line: 102, col: 4, message: 'Type mismatch: inferred type is Double? but Double was expected' },
           ];
         }
+        if (params.has('preview') || (window as any).__PETAK_PREVIEW__) {
+          runStore.snapshot = {
+            emulators: [
+              { id: 'Pixel_8_API_35', name: 'Pixel 8', kind: 'android-avd', state: 'running', deviceId: 'emulator-5554', sdk: '35' },
+              { id: 'Nexus_5_API_30', name: 'Nexus 5', kind: 'android-avd', state: 'stopped', deviceId: null, sdk: '30' },
+              { id: 'iPhone-15-Pro', name: 'iPhone 15 Pro', kind: 'ios-sim', state: 'running', deviceId: 'udid-ios-sim-15', sdk: '17.5' },
+              { id: 'iPad-Air-11', name: 'iPad Air 11-inch', kind: 'ios-sim', state: 'stopped', deviceId: null, sdk: '17.5' },
+            ],
+            physical: [
+              { id: '2A151FDH2008W4', name: 'Samsung Galaxy S23', platform: 'android', transport: 'usb', state: 'online' },
+              { id: '00008110-001A24621E22801E', name: 'UQi iPhone 14 Pro', platform: 'ios', transport: 'usb', state: 'online' },
+            ],
+          };
+          runStore.devices = [
+            { id: 'emulator-5554', name: 'Pixel 8', platform: 'android', kind: 'emulator', state: 'online', sdk: '35' },
+            { id: 'udid-ios-sim-15', name: 'iPhone 15 Pro', platform: 'ios', kind: 'emulator', state: 'online', sdk: '17.5' },
+            { id: '2A151FDH2008W4', name: 'Samsung Galaxy S23', platform: 'android', kind: 'physical', state: 'online' },
+          ];
+          runStore.selectedDeviceId = 'emulator-5554';
+          branchName = 'canary/prod/1.9.0';
+        }
+
         if (window.location.search.includes('tab=run')) {
           openRun();
         } else if (window.location.search.includes('tab=build')) {
           openBuild();
         } else if (window.location.search.includes('tab=logcat')) {
           openLogcat();
+        } else if (window.location.search.includes('tab=devices')) {
+          activeRailTab = 'devices';
+        } else if (window.location.search.includes('tab=git')) {
+          activeRailTab = 'git';
+        } else if (window.location.search.includes('tab=toolchains')) {
+          activeRailTab = 'settings';
         }
 
         if (params.has('mirror') || window.location.search.includes('preview-mirror')) {
@@ -1389,7 +1417,7 @@
 
           mirrorStore.isOpen = true;
           mirrorStore.deviceName = devParam;
-          mirrorStore.serial = 'emulator-5554';
+          mirrorStore.serial = isViewOnlyParam ? 'udid-ios-sim-15' : 'emulator-5554';
           mirrorStore.isViewOnly = isViewOnlyParam;
 
           if (stateParam === 'empty') {
@@ -1403,14 +1431,19 @@
             mirrorStore.disconnectReason = 'USB connection was lost or emulator exited. Re-plug device to resume stream.';
           } else if (stateParam === 'error') {
             mirrorStore.status = 'error';
-            mirrorStore.errorMessage = 'exit code 1: adb forward failed: device unauthorized. Please check USB debugging prompt on phone.';
+            if (params.has('screenrec') || isViewOnlyParam) {
+              mirrorStore.errorMessage = 'macOS authorization denied: Screen Recording permission is required to stream iOS Simulator display.';
+            } else {
+              mirrorStore.errorMessage = 'exit code 1: adb forward failed: device unauthorized. Please check USB debugging prompt on phone.';
+            }
           } else if (stateParam === 'view-only') {
             mirrorStore.status = 'view-only';
-            mirrorStore.deviceName = 'iPhone 15 Pro';
+            mirrorStore.deviceName = 'iPhone 15 Pro · iOS 17.5';
             mirrorStore.isViewOnly = true;
             mirrorStore.fps = 60;
           } else {
             mirrorStore.status = 'live';
+            mirrorStore.isViewOnly = false;
             mirrorStore.fps = 59;
             mirrorStore.latencyMs = 38;
           }

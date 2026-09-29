@@ -8,17 +8,19 @@
     fileName = '',
     relPath = '',
     folderPath = '',
+    initialTab = 'branches',
     onclose,
     onselect,
   } = $props<{
     fileName: string;
     relPath: string;
     folderPath: string;
+    initialTab?: 'branches' | 'revisions';
     onclose: () => void;
     onselect: (ref: string) => void;
   }>();
 
-  let activeTab = $state<'branches' | 'revisions'>('branches');
+  let activeTab = $state<'branches' | 'revisions'>(initialTab);
   let filterText = $state('');
   let inputEl: HTMLInputElement;
   let selectedIndex = $state(0);

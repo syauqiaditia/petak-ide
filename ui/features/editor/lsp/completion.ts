@@ -16,6 +16,7 @@ import { isLspSupported } from './sync';
 import { offsetToLspPos } from './pos';
 import { createSnippetCompletionSource } from '../snippets';
 import { applyTextEditsToView } from './applyEdit';
+import { renderMarkdownToDom } from './markdown';
 
 /**
  * Map LSP CompletionItemKind to human-readable type string and single-letter badge.
@@ -73,9 +74,6 @@ function getKindInfo(kind?: number): { typeName: string; letter: string } {
  * Format markdown documentation for CodeMirror completion info popover.
  */
 function renderDocContent(doc: string | { kind?: string; value: string } | any): HTMLElement {
-  const container = document.createElement('div');
-  container.className = 'cm-completion-doc-content';
-
   const rawText =
     typeof doc === 'string'
       ? doc
@@ -83,38 +81,9 @@ function renderDocContent(doc: string | { kind?: string; value: string } | any):
       ? doc.value
       : String(doc || '');
 
-  // Render minimal markdown: code blocks and text
-  const parts = rawText.split(/(```[\s\S]*?```)/g);
-  for (const part of parts) {
-    if (part.startsWith('```') && part.endsWith('```')) {
-      const lines = part.slice(3, -3).trim().split('\n');
-      const firstLine = lines[0] || '';
-      const codeLines = /^[a-zA-Z0-9_-]+$/.test(firstLine) ? lines.slice(1) : lines;
-      const pre = document.createElement('pre');
-      const code = document.createElement('code');
-      code.textContent = codeLines.join('\n');
-      pre.appendChild(code);
-      container.appendChild(pre);
-    } else {
-      const p = document.createElement('p');
-      // Simple inline code replacement
-      const inlineParts = part.split(/(`[^`]+`)/g);
-      for (const ip of inlineParts) {
-        if (ip.startsWith('`') && ip.endsWith('`')) {
-          const c = document.createElement('code');
-          c.textContent = ip.slice(1, -1);
-          p.appendChild(c);
-        } else if (ip) {
-          p.appendChild(document.createTextNode(ip));
-        }
-      }
-      if (p.childNodes.length > 0) {
-        container.appendChild(p);
-      }
-    }
-  }
-
-  return container;
+  const dom = renderMarkdownToDom(rawText);
+  dom.className = 'cm-completion-doc-content';
+  return dom;
 }
 
 /**
@@ -329,28 +298,35 @@ export const completionTheme = EditorView.theme({
     padding: '8px 12px !important',
     color: '#d8d9dc !important',
     fontSize: '12px !important',
-    maxWidth: '420px !important',
+    maxWidth: '520px !important',
     maxHeight: '260px !important',
     overflowY: 'auto !important',
     boxShadow: '0 8px 24px rgba(0,0,0,0.4) !important',
     fontFamily: "'JetBrains Mono', monospace !important",
   },
-  '.cm-completion-doc-content pre': {
+  '.cm-completion-doc-content pre.cm-lsp-code-block': {
     backgroundColor: '#141518',
     border: '1px solid #26282d',
     borderRadius: '4px',
-    padding: '6px 8px',
-    margin: '6px 0',
+    padding: '4px 8px',
+    margin: '4px 0',
     overflowX: 'auto',
+    fontSize: '11px',
+    lineHeight: '1.4',
   },
   '.cm-completion-doc-content code': {
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: '11.5px',
     color: '#56a8f5',
   },
-  '.cm-completion-doc-content p': {
-    margin: '4px 0',
-    lineHeight: '1.45',
+  '.cm-completion-doc-content p.cm-lsp-para': {
+    margin: '3px 0',
+    lineHeight: '1.4',
+  },
+  '.cm-completion-doc-content a.cm-lsp-link': {
+    color: '#6ea8ff',
+    textDecoration: 'underline',
+    textUnderlineOffset: '2px',
   },
 });
 

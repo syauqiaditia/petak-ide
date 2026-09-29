@@ -196,6 +196,49 @@ export interface Avd {
   name: string;
 }
 
+export interface KotlinLsStatus {
+  installed: boolean;
+  version: string | null;
+  javaOk: boolean;
+  javaVersion: string | null;
+  message: string;
+}
+
+export interface KotlinLsProgress {
+  stage: 'downloading' | 'extracting' | 'verifying' | 'done' | 'error';
+  percent: number | null;
+  message: string;
+}
+
+export interface CheckoutResult {
+  stashed: boolean;
+  stashPopped: boolean;
+  message: string;
+}
+
+export interface SnapshotEmulator {
+  id: string;
+  name: string;
+  kind: 'android-avd' | 'ios-sim';
+  state: 'running' | 'stopped' | 'booting';
+  deviceId?: string | null;
+  sdk?: string;
+}
+
+export interface SnapshotPhysical {
+  id: string;
+  name: string;
+  platform: DevicePlatform;
+  transport: 'usb' | 'wifi';
+  state?: string;
+  sdk?: string;
+}
+
+export interface DevicesSnapshot {
+  emulators: SnapshotEmulator[];
+  physical: SnapshotPhysical[];
+}
+
 export type RunKind = 'flutter' | 'gradle';
 
 export interface RunConfig {
@@ -767,6 +810,80 @@ export const api = {
     return invoke('devices_watch');
   },
 
+  devicesSnapshot(): Promise<DevicesSnapshot> {
+    return invoke<DevicesSnapshot>('devices_snapshot').catch(async () => {
+      // Fallback to devicesList and avdList
+      const devs = await invoke<Device[]>('devices_list').catch(() => []);
+      const avds = await invoke<Avd[]>('avd_list').catch(() => []);
+      const emus: SnapshotEmulator[] = devs
+        .filter((d) => d.kind === 'emulator' || d.platform === 'ios')
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          kind: (d.platform === 'ios' ? 'ios-sim' : 'android-avd') as 'android-avd' | 'ios-sim',
+          state: (d.state === 'online' ? 'running' : 'stopped') as 'running' | 'stopped',
+          deviceId: d.id,
+          sdk: d.sdk ?? undefined,
+        }));
+      for (const a of avds) {
+        if (!emus.some((e) => e.name.toLowerCase() === a.name.toLowerCase())) {
+          emus.push({
+            id: a.name,
+            name: a.name,
+            kind: 'android-avd',
+            state: 'stopped',
+            deviceId: null,
+          });
+        }
+      }
+      const phys: SnapshotPhysical[] = devs
+        .filter((d) => d.kind === 'physical')
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          platform: d.platform,
+          transport: d.id.includes(':') ? 'wifi' : 'usb',
+          state: d.state,
+          sdk: d.sdk ?? undefined,
+        }));
+      return { emulators: emus, physical: phys };
+    });
+  },
+
+  async avdStart(name: string, cold: boolean = false): Promise<void> {
+    try {
+      await invoke('avd_start', { name, cold });
+    } catch {
+      await invoke('emulator_start', { avd: name, headless: null });
+    }
+  },
+
+  avdStop(name: string): Promise<void> {
+    return invoke('avd_stop', { name });
+  },
+
+  simBoot(udid: string): Promise<void> {
+    return invoke('sim_boot', { udid });
+  },
+
+  simShutdown(udid: string): Promise<void> {
+    return invoke('sim_shutdown', { udid });
+  },
+
+  kotlinLsStatus(): Promise<KotlinLsStatus> {
+    return invoke<KotlinLsStatus>('kotlin_ls_status').catch(() => ({
+      installed: false,
+      version: null,
+      javaOk: true,
+      javaVersion: null,
+      message: 'Status check unavailable',
+    }));
+  },
+
+  kotlinLsInstall(): Promise<void> {
+    return invoke('kotlin_ls_install');
+  },
+
   avdList(): Promise<Avd[]> {
     return invoke<Avd[]>('avd_list');
   },
@@ -906,6 +1023,73 @@ export const api = {
     return invoke<string>('git_commit_paths', { root, rels, message });
   },
 
+  async gitBranchesTree(root: string): Promise<GitBranchList> {
+    try {
+      return await invoke<GitBranchList>('git_branches_tree', { root });
+    } catch {
+      return await invoke<GitBranchList>('git_branches', { root });
+    }
+  },
+
+  async gitCheckout(root: string, branch: string, autoStash: boolean = true): Promise<CheckoutResult> {
+    try {
+      return await invoke<CheckoutResult>('git_checkout', {
+        root,
+        branch,
+        autoStash,
+        auto_stash: autoStash,
+      });
+    } catch {
+      await invoke('git_checkout_branch', { root, branch });
+      return { stashed: false, stashPopped: false, message: 'Checked out ' + branch };
+    }
+  },
+
+  async gitStage(root: string, path: string): Promise<void> {
+    try {
+      await invoke('git_stage', { root, path });
+    } catch {
+      await invoke('git_stage_files', { root, paths: [path] });
+    }
+  },
+
+  async gitUnstage(root: string, path: string): Promise<void> {
+    try {
+      await invoke('git_unstage', { root, path });
+    } catch {
+      await invoke('git_unstage_files', { root, paths: [path] });
+    }
+  },
+
+  async gitLogPath(root: string, path: string, limit?: number): Promise<GitCommit[]> {
+    try {
+      return await invoke<GitCommit[]>('git_log_path', { root, path, limit: limit ?? null });
+    } catch {
+      return await invoke<GitCommit[]>('git_path_history', {
+        root,
+        rel: path,
+        isFile: true,
+        limit: limit ?? null,
+      });
+    }
+  },
+
+  async gitDiffBranch(root: string, path: string, branch: string): Promise<GitDiffFile[]> {
+    try {
+      return await invoke<GitDiffFile[]>('git_diff_branch', { root, path, branch });
+    } catch {
+      return await invoke<GitDiffFile[]>('git_diff_path', { root, rel: path, mode: branch });
+    }
+  },
+
+  async gitDiffRevision(root: string, path: string, rev: string): Promise<GitDiffFile[]> {
+    try {
+      return await invoke<GitDiffFile[]>('git_diff_revision', { root, path, rev });
+    } catch {
+      return await invoke<GitDiffFile[]>('git_diff_path', { root, rel: path, mode: rev });
+    }
+  },
+
   // Event Listeners
   onRunEvent(cb: (payload: RunEventPayload) => void): Promise<UnlistenFn> {
     return listen<RunEventPayload>('run-event', (event) => cb(event.payload));
@@ -915,8 +1099,16 @@ export const api = {
     return listen<LogLine[]>('logcat-batch', (event) => cb(event.payload));
   },
 
-  onDevicesChanged(cb: (payload: Device[]) => void): Promise<UnlistenFn> {
-    return listen<Device[]>('devices-changed', (event) => cb(event.payload));
+  onDevicesChanged(cb: (payload: DevicesSnapshot | Device[]) => void): Promise<UnlistenFn> {
+    return listen<DevicesSnapshot | Device[]>('devices-changed', (event) => cb(event.payload));
+  },
+
+  onDeviceReady(cb: (payload: { id: string; kind: string }) => void): Promise<UnlistenFn> {
+    return listen<{ id: string; kind: string }>('device-ready', (event) => cb(event.payload));
+  },
+
+  onKotlinLsProgress(cb: (payload: KotlinLsProgress) => void): Promise<UnlistenFn> {
+    return listen<KotlinLsProgress>('kotlin-ls-progress', (event) => cb(event.payload));
   },
 
   onGradleDaemon(cb: (payload: GradleDaemonPayload) => void): Promise<UnlistenFn> {

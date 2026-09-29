@@ -10,6 +10,7 @@
   let loadingFiles = $derived(gitStore.commitFilesLoading);
 
   let copied = $state(false);
+  let isCollapsed = $state(false);
 
   function copySha(sha: string) {
     if (!navigator?.clipboard) return;
@@ -62,13 +63,24 @@
   }
 </script>
 
-<div class="commit-detail">
-  {#if !selectedCommit}
-    <div class="empty-state">
-      <div class="empty-text">No commit selected</div>
-      <div class="empty-sub">Select a commit from the log to view details</div>
+<div class="commit-detail" class:collapsed={isCollapsed}>
+  {#if isCollapsed}
+    <button class="expand-strip-btn" onclick={() => (isCollapsed = false)} title="Expand Commit Details">
+      <span class="expand-arrow">◀</span>
+      <span class="vertical-title">DETAIL</span>
+    </button>
+  {:else}
+    <div class="panel-header-strip">
+      <span class="strip-title">COMMIT DETAIL</span>
+      <button class="collapse-icon-btn" onclick={() => (isCollapsed = true)} title="Collapse detail panel">▶</button>
     </div>
-  {:else if isMultiple}
+
+    {#if !selectedCommit}
+      <div class="empty-state">
+        <div class="empty-text">No commit selected</div>
+        <div class="empty-sub">Select a commit from the log to view details</div>
+      </div>
+    {:else if isMultiple}
     <!-- Multiple Commits Selected View (Matches Git.html) -->
     <div class="detail-section border-b">
       <div class="section-title">CHANGES IN {selectedCommits.length} COMMITS</div>
@@ -215,11 +227,12 @@
       {/if}
     </div>
   {/if}
+{/if}
 </div>
 
 <style>
   .commit-detail {
-    width: 360px;
+    width: 280px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -229,6 +242,80 @@
     overflow-y: auto;
     font-size: 13px;
     color: #d8d9dc;
+    transition: width 0.15s ease;
+  }
+
+  .commit-detail.collapsed {
+    width: 28px;
+    overflow: hidden;
+    background: #111215;
+  }
+
+  .expand-strip-btn {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 12px;
+    gap: 8px;
+    color: #8b8f98;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .expand-strip-btn:hover {
+    color: #e6e7ea;
+    background: #1c1d22;
+  }
+
+  .expand-arrow {
+    font-size: 10px;
+  }
+
+  .vertical-title {
+    writing-mode: vertical-rl;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  .panel-header-strip {
+    height: 28px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #18191e;
+    border-bottom: 1px solid #222428;
+    flex-shrink: 0;
+  }
+
+  .strip-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #727680;
+    letter-spacing: 0.5px;
+  }
+
+  .collapse-icon-btn {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: none;
+    color: #727680;
+    cursor: pointer;
+    font-size: 9px;
+    border-radius: 3px;
+  }
+
+  .collapse-icon-btn:hover {
+    color: #e6e7ea;
+    background: #252830;
   }
 
   .border-b {

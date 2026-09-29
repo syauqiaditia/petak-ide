@@ -1,8 +1,10 @@
 <script lang="ts">
   import { runStore } from './runStore.svelte';
-  import type { Device } from '../../lib/api';
+  import { groupDevices, type PickerDeviceItem } from './deviceLogic';
 
-  let open = $state(false);
+  let open = $state(
+    typeof window !== 'undefined' && window.location.search.includes('picker-open')
+  );
 
   let { onOpenDevicesPanel } = $props<{
     onOpenDevicesPanel?: () => void;
@@ -22,24 +24,25 @@
     if (open) open = false;
   }
 
-  function getDotColor(device: Device): string {
-    switch (device.state) {
-      case 'online':
-        return '#7fc98f'; // success green
-      case 'booting':
-        return '#e8b45a'; // warning yellow
-      case 'offline':
-      case 'unauthorized':
-      default:
-        return '#8b8f98'; // muted gray
-    }
-  }
+  let grouped = $derived(
+    groupDevices(runStore.snapshot, runStore.devices, runStore.avds)
+  );
 
-  function formatDeviceLabel(device: Device): string {
-    if (device.sdk) {
-      return `${device.name} · API ${device.sdk}`;
+  let pickerItems = $derived(grouped.pickerItems);
+  let emulatorItems = $derived(pickerItems.filter((i) => i.group === 'Emulator'));
+  let simulatorItems = $derived(pickerItems.filter((i) => i.group === 'Simulator'));
+  let physicalItems = $derived(pickerItems.filter((i) => i.group === 'Physical'));
+
+  let activeItem = $derived(
+    pickerItems.find((p) => p.id === runStore.selectedDeviceId) ||
+    (pickerItems.length > 0 ? pickerItems[0] : null)
+  );
+
+  function formatDeviceLabel(name: string, sdk?: string): string {
+    if (sdk) {
+      return `${name} · API ${sdk}`;
     }
-    return device.name;
+    return name;
   }
 </script>
 
@@ -49,16 +52,16 @@
   <button
     class="trigger-btn"
     onclick={toggleOpen}
-    title={runStore.selectedDevice ? `Device: ${formatDeviceLabel(runStore.selectedDevice)} (${runStore.selectedDevice.state})` : 'No device connected'}
+    title={activeItem ? `Device: ${formatDeviceLabel(activeItem.name, activeItem.sdk)} (${activeItem.state})` : 'No device connected'}
   >
     <svg class="device-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <rect x="7" y="3" width="10" height="18" rx="2"></rect>
       <path d="M11 18h2"></path>
     </svg>
 
-    {#if runStore.selectedDevice}
-      <span class="device-name">{formatDeviceLabel(runStore.selectedDevice)}</span>
-      <span class="status-dot" style:background={getDotColor(runStore.selectedDevice)}></span>
+    {#if activeItem}
+      <span class="device-name">{formatDeviceLabel(activeItem.name, activeItem.sdk)}</span>
+      <span class="status-dot online"></span>
     {:else}
       <span class="device-name empty">No device</span>
     {/if}
@@ -76,48 +79,80 @@
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.stopPropagation()}
     >
-      <div class="menu-header">CONNECTED DEVICES</div>
-      {#if runStore.devices.length === 0}
+      {#if pickerItems.length === 0}
         <div class="menu-empty">No device connected</div>
       {:else}
-        {#each runStore.devices as device}
-          {@const isSelected = runStore.selectedDevice?.id === device.id}
-          <button
-            class="menu-item"
-            class:selected={isSelected}
-            onclick={() => handleSelect(device.id)}
-          >
-            <span class="status-dot" style:background={getDotColor(device)}></span>
-            <div class="item-text">
-              <span class="item-title">{formatDeviceLabel(device)}</span>
-              <span class="item-desc">{device.kind} · {device.platform} · {device.state}</span>
-            </div>
-            {#if isSelected}
-              <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 12l5 5 9-10"></path>
-              </svg>
-            {/if}
-          </button>
-        {/each}
-      {/if}
-
-      {#if runStore.avds.length > 0}
-        <div class="divider"></div>
-        <div class="menu-header">AVAILABLE EMULATORS</div>
-        {#each runStore.avds as avd}
-          <div class="avd-row">
-            <span class="avd-name">{avd.name}</span>
+        <!-- Android Emulators Group -->
+        {#if emulatorItems.length > 0}
+          <div class="menu-header">EMULATORS (ANDROID)</div>
+          {#each emulatorItems as item}
+            {@const isSelected = activeItem?.id === item.id}
             <button
-              class="avd-start-btn"
-              onclick={() => {
-                runStore.startEmulator(avd.name);
-                open = false;
-              }}
+              class="menu-item"
+              class:selected={isSelected}
+              onclick={() => handleSelect(item.id)}
             >
-              Start
+              <span class="status-dot online"></span>
+              <div class="item-text">
+                <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
+                <span class="item-desc">Android Emulator · {item.id}</span>
+              </div>
+              {#if isSelected}
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12l5 5 9-10"></path>
+                </svg>
+              {/if}
             </button>
-          </div>
-        {/each}
+          {/each}
+        {/if}
+
+        <!-- iOS Simulators Group -->
+        {#if simulatorItems.length > 0}
+          <div class="menu-header" class:mt={emulatorItems.length > 0}>SIMULATORS (IOS)</div>
+          {#each simulatorItems as item}
+            {@const isSelected = activeItem?.id === item.id}
+            <button
+              class="menu-item"
+              class:selected={isSelected}
+              onclick={() => handleSelect(item.id)}
+            >
+              <span class="status-dot online"></span>
+              <div class="item-text">
+                <span class="item-title">{item.name}</span>
+                <span class="item-desc">iOS Simulator · {item.id}</span>
+              </div>
+              {#if isSelected}
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12l5 5 9-10"></path>
+                </svg>
+              {/if}
+            </button>
+          {/each}
+        {/if}
+
+        <!-- Physical Devices Group -->
+        {#if physicalItems.length > 0}
+          <div class="menu-header" class:mt={emulatorItems.length > 0 || simulatorItems.length > 0}>PHYSICAL DEVICES</div>
+          {#each physicalItems as item}
+            {@const isSelected = activeItem?.id === item.id}
+            <button
+              class="menu-item"
+              class:selected={isSelected}
+              onclick={() => handleSelect(item.id)}
+            >
+              <span class="status-dot online"></span>
+              <div class="item-text">
+                <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
+                <span class="item-desc">{item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {item.id}</span>
+              </div>
+              {#if isSelected}
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12l5 5 9-10"></path>
+                </svg>
+              {/if}
+            </button>
+          {/each}
+        {/if}
       {/if}
 
       {#if onOpenDevicesPanel}
@@ -129,7 +164,11 @@
             onOpenDevicesPanel?.();
           }}
         >
-          Manage Devices & Emulators...
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="7" y="3" width="10" height="18" rx="2"></rect>
+            <path d="M11 18h2"></path>
+          </svg>
+          Manage Devices & Emulators…
         </button>
       {/if}
     </div>
@@ -173,129 +212,112 @@
   }
   .device-name.empty {
     color: #8b8f98;
+    font-weight: 400;
   }
   .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
     flex-shrink: 0;
+  }
+  .status-dot.online {
+    background: #7fc98f;
   }
   .dropdown-menu {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 4px);
     right: 0;
-    min-width: 250px;
-    background: #1a1b1f;
-    border: 1px solid #2c2e34;
+    width: 290px;
+    background: #1e2025;
+    border: 1px solid #34363d;
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 100;
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    padding: 6px 0;
+    z-index: 1000;
+    max-height: 420px;
+    overflow-y: auto;
   }
   .menu-header {
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 600;
-    color: #8b8f98;
-    padding: 6px 8px 4px 8px;
+    color: #727680;
+    padding: 6px 12px 3px;
     letter-spacing: 0.5px;
   }
+  .menu-header.mt {
+    margin-top: 6px;
+    border-top: 1px solid #282a30;
+    padding-top: 8px;
+  }
   .menu-empty {
-    font-size: 12px;
+    padding: 12px 16px;
+    font-size: 12.5px;
     color: #8b8f98;
-    padding: 8px;
     text-align: center;
   }
   .menu-item {
+    width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    border-radius: 6px;
+    gap: 10px;
+    padding: 7px 12px;
     background: transparent;
     border: none;
-    color: #d8d9dc;
     cursor: pointer;
     text-align: left;
-    transition: background 0.1s;
-    width: 100%;
-    box-sizing: border-box;
+    transition: background 0.12s;
   }
   .menu-item:hover {
-    background: #23252b;
+    background: #26282f;
   }
   .menu-item.selected {
-    background: #1f2a3d;
+    background: #253347;
   }
   .item-text {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    gap: 1px;
   }
   .item-title {
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 12.5px;
     color: #e6e7ea;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .item-desc {
-    font-size: 11px;
+    font-size: 10.5px;
     color: #8b8f98;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .check-icon {
-    margin-left: auto;
     flex-shrink: 0;
   }
   .divider {
     height: 1px;
-    background: #26282d;
-    margin: 4px 0;
-  }
-  .avd-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 5px 8px;
-    border-radius: 6px;
-    font-size: 12px;
-  }
-  .avd-row:hover {
-    background: #23252b;
-  }
-  .avd-name {
-    color: #d8d9dc;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-  }
-  .avd-start-btn {
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: #1f3325;
-    color: #7fc98f;
-    border: 1px solid #284431;
-    font-size: 11px;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .avd-start-btn:hover {
-    background: #284431;
+    background: #282a30;
+    margin: 6px 0;
   }
   .menu-action-btn {
-    padding: 6px 8px;
-    border-radius: 6px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
     background: transparent;
     border: none;
-    color: #6ea8ff;
-    font-size: 11px;
-    text-align: left;
+    color: #9aa0a6;
+    font-size: 12px;
     cursor: pointer;
+    text-align: left;
+    transition: background 0.12s, color 0.12s;
   }
   .menu-action-btn:hover {
-    background: #1f2a3d;
+    background: #26282f;
+    color: #e6e7ea;
   }
 </style>

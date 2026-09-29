@@ -636,11 +636,12 @@ class GitStore {
     }
   }
 
-  async branchCheckout(name: string): Promise<void> {
+  async branchCheckout(name: string, autoStash: boolean = true): Promise<void> {
     if (!this.root) return;
     try {
-      await api.gitBranchCheckout(this.root, name);
-      this.showToast(`Switched to branch '${name}'`, { type: 'success' });
+      const res = await api.gitCheckout(this.root, name, autoStash);
+      const stashMsg = res.stashed ? (res.stashPopped ? ' (changes auto-stashed & restored)' : ' (changes stashed)') : '';
+      this.showToast(`Switched to branch '${name}'${stashMsg}`, { type: 'success' });
       await this.refresh();
     } catch (e: any) {
       this.showToast(`Checkout failed: ${e}`, { type: 'error' });
