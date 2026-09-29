@@ -1,5 +1,7 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { MirrorStatus, InputEvent, MirrorInfo } from '../features/mirror/types';
+export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
 
@@ -901,5 +903,65 @@ export const api = {
 
   onGradleDaemon(cb: (payload: GradleDaemonPayload) => void): Promise<UnlistenFn> {
     return listen<GradleDaemonPayload>('gradle-daemon', (event) => cb(event.payload));
+  },
+
+  // ---------------------------------------------------------------------------
+  // Device Mirror Methods (Phase 4.5)
+  // ---------------------------------------------------------------------------
+
+  async mirrorStart(
+    serial: string,
+    onFrame: (buf: ArrayBuffer) => void,
+    onStatus: (status: MirrorStatus) => void
+  ): Promise<MirrorInfo> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      // In browser preview / dev bridge mode
+      onStatus({ state: 'Connecting' });
+      setTimeout(() => {
+        onStatus({ state: 'Live', width: 1080, height: 2400 });
+      }, 100);
+      return {
+        serial,
+        name: serial.toLowerCase().includes('iphone') ? 'iPhone 15 Pro' : 'Pixel 8 · API 35',
+        width: 1080,
+        height: 2400,
+        codec: 'h264',
+      };
+    }
+
+    const onFrameChannel = new Channel<ArrayBuffer>();
+    onFrameChannel.onmessage = (buf) => onFrame(buf);
+
+    const onStatusChannel = new Channel<MirrorStatus>();
+    onStatusChannel.onmessage = (status) => onStatus(status);
+
+    return invoke<MirrorInfo>('mirror_start', {
+      serial,
+      on_frame: onFrameChannel,
+      on_status: onStatusChannel,
+      onFrame: onFrameChannel,
+      onStatus: onStatusChannel,
+    });
+  },
+
+  async mirrorStop(serial: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('mirror_stop', { serial });
+  },
+
+  async mirrorInput(serial: string, ev: InputEvent): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('mirror_input', { serial, ev });
+  },
+
+  async mirrorScreenshot(serial: string, path?: string | null): Promise<string> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return path || '/tmp/petak-screencap.png';
+    }
+    return invoke<string>('mirror_screenshot', { serial, path: path ?? null });
   },
 };

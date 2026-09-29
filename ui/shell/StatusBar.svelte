@@ -2,6 +2,7 @@
   import { diagnosticsStore } from '../features/editor/lsp/diagnostics.svelte';
   import { gitStore } from '../features/git/git.svelte.ts';
   import { runStore } from '../features/run/runStore.svelte';
+  import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
   import { formatAppState } from '../features/run/logic';
 
   let {
@@ -69,6 +70,25 @@
     <span class="device-tag">{runStore.selectedDevice.name} connected</span>
   {:else}
     <span class="device-tag no-device">No device</span>
+  {/if}
+
+  {#if mirrorStore.isOpen}
+    {#if mirrorStore.status === 'live'}
+      <span class="mirror-status-tag live">
+        <span class="dot mirror-dot-live"></span>
+        {mirrorStore.deviceName} mirror live ({mirrorStore.fps} fps{mirrorStore.latencyMs !== null ? ` · ${mirrorStore.latencyMs}ms` : ''})
+      </span>
+    {:else if mirrorStore.status === 'view-only'}
+      <span class="mirror-status-tag viewonly">
+        <span class="dot mirror-dot-viewonly"></span>
+        {mirrorStore.deviceName} mirror view-only
+      </span>
+    {:else if mirrorStore.status === 'connecting'}
+      <span class="mirror-status-tag connecting">
+        <span class="dot mirror-dot-connecting"></span>
+        {mirrorStore.deviceName} mirror connecting…
+      </span>
+    {/if}
   {/if}
 
   {#if diagnosticsStore.totalCount > 0}
@@ -189,6 +209,27 @@
   }
   .device-tag.no-device {
     color: #5b5f68;
+  }
+  .mirror-status-tag {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .mirror-status-tag.live {
+    color: #6ea8ff;
+  }
+  .mirror-status-tag.viewonly,
+  .mirror-status-tag.connecting {
+    color: #e8b45a;
+  }
+  .mirror-dot-live {
+    background: #6ea8ff;
+  }
+  .mirror-dot-viewonly,
+  .mirror-dot-connecting {
+    background: #e8b45a;
   }
   .problems-badge-group {
     display: flex;

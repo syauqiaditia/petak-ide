@@ -1,0 +1,126 @@
+/**
+ * Renders a crisp native-style mobile app mockup to canvas for visual verification and testing.
+ */
+export function drawCanvasMockApp(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  isViewOnly = false
+) {
+  // 1. Background
+  ctx.fillStyle = '#141518';
+  ctx.fillRect(0, 0, width, height);
+
+  const scale = width / 360;
+
+  // 2. Mobile status bar (top)
+  const barH = 26 * scale;
+  ctx.fillStyle = '#111215';
+  ctx.fillRect(0, 0, width, barH);
+
+  ctx.fillStyle = '#8b8f98';
+  ctx.font = `600 ${Math.round(11 * scale)}px 'Geist', sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillText('14:22', 14 * scale, barH / 2);
+
+  ctx.textAlign = 'right';
+  ctx.font = `500 ${Math.round(10 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText(isViewOnly ? 'LTE  88%' : '5G  94%', width - 14 * scale, barH / 2);
+
+  // 3. App Header
+  const headerY = barH;
+  const headerH = 44 * scale;
+  ctx.fillStyle = '#1a1b1f';
+  ctx.fillRect(0, headerY, width, headerH);
+  ctx.strokeStyle = '#26282d';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, headerY + headerH);
+  ctx.lineTo(width, headerY + headerH);
+  ctx.stroke();
+
+  ctx.fillStyle = '#e6e7ea';
+  ctx.font = `600 ${Math.round(13 * scale)}px 'Geist', sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.fillText(isViewOnly ? 'Flutter Gallery (iOS)' : 'Shopee Lite — Checkout', 14 * scale, headerY + headerH / 2);
+
+  // 4. Cards
+  const card1Y = headerY + headerH + 14 * scale;
+  const cardW = width - 24 * scale;
+  const cardX = 12 * scale;
+  const card1H = 90 * scale;
+
+  ctx.fillStyle = '#1a1b1f';
+  ctx.strokeStyle = '#26282d';
+  ctx.beginPath();
+  ctx.roundRect(cardX, card1Y, cardW, card1H, 8 * scale);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#9cc3ff';
+  ctx.font = `600 ${Math.round(11 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText('Order Summary', cardX + 12 * scale, card1Y + 18 * scale);
+
+  ctx.fillStyle = '#8b8f98';
+  ctx.font = `400 ${Math.round(11 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText('Subtotal (2 items)', cardX + 12 * scale, card1Y + 40 * scale);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#d8d9dc';
+  ctx.fillText('Rp 145.000', cardX + cardW - 12 * scale, card1Y + 40 * scale);
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#7fc98f';
+  ctx.fillText('Voucher (HEMAT20)', cardX + 12 * scale, card1Y + 62 * scale);
+  ctx.textAlign = 'right';
+  ctx.fillText('- Rp 20.000', cardX + cardW - 12 * scale, card1Y + 62 * scale);
+
+  // Total divider
+  const card2Y = card1Y + card1H + 12 * scale;
+  const card2H = 50 * scale;
+  ctx.fillStyle = '#1a1b1f';
+  ctx.beginPath();
+  ctx.roundRect(cardX, card2Y, cardW, card2H, 8 * scale);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#e6e7ea';
+  ctx.font = `600 ${Math.round(12 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText('Total Payment', cardX + 12 * scale, card2Y + card2H / 2);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#6ea8ff';
+  ctx.font = `600 ${Math.round(13 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText('Rp 125.000', cardX + cardW - 12 * scale, card2Y + card2H / 2);
+
+  // Payment method card
+  const card3Y = card2Y + card2H + 12 * scale;
+  const card3H = 46 * scale;
+  ctx.fillStyle = '#1f2a3d';
+  ctx.strokeStyle = '#3a4f75';
+  ctx.beginPath();
+  ctx.roundRect(cardX, card3Y, cardW, card3H, 8 * scale);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#9cc3ff';
+  ctx.font = `500 ${Math.round(11 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText('Payment Method', cardX + 12 * scale, card3Y + 16 * scale);
+  ctx.fillStyle = '#d8d9dc';
+  ctx.font = `400 ${Math.round(10 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText('Bank Jatim JConnect Virtual Account', cardX + 12 * scale, card3Y + 32 * scale);
+
+  // Bottom action button
+  const btnH = 40 * scale;
+  const btnY = height - (isViewOnly ? 30 * scale : 20 * scale) - btnH;
+  ctx.fillStyle = isViewOnly ? '#3a4f75' : '#6ea8ff';
+  ctx.beginPath();
+  ctx.roundRect(cardX, btnY, cardW, btnH, 8 * scale);
+  ctx.fill();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = isViewOnly ? '#d8d9dc' : '#0e1a2e';
+  ctx.font = `600 ${Math.round(12 * scale)}px 'Geist', sans-serif`;
+  ctx.fillText(isViewOnly ? 'Display Only Mode' : 'Pay Now · Rp 125.000', width / 2, btnY + btnH / 2);
+}
