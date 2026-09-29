@@ -831,7 +831,7 @@
           ></textarea>
         </div>
         <div class="action-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (squashModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (squashModalOpen = false)}>Cancel</button>
           <button class="modal-btn confirm" onclick={submitSquash} disabled={!squashMessage.trim()}>
             Squash Commits
           </button>
@@ -866,7 +866,7 @@
           ></textarea>
         </div>
         <div class="action-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (rewordModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (rewordModalOpen = false)}>Cancel</button>
           <button class="modal-btn confirm" onclick={submitReword} disabled={!rewordMessage.trim()}>
             Save Message
           </button>
@@ -895,7 +895,7 @@
           {/if}
         </div>
         <div class="action-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (dropModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (dropModalOpen = false)}>Cancel</button>
           <button class="modal-btn danger-btn" onclick={submitDrop}>
             Drop Commits
           </button>
@@ -923,7 +923,7 @@
           </p>
         </div>
         <div class="action-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (hardResetModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (hardResetModalOpen = false)}>Cancel</button>
           <button class="modal-btn danger-btn" onclick={submitHardReset}>
             Reset Hard Sekarang
           </button>
@@ -954,7 +954,7 @@
           />
         </div>
         <div class="action-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (newBranchModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (newBranchModalOpen = false)}>Cancel</button>
           <button class="modal-btn confirm" onclick={submitNewBranch} disabled={!newBranchName.trim()}>
             Create Branch
           </button>
@@ -985,7 +985,7 @@
           </p>
         </div>
         <div class="action-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (pushedWarningModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (pushedWarningModalOpen = false)}>Cancel</button>
           <button class="modal-btn confirm" onclick={confirmPushedAction}>
             Lanjutkan
           </button>

@@ -330,7 +330,7 @@
         </div>
 
         <div class="push-modal-footer">
-          <button class="modal-btn cancel" onclick={() => (pushModalOpen = false)}>Batal</button>
+          <button class="modal-btn cancel" onclick={() => (pushModalOpen = false)}>Cancel</button>
           <button
             class="modal-btn confirm"
             class:danger-btn={pushForceWithLease}

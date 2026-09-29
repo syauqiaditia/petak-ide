@@ -1,0 +1,12 @@
+Running test_p35_diff.mjs...
+ALL P3.5 DIFF & SBS TESTS PASSED!
+Running test_p36_graph.mjs...
+All graphGeom tests passed successfully! ✓
+=== Running Rebase Plan Logic Tests ===
+✓ Validation rules verified
+✓ Plan summary calculation verified: 5 commits -> 3 resulting commits
+✓ Reordering items verified
+✓ Action and message updates verified
+✓ Build RebasePlan verified
+ALL REBASE PLAN TESTS PASSED! ✓
+PASS no runes in plain .ts/.js

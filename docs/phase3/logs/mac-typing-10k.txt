@@ -1,0 +1,8 @@
+=== Benchmarking 10k Line Keystroke Latency with LSP (Big10k.dart) ===
+Samples: 200 keystrokes
+Min: 0.73 ms
+Max: 4.75 ms
+Avg: 0.91 ms
+p50: 0.80 ms
+p95: 1.20 ms
+Budget Target: <= 17.00 ms (1 frame @ 60Hz) -> PASS (LOLOS)
