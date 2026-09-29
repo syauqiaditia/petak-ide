@@ -17,6 +17,10 @@
     );
   }
 
+  let { onClose } = $props<{
+    onClose?: () => void;
+  }>();
+
   function isPhysSelected(phys: SnapshotPhysical): boolean {
     return runStore.selectedDeviceId === phys.id;
   }
@@ -25,11 +29,21 @@
 <div class="devices-panel">
   <div class="header">
     <span class="header-title">DEVICES & EMULATORS</span>
-    <button class="refresh-btn" onclick={() => runStore.refreshDevices()} title="Refresh devices and emulators">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
-      </svg>
-    </button>
+    <div class="header-actions">
+      <button class="refresh-btn" onclick={() => runStore.refreshDevices()} title="Refresh devices and emulators">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
+        </svg>
+      </button>
+      {#if onClose}
+        <button class="close-btn" onclick={onClose} title="Close Devices Panel" aria-label="Close Devices Panel">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      {/if}
+    </div>
   </div>
 
   <div class="content-scroll">
@@ -289,6 +303,27 @@
     font-weight: 600;
     color: #8b8f98;
     letter-spacing: 0.5px;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .close-btn {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: none;
+    color: #8b8f98;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .close-btn:hover {
+    background: #23252b;
+    color: #e6e7ea;
   }
   .refresh-btn {
     width: 24px;

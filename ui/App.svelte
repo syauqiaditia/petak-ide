@@ -15,6 +15,8 @@
   import { gitStore } from './features/git/git.svelte.ts';
   import { runStore } from './features/run/runStore.svelte';
   import { mirrorStore } from './features/mirror/mirrorStore.svelte';
+  import { panelStore } from './shell/panelStore.svelte';
+  import { executeProjectSwitchReset } from './shell/projectResetLogic';
   import { getSnippetCompletionsForLanguage } from './features/editor/snippets';
   import { toolchainStore } from './features/toolchain/toolchainStore.svelte';
 
@@ -29,13 +31,11 @@
   $effect(() => {
     if (activeRailTab === 'git' && !GitViewComponent) {
       import('./features/git/GitView.svelte').then((m) => (GitViewComponent = m.default));
-    } else if (activeRailTab === 'devices' && !DevicesPanelComponent) {
+    }
+    if (panelStore.activeRightPanel === 'devices' && !DevicesPanelComponent) {
       import('./features/run/DevicesPanel.svelte').then((m) => (DevicesPanelComponent = m.default));
     }
-  });
-
-  $effect(() => {
-    if (mirrorStore.isOpen && !DeviceMirrorPanelComponent) {
+    if (panelStore.activeRightPanel === 'mirror' && !DeviceMirrorPanelComponent) {
       import('./features/mirror/DeviceMirrorPanel.svelte').then((m) => (DeviceMirrorPanelComponent = m.default));
     }
   });
@@ -358,10 +358,27 @@
 
   async function openFolder(folderPath: string) {
     try {
+      if (currentFolderPath && currentFolderPath !== folderPath) {
+        const resetResult = await executeProjectSwitchReset({
+          tabsManager,
+          diagnosticsStore,
+          runStore,
+          gitStore,
+          onSaveDirtyTab: async (tab) => {
+            return window.confirm(`File "${tab.name}" has unsaved changes. Discard changes and switch project?`);
+          },
+        });
+        if (resetResult.cancelled) {
+          return;
+        }
+      }
+
       const list = await api.listDir(folderPath);
       currentFolderPath = folderPath;
       rootEntries = list;
       recentFolders = await api.addRecentFolder(folderPath);
+      api.recentProjectsAdd(folderPath).catch(() => {});
+      api.lspRestart(folderPath).catch(() => {});
       if (watchedRoot !== folderPath) {
         await api.watchRoot(folderPath);
         watchedRoot = folderPath;
@@ -1487,35 +1504,33 @@
     projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
     {branchName}
     onPickFolder={handlePickFolder}
-    onOpenDevicesPanel={() => (activeRailTab = 'devices')}
+    onSelectProject={openFolder}
+    onOpenDevicesPanel={() => panelStore.openRightPanel('devices')}
     onStartRun={openRun}
   />
 
   <div class="main-body">
-    <Rail bind:activeTab={activeRailTab} />
+    <Rail
+      bind:activeTab={activeRailTab}
+      onToggleDevices={() => panelStore.toggleRightPanel('devices')}
+    />
     <div class="center-area">
-      <div class="workspace-area" class:hidden-view={activeRailTab !== 'project' && activeRailTab !== 'devices'}>
-        {#if activeRailTab === 'devices'}
-          {#if DevicesPanelComponent}
-            <DevicesPanelComponent />
-          {/if}
-        {:else}
-          <FileTree
-            bind:this={fileTreeComponent}
-            {rootEntries}
-            folderPath={currentFolderPath}
-            {activeFilePath}
-            {recentFolders}
-            onPickFolder={handlePickFolder}
-            onSelectFile={handleSelectFile}
-            onOpenRecent={openFolder}
-            onOpenTerminal={handleOpenTerminal}
-            onOpenSearch={handleOpenSearch}
-            onOpenGitLog={handleOpenGitLog}
-            onOpenCommitPanel={handleOpenCommitPanel}
-            onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
-          />
-        {/if}
+      <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
+        <FileTree
+          bind:this={fileTreeComponent}
+          {rootEntries}
+          folderPath={currentFolderPath}
+          {activeFilePath}
+          {recentFolders}
+          onPickFolder={handlePickFolder}
+          onSelectFile={handleSelectFile}
+          onOpenRecent={openFolder}
+          onOpenTerminal={handleOpenTerminal}
+          onOpenSearch={handleOpenSearch}
+          onOpenGitLog={handleOpenGitLog}
+          onOpenCommitPanel={handleOpenCommitPanel}
+          onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
+        />
         <Editor
           bind:this={editorComponent}
           folderPath={currentFolderPath}
@@ -1576,12 +1591,17 @@
       <div class="agent-panel-slot-empty" style="display: none;" aria-hidden="true"></div>
     {/if}
 
-    <!-- Outer Right Dock: Device Mirror Panel (full height) -->
-    {#if mirrorStore.isOpen && DeviceMirrorPanelComponent}
+    <!-- Outer Right Dock: Device Mirror Panel OR Devices Panel (single active right panel B1) -->
+    {#if panelStore.activeRightPanel === 'mirror' && DeviceMirrorPanelComponent}
       <DeviceMirrorPanelComponent
-        onSelectDevice={() => (activeRailTab = 'devices')}
+        onSelectDevice={() => panelStore.openRightPanel('devices')}
         onOpenLogcat={openLogcat}
+        onClose={() => panelStore.closeRightPanel()}
       />
+    {:else if panelStore.activeRightPanel === 'devices' && DevicesPanelComponent}
+      <div class="right-devices-panel">
+        <DevicesPanelComponent onClose={() => panelStore.closeRightPanel()} />
+      </div>
     {/if}
   </div>
 

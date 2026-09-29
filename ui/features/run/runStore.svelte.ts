@@ -16,6 +16,8 @@ import {
   reduceRunEvent,
   type OutputItem,
 } from './logic';
+import { pruneDeviceSelection } from './deviceLogic';
+import type { RunUiState } from './runStateMachine';
 
 class RunStore {
   root = $state<string>('');
@@ -42,6 +44,7 @@ class RunStore {
   // Run lifecycle & state
   runId = $state<number | null>(null);
   state = $state<AppState>('stopped');
+  uiState = $state<RunUiState>('idle');
   appId = $state<string | null>(null);
   devtoolsUri = $state<string | null>(null);
   vmServiceUri = $state<string | null>(null);
@@ -202,16 +205,7 @@ class RunStore {
 
   updateDevices(list: Device[]) {
     this.devices = list || [];
-    // If selectedDeviceId is missing or not in current list, pick first available
-    if (this.devices.length > 0) {
-      if (!this.selectedDeviceId || !this.devices.some((d) => d.id === this.selectedDeviceId)) {
-        // Prefer online device
-        const online = this.devices.find((d) => d.state === 'online');
-        this.selectedDeviceId = online ? online.id : this.devices[0].id;
-      }
-    } else {
-      this.selectedDeviceId = '';
-    }
+    this.selectedDeviceId = pruneDeviceSelection(this.selectedDeviceId, this.devices);
   }
 
   async refreshAvds() {
@@ -252,18 +246,26 @@ class RunStore {
     this.outputLines = next.outputLines;
 
     if (event.type === 'appStarted') {
+      this.uiState = 'running';
       const devId = this.selectedDeviceId;
       if (devId) {
         api.logcatStart(devId, this.appId || undefined).catch((e) => {
           console.warn('[runStore] Failed to auto-start logcat:', e);
         });
       }
-    } else if (event.type === 'stopped') {
-      this.runId = null;
-      this.pid = null;
-      api.logcatStop().catch((e) => {
-        console.warn('[runStore] Failed to auto-stop logcat:', e);
-      });
+    } else if (event.type === 'state') {
+      if (event.state === 'running') {
+        this.uiState = 'running';
+      } else if (event.state === 'stopped') {
+        this.uiState = this.buildErrors.length > 0 ? 'error' : 'idle';
+        this.runId = null;
+        this.pid = null;
+        api.logcatStop().catch(() => {});
+      } else if (event.state === 'building' || event.state === 'installing') {
+        this.uiState = 'starting';
+      }
+    } else if (event.type === 'buildError') {
+      this.uiState = 'error';
     }
   }
 
@@ -298,8 +300,13 @@ class RunStore {
     const config = this.selectedConfig;
     const device = this.selectedDevice;
     if (!config || !device || !this.root) return;
+    if (device.state !== 'online') {
+      console.warn('[runStore] Cannot run on offline device:', device.id);
+      return;
+    }
 
     this.isStarting = true;
+    this.uiState = 'starting';
     this.state = 'building';
     this.buildErrors = [];
     this.outputLines = [];
@@ -311,6 +318,7 @@ class RunStore {
       this.runId = id;
     } catch (e: any) {
       this.state = 'stopped';
+      this.uiState = 'error';
       this.runId = null;
       const msg = typeof e === 'string' ? e : e?.message || 'Failed to start run';
       this.buildErrors = [
@@ -370,6 +378,7 @@ class RunStore {
   }
 
   async stopRun() {
+    this.uiState = 'idle';
     if (!this.runId) {
       this.state = 'stopped';
       api.logcatStop().catch(() => {});
@@ -382,10 +391,20 @@ class RunStore {
       console.warn('[runStore] Failed to stop run:', e);
     } finally {
       this.state = 'stopped';
+      this.uiState = 'idle';
       this.runId = null;
       this.pid = null;
       api.logcatStop().catch(() => {});
     }
+  }
+
+  resetLogs() {
+    this.outputLines = [];
+    this.buildErrors = [];
+    this.uiState = 'idle';
+    this.state = 'stopped';
+    this.runId = null;
+    this.pid = null;
   }
 
   async startEmulator(avdName: string) {

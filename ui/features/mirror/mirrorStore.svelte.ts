@@ -1,6 +1,7 @@
 import { api } from '../../lib/api';
 import type { Device } from '../../lib/api';
 import { runStore } from '../run/runStore.svelte';
+import { panelStore } from '../../shell/panelStore.svelte';
 import {
   clampPanelWidth,
   calcFps,
@@ -17,11 +18,9 @@ import type {
 
 class MirrorStore {
   // Persistence & UI state
-  isOpen = $state<boolean>(
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('petak.mirror.open') === 'true'
-      : false
-  );
+  get isOpen(): boolean {
+    return panelStore.activeRightPanel === 'mirror';
+  }
   width = $state<number>(
     typeof localStorage !== 'undefined' && localStorage.getItem('petak.mirror.width')
       ? clampPanelWidth(Number(localStorage.getItem('petak.mirror.width')))
@@ -58,6 +57,13 @@ class MirrorStore {
   private activeRunSerial: string | null = null;
 
   constructor() {
+    if (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('petak.mirror.open') === 'true' &&
+      !panelStore.activeRightPanel
+    ) {
+      panelStore.openRightPanel('mirror');
+    }
     // If opened on load, initialize device target
     if (this.isOpen) {
       this.syncDevice();
@@ -138,7 +144,7 @@ class MirrorStore {
   }
 
   async open(targetSerial?: string) {
-    this.isOpen = true;
+    panelStore.openRightPanel('mirror');
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('petak.mirror.open', 'true');
     }
@@ -158,7 +164,7 @@ class MirrorStore {
   }
 
   async close() {
-    this.isOpen = false;
+    panelStore.closeRightPanel('mirror');
     this.isFocused = false;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('petak.mirror.open', 'false');

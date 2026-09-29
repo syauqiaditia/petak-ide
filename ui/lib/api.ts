@@ -11,6 +11,13 @@ export interface Entry {
   is_dir: boolean;
 }
 
+export interface RecentProject {
+  name: string;
+  path: string;
+  lastOpened: number;
+  exists: boolean;
+}
+
 export interface FsChangedPayload {
   paths: string[];
 }
@@ -598,6 +605,39 @@ export const api = {
     return invoke<string[]>('add_recent_folder', { path });
   },
 
+  async recentProjectsList(): Promise<RecentProject[]> {
+    try {
+      return await invoke<RecentProject[]>('recent_projects_list');
+    } catch {
+      const folders = await this.recentFolders().catch(() => []);
+      return folders.slice(0, 10).map((p) => {
+        const parts = p.split('/').filter(Boolean);
+        return {
+          name: parts[parts.length - 1] || p,
+          path: p,
+          lastOpened: Date.now(),
+          exists: true,
+        };
+      });
+    }
+  },
+
+  async recentProjectsAdd(path: string): Promise<void> {
+    try {
+      await invoke('recent_projects_add', { path });
+    } catch {
+      await this.addRecentFolder(path).catch(() => []);
+    }
+  },
+
+  async recentProjectsRemove(path: string): Promise<void> {
+    try {
+      await invoke('recent_projects_remove', { path });
+    } catch {
+      // Best-effort fallback
+    }
+  },
+
   markReady(tsMs: number): Promise<void> {
     return invoke('mark_ready', { tsMs });
   },
@@ -1053,11 +1093,44 @@ export const api = {
     }
   },
 
+  async gitStagePaths(root: string, paths: string[]): Promise<void> {
+    try {
+      await invoke('git_stage_paths', { root, paths });
+    } catch {
+      await invoke('git_stage_files', { root, paths });
+    }
+  },
+
   async gitUnstage(root: string, path: string): Promise<void> {
     try {
       await invoke('git_unstage', { root, path });
     } catch {
       await invoke('git_unstage_files', { root, paths: [path] });
+    }
+  },
+
+  async gitUnstagePaths(root: string, paths: string[]): Promise<void> {
+    try {
+      await invoke('git_unstage_paths', { root, paths });
+    } catch {
+      await invoke('git_unstage_files', { root, paths });
+    }
+  },
+
+  async gitCommitSelected(root: string, message: string, paths: string[]): Promise<{ sha: string }> {
+    try {
+      return await invoke<{ sha: string }>('git_commit_selected', { root, message, paths });
+    } catch {
+      const sha = await invoke<string>('git_commit_paths', { root, rels: paths, message });
+      return { sha };
+    }
+  },
+
+  async gitDeleteUntracked(root: string, path: string): Promise<void> {
+    try {
+      await invoke('git_delete_untracked', { root, path });
+    } catch {
+      await invoke('fs_delete', { path });
     }
   },
 

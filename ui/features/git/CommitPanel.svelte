@@ -1,12 +1,126 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { gitStore } from './git.svelte.ts';
+  import { api } from '../../lib/api';
   import type { GitStatusEntry } from './types.ts';
+  import {
+    isAllSelected,
+    isPartiallySelected,
+    planSelectAllToggle,
+    getFileContextActions,
+    type FileContextAction,
+  } from './commitSelectionLogic';
 
   let commitMessage = $state('');
   let isAmend = $state(false);
   let isCommitting = $state(false);
   let commitError = $state<string | null>(null);
+
+  let contextMenuOpen = $state(
+    typeof window !== 'undefined' && window.location.search.includes('ctx-menu')
+  );
+  let contextMenuPos = $state<{ x: number; y: number }>({ x: 180, y: 160 });
+  let contextTargetEntry = $state<GitStatusEntry | null>(null);
+  let contextTargetStaged = $state(false);
+
+  $effect(() => {
+    if (contextMenuOpen && !contextTargetEntry && gitStore.status.entries.length > 0) {
+      contextTargetEntry = gitStore.status.entries[0];
+    }
+  });
+
+  let allFilePaths = $derived([
+    ...gitStore.stagedEntries.map((e) => e.path),
+    ...gitStore.changesEntries.map((e) => e.path),
+    ...gitStore.untrackedEntries.map((e) => e.path),
+  ]);
+  let totalFiles = $derived(allFilePaths.length);
+  let stagedPaths = $derived(gitStore.stagedEntries.map((e) => e.path));
+
+  let allSelected = $derived(isAllSelected(gitStore.stagedEntries.length, totalFiles));
+  let partiallySelected = $derived(isPartiallySelected(gitStore.stagedEntries.length, totalFiles));
+
+  async function handleToggleSelectAll() {
+    const plan = planSelectAllToggle(stagedPaths, allFilePaths);
+    if (plan.action === 'stage') {
+      await gitStore.stageFiles(plan.paths);
+    } else {
+      await gitStore.unstageFiles(plan.paths);
+    }
+  }
+
+  function handleRowContextMenu(e: MouseEvent, entry: GitStatusEntry, inStaged: boolean) {
+    e.preventDefault();
+    e.stopPropagation();
+    contextTargetEntry = entry;
+    contextTargetStaged = inStaged;
+    contextMenuPos = { x: e.clientX, y: e.clientY };
+    contextMenuOpen = true;
+  }
+
+  let contextActions = $derived(
+    contextTargetEntry
+      ? getFileContextActions(
+          contextTargetEntry.path,
+          contextTargetStaged,
+          contextTargetEntry.worktree === 'untracked'
+        )
+      : []
+  );
+
+  async function handleContextAction(actionId: string) {
+    if (!contextTargetEntry) return;
+    const path = contextTargetEntry.path;
+    const isUntracked = contextTargetEntry.worktree === 'untracked';
+    contextMenuOpen = false;
+
+    switch (actionId) {
+      case 'rollback':
+        await gitStore.rollback([path]);
+        break;
+      case 'goto_file':
+      case 'show_diff':
+        gitStore.selectFile(path, contextTargetStaged ? 'staged' : 'worktree');
+        break;
+      case 'toggle_stage':
+        if (contextTargetStaged) {
+          await gitStore.unstageFiles([path]);
+        } else {
+          await gitStore.stageFiles([path]);
+        }
+        break;
+      case 'gitignore_add':
+        if (gitStore.root) {
+          await api.gitGitignoreAdd(gitStore.root, path);
+          await gitStore.refresh();
+        }
+        break;
+      case 'show_history':
+        gitStore.setLogFilter({ path });
+        gitStore.activeSubTab = 'log';
+        break;
+      case 'copy_path':
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(path);
+        }
+        break;
+      case 'reveal_finder':
+        if (gitStore.root) {
+          const fullPath = `${gitStore.root}/${path}`;
+          api.showInFolder(fullPath).catch(() => {});
+        }
+        break;
+      case 'delete_untracked':
+        if (gitStore.root && isUntracked) {
+          const ok = window.confirm(`Delete untracked file "${path}"?`);
+          if (ok) {
+            await api.gitDeleteUntracked(gitStore.root, path);
+            await gitStore.refresh();
+          }
+        }
+        break;
+    }
+  }
 
   let lines = $derived(commitMessage.split('\n'));
   let subject = $derived(lines[0] ?? '');
@@ -39,7 +153,17 @@
     isCommitting = true;
     commitError = null;
     try {
-      await gitStore.commit(commitMessage.trim(), isAmend);
+      if (isAmend) {
+        await gitStore.commit(commitMessage.trim(), true);
+      } else {
+        const paths = gitStore.stagedEntries.map((e) => e.path);
+        if (gitStore.root) {
+          await api.gitCommitSelected(gitStore.root, commitMessage.trim(), paths);
+          await gitStore.refresh();
+        } else {
+          await gitStore.commit(commitMessage.trim(), false);
+        }
+      }
       commitMessage = '';
       isAmend = false;
     } catch (e: any) {
@@ -80,13 +204,41 @@
   }
 </script>
 
+<svelte:window onclick={() => { if (contextMenuOpen) contextMenuOpen = false; }} />
+
 <div class="commit-panel">
+  <!-- Select All Bar (F3) -->
+  {#if totalFiles > 0}
+    <div class="select-all-bar">
+      <label class="select-all-label">
+        <input
+          type="checkbox"
+          class="file-checkbox"
+          checked={allSelected}
+          indeterminate={partiallySelected}
+          onchange={handleToggleSelectAll}
+        />
+        <span class="select-all-text">Select All ({gitStore.stagedEntries.length}/{totalFiles})</span>
+      </label>
+    </div>
+  {/if}
+
   <!-- File Groups List -->
   <div class="files-container">
     <!-- 1. Staged Changes -->
     <div class="group-section">
       <div class="group-header">
-        <span class="group-title">STAGED ({gitStore.stagedEntries.length})</span>
+        <label class="group-header-label">
+          <input
+            type="checkbox"
+            class="file-checkbox"
+            checked={gitStore.stagedEntries.length > 0}
+            disabled={gitStore.stagedEntries.length === 0}
+            onchange={() => gitStore.unstageAll()}
+            title="Unstage all"
+          />
+          <span class="group-title">STAGED ({gitStore.stagedEntries.length})</span>
+        </label>
         {#if gitStore.stagedEntries.length > 0}
           <button
             class="action-btn"
@@ -112,22 +264,23 @@
               class="file-row"
               class:selected={isSelected}
               onclick={() => gitStore.selectFile(entry.path, 'staged')}
+              oncontextmenu={(e) => handleRowContextMenu(e, entry, true)}
               role="button"
               tabindex="0"
               onkeydown={(e) => {
                 if (e.key === 'Enter') gitStore.selectFile(entry.path, 'staged');
               }}
             >
-              <button
-                class="stage-toggle-btn unstage"
+              <input
+                type="checkbox"
+                class="file-checkbox"
+                checked={true}
                 title="Unstage file"
                 onclick={(e) => {
                   e.stopPropagation();
                   gitStore.unstageFiles([entry.path]);
                 }}
-              >
-                −
-              </button>
+              />
               <span class="status-badge" style="color: {color};">{char}</span>
               <span class="file-name" title={entry.path}>{name}</span>
               {#if dir}
@@ -142,7 +295,17 @@
     <!-- 2. Changes (Worktree) -->
     <div class="group-section">
       <div class="group-header">
-        <span class="group-title">CHANGES ({gitStore.changesEntries.length})</span>
+        <label class="group-header-label">
+          <input
+            type="checkbox"
+            class="file-checkbox"
+            checked={false}
+            disabled={gitStore.changesEntries.length === 0}
+            onchange={() => gitStore.stageAll()}
+            title="Stage all changes"
+          />
+          <span class="group-title">CHANGES ({gitStore.changesEntries.length})</span>
+        </label>
         {#if gitStore.changesEntries.length > 0}
           <button
             class="action-btn"
@@ -169,22 +332,23 @@
               class:selected={isSelected}
               class:conflicted={entry.conflicted}
               onclick={() => gitStore.selectFile(entry.path, 'worktree')}
+              oncontextmenu={(e) => handleRowContextMenu(e, entry, false)}
               role="button"
               tabindex="0"
               onkeydown={(e) => {
                 if (e.key === 'Enter') gitStore.selectFile(entry.path, 'worktree');
               }}
             >
-              <button
-                class="stage-toggle-btn stage"
+              <input
+                type="checkbox"
+                class="file-checkbox"
+                checked={false}
                 title="Stage file"
                 onclick={(e) => {
                   e.stopPropagation();
                   gitStore.stageFiles([entry.path]);
                 }}
-              >
-                +
-              </button>
+              />
               <span class="status-badge" style="color: {color};">{char}</span>
               <span class="file-name" title={entry.path}>{name}</span>
               {#if entry.conflicted}
@@ -202,7 +366,19 @@
     {#if gitStore.untrackedEntries.length > 0}
       <div class="group-section">
         <div class="group-header">
-          <span class="group-title">UNTRACKED ({gitStore.untrackedEntries.length})</span>
+          <label class="group-header-label">
+            <input
+              type="checkbox"
+              class="file-checkbox"
+              checked={false}
+              onchange={() => {
+                const paths = gitStore.untrackedEntries.map((e) => e.path);
+                gitStore.stageFiles(paths);
+              }}
+              title="Stage untracked files"
+            />
+            <span class="group-title">UNTRACKED ({gitStore.untrackedEntries.length})</span>
+          </label>
           <button
             class="action-btn"
             title="Stage untracked files"
@@ -226,22 +402,23 @@
               class="file-row"
               class:selected={isSelected}
               onclick={() => gitStore.selectFile(entry.path, 'worktree')}
+              oncontextmenu={(e) => handleRowContextMenu(e, entry, false)}
               role="button"
               tabindex="0"
               onkeydown={(e) => {
                 if (e.key === 'Enter') gitStore.selectFile(entry.path, 'worktree');
               }}
             >
-              <button
-                class="stage-toggle-btn stage"
+              <input
+                type="checkbox"
+                class="file-checkbox"
+                checked={false}
                 title="Stage file"
                 onclick={(e) => {
                   e.stopPropagation();
                   gitStore.stageFiles([entry.path]);
                 }}
-              >
-                +
-              </button>
+              />
               <span class="status-badge" style="color: {color};">{char}</span>
               <span class="file-name" title={entry.path}>{name}</span>
               {#if dir}
@@ -317,6 +494,28 @@
       </button>
     </div>
   </div>
+
+  <!-- Context Menu (F3) -->
+  {#if contextMenuOpen}
+    <div
+      class="file-context-menu"
+      style:left="{contextMenuPos.x}px"
+      style:top="{contextMenuPos.y}px"
+      role="menu"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+    >
+      {#each contextActions as action}
+        <button
+          class="context-menu-item"
+          class:danger={action.danger}
+          onclick={() => handleContextAction(action.id)}
+        >
+          {action.label}
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -332,6 +531,77 @@
     user-select: none;
     -webkit-user-select: none;
     font-size: 13px;
+  }
+
+  .select-all-bar {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    background: #17181c;
+    border-bottom: 1px solid #23252a;
+    flex-shrink: 0;
+  }
+  .select-all-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #a0a4ad;
+    cursor: pointer;
+    user-select: none;
+  }
+  .select-all-text {
+    letter-spacing: 0.2px;
+  }
+  .group-header-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .file-checkbox {
+    width: 14px;
+    height: 14px;
+    accent-color: #6ea8ff;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin: 0;
+  }
+
+  .file-context-menu {
+    position: fixed;
+    width: 180px;
+    background: #1e2025;
+    border: 1px solid #34363d;
+    border-radius: 6px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+    z-index: 2000;
+    padding: 4px 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .context-menu-item {
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #d8d9dc;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .context-menu-item:hover {
+    background: #272a32;
+    color: #ffffff;
+  }
+  .context-menu-item.danger {
+    color: #f07a74;
+  }
+  .context-menu-item.danger:hover {
+    background: #361d1e;
   }
 
   .files-container {
@@ -408,36 +678,6 @@
     background: rgba(232, 180, 90, 0.12);
   }
 
-  .stage-toggle-btn {
-    width: 18px;
-    height: 18px;
-    display: grid;
-    place-items: center;
-    border-radius: 3px;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1;
-    color: #8b8f98;
-    background: #1c1e23;
-    border: 1px solid #2c2e34;
-    transition: all 0.1s;
-  }
-
-  .stage-toggle-btn:hover {
-    color: #d8d9dc;
-    border-color: #6ea8ff;
-  }
-
-  .stage-toggle-btn.stage:hover {
-    background: #1b2b20;
-    color: #7fc98f;
-  }
-
-  .stage-toggle-btn.unstage:hover {
-    background: #2c1d1f;
-    color: #f07a74;
-  }
-
   .status-badge {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
@@ -447,7 +687,8 @@
   }
 
   .file-name {
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
     font-weight: 450;
     white-space: nowrap;
     overflow: hidden;

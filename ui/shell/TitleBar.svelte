@@ -2,6 +2,9 @@
   import { runStore } from '../features/run/runStore.svelte';
   import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
   import { gitStore } from '../features/git/git.svelte';
+  import { panelStore } from './panelStore.svelte';
+  import { getRunVisualAttrs } from '../features/run/runStateMachine';
+  import { api, type RecentProject } from '../lib/api';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
 
@@ -9,6 +12,48 @@
     typeof window !== 'undefined' && window.location.search.includes('branch-open')
   );
   let branchSearch = $state('');
+
+  let projectPopupOpen = $state(
+    typeof window !== 'undefined' && window.location.search.includes('project-open')
+  );
+  let recentProjects = $state<RecentProject[]>([]);
+
+  $effect(() => {
+    if (projectPopupOpen && recentProjects.length === 0) {
+      loadRecentProjects();
+    }
+  });
+
+  async function loadRecentProjects() {
+    try {
+      recentProjects = await api.recentProjectsList();
+    } catch {
+      recentProjects = [];
+    }
+  }
+
+  async function handleRemoveRecent(e: MouseEvent, path: string) {
+    e.stopPropagation();
+    try {
+      await api.recentProjectsRemove(path);
+      recentProjects = recentProjects.filter((p) => p.path !== path);
+    } catch {
+      // ignore
+    }
+  }
+
+  function handleSelectProject(p: RecentProject) {
+    if (!p.exists) {
+      const ok = window.confirm(`Folder "${p.path}" does not exist. Remove from recent projects?`);
+      if (ok) {
+        api.recentProjectsRemove(p.path);
+        recentProjects = recentProjects.filter((x) => x.path !== p.path);
+      }
+      return;
+    }
+    projectPopupOpen = false;
+    onSelectProject?.(p.path);
+  }
 
   let allBranches = $derived([
     ...(gitStore.branches?.local ?? []),
@@ -35,12 +80,14 @@
     projectName = 'petak',
     branchName = '',
     onPickFolder,
+    onSelectProject,
     onOpenDevicesPanel,
     onStartRun,
   } = $props<{
     projectName?: string;
     branchName?: string | null;
     onPickFolder?: () => void;
+    onSelectProject?: (path: string) => void;
     onOpenDevicesPanel?: () => void;
     onStartRun?: () => void;
   }>();
@@ -54,14 +101,23 @@
 
   let hasConfig = $derived(runStore.selectedConfig !== null);
   let hasDevice = $derived(runStore.selectedDevice !== null);
+  let isDeviceOnline = $derived(runStore.selectedDevice?.state === 'online');
   let isGradle = $derived(runStore.selectedConfig?.kind === 'gradle');
 
-  let runDisabled = $derived(!hasConfig || !hasDevice || isRunning);
+  let runAttrs = $derived(getRunVisualAttrs(runStore.uiState, isDeviceOnline, hasConfig));
+
+  let runDisabled = $derived(runAttrs.runDisabled);
   let runTooltip = $derived(
-    !hasConfig
+    runStore.uiState === 'starting'
+      ? 'Starting app…'
+      : runStore.uiState === 'running'
+      ? 'App running'
+      : runStore.uiState === 'error'
+      ? 'Run failed — click to retry'
+      : !hasConfig
       ? 'Pilih run config terlebih dahulu'
-      : !hasDevice
-      ? 'Pilih device terlebih dahulu (saat ini No device)'
+      : !hasDevice || !isDeviceOnline
+      ? 'Pilih device yang online terlebih dahulu (tidak ada device online)'
       : `Run ${runStore.selectedConfig?.name} on ${runStore.selectedDevice?.name}`
   );
 
@@ -98,7 +154,10 @@
   }
 </script>
 
-<svelte:window onclick={() => { if (branchPopupOpen) branchPopupOpen = false; }} />
+<svelte:window onclick={() => {
+  if (branchPopupOpen) branchPopupOpen = false;
+  if (projectPopupOpen) projectPopupOpen = false;
+}} />
 
 <div class="titlebar" data-tauri-drag-region>
   <!-- macOS window control spacer -->
@@ -117,13 +176,78 @@
 
   <div class="divider"></div>
 
-  <!-- Project selector -->
-  <button class="project-btn" onclick={onPickFolder} title="Click to open or switch folder">
-    <span>{projectName}</span>
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M6 9l6 6 6-6"></path>
-    </svg>
-  </button>
+  <!-- Project selector with Recent Projects dropdown (B4 + F1) -->
+  <div class="project-wrap">
+    <button
+      class="project-btn"
+      onclick={(e) => {
+        toggleProjectPopup(e);
+      }}
+      title="Click to view recent projects or open folder"
+    >
+      <span>{projectName}</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9l6 6 6-6"></path>
+      </svg>
+    </button>
+
+    {#if projectPopupOpen}
+      <div
+        class="project-popup-menu"
+        role="menu"
+        tabindex="-1"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+      >
+        <div class="project-popup-header">RECENT PROJECTS</div>
+        <div class="project-popup-list">
+          {#if recentProjects.length === 0}
+            <div class="project-popup-empty">No recent projects</div>
+          {:else}
+            {#each recentProjects as p}
+              <div
+                class="project-popup-item"
+                class:missing={!p.exists}
+                onclick={() => handleSelectProject(p)}
+                role="button"
+                tabindex="0"
+                onkeydown={(e) => { if (e.key === 'Enter') handleSelectProject(p); }}
+              >
+                <div class="project-item-info">
+                  <span class="project-item-name">{p.name}</span>
+                  <span class="project-item-path" title={p.path}>{p.path}</span>
+                </div>
+                {#if !p.exists}
+                  <span class="missing-tag">Missing</span>
+                {/if}
+                <button
+                  class="project-item-del-btn"
+                  title="Remove from recents"
+                  onclick={(e) => handleRemoveRecent(e, p.path)}
+                >
+                  ✕
+                </button>
+              </div>
+            {/each}
+          {/if}
+        </div>
+        <div class="project-popup-footer">
+          <button
+            class="project-open-folder-btn"
+            onclick={() => {
+              projectPopupOpen = false;
+              onPickFolder?.();
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M3 5h7l2 2h9v12H3z"></path>
+            </svg>
+            Open Folder…
+          </button>
+        </div>
+      </div>
+    {/if}
+  </div>
 
   <!-- Branch switcher with popup -->
   {#if branchName}
@@ -211,8 +335,8 @@
     </svg>
   </button>
 
-  <!-- Run / Reload controls -->
-  {#if isRunning}
+  <!-- Run / Reload controls (B3 Run State Machine) -->
+  {#if runAttrs.showHotReload}
     <!-- When running: show Hot Reload + Hot Restart -->
     <button
       class="action-btn reload-btn"
@@ -238,17 +362,33 @@
       </svg>
     </button>
   {:else}
-    <!-- When idle: show Run button -->
+    <!-- When idle / starting / error: show Run button with state machine colors & spinner -->
     <button
       class="action-btn run-btn"
+      class:starting={runStore.uiState === 'starting'}
+      class:error={runStore.uiState === 'error'}
+      class:idle={runStore.uiState === 'idle'}
+      style:background={runAttrs.buttonBg}
+      style:color={runAttrs.buttonColor}
       aria-label="Run"
       title={runTooltip}
-      disabled={runDisabled}
+      disabled={runAttrs.runDisabled}
       onclick={handleRunClick}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M7 5l12 7-12 7z"></path>
-      </svg>
+      {#if runAttrs.icon === 'spinner'}
+        <svg class="spinning-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
+        </svg>
+      {:else if runAttrs.icon === 'retry'}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+        </svg>
+      {:else}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M7 5l12 7-12 7z"></path>
+        </svg>
+      {/if}
     </button>
   {/if}
 
@@ -258,7 +398,7 @@
     class:has-devtools={!!runStore.devtoolsUri}
     aria-label="Debug"
     title={debugTooltip}
-    disabled={!runStore.devtoolsUri && runDisabled}
+    disabled={runAttrs.debugDisabled}
     onclick={handleDebugClick}
   >
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -271,8 +411,8 @@
   <button
     class="action-btn stop-btn"
     aria-label="Stop"
-    title={isRunning ? `Stop (${runStore.selectedConfig?.name || 'app'})` : 'App tidak sedang berjalan'}
-    disabled={!isRunning}
+    title={!runAttrs.stopDisabled ? `Stop (${runStore.selectedConfig?.name || 'app'})` : 'App tidak sedang berjalan'}
+    disabled={runAttrs.stopDisabled}
     onclick={() => runStore.stopRun()}
   >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -282,10 +422,10 @@
 
   <div class="divider"></div>
 
-  <!-- Device Mirror Toggle Button -->
+  <!-- Device Mirror Toggle Button (B1) -->
   <button
     class="mirror-toggle-btn"
-    class:active={mirrorStore.isOpen}
+    class:active={panelStore.isRightOpen('mirror')}
     aria-label="Toggle Device Mirror"
     title="Toggle Device Mirror (⌘⇧D)"
     onclick={() => mirrorStore.toggle()}
@@ -364,6 +504,10 @@
     height: 18px;
     background: #2c2e34;
   }
+  .project-wrap {
+    position: relative;
+    display: inline-block;
+  }
   .project-btn {
     display: flex;
     align-items: center;
@@ -380,6 +524,132 @@
   }
   .project-btn:hover {
     background: #1e2025;
+  }
+  .project-popup-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 320px;
+    background: #1e2025;
+    border: 1px solid #34363d;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .project-popup-header {
+    padding: 8px 12px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #8b8f98;
+    background: #18191e;
+    border-bottom: 1px solid #282a31;
+    letter-spacing: 0.6px;
+  }
+  .project-popup-list {
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .project-popup-empty {
+    padding: 12px 14px;
+    font-size: 12px;
+    color: #656972;
+    text-align: center;
+  }
+  .project-popup-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+    gap: 8px;
+  }
+  .project-popup-item:hover {
+    background: #252830;
+  }
+  .project-popup-item.missing {
+    opacity: 0.6;
+  }
+  .project-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .project-item-name {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: #e6e7ea;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-item-path {
+    font-size: 10.5px;
+    color: #8b8f98;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .missing-tag {
+    font-size: 9.5px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #422525;
+    color: #f07a74;
+    flex-shrink: 0;
+  }
+  .project-item-del-btn {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: #6e727a;
+    cursor: pointer;
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .project-popup-item:hover .project-item-del-btn {
+    opacity: 1;
+  }
+  .project-item-del-btn:hover {
+    background: #362224;
+    color: #f07a74;
+  }
+  .project-popup-footer {
+    border-top: 1px solid #282a31;
+    padding: 6px;
+    background: #17181c;
+  }
+  .project-open-folder-btn {
+    width: 100%;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: #6ea8ff;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .project-open-folder-btn:hover {
+    background: #202735;
+  }
+  .spinning-icon {
+    animation: spin 1s linear infinite;
   }
   .branch-wrap {
     position: relative;
