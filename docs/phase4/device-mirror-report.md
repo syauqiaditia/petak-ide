@@ -3,8 +3,13 @@
 **Tasks:**
 - `t_bc34c961` (Senior — Mirror Core Android via scrcpy backend)
 - `t_eb501da4` (Senior2 — UI Panel Device Mirror: dock, toolbars, WebCodecs decoder, preview)
+- `t_63556735` (Senior — iOS Simulator ScreenCaptureKit & iPhone fisik CoreMediaIO backend)
 **Base Branch:** `feat/phase4-run`  
 **Date:** September 29, 2026  
+**Status Ringkasan Level Dukungan:**
+- Android Emulator + HP Fisik: **Selesai & Terverifikasi (Server Linux)**
+- UI Panel Device Mirror (WebCodecs decoder): **Selesai & Terverifikasi (Server Linux Preview)**
+- iOS Simulator + iPhone Fisik: **Ditulis, belum diverifikasi (Mac)**  
 
 ---
 
@@ -288,19 +293,126 @@ Seluruh tangkapan layar preview telah disimpan di `docs/phase4/screens/` dan dit
 
 ---
 
-# BAGIAN 3: Downstream Handoff
+# BAGIAN 3: iOS Mirror Implementation (Simulator & Physical Device)
 
-### For iOS Worker (`t_63556735`):
-- Kontrak binary packet sama: `[u8 kind][u64be pts][payload]`.
-- iOS backend dapat mengimplementasikan streaming via WDA / `go-ios` / idb stream dengan format yang sama sehingga frontend tidak perlu branching format data.
+**Task:** `t_63556735`  
+**Author:** Senior (`muhammad.syauqi@ist.id`)  
+**Status Verifikasi:** **Ditulis, belum diverifikasi (Mac)**
+
+## 1. Overview & Architecture
+
+Modul iOS mirror diimplementasikan di `crates/core/src/mirror/ios/` untuk melengkapi dukungan device mirror di Petak 4.5.
+Sesuai arahan task dan disiplin ponytail:
+- **Zero Crate Dependencies:** Tidak ada crate dependensi eksternal baru yang ditambahkan ke `Cargo.toml`.
+- **Zero Cold-Start Cost:** Modul bersifat lazy total; helper dan thread capture tidak pernah di-load atau di-spawn sebelum `mirror_start` dipanggil dengan serial/UDID target iOS.
+- **Strict Contract Compatibility:** Format packet binary yang dikirim ke UI 100% identik dengan kontrak scrcpy Android:
+  `[u8 kind: 0=config(SPS+PPS Annex-B) 1=key 2=delta][u64 pts_us][payload Annex-B bytes]`
+  sehingga frontend Svelte + WebCodecs decoder (`DeviceCanvas.svelte`) tidak membutuhkan branching format data.
+
+### Submodules & Components
+
+```
+crates/core/src/mirror/ios/
+├── mod.rs                  // Facade & unified IosSessionHandle, UDID parsing, device routing
+├── simulator.rs            // Simulator lifecycle (boot simctl, open Simulator.app, SCK coordination)
+├── physical.rs             // Physical iPhone lifecycle (CoreMediaIO / AVFoundation, view-only)
+├── fallback.rs             // Low-fps simctl io screenshot polling fallback ("slow fallback")
+├── input.rs                // Best-effort input injection (idb / CGEvent / view-only rationale)
+├── screenshot.rs           // Native screenshot (simctl io screenshot / devicectl device capture)
+├── stream.rs               // Length-prefixed packet reader from capture helper stdout
+└── petak_ios_capture.swift // Native macOS capture helper (ScreenCaptureKit, AVFoundation, VideoToolbox)
+```
+
+---
+
+## 2. Fitur per Level Dukungan (Jujur Sesuai Kenyataan)
+
+### (a) iOS Simulator: Target Tampil + Input Best-Effort
+1. **Boot Lifecycle:**
+   - Deteksi status simulator via `xcrun simctl list devices --json`.
+   - Jika simulator dalam status `Shutdown`, otomatis di-boot via `xcrun simctl boot <udid>`.
+   - Membuka Simulator.app (`open -a Simulator --args -CurrentDeviceUDID <udid>`) agar window simulator tersedia di window server macOS.
+2. **ScreenCaptureKit (macOS 12.3+):**
+   - Menggunakan `SCShareableContent` dan `SCStream` untuk menangkap frame window Simulator secara hardware-accelerated pada 60 fps (memerlukan izin macOS *Screen Recording* untuk Petak.app).
+   - Frame `CVPixelBuffer` dikompresi langsung menggunakan hardware encoder Apple Silicon via **VideoToolbox** (`VTCompressionSessionCreate`, H.264 Baseline, realtime).
+   - Menghasilkan NAL units SPS/PPS (kind 0), IDR keyframe (kind 1), dan delta frames (kind 2) Annex-B.
+3. **Slow Fallback (Polling Screenshot):**
+   - Jika izin Screen Recording belum diberikan atau window Simulator tidak ditemukan/minimized, otomatis beralih ke mode **slow fallback**:
+     Polling screenshot via `xcrun simctl io <udid> screenshot` pada target 5–10 fps.
+   - Ditandai jelas pada telemetri & status HUD sebagai badge `slow-fallback`.
+4. **Input Injection (Best Effort):**
+   - **Tingkat 1 (`idb`):** Jika Facebook `idb` CLI terinstal di Mac host (`which idb`), input tap (`idb ui tap`), text (`idb ui text`), key (`idb ui key`), nav button (`idb ui button HOME`), dan swipe (`idb ui swipe`) dieksekusi langsung tanpa memerlukan fokus window.
+   - **Tingkat 2 (`CGEvent`):** Jika `idb` tidak terpasang, mencoba injeksi event via `CGEvent` ke window Simulator (memerlukan izin macOS *Accessibility*).
+   - **Tingkat 3 (View-Only Rationale):** Jika `idb` tidak terpasang dan izin Accessibility tidak diberikan, operasi beralih ke view-only dengan pesan kesalahan terstruktur:
+     `"iOS Simulator input requires macOS Accessibility permissions for CGEvent or Facebook idb CLI ('idb ui tap'). The mirror session is operating in view-only mode."`
+
+### (b) iPhone Fisik: View-Only (QuickTime-style)
+1. **CoreMediaIO + AVFoundation:**
+   - Mengaktifkan capture device iOS di DAL CoreMediaIO menggunakan selector `kCMIOHardwarePropertyAllowScreenCaptureDevices`.
+   - Mengidentifikasi iPhone yang tersambung via USB (memerlukan iPhone dalam keadaan *unlocked* dan *Trust this Computer* telah disetujui).
+   - Menerima frame stream via `AVCaptureSession` + `AVCaptureVideoDataOutput`.
+   - Kompresi H.264 via VideoToolbox hardware encoder.
+2. **Strictly View-Only:**
+   - Karena Apple tidak menyediakan API resmi injeksi touch over USB tanpa WebDriverAgent / jailbreak, mode ini secara jujur ditandai **view-only**.
+   - UI otomatis menampilkan badge amber `VIEW ONLY` dan menyembunyikan bottom navigation bar Android.
+   - Setiap panggilan `mirror_input` pada iPhone fisik langsung mengembalikan penjelasan tertulis:
+     `"Physical iPhone mirror is strictly view-only: Apple does not support remote touch/key injection over USB without WebDriverAgent. Badge 'view only' is active in UI."`
+
+### (c) Screenshot
+- **Simulator:** Dieksekusi langsung via `xcrun simctl io <udid> screenshot <out_path>` (PNG valid).
+- **Physical Device:** Dieksekusi via `xcrun devicectl device capture screenshot --device <udid> <out_path>`.
+
+---
+
+## 3. Hasil Pengujian & Verifikasi di Server Linux
+
+Kode iOS diuji secara ketat di server Linux (`uqiflutter1`) dengan mock execution layer dan unit tests:
+
+### 3.1 Unit Tests (162 Passed, 0 Failed)
+```
+$ cargo test -p petak-core
+test mirror::ios::input::tests::test_physical_input_rejected_as_view_only ... ok
+test mirror::ios::input::tests::test_simulator_input_with_idb ... ok
+test mirror::ios::input::tests::test_simulator_input_without_idb_returns_rationale ... ok
+test mirror::ios::simulator::tests::test_ensure_simulator_booted_calls_boot ... ok
+test mirror::ios::simulator::tests::test_resolve_swift_helper_path ... ok
+test mirror::ios::stream::tests::test_read_ios_frame_packet_eof ... ok
+test mirror::ios::stream::tests::test_read_ios_frame_packet_too_short ... ok
+test mirror::ios::stream::tests::test_read_ios_frame_packet_valid ... ok
+test mirror::ios::screenshot::tests::test_physical_device_screenshot ... ok
+test mirror::ios::screenshot::tests::test_simulator_screenshot ... ok
+test mirror::ios::fallback::tests::test_fallback_lifecycle ... ok
+test mirror::ios::tests::test_is_ios_device_detection ... ok
+
+test result: ok. 162 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+### 3.2 CFG Gating & Static Analysis
+- `cargo check -p petak-core`: **Exit code 0 (100% bersih tanpa warning atau error)**
+- `cargo check -p petak-core --example mirror_stream`: **Exit code 0**
+- `npm test`: **8/8 passing**
+- `npm run build`: **Berhasil (Vite production build sukses)**
+
+### 3.3 Ukuran Binary & Dampak Rlib
+Diukur pada `release` profile (`cargo build -p petak-core --release`):
+- Base rlib (`feat/phase4-run`): `8,560,598` bytes (~8.56 MB)
+- With iOS Module (`wt/t_63556735`): `8,882,526` bytes (~8.88 MB)
+- Delta rlib: **+321,928 bytes (+314 KB / +3.7%)**
+- 0 crate baru ditambahkan ke `Cargo.toml`.
+
+---
+
+# BAGIAN 4: Downstream Handoff
 
 ### For QA Worker (`t_c226bc64`):
-- Test suite `crates/core/tests/mirror_e2e.rs` sudah mencakup:
-  1. `test_mirror_screenshot`: screencap PNG validity
-  2. `test_mirror_session_inject_input`: touch down/up, key, scroll, nav back/home, rotate
-  3. `test_mirror_session_lifecycle`: connect, Live status, clean drop & cleanup
-  4. `test_mirror_session_video_frames`: verify ≥1 valid frame, H.264 SPS/IDR packet sequence
+- Android scrcpy backend terverifikasi end-to-end dengan real emulator di server Linux.
+- iOS module terpasang di `crates/core/src/mirror/ios/` dengan 12 unit test baru yang menguji stream parsing, fallback polling, screenshot command building, input validation/rejection, dan device detection.
 
 ### For Techlead (Mac Verification):
-- Backend `crates/core` sudah terverifikasi 100% di server Linux dengan real emulator Android.
-- Di Mac: verify build `cargo check -p petak-app` dan UI WebCodecs decoder rendering di canvas WebView.
+- Backend iOS siap diverifikasi langsung di Mac (t_b08e611b):
+  1. Boot iPhone Simulator di Mac: `open -a Simulator`.
+  2. Buka panel Device Mirror di Petak.
+  3. Konfirmasi izin Screen Recording diminta dan diberikan.
+  4. Periksa stream 60 fps ScreenCaptureKit live di canvas.
+  5. Uji mode fallback dengan me-minimize Simulator window atau mencabut izin Screen Recording.
+  6. Jika menyambungkan iPhone fisik via USB: konfirmasi muncul badge `VIEW ONLY` dan screen stream muncul via AVFoundation/CoreMediaIO.
