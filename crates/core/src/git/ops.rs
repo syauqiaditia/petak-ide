@@ -518,3 +518,72 @@ pub fn branch_rename(exec: &dyn Exec, repo: &Path, old: &str, new: &str) -> Resu
     git(exec, repo, &["branch", "-m", old, "--", new])?;
     Ok(())
 }
+
+/// Checkout result with auto-stash info.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckoutResult {
+    pub stashed: bool,
+    pub stash_popped: bool,
+    pub message: String,
+}
+
+/// Checkout a branch with optional auto-stash (stash push -u before, pop after).
+pub fn checkout_with_stash(
+    exec: &dyn Exec,
+    repo: &Path,
+    branch: &str,
+    auto_stash: bool,
+) -> Result<CheckoutResult, GitError> {
+    validate_branch_name(branch)?;
+
+    let mut stashed = false;
+    let mut stash_popped = false;
+
+    if auto_stash {
+        // Check if worktree is dirty
+        let status_out = git(exec, repo, &["status", "--porcelain"])?;
+        if !status_out.trim().is_empty() {
+            // Stash including untracked
+            git(exec, repo, &["stash", "push", "-u", "-m", &format!("auto-stash before checkout {}", branch)])?;
+            stashed = true;
+        }
+    }
+
+    let checkout_result = git(exec, repo, &["checkout", branch]);
+
+    if let Err(e) = checkout_result {
+        // If checkout failed and we stashed, pop the stash back
+        if stashed {
+            let _ = git(exec, repo, &["stash", "pop"]);
+        }
+        return Err(e);
+    }
+
+    if stashed {
+        // Try to pop the stash
+        match git(exec, repo, &["stash", "pop"]) {
+            Ok(_) => {
+                stash_popped = true;
+            }
+            Err(_) => {
+                // Stash pop had conflicts — stash remains, user sees modified files
+                stash_popped = false;
+            }
+        }
+    }
+
+    let message = if stashed && stash_popped {
+        format!("Checkout ke '{}' berhasil (perubahan di-stash lalu di-pop).", branch)
+    } else if stashed && !stash_popped {
+        format!("Checkout ke '{}' berhasil. Stash pop gagal (kemungkinan conflict). Cek `git stash list`.", branch)
+    } else {
+        format!("Checkout ke '{}' berhasil.", branch)
+    };
+
+    Ok(CheckoutResult {
+        stashed,
+        stash_popped,
+        message,
+    })
+}

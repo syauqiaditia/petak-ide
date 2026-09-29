@@ -31,8 +31,8 @@ pub use model::{
 };
 pub use ops::{
     branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,
-    commit, last_commit_message, merge, rebase_onto, reset, revert, stage_files, stage_hunk,
-    unstage_files, unstage_hunk,
+    checkout_with_stash, commit, last_commit_message, merge, rebase_onto, reset, revert,
+    stage_files, stage_hunk, unstage_files, unstage_hunk, CheckoutResult,
 };
 pub use path::{
     add_to_gitignore, blame, commit_paths, diff_path_head, diff_path_staged, diff_path_vs_ref,

@@ -104,6 +104,31 @@ pub fn simctl_boot(exec: &dyn Exec, udid: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Shutdown an iOS simulator via `xcrun simctl shutdown <udid>`.
+pub fn simctl_shutdown(exec: &dyn Exec, udid: &str) -> io::Result<()> {
+    if !is_valid_udid(udid) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid iOS simulator UDID: {}", udid),
+        ));
+    }
+
+    let output = exec.run(Path::new("."), "xcrun", &["simctl", "shutdown", udid], &[], None)?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        let msg = if err.trim().is_empty() {
+            String::from_utf8_lossy(&output.stdout)
+        } else {
+            err
+        };
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("simctl shutdown failed: {}", msg.trim()),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct DevicectlOutput {
     #[serde(default)]
