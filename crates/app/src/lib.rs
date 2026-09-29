@@ -30,6 +30,11 @@ pub fn run() {
                 if let Some(run_state) = window.try_state::<commands::RunState>() {
                     run_state.shutdown_all();
                 }
+                if let Some(mirror_state) = window.try_state::<commands::MirrorState>() {
+                    if let Ok(mut sessions) = mirror_state.sessions.lock() {
+                        sessions.clear();
+                    }
+                }
             }
         })
         .setup(|app| {
