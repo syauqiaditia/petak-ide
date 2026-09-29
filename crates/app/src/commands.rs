@@ -2387,3 +2387,120 @@ pub async fn git_commit_paths(
     .await
     .map_err(|e| e.to_string())?
 }
+
+// -----------------------------------------------------------------------------
+// Mirror (device mirror via scrcpy)
+// -----------------------------------------------------------------------------
+
+pub struct MirrorState {
+    pub sessions: Mutex<std::collections::HashMap<String, petak_core::mirror::session::MirrorSession>>,
+}
+
+impl Default for MirrorState {
+    fn default() -> Self {
+        Self {
+            sessions: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorFramePayload {
+    pub serial: String,
+    pub data: Vec<u8>,
+}
+
+#[tauri::command]
+pub async fn mirror_start(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, MirrorState>,
+    serial: String,
+    max_size: Option<u16>,
+) -> Result<petak_core::mirror::session::MirrorInfo, String> {
+    let serial_clone = serial.clone();
+    let max = max_size.unwrap_or(1920);
+
+    let (info, session, frame_rx, status_rx) =
+        tauri::async_runtime::spawn_blocking(move || {
+            petak_core::mirror::session::MirrorSession::start(&serial_clone, max)
+                .map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+
+    // Status event forwarder
+    let app_status = app.clone();
+    let serial_for_status = serial.clone();
+    std::thread::spawn(move || {
+        while let Ok(status) = status_rx.recv() {
+            let _ = app_status.emit(
+                "mirror-status",
+                serde_json::json!({ "serial": serial_for_status, "status": status }),
+            );
+        }
+    });
+
+    // Frame forwarder
+    let app_frame = app.clone();
+    let serial_for_frame = serial.clone();
+    std::thread::spawn(move || {
+        while let Ok(packet) = frame_rx.recv() {
+            let _ = app_frame.emit(
+                "mirror-frame",
+                MirrorFramePayload {
+                    serial: serial_for_frame.clone(),
+                    data: packet,
+                },
+            );
+        }
+    });
+
+    if let Ok(mut sessions) = state.sessions.lock() {
+        sessions.insert(serial.clone(), session);
+    }
+
+    Ok(info)
+}
+
+#[tauri::command]
+pub async fn mirror_stop(
+    state: tauri::State<'_, MirrorState>,
+    serial: String,
+) -> Result<(), String> {
+    let removed = {
+        let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+        sessions.remove(&serial)
+    };
+    // Drop kills the server process + removes forward
+    drop(removed);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn mirror_input(
+    state: tauri::State<'_, MirrorState>,
+    serial: String,
+    event: petak_core::mirror::control::InputEvent,
+) -> Result<(), String> {
+    let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    if let Some(session) = sessions.get(&serial) {
+        session.send_input(&event).map_err(|e| e.to_string())
+    } else {
+        Err(format!("No mirror session for {}", serial))
+    }
+}
+
+#[tauri::command]
+pub async fn mirror_screenshot(
+    serial: String,
+    path: Option<String>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::mirror::session::take_screenshot(&exec, &serial, path.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

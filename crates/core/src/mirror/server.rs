@@ -1,0 +1,232 @@
+/// Push and start scrcpy-server on an Android device via adb.
+///
+/// Steps:
+/// 1. adb push scrcpy-server-v4.1 /data/local/tmp/scrcpy-server.jar
+/// 2. adb forward tcp:<port> localabstract:scrcpy_<scid>
+/// 3. adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar \
+///      app_process / com.genymobile.scrcpy.Server 4.1 \
+///      tunnel_forward=true audio=false control=true max_size=<max> ...
+/// 4. Connect to localhost:<port> — video socket first, then control socket.
+use std::io;
+use std::net::TcpStream;
+use std::path::Path;
+use std::sync::mpsc::Sender;
+use std::time::Duration;
+
+use crate::exec::{Exec, Proc, ProcLine, Spawn};
+use crate::run::device::{is_valid_device_id, resolve_adb_binary};
+
+pub const SCRCPY_VERSION: &str = "4.1";
+const SERVER_REMOTE_PATH: &str = "/data/local/tmp/scrcpy-server.jar";
+
+/// Resolve the local path to the scrcpy-server jar.
+/// In dev: /mnt/storage/uqi-cache/scrcpy/scrcpy-server-v4.1
+/// In release: embedded via include_bytes! (future).
+pub fn resolve_server_jar() -> io::Result<String> {
+    let cache_path = format!(
+        "/mnt/storage/uqi-cache/scrcpy/scrcpy-server-v{}",
+        SCRCPY_VERSION
+    );
+    if Path::new(&cache_path).exists() {
+        return Ok(cache_path);
+    }
+    // Try relative to CARGO_MANIFEST_DIR for tests
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!(
+            "scrcpy-server-v{} not found at {}",
+            SCRCPY_VERSION, cache_path
+        ),
+    ))
+}
+
+/// Push the scrcpy-server jar to the device.
+pub fn push_server(exec: &dyn Exec, device: &str, local_jar: &str) -> io::Result<()> {
+    if !is_valid_device_id(device) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid device ID: {}", device),
+        ));
+    }
+    let adb = resolve_adb_binary();
+    let output = exec.run(
+        Path::new("."),
+        &adb,
+        &["-s", device, "push", local_jar, SERVER_REMOTE_PATH],
+        &[],
+        None,
+    )?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("adb push failed: {}", err.trim()),
+        ));
+    }
+    Ok(())
+}
+
+/// Set up adb forward and return the local port.
+pub fn setup_forward(exec: &dyn Exec, device: &str, scid: u32) -> io::Result<u16> {
+    let adb = resolve_adb_binary();
+    let abstract_name = format!("localabstract:scrcpy_{:08x}", scid);
+
+    // Use tcp:0 to let adb pick a free port
+    let output = exec.run(
+        Path::new("."),
+        &adb,
+        &["-s", device, "forward", "tcp:0", &abstract_name],
+        &[],
+        None,
+    )?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("adb forward failed: {}", err.trim()),
+        ));
+    }
+    let port_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    port_str.parse::<u16>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("could not parse port from adb forward: '{}'", port_str),
+        )
+    })
+}
+
+/// Remove the adb forward for a given port.
+pub fn remove_forward(exec: &dyn Exec, device: &str, port: u16) {
+    let adb = resolve_adb_binary();
+    let tcp_spec = format!("tcp:{}", port);
+    let _ = exec.run(
+        Path::new("."),
+        &adb,
+        &["-s", device, "forward", "--remove", &tcp_spec],
+        &[],
+        None,
+    );
+}
+
+/// Start the scrcpy server process on the device.
+/// Returns the Proc handle to the running `adb shell` process.
+pub fn start_server(
+    spawn: &dyn Spawn,
+    device: &str,
+    scid: u32,
+    max_size: u16,
+    tx: Sender<ProcLine>,
+) -> io::Result<Box<dyn Proc>> {
+    if !is_valid_device_id(device) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid device ID: {}", device),
+        ));
+    }
+    let adb = resolve_adb_binary();
+    let scid_hex = format!("{:08x}", scid);
+    let max_size_str = max_size.to_string();
+
+    let shell_cmd = format!(
+        "CLASSPATH={} app_process / com.genymobile.scrcpy.Server {} \
+         tunnel_forward=true audio=false control=true cleanup=false \
+         send_device_meta=false send_frame_meta=true \
+         send_dummy_byte=false \
+         max_size={} scid={}",
+        SERVER_REMOTE_PATH, SCRCPY_VERSION, max_size_str, scid_hex
+    );
+
+    spawn.spawn(
+        Path::new("."),
+        &adb,
+        &["-s", device, "shell", &shell_cmd],
+        &[],
+        tx,
+    )
+}
+
+/// Connect to the scrcpy server via the forwarded port.
+/// The server expects the video socket first, then the control socket.
+/// Each connection starts with reading a dummy byte (if send_dummy_byte=true, but we set false).
+pub fn connect_sockets(port: u16) -> io::Result<(TcpStream, TcpStream)> {
+    let timeout = Duration::from_secs(10);
+
+    // Retry connection briefly — server takes a moment to bind
+    let video = retry_connect(port, timeout)?;
+    let control = retry_connect(port, timeout)?;
+
+    video.set_read_timeout(Some(Duration::from_secs(5)))?;
+    control.set_read_timeout(Some(Duration::from_secs(5)))?;
+    control.set_write_timeout(Some(Duration::from_secs(5)))?;
+
+    Ok((video, control))
+}
+
+fn retry_connect(port: u16, timeout: Duration) -> io::Result<TcpStream> {
+    let start = std::time::Instant::now();
+    loop {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(s) => return Ok(s),
+            Err(e) => {
+                if start.elapsed() >= timeout {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        format!("failed to connect to scrcpy port {}: {}", port, e),
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+}
+
+/// Represents a running scrcpy server with its associated resources.
+pub struct ScrcpyServer {
+    pub device: String,
+    pub scid: u32,
+    pub port: u16,
+    pub server_proc: Box<dyn Proc>,
+    pub exec: Box<dyn Exec>,
+}
+
+impl ScrcpyServer {
+    /// Kill the server process and remove the adb forward.
+    pub fn stop(&mut self) {
+        let _ = self.server_proc.kill();
+        remove_forward(self.exec.as_ref(), &self.device, self.port);
+    }
+}
+
+impl Drop for ScrcpyServer {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_server_jar() {
+        // This test only works when the jar is cached
+        if Path::new(&format!(
+            "/mnt/storage/uqi-cache/scrcpy/scrcpy-server-v{}",
+            SCRCPY_VERSION
+        ))
+        .exists()
+        {
+            let path = resolve_server_jar().unwrap();
+            assert!(path.contains("scrcpy-server"));
+        }
+    }
+
+    #[test]
+    fn test_scid_format() {
+        let scid: u32 = 0x12345678;
+        let hex = format!("{:08x}", scid);
+        assert_eq!(hex, "12345678");
+        let abstract_name = format!("localabstract:scrcpy_{}", hex);
+        assert_eq!(abstract_name, "localabstract:scrcpy_12345678");
+    }
+}
