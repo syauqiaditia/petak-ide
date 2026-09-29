@@ -1,4 +1,5 @@
 use std::sync::Mutex;
+use petak_core::exec::Exec;
 use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
@@ -1712,7 +1713,7 @@ pub async fn run_stop(
 ) -> Result<(), String> {
     let run_opt = {
         let mut guard = state.inner.runs.lock().map_err(|e| e.to_string())?;
-        guard.runs.remove(&run_id)
+        guard.remove(&run_id)
     };
 
     if let Some(run) = run_opt {

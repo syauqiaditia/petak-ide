@@ -77,7 +77,8 @@ pub enum OutputStream {
     Stderr,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BuildError {
     pub file: String,
     pub line: u32,
@@ -85,7 +86,8 @@ pub struct BuildError {
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReloadResult {
     pub full_restart: bool,
     pub ok: bool,
