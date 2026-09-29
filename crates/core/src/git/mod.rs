@@ -5,6 +5,7 @@ pub mod graph;
 pub mod log;
 pub mod model;
 pub mod ops;
+pub mod path;
 pub mod rebase;
 pub mod remote;
 pub mod status;
@@ -21,7 +22,7 @@ pub use log::{
     parse_log_output, parse_tracking,
 };
 pub use model::{
-    BackupRef, BranchInfo, BranchList, Choice, Commit, CommitFile, ConflictBlock, ConflictChoice,
+    BackupRef, BlameLine, BranchInfo, BranchList, Choice, Commit, CommitFile, ConflictBlock, ConflictChoice,
     ConflictFile, ConflictSide, DiffFile, DiffLine, DiffLineKind, Edge, EdgeKind, FileState,
     GraphRow, GraphState, Hunk, LocalBranch, LogFilter, LogPage, OpKind, OpResult, OpState,
     OpStateKind, PullMode, RebaseAction, RebaseItem, RebasePlan, RebaseState, RebaseStateKind,
@@ -32,6 +33,10 @@ pub use ops::{
     branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,
     commit, last_commit_message, merge, rebase_onto, reset, revert, stage_files, stage_hunk,
     unstage_files, unstage_hunk,
+};
+pub use path::{
+    add_to_gitignore, blame, commit_paths, diff_path_head, diff_path_staged, diff_path_vs_ref,
+    file_at_ref, parse_blame_porcelain, path_history, rollback_paths,
 };
 pub use rebase::{
     drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,

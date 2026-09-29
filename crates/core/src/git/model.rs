@@ -359,3 +359,13 @@ pub enum PullMode {
     Rebase,
     Merge,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameLine {
+    pub line: u32,
+    pub sha: String,
+    pub author: String,
+    pub time_unix: i64,
+    pub summary: String,
+}

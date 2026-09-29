@@ -179,6 +179,7 @@ pub fn run() {
             commands::bench_mode,
             commands::test_mode,
             commands::test_repo_path,
+            commands::test_env,
             commands::index_build,
             commands::find_files,
             commands::grep,
@@ -234,6 +235,13 @@ pub fn run() {
             commands::lh_revert,
             commands::lh_label,
             commands::lh_snapshot,
+            commands::git_diff_path,
+            commands::git_file_at_ref,
+            commands::git_path_history,
+            commands::git_blame,
+            commands::git_rollback,
+            commands::git_gitignore_add,
+            commands::git_commit_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

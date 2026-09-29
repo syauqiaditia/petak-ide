@@ -68,6 +68,14 @@ export interface GitCommitFile {
   status: GitFileState;
 }
 
+export interface GitBlameLine {
+  line: number;
+  sha: string;
+  author: string;
+  timeUnix: number;
+  summary: string;
+}
+
 export type GitRefKind = 'head' | 'branch' | 'remote' | 'tag';
 
 export interface GitRefLabel {

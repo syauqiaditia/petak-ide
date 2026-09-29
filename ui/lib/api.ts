@@ -301,6 +301,8 @@ import type {
   GitConflictChoice,
   GitRemote,
   GitPullMode,
+  GitCommit,
+  GitBlameLine,
 } from '../features/git/types';
 export * from '../features/git/types';
 
@@ -559,6 +561,10 @@ export const api = {
 
   testRepoPath(): Promise<string | null> {
     return invoke<string | null>('test_repo_path');
+  },
+
+  testEnv(name: string): Promise<string | null> {
+    return invoke<string | null>('test_env', { name });
   },
 
   indexBuild(root: string): Promise<void> {
@@ -851,6 +857,35 @@ export const api = {
     return invoke<LocalHistoryEntry | null>('lh_snapshot', { root, rel, kind });
   },
 
+  // Git Per-Path
+  gitDiffPath(root: string, rel: string, mode: 'head' | 'staged' | string): Promise<GitDiffFile[]> {
+    return invoke<GitDiffFile[]>('git_diff_path', { root, rel, mode });
+  },
+
+  gitFileAtRef(root: string, gitRef: string, rel: string): Promise<string | null> {
+    return invoke<string | null>('git_file_at_ref', { root, gitRef, rel });
+  },
+
+  gitPathHistory(root: string, rel: string, isFile: boolean, limit?: number, skip?: number): Promise<GitCommit[]> {
+    return invoke<GitCommit[]>('git_path_history', { root, rel, isFile, limit: limit ?? null, skip: skip ?? null });
+  },
+
+  gitBlame(root: string, rel: string): Promise<GitBlameLine[]> {
+    return invoke<GitBlameLine[]>('git_blame', { root, rel });
+  },
+
+  gitRollback(root: string, rels: string[]): Promise<void> {
+    return invoke('git_rollback', { root, rels });
+  },
+
+  gitGitignoreAdd(root: string, rel: string): Promise<void> {
+    return invoke('git_gitignore_add', { root, rel });
+  },
+
+  gitCommitPaths(root: string, rels: string[], message: string): Promise<string> {
+    return invoke<string>('git_commit_paths', { root, rels, message });
+  },
+
   // Event Listeners
   onRunEvent(cb: (payload: RunEventPayload) => void): Promise<UnlistenFn> {
     return listen<RunEventPayload>('run-event', (event) => cb(event.payload));
@@ -984,5 +1019,33 @@ export const api = {
 
   lh_snapshot(root: string, rel: string, kind: string): Promise<LocalHistoryEntry | null> {
     return api.lhSnapshot(root, rel, kind);
+  },
+
+  git_diff_path(root: string, rel: string, mode: 'head' | 'staged' | string): Promise<GitDiffFile[]> {
+    return api.gitDiffPath(root, rel, mode);
+  },
+
+  git_file_at_ref(root: string, git_ref: string, rel: string): Promise<string | null> {
+    return api.gitFileAtRef(root, git_ref, rel);
+  },
+
+  git_path_history(root: string, rel: string, is_file: boolean, limit?: number, skip?: number): Promise<GitCommit[]> {
+    return api.gitPathHistory(root, rel, is_file, limit, skip);
+  },
+
+  git_blame(root: string, rel: string): Promise<GitBlameLine[]> {
+    return api.gitBlame(root, rel);
+  },
+
+  git_rollback(root: string, rels: string[]): Promise<void> {
+    return api.gitRollback(root, rels);
+  },
+
+  git_gitignore_add(root: string, rel: string): Promise<void> {
+    return api.gitGitignoreAdd(root, rel);
+  },
+
+  git_commit_paths(root: string, rels: string[], message: string): Promise<string> {
+    return api.gitCommitPaths(root, rels, message);
   },
 };

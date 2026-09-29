@@ -854,6 +854,11 @@ pub fn test_repo_path() -> Option<String> {
 }
 
 #[tauri::command]
+pub fn test_env(name: String) -> Option<String> {
+    std::env::var(name).ok()
+}
+
+#[tauri::command]
 pub async fn index_build(
     state: tauri::State<'_, Mutex<Option<petak_core::search::FileIndex>>>,
     root: String,
@@ -2200,4 +2205,161 @@ pub fn lh_snapshot(app: tauri::AppHandle, root: String, rel: String, kind: Strin
         }
     }
     Ok(None)
+}
+
+#[tauri::command]
+pub async fn git_diff_path(
+    root: String,
+    rel: String,
+    mode: String,
+) -> Result<Vec<petak_core::git::DiffFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &rel).map_err(|e| e.to_string())?;
+        match mode.as_str() {
+            "head" => petak_core::git::diff_path_head(&exec, repo, &rel).map_err(|e| e.to_string()),
+            "staged" => petak_core::git::diff_path_staged(&exec, repo, &rel).map_err(|e| e.to_string()),
+            git_ref => petak_core::git::diff_path_vs_ref(&exec, repo, git_ref, &rel).map_err(|e| e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_file_at_ref(
+    root: String,
+    git_ref: String,
+    rel: String,
+) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &rel).map_err(|e| e.to_string())?;
+        Ok(petak_core::git::file_at_ref(&exec, repo, &git_ref, &rel))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_path_history(
+    root: String,
+    rel: String,
+    is_file: bool,
+    limit: Option<usize>,
+    skip: Option<usize>,
+) -> Result<Vec<petak_core::git::Commit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &rel).map_err(|e| e.to_string())?;
+        petak_core::git::path_history(
+            &exec,
+            repo,
+            &rel,
+            is_file,
+            limit.unwrap_or(0),
+            skip.unwrap_or(0),
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_blame(
+    root: String,
+    rel: String,
+) -> Result<Vec<petak_core::git::BlameLine>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &rel).map_err(|e| e.to_string())?;
+        petak_core::git::blame(&exec, repo, &rel).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_rollback(
+    app: tauri::AppHandle,
+    root: String,
+    rels: Vec<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = lh_store_dir(&app, &root)?;
+        let root_path = std::path::Path::new(&root);
+
+        // 1. Snapshot each file before rollback
+        for rel in &rels {
+            let target = petak_core::fsops::resolve_in_root(root_path, rel)
+                .map_err(|e| e.to_string())?;
+            if target.is_file() {
+                snapshot_file_if_small(&store, &target, rel, "before_rollback");
+            } else if target.is_dir() {
+                fn snapshot_dir(store: &std::path::Path, root_path: &std::path::Path, dir: &std::path::Path) {
+                    if let Ok(entries) = std::fs::read_dir(dir) {
+                        for entry in entries.flatten() {
+                            let p = entry.path();
+                            if p.is_file() {
+                                if let Ok(rel_p) = p.strip_prefix(root_path) {
+                                    let rel_str = rel_p.to_string_lossy().replace('\\', "/");
+                                    snapshot_file_if_small(store, &p, &rel_str, "before_rollback");
+                                }
+                            } else if p.is_dir() {
+                                snapshot_dir(store, root_path, &p);
+                            }
+                        }
+                    }
+                }
+                snapshot_dir(&store, root_path, &target);
+            }
+        }
+
+        // 2. Perform rollback
+        let exec = petak_core::exec::SystemExec;
+        let rel_slices: Vec<&str> = rels.iter().map(|s| s.as_str()).collect();
+        petak_core::git::rollback_paths(&exec, root_path, &rel_slices)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_gitignore_add(
+    root: String,
+    rel: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &rel).map_err(|e| e.to_string())?;
+        petak_core::git::add_to_gitignore(repo, &rel).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_commit_paths(
+    root: String,
+    rels: Vec<String>,
+    message: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        for rel in &rels {
+            let _ = petak_core::fsops::resolve_in_root(repo, rel).map_err(|e| e.to_string())?;
+        }
+        let rel_slices: Vec<&str> = rels.iter().map(|s| s.as_str()).collect();
+        petak_core::git::commit_paths(&exec, repo, &message, &rel_slices)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
