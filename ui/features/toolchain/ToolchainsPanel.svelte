@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { toolchainStore, type LspState } from './toolchainStore.svelte';
+  import { api, type KotlinLsStatus, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
 
   let {
     root = '',
@@ -14,6 +16,56 @@
   let androidSdkInput = $state('');
   let kotlinLsInput = $state('');
   let saveFeedback = $state<string | null>(null);
+
+  // Kotlin LS Installer state
+  let kotlinStatus = $state<KotlinLsStatus | null>(null);
+  let isInstallingKotlin = $state(false);
+  let kotlinProgress = $state<KotlinLsProgress | null>(null);
+  let kotlinInstallError = $state<string | null>(null);
+  let unlistenProgress: UnlistenFn | null = null;
+
+  let isJavaMissing = $derived(
+    !toolchainStore.toolchain?.java && kotlinStatus !== null && !kotlinStatus.javaOk
+  );
+
+  async function loadKotlinStatus() {
+    try {
+      kotlinStatus = await api.kotlinLsStatus();
+    } catch {
+      kotlinStatus = null;
+    }
+  }
+
+  async function handleInstallKotlinLs() {
+    if (isInstallingKotlin) return;
+    isInstallingKotlin = true;
+    kotlinInstallError = null;
+    kotlinProgress = { stage: 'downloading', percent: 10, message: 'Menghubungkan ke GitHub releases…' };
+
+    try {
+      unlistenProgress = await api.onKotlinLsProgress((p) => {
+        kotlinProgress = p;
+      });
+      await api.kotlinLsInstall();
+      await toolchainStore.refresh(root);
+      await loadKotlinStatus();
+    } catch (err: any) {
+      kotlinInstallError = err?.message || String(err);
+    } finally {
+      isInstallingKotlin = false;
+      if (unlistenProgress) {
+        unlistenProgress();
+        unlistenProgress = null;
+      }
+    }
+  }
+
+  onMount(() => {
+    loadKotlinStatus();
+    return () => {
+      if (unlistenProgress) unlistenProgress();
+    };
+  });
 
   $effect(() => {
     flutterSdkInput = toolchainStore.config.flutterSdk || '';
@@ -234,7 +286,7 @@
       </div>
 
       <!-- Kotlin Language Server -->
-      <div class="tool-row">
+      <div class="tool-row" class:has-actions={true}>
         <div class="tool-name">Kotlin LS</div>
         <div class="tool-value">
           {#if toolchainStore.toolchain?.kotlinLs}
@@ -244,9 +296,46 @@
             {/if}
           {:else}
             <span class="not-found">Not detected</span>
+            <button
+              class="install-ls-btn"
+              disabled={isInstallingKotlin || isJavaMissing}
+              onclick={handleInstallKotlinLs}
+              title={isJavaMissing ? 'JDK diperlukan sebelum memasang Kotlin LS' : 'Unduh & pasang kotlin-language-server'}
+            >
+              {#if isInstallingKotlin}
+                Memasang…
+              {:else}
+                Install Kotlin Language Server
+              {/if}
+            </button>
           {/if}
         </div>
       </div>
+
+      {#if isInstallingKotlin && kotlinProgress}
+        <div class="install-progress-card">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" style:width="{kotlinProgress.percent ?? 50}%"></div>
+          </div>
+          <span class="progress-msg">{kotlinProgress.message}</span>
+        </div>
+      {/if}
+
+      {#if kotlinInstallError}
+        <div class="install-error-card">
+          <span>Gagal memasang Kotlin LS: {kotlinInstallError}</span>
+        </div>
+      {/if}
+
+      {#if isJavaMissing && !toolchainStore.toolchain?.kotlinLs}
+        <div class="jdk-missing-warning">
+          <span class="warn-icon">⚠</span>
+          <div class="warn-body">
+            <strong>JDK (Java) tidak terdeteksi di PATH</strong>
+            <p>Kotlin Language Server membutuhkan JDK (Java 17+). Silakan pasang OpenJDK atau JDK Android Studio terlebih dahulu.</p>
+          </div>
+        </div>
+      {/if}
 
       <!-- SourceKit-LSP -->
       <div class="tool-row">
@@ -557,6 +646,92 @@
   .not-found {
     color: #666a73;
     font-style: italic;
+  }
+  .install-ls-btn {
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    background: #1f3650;
+    color: #8bbdff;
+    border: 1px solid #2d4c72;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .install-ls-btn:hover:not(:disabled) {
+    background: #274567;
+  }
+  .install-ls-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .install-progress-card {
+    margin: 4px 0 8px;
+    padding: 8px 12px;
+    background: #151821;
+    border: 1px solid #273043;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .progress-bar-wrap {
+    height: 4px;
+    background: #20242f;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: #569aff;
+    transition: width 0.3s ease;
+  }
+  .progress-msg {
+    font-size: 11px;
+    color: #9cb1d1;
+  }
+  .install-error-card {
+    margin: 4px 0 8px;
+    padding: 8px 12px;
+    background: #2a1617;
+    border: 1px solid #482326;
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: #f0837f;
+  }
+  .jdk-missing-warning {
+    margin: 4px 0 8px;
+    padding: 8px 12px;
+    background: #282012;
+    border: 1px solid #4a381b;
+    border-radius: 6px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .warn-icon {
+    color: #f2ad49;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .warn-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11.5px;
+    color: #e5cfac;
+  }
+  .warn-body strong {
+    color: #ffda99;
+  }
+  .warn-body p {
+    margin: 0;
+    font-size: 11px;
+    color: #c9b493;
+    line-height: 1.4;
   }
   .path-container {
     display: flex;

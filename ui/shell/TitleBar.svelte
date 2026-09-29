@@ -1,8 +1,35 @@
 <script lang="ts">
   import { runStore } from '../features/run/runStore.svelte';
   import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
+  import { gitStore } from '../features/git/git.svelte';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
+
+  let branchPopupOpen = $state(
+    typeof window !== 'undefined' && window.location.search.includes('branch-open')
+  );
+  let branchSearch = $state('');
+
+  let allBranches = $derived([
+    ...(gitStore.branches?.local ?? []),
+    ...(gitStore.branches?.remote ?? []).map((r) => ({
+      name: r.name,
+      isCurrent: false,
+      ahead: 0,
+      behind: 0,
+      upstream: null,
+      sha: r.sha,
+    })),
+  ]);
+
+  let filteredBranches = $derived(
+    allBranches.filter((b) => b.name.toLowerCase().includes(branchSearch.toLowerCase()))
+  );
+
+  async function handleSelectBranch(bName: string) {
+    branchPopupOpen = false;
+    await gitStore.branchCheckout(bName, true);
+  }
 
   let {
     projectName = 'petak',
@@ -71,6 +98,8 @@
   }
 </script>
 
+<svelte:window onclick={() => { if (branchPopupOpen) branchPopupOpen = false; }} />
+
 <div class="titlebar" data-tauri-drag-region>
   <!-- macOS window control spacer -->
   <div class="traffic-lights-spacer" data-tauri-drag-region></div>
@@ -96,17 +125,67 @@
     </svg>
   </button>
 
-  <!-- Branch -->
+  <!-- Branch switcher with popup -->
   {#if branchName}
-    <button class="branch-btn" title="Git Branch">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="6" cy="5" r="2"></circle>
-        <circle cx="6" cy="19" r="2"></circle>
-        <circle cx="18" cy="7" r="2"></circle>
-        <path d="M6 7v10M18 9c0 5-6 4-12 8"></path>
-      </svg>
-      <span>{branchName}</span>
-    </button>
+    <div class="branch-wrap">
+      <button
+        class="branch-btn"
+        onclick={(e) => {
+          e.stopPropagation();
+          branchPopupOpen = !branchPopupOpen;
+        }}
+        title="Git Branch: {branchName} (Click to switch branch)"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="5" r="2"></circle>
+          <circle cx="6" cy="19" r="2"></circle>
+          <circle cx="18" cy="7" r="2"></circle>
+          <path d="M6 7v10M18 9c0 5-6 4-12 8"></path>
+        </svg>
+        <span class="branch-label">{branchName}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2">
+          <path d="M6 9l6 6 6-6"></path>
+        </svg>
+      </button>
+
+      {#if branchPopupOpen}
+        <div
+          class="branch-popup-menu"
+          role="menu"
+          tabindex="-1"
+          onclick={(e) => e.stopPropagation()}
+          onkeydown={(e) => e.stopPropagation()}
+        >
+          <div class="branch-popup-search">
+            <input
+              type="text"
+              class="branch-popup-input"
+              placeholder="Search branch…"
+              bind:value={branchSearch}
+            />
+          </div>
+          <div class="branch-popup-list">
+            {#if filteredBranches.length === 0}
+              <div class="branch-popup-empty">No branches found</div>
+            {:else}
+              {#each filteredBranches as b}
+                {@const isCurrent = b.name === branchName || b.isCurrent}
+                <button
+                  class="branch-popup-item"
+                  class:current={isCurrent}
+                  onclick={() => handleSelectBranch(b.name)}
+                >
+                  <span class="branch-item-name" class:bold={isCurrent}>{b.name}</span>
+                  {#if isCurrent}
+                    <span class="branch-current-tag">HEAD</span>
+                  {/if}
+                </button>
+              {/each}
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </div>
   {/if}
 
   <div class="spacer" data-tauri-drag-region></div>
@@ -302,6 +381,10 @@
   .project-btn:hover {
     background: #1e2025;
   }
+  .branch-wrap {
+    position: relative;
+    display: inline-block;
+  }
   .branch-btn {
     display: flex;
     align-items: center;
@@ -317,6 +400,95 @@
   }
   .branch-btn:hover {
     background: #1e2025;
+    color: #e6e7ea;
+  }
+  .branch-label {
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .branch-popup-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 280px;
+    background: #1e2025;
+    border: 1px solid #34363d;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .branch-popup-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid #282a31;
+    background: #18191e;
+  }
+  .branch-popup-input {
+    width: 100%;
+    height: 26px;
+    background: #121316;
+    border: 1px solid #2e3037;
+    border-radius: 5px;
+    padding: 0 8px;
+    color: #e6e7ea;
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .branch-popup-input:focus {
+    border-color: #569aff;
+  }
+  .branch-popup-list {
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .branch-popup-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #8b8f98;
+  }
+  .branch-popup-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s;
+  }
+  .branch-popup-item:hover {
+    background: #252830;
+  }
+  .branch-popup-item.current {
+    background: #23344a;
+  }
+  .branch-item-name {
+    font-size: 12.5px;
+    color: #d8d9dc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .branch-item-name.bold {
+    font-weight: 600;
+    color: #ffffff;
+  }
+  .branch-current-tag {
+    font-size: 9.5px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: #2d4c72;
+    color: #9eccff;
   }
   .spacer {
     flex-grow: 1;

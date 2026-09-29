@@ -85,6 +85,7 @@
   let rollbackModalPaths = $state<string[]>([]);
 
   let comparePickerOpen = $state(false);
+  let compareInitialTab = $state<'branches' | 'revisions'>('branches');
   let compareTargetFile = $state<{ name: string; rel: string } | null>(null);
 
   let localHistoryOpen = $state(false);
@@ -96,6 +97,15 @@
 
   // pubspec.yaml cache for package: import syntax
   let pubspecPackageName = $state<string>('');
+
+  onMount(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('menu-git')) {
+      setTimeout(() => {
+        selectedPaths = new Set(['/project/lib/main.dart']);
+        openContextMenuForSelection(140, 180);
+      }, 300);
+    }
+  });
 
   $effect(() => {
     if (folderPath) {
@@ -584,6 +594,10 @@
     } else {
       // Single selection menu
       const targetDir = firstEntry.is_dir ? getRelPath(firstEntry.path) : getParentRel(getRelPath(firstEntry.path));
+      const relEntryPath = getRelPath(firstEntry.path);
+      const isEntryStaged = gitStore.stagedEntries.some(
+        (s) => s.path === relEntryPath || s.path.startsWith(relEntryPath + '/')
+      );
 
       items.push({
         label: 'New',
@@ -830,9 +844,14 @@
               },
             },
             {
+              label: 'Show History',
+              action: () => onOpenGitLog?.(getRelPath(firstEntry.path)),
+            },
+            {
               label: 'Compare with Branch…',
               action: () => {
                 compareTargetFile = { name: firstEntry.name, rel: getRelPath(firstEntry.path) };
+                compareInitialTab = 'branches';
                 comparePickerOpen = true;
               },
             },
@@ -840,31 +859,19 @@
               label: 'Compare with Revision…',
               action: () => {
                 compareTargetFile = { name: firstEntry.name, rel: getRelPath(firstEntry.path) };
+                compareInitialTab = 'revisions';
                 comparePickerOpen = true;
               },
             },
             {
-              label: 'Show History',
-              action: () => onOpenGitLog?.(getRelPath(firstEntry.path)),
-            },
-            {
               label: 'Annotate / Blame',
               disabled: firstEntry.is_dir,
-              action: () => onToggleAnnotate?.(),
-            },
-            { separator: true },
-            {
-              label: 'Add to VCS',
-              shortcut: '⌥⌘A',
-              action: async () => {
-                await api.gitDiffPath(folderPath, getRelPath(firstEntry.path), 'head');
+              action: () => {
+                onSelectFile(firstEntry.path);
+                setTimeout(() => onToggleAnnotate?.(), 100);
               },
             },
-            {
-              label: firstEntry.is_dir ? 'Commit Folder…' : 'Commit File…',
-              shortcut: '⌘K',
-              action: () => onOpenCommitPanel?.(getRelPath(firstEntry.path)),
-            },
+            { separator: true },
             {
               label: 'Rollback Changes…',
               danger: true,
@@ -873,12 +880,29 @@
                 rollbackModalOpen = true;
               },
             },
-            { separator: true },
             {
               label: 'Add to .gitignore',
               action: async () => {
                 await api.gitGitignoreAdd(folderPath, getRelPath(firstEntry.path));
+                await gitStore.refresh(folderPath);
               },
+            },
+            {
+              label: isEntryStaged ? 'Unstage' : 'Stage',
+              action: async () => {
+                if (isEntryStaged) {
+                  await api.gitUnstage(folderPath, relEntryPath);
+                } else {
+                  await api.gitStage(folderPath, relEntryPath);
+                }
+                await gitStore.refresh(folderPath);
+              },
+            },
+            { separator: true },
+            {
+              label: firstEntry.is_dir ? 'Commit Folder…' : 'Commit File…',
+              shortcut: '⌘K',
+              action: () => onOpenCommitPanel?.(getRelPath(firstEntry.path)),
             },
           ],
         });
@@ -1362,6 +1386,7 @@
     fileName={compareTargetFile.name}
     relPath={compareTargetFile.rel}
     {folderPath}
+    initialTab={compareInitialTab}
     onclose={() => (comparePickerOpen = false)}
     onselect={async (ref) => {
       try {

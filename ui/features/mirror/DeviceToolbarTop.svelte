@@ -14,12 +14,12 @@
     <span class="device-name-text" title={name}>{name}</span>
 
     {#if status === 'live'}
-      <span class="device-badge-live">
+      <span class="device-badge-live" title="Full interactive control (touch, swipe, scroll, keyboard, navigation)">
         <span class="dot-live"></span>
-        LIVE
+        Interactive
       </span>
     {:else if status === 'view-only'}
-      <span class="device-badge-viewonly">VIEW ONLY</span>
+      <span class="device-badge-viewonly" title="iOS screen mirroring (view only)">View only</span>
     {:else if status === 'connecting'}
       <span class="device-badge-connecting">
         <span class="dot-connecting"></span>

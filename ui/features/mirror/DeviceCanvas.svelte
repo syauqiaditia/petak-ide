@@ -230,8 +230,12 @@
         typeof window !== 'undefined' &&
         (window.location.search.includes('preview') || !(window as any).__TAURI_INTERNALS__);
 
+      const isInteracted =
+        typeof window !== 'undefined' &&
+        (window.location.search.includes('interact=after') || window.location.search.includes('after'));
+
       if (isPreviewEnv) {
-        drawCanvasMockApp(ctx, canvasEl.width, canvasEl.height, isViewOnly);
+        drawCanvasMockApp(ctx, canvasEl.width, canvasEl.height, isViewOnly, isInteracted);
       } else {
         ctx.fillStyle = '#0a0a0c';
         ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);

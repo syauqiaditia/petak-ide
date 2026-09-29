@@ -9,6 +9,7 @@ import {
   type BuildError,
   type RunEvent,
   type UnlistenFn,
+  type DevicesSnapshot,
 } from '../../lib/api';
 import {
   initialRunLogicState,
@@ -30,6 +31,7 @@ class RunStore {
   // Devices & AVDs
   devices = $state<Device[]>([]);
   selectedDeviceId = $state<string>('');
+  snapshot = $state<DevicesSnapshot | null>(null);
   avds = $state<Avd[]>([]);
   avdsLoading = $state<boolean>(false);
 
@@ -63,6 +65,7 @@ class RunStore {
   // Listeners
   private unlistenRunEvent: UnlistenFn | null = null;
   private unlistenDevices: UnlistenFn | null = null;
+  private unlistenDeviceReady: UnlistenFn | null = null;
   private unlistenGradleDaemon: UnlistenFn | null = null;
   private initialized = false;
   private isWatchingDevices = false;
@@ -99,8 +102,13 @@ class RunStore {
           this.isWatchingDevices = true;
           await api.devicesWatch();
         }
-        const list = await api.devicesList();
-        this.updateDevices(list);
+        const snap = await api.devicesSnapshot();
+        if (snap) {
+          this.updateSnapshot(snap);
+        } else {
+          const list = await api.devicesList();
+          this.updateDevices(list);
+        }
       } catch (e) {
         console.warn('[runStore] Failed to watch/list devices:', e);
       }
@@ -124,11 +132,29 @@ class RunStore {
         }
 
         try {
-          this.unlistenDevices = await api.onDevicesChanged((devices) => {
-            this.updateDevices(devices);
+          this.unlistenDevices = await api.onDevicesChanged((payload: any) => {
+            if (payload && (payload.emulators || payload.physical)) {
+              this.updateSnapshot(payload as DevicesSnapshot);
+            } else if (Array.isArray(payload)) {
+              this.updateDevices(payload);
+            }
           });
         } catch (e) {
           console.warn('[runStore] Failed to listen to devices-changed:', e);
+        }
+
+        try {
+          this.unlistenDeviceReady = await api.onDeviceReady((ready) => {
+            if (ready?.id) {
+              this.selectDevice(ready.id);
+              // Auto-open mirror on device-ready
+              import('../mirror/mirrorStore.svelte').then((m) => {
+                m.mirrorStore.open(ready.id).catch(() => {});
+              });
+            }
+          });
+        } catch (e) {
+          console.warn('[runStore] Failed to listen to device-ready:', e);
         }
 
         try {
@@ -142,6 +168,36 @@ class RunStore {
     })();
 
     return this.initPromise;
+  }
+
+  updateSnapshot(snap: DevicesSnapshot) {
+    this.snapshot = snap;
+    const devs: Device[] = [];
+    for (const emu of snap.emulators || []) {
+      if (emu.state === 'running' || emu.state === 'booting') {
+        devs.push({
+          id: emu.deviceId || emu.id,
+          name: emu.name,
+          platform: emu.kind === 'ios-sim' ? 'ios' : 'android',
+          kind: 'emulator',
+          state: emu.state === 'running' ? 'online' : 'booting',
+          sdk: emu.sdk,
+        });
+      }
+    }
+    for (const phys of snap.physical || []) {
+      if (phys.state !== 'offline') {
+        devs.push({
+          id: phys.id,
+          name: phys.name,
+          platform: phys.platform,
+          kind: 'physical',
+          state: 'online',
+          sdk: phys.sdk,
+        });
+      }
+    }
+    this.updateDevices(devs);
   }
 
   updateDevices(list: Device[]) {
