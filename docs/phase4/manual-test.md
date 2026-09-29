@@ -160,3 +160,75 @@ Buka Petak, lalu buka folder tersebut via menu **File → Open Folder** (`/tmp/p
    - **Close to the Right**: menutup tab-tab di sebelah kanan.
    - **Close All**: menutup seluruh tab.
    - **Select in Project Tree**: menyorot dan scroll otomatis ke posisi file tersebut di File Tree sidebar.
+
+---
+
+## 4. Panduan Pengujian Device Mirror (Fase 4.5)
+
+Fitur Device Mirror menampilkan layar perangkat secara live di panel samping kanan Petak dengan arsitektur full-tinggi (dock paling luar kanan), menyempitkan area editor tanpa memotong atau tertutup panel bawah (Terminal/Run/Logcat), serta menyediakan slot panel AI Agent Fase 5 di sebelah kirinya.
+
+### Langkah 1: Membuka Panel Device Mirror
+1. Buka panel mirror melalui salah satu cara berikut:
+   - Klik ikon ponsel (Device Mirror) di sisi kanan TitleBar Petak.
+   - Gunakan shortcut keyboard: **`Cmd+Shift+D`** (macOS) atau **`Ctrl+Shift+D`** (Linux/Windows).
+   - Jalankan aplikasi ke perangkat (tombol **Run**): panel otomatis terbuka jika opsi auto-show aktif.
+2. Perhatikan layout:
+   - Panel muncul di dock paling kanan dengan tinggi penuh (dari bawah TitleBar hingga atas StatusBar).
+   - Area editor dan panel bawah (Run/Logcat) menyempit secara mulus.
+   - Slot kosong panel AI Agent Fase 5 berada di sebelah kiri panel mirror (tersembunyi secara default).
+
+### Langkah 2: Mengubah Ukuran Panel (Resize)
+1. Arahkan kursor mouse ke border sebelah kiri panel Device Mirror hingga kursor berubah menjadi `col-resize`.
+2. Klik dan geser (drag) ke kiri atau kanan:
+   - Ukuran panel dapat diubah dinamis antara **300 px** hingga **600 px**.
+   - Rasio aspek tampilan layar perangkat tetap terjaga rapi dengan bezel gelap token Petak (`#111215`) dan kamera punch-hole 8px di bagian atas.
+
+### Langkah 3: Interaksi Perangkat Android (Emulator & HP Fisik USB)
+1. Pilih device Android di dropdown TitleBar atau Devices sidebar.
+2. Saat koneksi terhubung (*status badge hijau `Live`*):
+   - **Touch & Gesture:** Klik pada sembarang tombol atau widget di layar mirror, drag untuk scroll list view. Reticle sentuhan muncul memberi umpan balik visual instan.
+   - **Ketik Teks:** Klik pada kolom input teks di dalam aplikasi Android, ketik teks melalui keyboard laptop/Mac. Teks langsung terketik di perangkat.
+   - **Hardware Navigation Bar:** Di toolbar bawah layar mirror, klik tombol navigasi hardware:
+     - **Back** (segitiga kiri)
+     - **Home** (lingkaran tengah)
+     - **Recents** (kotak kanan)
+     - **Vol-** dan **Vol+**
+     - **Power** (mengunci/membuka layar)
+   - **Rotate:** Klik tombol Rotate di toolbar atas untuk memutar orientasi layar perangkat.
+   - **Screenshot:** Klik ikon kamera di toolbar atas. Tangkapan layar tersimpan dan notifikasi toast konfirmasi muncul.
+
+### Langkah 4: Membaca Telemetri Nyata (HUD FPS & Latency)
+1. Perhatikan pill HUD di pojok kanan bawah area layar perangkat.
+2. HUD menampilkan data telemetri aktual (bukan angka dummy):
+   - **FPS:** Dihitung dari frame buffer nyata yang diterima dan dirender (target 30–60 FPS).
+   - **Latency:** Selisih waktu nyata antara pengiriman input event hingga frame layar ter-render (target < 150 ms).
+
+### Langkah 5: Pengujian iOS Simulator (Khusus macOS)
+1. Di TitleBar, pilih target **iPhone 17 Pro Simulator** lalu klik **Run** (atau buka panel mirror).
+2. Petak otomatis mem-boot simulator dan membuka window Simulator.app via `xcrun simctl`.
+3. **Izin Screen Recording:**
+   - Jika pertama kali dijalankan, macOS akan menampilkan dialog izin Screen Recording untuk Petak. Izinkan di *System Settings → Privacy & Security → Screen Recording*.
+   - Stream ScreenCaptureKit hardware-accelerated 60 fps langsung aktif di canvas Petak.
+4. **Slow Fallback Test:**
+   - Jika izin belum diberikan atau window simulator diminimize, badge `slow-fallback` muncul dan stream beralih ke screenshot polling 5–10 fps secara aman.
+5. **Input Best-Effort:**
+   - Coba klik di area layar simulator: jika Facebook `idb` terpasang atau izin Accessibility aktif, tap akan dieksekusi. Jika tidak tersedia, UI menampilkan alasan transparan (view-only mode).
+
+### Langkah 6: Pengujian iPhone Fisik (View-Only via USB di macOS)
+1. Colokkan iPhone fisik ke Mac via kabel USB.
+2. Pastikan iPhone dalam keadaan tidak terkunci (*unlocked*) dan konfirmasi dialog *"Trust This Computer"*.
+3. Buka mirror untuk perangkat iPhone fisik tersebut:
+   - Layar iPhone ditangkap secara hardware via CoreMediaIO / AVFoundation.
+   - Toolbar bawah Android otomatis disembunyikan.
+   - Badge amber **`VIEW ONLY`** muncul di toolbar atas dengan pesan transparan bahwa remote touch via USB tidak didukung resmi oleh Apple.
+
+### Langkah 7: Pengujian Siklus Re-entry & Pembersihan Proses (App Quit)
+1. **Re-entry Flow:** Tekan `Cmd+Shift+D` untuk menutup panel, lalu tekan lagi untuk membuka. Ulangi 3 kali. Pastikan tidak ada lag, frame macet, atau memory leak.
+2. **Zero Orphan Process Test:**
+   - Dengan mirror Android sedang aktif, tutup aplikasi Petak secara langsung (`Cmd+Q` atau tutup window).
+   - Buka terminal di host dan jalankan:
+     ```bash
+     pgrep -il scrcpy
+     adb forward --list
+     ```
+   - **Hasil yang diharapkan:** Seluruh proses `scrcpy-server` mati dan forward port TCP dibersihkan seketika. Tidak ada proses yatim tertinggal di perangkat maupun sistem.
