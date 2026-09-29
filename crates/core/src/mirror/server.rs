@@ -95,14 +95,14 @@ pub fn setup_forward(exec: &dyn Exec, device: &str, scid: u32) -> io::Result<u16
     })
 }
 
-/// Remove the adb forward for a given scid.
-pub fn remove_forward(exec: &dyn Exec, device: &str, scid: u32) {
+/// Remove the adb forward for a given port.
+pub fn remove_forward(exec: &dyn Exec, device: &str, port: u16) {
     let adb = resolve_adb_binary();
-    let abstract_name = format!("localabstract:scrcpy_{:08x}", scid);
+    let tcp_spec = format!("tcp:{}", port);
     let _ = exec.run(
         Path::new("."),
         &adb,
-        &["-s", device, "forward", "--remove", &abstract_name],
+        &["-s", device, "forward", "--remove", &tcp_spec],
         &[],
         None,
     );
@@ -129,8 +129,8 @@ pub fn start_server(
 
     let shell_cmd = format!(
         "CLASSPATH={} app_process / com.genymobile.scrcpy.Server {} \
-         tunnel_forward=true audio=false control=true \
-         send_device_meta=false send_frame_meta=true send_codec_meta=true \
+         tunnel_forward=true audio=false control=true cleanup=false \
+         send_device_meta=false send_frame_meta=true \
          send_dummy_byte=false \
          max_size={} scid={}",
         SERVER_REMOTE_PATH, SCRCPY_VERSION, max_size_str, scid_hex
@@ -193,7 +193,7 @@ impl ScrcpyServer {
     /// Kill the server process and remove the adb forward.
     pub fn stop(&mut self) {
         let _ = self.server_proc.kill();
-        remove_forward(self.exec.as_ref(), &self.device, self.scid);
+        remove_forward(self.exec.as_ref(), &self.device, self.port);
     }
 }
 

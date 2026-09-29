@@ -7,6 +7,7 @@ use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +100,9 @@ impl MirrorSession {
             server_proc,
             exec,
         };
+
+        // Give scrcpy-server a moment to start and bind its abstract socket
+        thread::sleep(Duration::from_millis(800));
 
         // 5. Connect video + control sockets
         let (video_stream, control_stream) = server::connect_sockets(port)?;
