@@ -13,6 +13,7 @@ pub fn run() {
         .manage(commands::TermSessions::default())
         .manage(commands::TermCounter::new(1))
         .manage(commands::RunState::default())
+        .manage(commands::MirrorState::default())
         .manage(commands::CurrentProjectRoot::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } = event {
@@ -242,6 +243,10 @@ pub fn run() {
             commands::git_rollback,
             commands::git_gitignore_add,
             commands::git_commit_paths,
+            commands::mirror_start,
+            commands::mirror_stop,
+            commands::mirror_input,
+            commands::mirror_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

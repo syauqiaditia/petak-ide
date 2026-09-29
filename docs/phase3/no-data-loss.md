@@ -15,14 +15,14 @@ cargo test -p petak-core --test git_rebase
 
 | op | HEAD lama | HEAD baru | tree sama? | backup restore = HEAD lama? |
 |---|---|---|---|---|
-| squash (2 commit tengah) | `9d8d3ea` | `011963c` | ya (identik) | ya (HEAD cocok & status bersih) |
-| reword | `9d8d3ea` | `f820ff0` | ya (identik) | ya (HEAD cocok & status bersih) |
-| fixup (into previous) | `9d8d3ea` | `85d222f` | ya (identik) | ya (HEAD cocok & status bersih) |
-| drop (1 commit tengah) | `9d8d3ea` | `fae91fb` | terverifikasi (-file4.txt) | ya (HEAD cocok & status bersih) |
-| reorder (2 commit independen) | `fb7dacc` | `e83db31` | ya (identik) | ya (HEAD cocok & status bersih) |
-| reset --hard | `fb7dacc` | `b877815` | mundur 3 commit | ya (HEAD cocok & status bersih) |
-| rebase --root | `fb7dacc` | `e876117` | ya (identik) | ya (HEAD cocok & status bersih) |
-| rebase conflict → abort | `54b3366` | `54b3366` | ya (identik) | ya (HEAD cocok & status bersih) |
+| squash (2 commit tengah) | `bd6a8fa` | `2076574` | ya (identik) | ya (HEAD cocok & status bersih) |
+| reword | `bd6a8fa` | `fd99f6c` | ya (identik) | ya (HEAD cocok & status bersih) |
+| fixup (into previous) | `bd6a8fa` | `32dda65` | ya (identik) | ya (HEAD cocok & status bersih) |
+| drop (1 commit tengah) | `bd6a8fa` | `3bf6964` | terverifikasi (-file4.txt) | ya (HEAD cocok & status bersih) |
+| reorder (2 commit independen) | `021ab0d` | `6f8ac9d` | ya (identik) | ya (HEAD cocok & status bersih) |
+| reset --hard | `021ab0d` | `76fa86d` | mundur 3 commit | ya (HEAD cocok & status bersih) |
+| rebase --root | `021ab0d` | `e86250f` | ya (identik) | ya (HEAD cocok & status bersih) |
+| rebase conflict → abort | `0027693` | `0027693` | ya (identik) | ya (HEAD cocok & status bersih) |
 
 ## Kesimpulan dan Garansi Keamanan
 
