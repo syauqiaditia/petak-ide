@@ -408,7 +408,7 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         )
         var allow: UInt32 = 1
         CMIOObjectSetPropertyData(
-            CMIOObjectPropertyID(kCMIOObjectSystemObject),
+            CMIOObjectID(kCMIOObjectSystemObject),
             &prop, 0, nil,
             UInt32(MemoryLayout<UInt32>.size),
             &allow
