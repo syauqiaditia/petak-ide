@@ -256,6 +256,21 @@ pub fn run() {
             commands::mirror_stop,
             commands::mirror_input,
             commands::mirror_screenshot,
+            // Batch 2
+            commands::devices_snapshot,
+            commands::avd_start,
+            commands::avd_stop,
+            commands::sim_boot,
+            commands::sim_shutdown,
+            commands::kotlin_ls_status,
+            commands::kotlin_ls_install,
+            commands::git_branches_tree,
+            commands::git_checkout,
+            commands::git_log_path,
+            commands::git_diff_branch,
+            commands::git_diff_revision,
+            commands::git_stage,
+            commands::git_unstage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

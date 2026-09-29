@@ -14,13 +14,7 @@ impl Clock for WallClock {
 }
 
 fn has_kotlin_ls() -> bool {
-    let local = Path::new("/mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server");
-    local.exists()
-        || std::process::Command::new("kotlin-language-server")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+    petak_core::toolchain::resolve_kotlin_ls().is_some()
 }
 
 #[test]

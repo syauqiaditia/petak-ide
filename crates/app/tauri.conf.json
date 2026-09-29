@@ -27,6 +27,7 @@
       "csp": null
     }
   },
+  "resources": ["resources/scrcpy-server-v4.1"],
   "bundle": {
     "active": true,
     "targets": ["app", "dmg"],

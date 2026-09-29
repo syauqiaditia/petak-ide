@@ -4,8 +4,8 @@
 /// 1. adb push scrcpy-server-v4.1 /data/local/tmp/scrcpy-server.jar
 /// 2. adb forward tcp:<port> localabstract:scrcpy_<scid>
 /// 3. adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar \
-///      app_process / com.genymobile.scrcpy.Server 4.1 \
-///      tunnel_forward=true audio=false control=true max_size=<max> ...
+///    app_process / com.genymobile.scrcpy.Server 4.1 \
+///    tunnel_forward=true audio=false control=true max_size=<max> ...
 /// 4. Connect to localhost:<port> — video socket first, then control socket.
 use std::io;
 use std::net::TcpStream;
@@ -19,25 +19,84 @@ use crate::run::device::{is_valid_device_id, resolve_adb_binary};
 pub const SCRCPY_VERSION: &str = "4.1";
 const SERVER_REMOTE_PATH: &str = "/data/local/tmp/scrcpy-server.jar";
 
+/// Expected sha256 of scrcpy-server-v4.1
+const SCRCPY_SERVER_SHA256: &str = "deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae";
+
 /// Resolve the local path to the scrcpy-server jar.
-/// In dev: /mnt/storage/uqi-cache/scrcpy/scrcpy-server-v4.1
-/// In release: embedded via include_bytes! (future).
+/// Order: env PETAK_SCRCPY_SERVER -> Tauri resource dir -> app-support dir.
 pub fn resolve_server_jar() -> io::Result<String> {
-    let cache_path = format!(
-        "/mnt/storage/uqi-cache/scrcpy/scrcpy-server-v{}",
-        SCRCPY_VERSION
-    );
-    if Path::new(&cache_path).exists() {
-        return Ok(cache_path);
+    let jar_name = format!("scrcpy-server-v{}", SCRCPY_VERSION);
+
+    // 1. Env override
+    if let Ok(env_path) = std::env::var("PETAK_SCRCPY_SERVER") {
+        if !env_path.trim().is_empty() {
+            let p = Path::new(&env_path);
+            if !p.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("PETAK_SCRCPY_SERVER file tidak ditemukan: {}", env_path),
+                ));
+            }
+            verify_server_jar(&env_path)?;
+            return Ok(env_path);
+        }
     }
-    // Try relative to CARGO_MANIFEST_DIR for tests
+
+    // 2. Tauri resource dir (bundled in app)
+    //    At runtime the resource is next to the binary:
+    //    macOS: Petak.app/Contents/Resources/<jar>
+    //    Linux: <dir>/resources/<jar>  (or next to binary)
+    if let Ok(exe) = std::env::current_exe() {
+        // macOS bundle: exe is at .app/Contents/MacOS/Petak
+        if let Some(macos_dir) = exe.parent() {
+            let resources = macos_dir.join("../Resources").join(&jar_name);
+            if resources.is_file() {
+                let p = resources.to_string_lossy().to_string();
+                verify_server_jar(&p)?;
+                return Ok(p);
+            }
+            // Linux / dev: resources/ next to exe
+            let beside = macos_dir.join(&jar_name);
+            if beside.is_file() {
+                let p = beside.to_string_lossy().to_string();
+                verify_server_jar(&p)?;
+                return Ok(p);
+            }
+        }
+    }
+
+    // 3. App-support dir: ~/Library/Application Support/Petak/scrcpy/
+    //    or ~/.local/share/Petak/scrcpy/ on Linux
+    if let Some(data) = dirs::data_dir() {
+        let app_support = data.join("Petak").join("scrcpy").join(&jar_name);
+        if app_support.is_file() {
+            let p = app_support.to_string_lossy().to_string();
+            verify_server_jar(&p)?;
+            return Ok(p);
+        }
+    }
+
     Err(io::Error::new(
         io::ErrorKind::NotFound,
         format!(
-            "scrcpy-server-v{} not found at {}",
-            SCRCPY_VERSION, cache_path
+            "scrcpy-server-v{} tidak ditemukan. Pastikan file sudah dibundle di app atau ada di ~/Library/Application Support/Petak/scrcpy/",
+            SCRCPY_VERSION
         ),
     ))
+}
+
+/// Verify sha256 of a jar file.
+pub fn verify_server_jar(path: &str) -> io::Result<()> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path)?;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    if hash != SCRCPY_SERVER_SHA256 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("scrcpy-server sha256 mismatch: expected {}, got {}", SCRCPY_SERVER_SHA256, hash),
+        ));
+    }
+    Ok(())
 }
 
 /// Push the scrcpy-server jar to the device.
@@ -58,10 +117,7 @@ pub fn push_server(exec: &dyn Exec, device: &str, local_jar: &str) -> io::Result
     )?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("adb push failed: {}", err.trim()),
-        ));
+        return Err(io::Error::other(format!("adb push failed: {}", err.trim())));
     }
     Ok(())
 }
@@ -81,10 +137,7 @@ pub fn setup_forward(exec: &dyn Exec, device: &str, scid: u32) -> io::Result<u16
     )?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("adb forward failed: {}", err.trim()),
-        ));
+        return Err(io::Error::other(format!("adb forward failed: {}", err.trim())));
     }
     let port_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
     port_str.parse::<u16>().map_err(|_| {
@@ -208,17 +261,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_resolve_server_jar() {
-        // This test only works when the jar is cached
-        if Path::new(&format!(
-            "/mnt/storage/uqi-cache/scrcpy/scrcpy-server-v{}",
-            SCRCPY_VERSION
-        ))
-        .exists()
-        {
-            let path = resolve_server_jar().unwrap();
-            assert!(path.contains("scrcpy-server"));
+    fn test_resolve_server_jar_env_nonexistent() {
+        std::env::set_var("PETAK_SCRCPY_SERVER", "/nonexistent/path/server.jar");
+        let result = resolve_server_jar();
+        std::env::remove_var("PETAK_SCRCPY_SERVER");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_resolve_server_jar_env_valid() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../app/resources")
+            .join(format!("scrcpy-server-v{}", SCRCPY_VERSION));
+        if bundled.is_file() {
+            let bytes = std::fs::read(&bundled).unwrap();
+            use std::io::Write;
+            tmp.write_all(&bytes).unwrap();
+            let tmp_str = tmp.path().to_str().unwrap().to_string();
+            std::env::set_var("PETAK_SCRCPY_SERVER", &tmp_str);
+            let result = resolve_server_jar();
+            std::env::remove_var("PETAK_SCRCPY_SERVER");
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), tmp_str);
         }
+    }
+
+    #[test]
+    fn test_resolve_server_jar_env_sha256_mismatch() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::Write;
+        tmp.write_all(b"corrupted jar data").unwrap();
+        let tmp_str = tmp.path().to_str().unwrap().to_string();
+        std::env::set_var("PETAK_SCRCPY_SERVER", &tmp_str);
+        let result = resolve_server_jar();
+        std::env::remove_var("PETAK_SCRCPY_SERVER");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_verify_server_jar_bad_path() {
+        let result = verify_server_jar("/nonexistent/file");
+        assert!(result.is_err());
     }
 
     #[test]

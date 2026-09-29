@@ -6,6 +6,9 @@ Events are Tauri `listen()` from Rust → UI.
 ## A. Scrcpy
 
 No new commands — `mirror_start` already exists, jar resolution is internal.
+Android mirror is INTERACTIVE (touch/drag/scroll/keyboard/nav buttons via scrcpy control socket — already implemented in mirror/control.rs).
+iOS Simulator mirror is VIEW-ONLY (screen capture only).
+UI should label panels accordingly: "Android — Interactive" vs "iOS — View only".
 
 ## B. Kotlin LS
 

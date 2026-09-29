@@ -2516,3 +2516,229 @@ pub async fn mirror_screenshot(
     .await
     .map_err(|e| e.to_string())?
 }
+
+// ──────────── Batch 2 commands ────────────
+
+#[tauri::command]
+pub async fn devices_snapshot() -> Result<petak_core::run::DevicesSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        Ok(petak_core::run::devices_snapshot(&exec))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn avd_start(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, RunState>,
+    name: String,
+    cold: bool,
+) -> Result<(), String> {
+    let state_inner = state.inner.clone();
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let is_headless = {
+            #[cfg(unix)]
+            {
+                std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err()
+            }
+            #[cfg(not(unix))]
+            {
+                false
+            }
+        };
+        let spawn = petak_core::exec::SystemSpawn;
+        let proc = petak_core::run::avd_start(&spawn, &name, cold, is_headless)
+            .map_err(|e| e.to_string())?;
+
+        if let Ok(mut emus) = state_inner.spawned_emulators.lock() {
+            emus.push(proc);
+        }
+
+        // Wait briefly then emit device-ready
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let _ = app_clone.emit("device-ready", serde_json::json!({
+            "id": name,
+            "kind": "android-avd"
+        }));
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn avd_stop(name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::run::avd_stop(&exec, &name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn sim_boot(app: tauri::AppHandle, udid: String) -> Result<(), String> {
+    let app_clone = app.clone();
+    let udid_clone = udid.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::run::simctl_boot(&exec, &udid_clone).map_err(|e| e.to_string())?;
+        let _ = app_clone.emit("device-ready", serde_json::json!({
+            "id": udid_clone,
+            "kind": "ios-sim"
+        }));
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn sim_shutdown(udid: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        petak_core::run::simctl_shutdown(&exec, &udid).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn kotlin_ls_status() -> Result<petak_core::toolchain::KotlinLsStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::toolchain::kotlin_ls_status())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn kotlin_ls_install(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::toolchain::kotlin_ls_install(|stage, percent, message| {
+            let _ = app.emit("kotlin-ls-progress", serde_json::json!({
+                "stage": stage,
+                "percent": percent,
+                "message": message,
+            }));
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_branches_tree(root: String) -> Result<petak_core::git::BranchList, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::branches(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_checkout(
+    root: String,
+    branch: String,
+    auto_stash: bool,
+) -> Result<petak_core::git::CheckoutResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::checkout_with_stash(&exec, repo, &branch, auto_stash)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_log_path(
+    root: String,
+    path: String,
+    limit: Option<usize>,
+) -> Result<Vec<petak_core::git::Commit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
+        let is_file = repo.join(&path).is_file();
+        petak_core::git::path_history(
+            &exec,
+            repo,
+            &path,
+            is_file,
+            limit.unwrap_or(100),
+            0,
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_diff_branch(
+    root: String,
+    path: String,
+    branch: String,
+) -> Result<Vec<petak_core::git::DiffFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
+        petak_core::git::diff_path_vs_ref(&exec, repo, &branch, &path)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_diff_revision(
+    root: String,
+    path: String,
+    rev: String,
+) -> Result<Vec<petak_core::git::DiffFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
+        petak_core::git::diff_path_vs_ref(&exec, repo, &rev, &path)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stage(root: String, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
+        petak_core::git::stage_files(&exec, repo, &[path.as_str()])
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_unstage(root: String, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
+        petak_core::git::unstage_files(&exec, repo, &[path.as_str()])
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

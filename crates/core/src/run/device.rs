@@ -338,6 +338,314 @@ pub fn start_emulator(
     spawn.spawn(Path::new("."), &emu_cmd, &args_ref, &[], tx)
 }
 
+/// Start an AVD. `cold` = true wipes the snapshot for a cold boot.
+pub fn avd_start(
+    spawn: &dyn Spawn,
+    avd: &str,
+    cold: bool,
+    headless: bool,
+) -> io::Result<Box<dyn Proc>> {
+    if !is_valid_avd_name(avd) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid AVD name: {}", avd),
+        ));
+    }
+    let emu_cmd = resolve_emulator_binary();
+    let mut args = vec!["-avd".to_string(), avd.to_string()];
+    if cold {
+        args.push("-no-snapshot-load".to_string());
+    }
+    if headless {
+        args.extend([
+            "-no-window".to_string(),
+            "-no-audio".to_string(),
+            "-gpu".to_string(),
+            "swiftshader_indirect".to_string(),
+        ]);
+    }
+    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    let (tx, _rx) = std::sync::mpsc::channel();
+    spawn.spawn(Path::new("."), &emu_cmd, &args_ref, &[], tx)
+}
+
+/// Query the running AVD name for an emulator device ID using `adb -s <id> emu avd name`.
+pub fn get_running_avd_name(exec: &dyn Exec, adb: &str, device_id: &str) -> Option<String> {
+    let out = exec
+        .run(
+            Path::new("."),
+            adb,
+            &["-s", device_id, "emu", "avd", "name"],
+            &[],
+            None,
+        )
+        .ok()?;
+
+    if !out.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if !trimmed.is_empty()
+            && trimmed != "OK"
+            && !trimmed.starts_with("KO")
+            && !trimmed.contains("Authentication required")
+        {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+/// Stop a running AVD by finding its emulator device and killing it.
+pub fn avd_stop(exec: &dyn Exec, avd: &str) -> io::Result<()> {
+    if !is_valid_avd_name(avd) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid AVD name: {}", avd),
+        ));
+    }
+    let adb = resolve_adb_binary();
+
+    // List devices to find running emulators
+    let output = exec.run(Path::new("."), &adb, &["devices"], &[], None)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let mut running_emulators = Vec::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        if let Some(device_id) = line.split_whitespace().next() {
+            if device_id.starts_with("emulator-") && line.contains("device") {
+                running_emulators.push(device_id.to_string());
+            }
+        }
+    }
+
+    // Match specific emulator by querying AVD name
+    for emu_id in &running_emulators {
+        if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
+            if name == avd {
+                let _ = exec.run(
+                    Path::new("."),
+                    &adb,
+                    &["-s", emu_id, "emu", "kill"],
+                    &[],
+                    None,
+                );
+                return Ok(());
+            }
+        }
+    }
+
+    // Fallback: if only 1 emulator is running and get_running_avd_name was None (e.g. unmocked/console auth),
+    // we can stop that single emulator. If multiple emulators are running, never kill blindly.
+    if running_emulators.len() == 1 {
+        let emu_id = &running_emulators[0];
+        if get_running_avd_name(exec, &adb, emu_id).is_none() {
+            let _ = exec.run(
+                Path::new("."),
+                &adb,
+                &["-s", emu_id, "emu", "kill"],
+                &[],
+                None,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Snapshot of all devices, grouped for the UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevicesSnapshot {
+    pub emulators: Vec<EmulatorInfo>,
+    pub physical: Vec<PhysicalDevice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmulatorInfo {
+    pub id: String,
+    pub name: String,
+    pub kind: String,  // "android-avd" | "ios-sim"
+    pub state: String, // "running" | "stopped" | "booting"
+    pub device_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhysicalDevice {
+    pub id: String,
+    pub name: String,
+    pub platform: String,  // "android" | "ios"
+    pub transport: String, // "usb" | "wifi"
+}
+
+/// Build a unified devices snapshot from all sources.
+pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
+    let mut emulators = Vec::new();
+    let mut physical = Vec::new();
+
+    let adb = resolve_adb_binary();
+
+    // 1. Android AVDs (emulator -list-avds) and running emulators (adb devices)
+    let avds = list_avds(exec);
+    let running_android = if let Ok(out) =
+        exec.run(Path::new("."), &adb, &["devices", "-l"], &[], None)
+    {
+        if out.status.success() {
+            parse_adb_devices(&String::from_utf8_lossy(&out.stdout))
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Map running emulator IDs to their names
+    let mut avd_to_device_id = std::collections::HashMap::new();
+    let mut unmatched_emu_ids = Vec::new();
+
+    for dev in &running_android {
+        if dev.kind == DeviceKind::Emulator && dev.state == DeviceState::Online {
+            if let Some(avd_name) = get_running_avd_name(exec, &adb, &dev.id) {
+                avd_to_device_id.insert(avd_name, dev.id.clone());
+            } else {
+                unmatched_emu_ids.push(dev.id.clone());
+            }
+        }
+    }
+
+    for avd in &avds {
+        // Match specific running emulator by AVD name first
+        let device_id = if let Some(id) = avd_to_device_id.remove(&avd.name) {
+            Some(id)
+        } else if avd_to_device_id.is_empty() && !unmatched_emu_ids.is_empty() {
+            // Fallback if emu avd name query not available: consume at most one emulator per AVD
+            unmatched_emu_ids.pop()
+        } else {
+            None
+        };
+
+        let is_running = device_id.is_some();
+        emulators.push(EmulatorInfo {
+            id: avd.name.clone(),
+            name: avd.name.clone(),
+            kind: "android-avd".to_string(),
+            state: if is_running {
+                "running".to_string()
+            } else {
+                "stopped".to_string()
+            },
+            device_id,
+        });
+    }
+
+    // Any remaining running emulators that weren't in the avds list
+    for (avd_name, dev_id) in avd_to_device_id {
+        emulators.push(EmulatorInfo {
+            id: avd_name.clone(),
+            name: avd_name,
+            kind: "android-avd".to_string(),
+            state: "running".to_string(),
+            device_id: Some(dev_id),
+        });
+    }
+
+    for dev_id in unmatched_emu_ids {
+        emulators.push(EmulatorInfo {
+            id: dev_id.clone(),
+            name: dev_id.clone(),
+            kind: "android-avd".to_string(),
+            state: "running".to_string(),
+            device_id: Some(dev_id),
+        });
+    }
+
+    // Physical Android devices
+    for dev in &running_android {
+        if dev.kind == DeviceKind::Physical && dev.state == DeviceState::Online {
+            let transport = if dev.id.contains(':') {
+                "wifi"
+            } else {
+                "usb"
+            };
+            physical.push(PhysicalDevice {
+                id: dev.id.clone(),
+                name: dev.name.clone(),
+                platform: "android".to_string(),
+                transport: transport.to_string(),
+            });
+        }
+    }
+
+    // 2. iOS Simulators (xcrun simctl)
+    if let Ok(out) = exec.run(
+        Path::new("."),
+        "xcrun",
+        &["simctl", "list", "devices", "available", "--json"],
+        &[],
+        None,
+    ) {
+        if out.status.success() {
+            let json_str = String::from_utf8_lossy(&out.stdout);
+            if let Ok(sims) = crate::run::ios::parse_simctl_devices(&json_str) {
+                for sim in sims {
+                    let state = match sim.state {
+                        DeviceState::Online => "running",
+                        DeviceState::Booting => "booting",
+                        _ => "stopped",
+                    };
+                    emulators.push(EmulatorInfo {
+                        id: sim.id.clone(),
+                        name: sim.name,
+                        kind: "ios-sim".to_string(),
+                        state: state.to_string(),
+                        device_id: if state == "running" {
+                            Some(sim.id)
+                        } else {
+                            None
+                        },
+                    });
+                }
+            }
+        }
+    }
+
+    // 3. Physical iOS devices (xcrun devicectl)
+    if let Ok(out) = exec.run(
+        Path::new("."),
+        "xcrun",
+        &["devicectl", "list", "devices", "--json-output", "-"],
+        &[],
+        None,
+    ) {
+        if out.status.success() {
+            let json_str = String::from_utf8_lossy(&out.stdout);
+            if let Ok(devs) = crate::run::ios::parse_devicectl_devices(&json_str) {
+                for dev in devs {
+                    if dev.state == DeviceState::Online {
+                        physical.push(PhysicalDevice {
+                            id: dev.id,
+                            name: dev.name,
+                            platform: "ios".to_string(),
+                            transport: "usb".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    DevicesSnapshot {
+        emulators,
+        physical,
+    }
+}
+
 /// Watch device connect/disconnect events using `adb track-devices`.
 /// Non-polling, streaming push notifications via `adb track-devices`.
 pub fn watch_devices(
@@ -569,5 +877,151 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(avds.len(), 2);
         assert_eq!(avds[0].name, "Pixel_7");
         assert_eq!(avds[1].name, "jatim_dev");
+    }
+
+    #[test]
+    fn test_devices_snapshot_multi_avd() {
+        struct MockSnapshotExec;
+        impl Exec for MockSnapshotExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+
+                if args == &["-list-avds"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"Pixel_7\njatim_dev\nTablet\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["devices", "-l"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"List of devices attached\nemulator-5554 device product:sdk_gphone64 model:Pixel_7 device:emu64x transport_id:1\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5554", "emu", "avd", "name"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"Pixel_7\r\nOK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if cmd == "xcrun" {
+                    return Err(io::Error::other("xcrun not found"));
+                }
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let snap = devices_snapshot(&MockSnapshotExec);
+        let avds: Vec<_> = snap.emulators.into_iter().filter(|e| e.kind == "android-avd").collect();
+        assert_eq!(avds.len(), 3);
+
+        let pixel7 = avds.iter().find(|e| e.name == "Pixel_7").unwrap();
+        assert_eq!(pixel7.state, "running");
+        assert_eq!(pixel7.device_id, Some("emulator-5554".to_string()));
+
+        let jatim = avds.iter().find(|e| e.name == "jatim_dev").unwrap();
+        assert_eq!(jatim.state, "stopped");
+        assert_eq!(jatim.device_id, None);
+
+        let tablet = avds.iter().find(|e| e.name == "Tablet").unwrap();
+        assert_eq!(tablet.state, "stopped");
+        assert_eq!(tablet.device_id, None);
+    }
+
+    #[test]
+    fn test_avd_stop_specific_emulator() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        struct MockStopExec {
+            killed_5554: Arc<AtomicBool>,
+            killed_5556: Arc<AtomicBool>,
+        }
+        impl Exec for MockStopExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+
+                if args == &["devices"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"List of devices attached\nemulator-5554 device\nemulator-5556 device\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5554", "emu", "avd", "name"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"Pixel_7\r\nOK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5556", "emu", "avd", "name"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"jatim_dev\r\nOK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5554", "emu", "kill"] {
+                    self.killed_5554.store(true, Ordering::SeqCst);
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"OK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5556", "emu", "kill"] {
+                    self.killed_5556.store(true, Ordering::SeqCst);
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"OK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let killed_5554 = Arc::new(AtomicBool::new(false));
+        let killed_5556 = Arc::new(AtomicBool::new(false));
+        let exec = MockStopExec {
+            killed_5554: killed_5554.clone(),
+            killed_5556: killed_5556.clone(),
+        };
+
+        // Stop only "jatim_dev"
+        let res = avd_stop(&exec, "jatim_dev");
+        assert!(res.is_ok());
+        // emulator-5556 was running jatim_dev, so it must be killed
+        assert!(killed_5556.load(Ordering::SeqCst));
+        // emulator-5554 was running Pixel_7, so it must NOT be killed!
+        assert!(!killed_5554.load(Ordering::SeqCst));
     }
 }
