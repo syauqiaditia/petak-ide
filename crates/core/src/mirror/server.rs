@@ -4,8 +4,8 @@
 /// 1. adb push scrcpy-server-v4.1 /data/local/tmp/scrcpy-server.jar
 /// 2. adb forward tcp:<port> localabstract:scrcpy_<scid>
 /// 3. adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar \
-///      app_process / com.genymobile.scrcpy.Server 4.1 \
-///      tunnel_forward=true audio=false control=true max_size=<max> ...
+///    app_process / com.genymobile.scrcpy.Server 4.1 \
+///    tunnel_forward=true audio=false control=true max_size=<max> ...
 /// 4. Connect to localhost:<port> — video socket first, then control socket.
 use std::io;
 use std::net::TcpStream;
@@ -29,7 +29,15 @@ pub fn resolve_server_jar() -> io::Result<String> {
 
     // 1. Env override
     if let Ok(env_path) = std::env::var("PETAK_SCRCPY_SERVER") {
-        if Path::new(&env_path).is_file() {
+        if !env_path.trim().is_empty() {
+            let p = Path::new(&env_path);
+            if !p.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("PETAK_SCRCPY_SERVER file tidak ditemukan: {}", env_path),
+                ));
+            }
+            verify_server_jar(&env_path)?;
             return Ok(env_path);
         }
     }
@@ -43,12 +51,16 @@ pub fn resolve_server_jar() -> io::Result<String> {
         if let Some(macos_dir) = exe.parent() {
             let resources = macos_dir.join("../Resources").join(&jar_name);
             if resources.is_file() {
-                return Ok(resources.to_string_lossy().to_string());
+                let p = resources.to_string_lossy().to_string();
+                verify_server_jar(&p)?;
+                return Ok(p);
             }
             // Linux / dev: resources/ next to exe
             let beside = macos_dir.join(&jar_name);
             if beside.is_file() {
-                return Ok(beside.to_string_lossy().to_string());
+                let p = beside.to_string_lossy().to_string();
+                verify_server_jar(&p)?;
+                return Ok(p);
             }
         }
     }
@@ -58,7 +70,9 @@ pub fn resolve_server_jar() -> io::Result<String> {
     if let Some(data) = dirs::data_dir() {
         let app_support = data.join("Petak").join("scrcpy").join(&jar_name);
         if app_support.is_file() {
-            return Ok(app_support.to_string_lossy().to_string());
+            let p = app_support.to_string_lossy().to_string();
+            verify_server_jar(&p)?;
+            return Ok(p);
         }
     }
 
@@ -103,10 +117,7 @@ pub fn push_server(exec: &dyn Exec, device: &str, local_jar: &str) -> io::Result
     )?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("adb push failed: {}", err.trim()),
-        ));
+        return Err(io::Error::other(format!("adb push failed: {}", err.trim())));
     }
     Ok(())
 }
@@ -126,10 +137,7 @@ pub fn setup_forward(exec: &dyn Exec, device: &str, scid: u32) -> io::Result<u16
     )?;
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("adb forward failed: {}", err.trim()),
-        ));
+        return Err(io::Error::other(format!("adb forward failed: {}", err.trim())));
     }
     let port_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
     port_str.parse::<u16>().map_err(|_| {
@@ -253,14 +261,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_resolve_server_jar_env() {
-        // Test env override path
-        std::env::set_var("PETAK_SCRCPY_SERVER", "/nonexistent/path");
+    fn test_resolve_server_jar_env_nonexistent() {
+        std::env::set_var("PETAK_SCRCPY_SERVER", "/nonexistent/path/server.jar");
         let result = resolve_server_jar();
-        // Should not find it at /nonexistent/path, but should not panic
         std::env::remove_var("PETAK_SCRCPY_SERVER");
-        // Jar may or may not be found depending on runtime location
-        let _ = result;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_resolve_server_jar_env_valid() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../app/resources")
+            .join(format!("scrcpy-server-v{}", SCRCPY_VERSION));
+        if bundled.is_file() {
+            let bytes = std::fs::read(&bundled).unwrap();
+            use std::io::Write;
+            tmp.write_all(&bytes).unwrap();
+            let tmp_str = tmp.path().to_str().unwrap().to_string();
+            std::env::set_var("PETAK_SCRCPY_SERVER", &tmp_str);
+            let result = resolve_server_jar();
+            std::env::remove_var("PETAK_SCRCPY_SERVER");
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), tmp_str);
+        }
+    }
+
+    #[test]
+    fn test_resolve_server_jar_env_sha256_mismatch() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        use std::io::Write;
+        tmp.write_all(b"corrupted jar data").unwrap();
+        let tmp_str = tmp.path().to_str().unwrap().to_string();
+        std::env::set_var("PETAK_SCRCPY_SERVER", &tmp_str);
+        let result = resolve_server_jar();
+        std::env::remove_var("PETAK_SCRCPY_SERVER");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
 
     #[test]

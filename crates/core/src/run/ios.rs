@@ -71,10 +71,8 @@ fn parse_ios_runtime_sdk(runtime: &str) -> Option<String> {
         let ver_part = &runtime[pos + 4..];
         let ver = ver_part.replace('-', ".");
         Some(format!("iOS {}", ver))
-    } else if let Some(pos) = runtime.find("iOS ") {
-        Some(runtime[pos..].to_string())
     } else {
-        None
+        runtime.find("iOS ").map(|pos| runtime[pos..].to_string())
     }
 }
 
@@ -96,10 +94,7 @@ pub fn simctl_boot(exec: &dyn Exec, udid: &str) -> io::Result<()> {
         } else {
             err
         };
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("simctl boot failed: {}", msg.trim()),
-        ));
+        return Err(io::Error::other(format!("simctl boot failed: {}", msg.trim())));
     }
     Ok(())
 }
@@ -121,10 +116,7 @@ pub fn simctl_shutdown(exec: &dyn Exec, udid: &str) -> io::Result<()> {
         } else {
             err
         };
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("simctl shutdown failed: {}", msg.trim()),
-        ));
+        return Err(io::Error::other(format!("simctl shutdown failed: {}", msg.trim())));
     }
     Ok(())
 }

@@ -983,7 +983,7 @@ where
     progress(
         "downloading",
         Some(10.0),
-        &format!("Mengunduh {} versi {}...", zip_url.split('/').last().unwrap_or("server.zip"), tag),
+        &format!("Mengunduh {} versi {}...", zip_url.split('/').next_back().unwrap_or("server.zip"), tag),
     );
 
     let tmp_dir = tempfile::tempdir().map_err(|e| format!("tmpdir gagal: {}", e))?;
