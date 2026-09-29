@@ -1066,7 +1066,7 @@
       const statusDuration = performance.now() - t0Status;
       await api.benchLog(`P3_STATUS_LATENCY: ${statusDuration.toFixed(2)}ms`);
       await api.benchLog(`P3_BRANCH: ${gitStore.branch?.head || 'detached'}`);
-      await api.benchLog(`P3_ENTRIES_COUNT: ${gitStore.entries.length}`);
+      await api.benchLog(`P3_ENTRIES_COUNT: ${gitStore.status?.entries?.length || 0}`);
       await api.benchLog('P3_COMMIT_VIEW_READY');
 
       // 2. Measure log page 1
