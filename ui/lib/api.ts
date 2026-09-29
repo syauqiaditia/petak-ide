@@ -1099,8 +1099,8 @@ export const api = {
     return listen<LogLine[]>('logcat-batch', (event) => cb(event.payload));
   },
 
-  onDevicesChanged(cb: (payload: any) => void): Promise<UnlistenFn> {
-    return listen<any>('devices-changed', (event) => cb(event.payload));
+  onDevicesChanged(cb: (payload: DevicesSnapshot | Device[]) => void): Promise<UnlistenFn> {
+    return listen<DevicesSnapshot | Device[]>('devices-changed', (event) => cb(event.payload));
   },
 
   onDeviceReady(cb: (payload: { id: string; kind: string }) => void): Promise<UnlistenFn> {
