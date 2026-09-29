@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { placeMenu, placeSubmenu } from './menuPos';
+  import { placeMenu, placeSubmenu, calculateSubmenuHeight } from './menuPos';
 
   export interface MenuItem {
     id?: string;
@@ -105,10 +105,12 @@
       w: window.innerWidth,
       h: window.innerHeight,
     };
+    const subItems = items[idx]?.items ?? [];
+    const subH = calculateSubmenuHeight(subItems);
     submenuPos = placeSubmenu(
       { x: parentRect.left, y: parentRect.top, w: parentRect.width, h: parentRect.height },
       itemRect.top,
-      { w: 220, h: 200 },
+      { w: 220, h: subH },
       vp
     );
   }
@@ -120,7 +122,7 @@
       const target = e.currentTarget as HTMLElement;
       subMenuTimer = setTimeout(() => {
         openSubmenu(idx, target);
-      }, 100);
+      }, 120);
     } else {
       if (subMenuTimer) clearTimeout(subMenuTimer);
       activeSubmenuIndex = -1;
@@ -359,7 +361,7 @@
     flex-direction: column;
     gap: 1px;
     user-select: none;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
   }
 
   .context-menu::-webkit-scrollbar {

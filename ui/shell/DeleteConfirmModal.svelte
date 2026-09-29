@@ -44,7 +44,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="modal-backdrop" onclick={onclose} role="presentation">
-  <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog">
+  <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
     <div class="modal-header">
       <span class="modal-title">{title}</span>
       <button class="modal-close-btn" onclick={onclose} title="Close (Esc)">✕</button>
@@ -109,7 +109,7 @@
     flex-direction: column;
     overflow: hidden;
     color: #d8d9dc;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
   }
 
   .modal-header {

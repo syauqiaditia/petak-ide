@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { placeMenu, placeSubmenu } from '../ui/shell/menuPos.ts';
+import { placeMenu, placeSubmenu, calculateSubmenuHeight } from '../ui/shell/menuPos.ts';
 import {
   getRelativePath,
   canCopyPackageImport,
@@ -73,6 +73,34 @@ console.log('=== Running Petak P4.M Context Menu Logic Tests ===');
   const s3 = placeSubmenu(parent, 700, subMenu, viewport);
   assert.strictEqual(s3.y, 768 - 180 - 8); // 580
   console.log('✓ placeSubmenu vertical clamp verified');
+
+  // Case D: calculateSubmenuHeight dynamic calculation
+  assert.strictEqual(calculateSubmenuHeight([]), 12);
+  // Git submenu: 9 items + 2 separators = 9 * 26 + 2 * 9 + 12 = 264px
+  const gitSubmenuItems = [
+    { label: 'Show Diff' },
+    { label: 'Compare with Branch…' },
+    { label: 'Compare with Revision…' },
+    { label: 'Show History' },
+    { label: 'Annotate / Blame' },
+    { separator: true },
+    { label: 'Add to VCS' },
+    { label: 'Commit File…' },
+    { label: 'Rollback Changes…' },
+    { separator: true },
+    { label: 'Add to .gitignore' },
+  ];
+  const gitH = calculateSubmenuHeight(gitSubmenuItems);
+  assert.strictEqual(gitH, 264);
+  console.log('✓ calculateSubmenuHeight for Git submenu (9 items, 2 separators) = 264px verified');
+
+  // Case E: Git submenu near bottom avoids clipping with dynamic height
+  // itemTop at 550; with old h=200 it wouldn't shift (546 + 200 = 746 <= 760)
+  // With dynamic h=264: 546 + 264 = 810 > 760, shifts up to 768 - 264 - 8 = 496!
+  const sGit = placeSubmenu(parent, 550, { w: 220, h: gitH }, viewport);
+  assert.strictEqual(sGit.y, 768 - 264 - 8); // 496
+  assert.ok(sGit.y + gitH <= viewport.h - 8, 'Git submenu bottom fits within viewport boundary');
+  console.log('✓ Git submenu boundary detection with dynamic height prevents clipping verified');
 }
 
 // 3. contextMenuLogic: Menu capabilities

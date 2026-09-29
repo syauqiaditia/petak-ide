@@ -400,9 +400,9 @@ Evaluasi dilakukan dengan menguji interaksi nyata di runtime browser Chromium he
 Implementasi fitur context menu, file tree inline rename, modal dialogs, dan gutter blame pada kartu `t_b22a42e5` telah menunjukkan kualitas tinggi dan keberhasilan arsitektural yang signifikan (termasuk eliminasi tuntas bug reload bawaan WebView macOS). 
 
 Namun, agar visual dan keamanan interaksi 100% selaras dengan standar JetBrains New UI dan token Petak, senior engineer wajib menyelesaikan perbaikan atas 6 temuan di atas sebelum fitur ini digabung ke rilis utama:
-- [ ] Fix tinggi dinamis submenu di `ContextMenu.svelte:111` agar item Git bawah tidak terpotong.
-- [ ] Ganti warna tombol primer di `NewItemModal.svelte` dan `LocalHistoryModal.svelte` ke token `#2a3a55` / `#cfe0ff`.
-- [ ] Harmonisasi `font-family` ke `'Geist', system-ui, -apple-system, sans-serif`.
-- [ ] Lindungi root folder dari seleksi delete di `FileTree.svelte:1115`.
-- [ ] Lengkapi atribut aksesibilitas `aria-selected` dan `aria-modal="true"`.
-- [ ] Setel hover delay submenu ke `120ms`.
+- [x] Fix tinggi dinamis submenu di `ContextMenu.svelte:111` agar item Git bawah tidak terpotong.
+- [x] Ganti warna tombol primer di `NewItemModal.svelte` dan `LocalHistoryModal.svelte` ke token `#2a3a55` / `#cfe0ff`.
+- [x] Harmonisasi `font-family` ke `'Geist', system-ui, -apple-system, sans-serif`.
+- [x] Lindungi root folder dari seleksi delete di `FileTree.svelte:1115`.
+- [x] Lengkapi atribut aksesibilitas `aria-selected` dan `aria-modal="true"`.
+- [x] Setel hover delay submenu ke `120ms`.

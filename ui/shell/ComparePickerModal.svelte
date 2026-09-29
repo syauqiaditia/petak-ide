@@ -116,7 +116,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="modal-backdrop" onclick={onclose} role="presentation">
-  <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog">
+  <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
     <div class="modal-header">
       <span class="modal-title">Compare '{fileName}' with…</span>
       <button class="modal-close-btn" onclick={onclose} title="Close (Esc)">✕</button>
@@ -244,7 +244,7 @@
     flex-direction: column;
     overflow: hidden;
     color: #d8d9dc;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
   }
 
   .modal-header {
@@ -462,12 +462,12 @@
   }
 
   .btn-primary {
-    background: #2a4b8d;
-    color: #e6efff;
+    background: #2a3a55;
+    color: #cfe0ff;
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: #345ca8;
+    background: #354a6e;
   }
 
   .btn:disabled {

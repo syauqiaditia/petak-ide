@@ -969,7 +969,7 @@
     height: 22px;
     line-height: 22px;
     font-size: 11px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
     color: #8b8f98;
     padding: 0 6px;
     white-space: nowrap;

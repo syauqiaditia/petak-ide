@@ -86,3 +86,16 @@ export function placeSubmenu(
 
   return { x: Math.round(subX), y: Math.round(subY) };
 }
+
+/**
+ * Calculates estimated height for context submenu based on its items:
+ * 26px per item + 9px per separator + 12px padding (6px top + 6px bottom).
+ */
+export function calculateSubmenuHeight(items?: { separator?: boolean }[]): number {
+  if (!items || items.length === 0) return 12;
+  let h = 12;
+  for (const item of items) {
+    h += item.separator ? 9 : 26;
+  }
+  return h;
+}

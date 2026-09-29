@@ -1153,6 +1153,7 @@
                 handleDrop(e, entry);
               }}
               role="treeitem"
+              aria-selected={isSelected}
               tabindex="-1"
             >
               <span
@@ -1220,6 +1221,7 @@
               oncontextmenu={(e) => handleItemContextMenu(e, entry)}
               ondragstart={(e) => handleDragStart(e, entry)}
               role="treeitem"
+              aria-selected={isSelected}
               tabindex="-1"
             >
               <span class="item-spacer"></span>

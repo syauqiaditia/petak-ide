@@ -173,7 +173,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class="modal-backdrop" onclick={onclose} role="presentation">
-  <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog">
+  <div class="modal-box" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
     <!-- Header -->
     <div class="modal-header">
       <span class="modal-title">Local History — {fileName}</span>
@@ -277,7 +277,7 @@
   <!-- Put Label Dialog Sub-modal -->
   {#if labelModalOpen}
     <div class="label-submodal-backdrop" onclick={() => (labelModalOpen = false)} role="presentation">
-      <div class="label-submodal" onclick={(e) => e.stopPropagation()} role="dialog">
+      <div class="label-submodal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
         <div class="submodal-title">Put Label on Snapshot</div>
         <input
           bind:value={labelInput}
@@ -323,7 +323,7 @@
     flex-direction: column;
     overflow: hidden;
     color: #d8d9dc;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
   }
 
   .modal-header {
@@ -553,17 +553,21 @@
   }
 
   .btn-revert {
-    background: #2a4b8d;
-    color: #e6efff;
+    background: #2a3a55;
+    color: #cfe0ff;
   }
 
   .btn-revert:hover:not(:disabled) {
-    background: #355ba8;
+    background: #354a6e;
   }
 
   .btn-primary {
-    background: #2a4b8d;
-    color: #e6efff;
+    background: #2a3a55;
+    color: #cfe0ff;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: #354a6e;
   }
 
   .btn:disabled {
