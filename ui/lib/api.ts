@@ -203,6 +203,15 @@ export interface RunConfigFile {
   configs: RunConfig[];
 }
 
+export interface LocalHistoryEntry {
+  id: string;
+  path: string;
+  ts_ms: number;
+  blob: string;
+  kind: string;
+  label?: string | null;
+}
+
 export type AppState = 'building' | 'installing' | 'running' | 'reloading' | 'stopped';
 export type OutputStream = 'stdout' | 'stderr';
 
@@ -784,6 +793,64 @@ export const api = {
     return invoke('open_url', { url });
   },
 
+  // FS operations
+  fsCreateFile(root: string, rel: string, template?: string): Promise<string> {
+    return invoke<string>('fs_create_file', { root, rel, template: template ?? null });
+  },
+
+  fsCreateDir(root: string, rel: string): Promise<string> {
+    return invoke<string>('fs_create_dir', { root, rel });
+  },
+
+  fsRename(root: string, from: string, to: string): Promise<void> {
+    return invoke('fs_rename', { root, from, to });
+  },
+
+  fsMove(root: string, srcs: string[], dest: string): Promise<string[]> {
+    return invoke<string[]>('fs_move', { root, srcs, dest });
+  },
+
+  fsCopy(root: string, srcs: string[], dest: string): Promise<string[]> {
+    return invoke<string[]>('fs_copy', { root, srcs, dest });
+  },
+
+  fsDuplicate(root: string, rel: string): Promise<string> {
+    return invoke<string>('fs_duplicate', { root, rel });
+  },
+
+  fsTrash(root: string, rels: string[]): Promise<void> {
+    return invoke('fs_trash', { root, rels });
+  },
+
+  osReveal(path: string): Promise<void> {
+    return invoke('os_reveal', { path });
+  },
+
+  osOpenDefault(path: string): Promise<void> {
+    return invoke('os_open_default', { path });
+  },
+
+  // Local History
+  lhList(root: string, rel: string): Promise<LocalHistoryEntry[]> {
+    return invoke<LocalHistoryEntry[]>('lh_list', { root, rel });
+  },
+
+  lhRead(root: string, id: string): Promise<string> {
+    return invoke<string>('lh_read', { root, id });
+  },
+
+  lhRevert(root: string, id: string): Promise<void> {
+    return invoke('lh_revert', { root, id });
+  },
+
+  lhLabel(root: string, rel: string, label: string): Promise<LocalHistoryEntry> {
+    return invoke<LocalHistoryEntry>('lh_label', { root, rel, label });
+  },
+
+  lhSnapshot(root: string, rel: string, kind: string): Promise<LocalHistoryEntry | null> {
+    return invoke<LocalHistoryEntry | null>('lh_snapshot', { root, rel, kind });
+  },
+
   // Event Listeners
   onRunEvent(cb: (payload: RunEventPayload) => void): Promise<UnlistenFn> {
     return listen<RunEventPayload>('run-event', (event) => cb(event.payload));
@@ -860,5 +927,62 @@ export const api = {
 
   logcat_stop(): Promise<void> {
     return api.logcatStop();
+  },
+
+  // FS & Local History snake_case aliases
+  fs_create_file(root: string, rel: string, template?: string): Promise<string> {
+    return api.fsCreateFile(root, rel, template);
+  },
+
+  fs_create_dir(root: string, rel: string): Promise<string> {
+    return api.fsCreateDir(root, rel);
+  },
+
+  fs_rename(root: string, from: string, to: string): Promise<void> {
+    return api.fsRename(root, from, to);
+  },
+
+  fs_move(root: string, srcs: string[], dest: string): Promise<string[]> {
+    return api.fsMove(root, srcs, dest);
+  },
+
+  fs_copy(root: string, srcs: string[], dest: string): Promise<string[]> {
+    return api.fsCopy(root, srcs, dest);
+  },
+
+  fs_duplicate(root: string, rel: string): Promise<string> {
+    return api.fsDuplicate(root, rel);
+  },
+
+  fs_trash(root: string, rels: string[]): Promise<void> {
+    return api.fsTrash(root, rels);
+  },
+
+  os_reveal(path: string): Promise<void> {
+    return api.osReveal(path);
+  },
+
+  os_open_default(path: string): Promise<void> {
+    return api.osOpenDefault(path);
+  },
+
+  lh_list(root: string, rel: string): Promise<LocalHistoryEntry[]> {
+    return api.lhList(root, rel);
+  },
+
+  lh_read(root: string, id: string): Promise<string> {
+    return api.lhRead(root, id);
+  },
+
+  lh_revert(root: string, id: string): Promise<void> {
+    return api.lhRevert(root, id);
+  },
+
+  lh_label(root: string, rel: string, label: string): Promise<LocalHistoryEntry> {
+    return api.lhLabel(root, rel, label);
+  },
+
+  lh_snapshot(root: string, rel: string, kind: string): Promise<LocalHistoryEntry | null> {
+    return api.lhSnapshot(root, rel, kind);
   },
 };

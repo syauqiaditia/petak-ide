@@ -13,6 +13,7 @@ pub fn run() {
         .manage(commands::TermSessions::default())
         .manage(commands::TermCounter::new(1))
         .manage(commands::RunState::default())
+        .manage(commands::CurrentProjectRoot::default())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } = event {
                 if let Some(state) = window.try_state::<commands::TermSessions>() {
@@ -219,6 +220,20 @@ pub fn run() {
             commands::gradle_status,
             commands::gradle_stop,
             commands::open_url,
+            commands::fs_create_file,
+            commands::fs_create_dir,
+            commands::fs_rename,
+            commands::fs_move,
+            commands::fs_copy,
+            commands::fs_duplicate,
+            commands::fs_trash,
+            commands::os_reveal,
+            commands::os_open_default,
+            commands::lh_list,
+            commands::lh_read,
+            commands::lh_revert,
+            commands::lh_label,
+            commands::lh_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
