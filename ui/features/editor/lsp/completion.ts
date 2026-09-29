@@ -14,6 +14,8 @@ import { EditorView, keymap } from '@codemirror/view';
 import { api, type LspCompletionItem } from '../../../lib/api';
 import { isLspSupported } from './sync';
 import { offsetToLspPos } from './pos';
+import { createSnippetCompletionSource } from '../snippets';
+import { applyTextEditsToView } from './applyEdit';
 
 /**
  * Map LSP CompletionItemKind to human-readable type string and single-letter badge.
@@ -167,8 +169,23 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
           completion.displayLabel = item.label;
         }
 
-        // Snippet support (insertTextFormat === 2)
-        if (item.insertTextFormat === 2 && (item.insertText || (item.textEdit && (item.textEdit as any).newText))) {
+        // Snippet support (insertTextFormat === 2) and additionalTextEdits (e.g. auto import)
+        const mainInsert =
+          (item.textEdit && (item.textEdit as any).newText) || item.insertText || item.label;
+
+        if (item.additionalTextEdits && item.additionalTextEdits.length > 0) {
+          const isSnippet = item.insertTextFormat === 2;
+          completion.apply = (view: EditorView, comp: Completion, from: number, to: number) => {
+            if (isSnippet) {
+              snippet(mainInsert)(view, comp, from, to);
+            } else {
+              view.dispatch({
+                changes: { from, to, insert: mainInsert },
+              });
+            }
+            applyTextEditsToView(view, item.additionalTextEdits!);
+          };
+        } else if (item.insertTextFormat === 2 && (item.insertText || (item.textEdit && (item.textEdit as any).newText))) {
           const template = item.insertText || (item.textEdit as any).newText || item.label;
           completion.apply = snippet(template);
         } else if (item.textEdit && (item.textEdit as any).newText) {
@@ -343,7 +360,10 @@ export const completionTheme = EditorView.theme({
 export function createLspAutocompleteExtension(getPath: () => string | null): Extension {
   return [
     autocompletion({
-      override: [createLspCompletionSource(getPath)],
+      override: [
+        createSnippetCompletionSource(getPath),
+        createLspCompletionSource(getPath),
+      ],
       activateOnTyping: true,
       maxRenderedOptions: 50,
       defaultKeymap: true,
@@ -352,18 +372,13 @@ export function createLspAutocompleteExtension(getPath: () => string | null): Ex
           render: (completion: Completion) => {
             const badge = document.createElement('span');
             badge.className = 'cm-completion-badge ' + (completion.type || 'text');
-            badge.textContent = (completion as any)._kindLetter || 'm';
+            badge.textContent = (completion as any)._kindLetter || (completion.type === 'snippet' ? 's' : 'm');
             return badge;
           },
           position: 20,
         },
       ],
     }),
-    keymap.of([
-      { key: 'Ctrl-Space', run: startCompletion },
-      { key: 'Tab', run: acceptCompletion },
-      { key: 'Escape', run: closeCompletion },
-    ]),
     completionTheme,
   ];
 }

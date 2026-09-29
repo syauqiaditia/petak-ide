@@ -28,6 +28,7 @@
     setDiagnosticsEditorView,
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
+  import { createEditorKeymapExtension } from './keymap';
   import { createLspHoverExtension } from './lsp/hover';
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
   import { renameStore, triggerRename, executeRename } from './lsp/rename.svelte';
@@ -460,6 +461,8 @@
     return EditorState.create({
       doc: content,
       extensions: [
+        createEditorKeymapExtension(),
+        EditorState.allowMultipleSelections.of(true),
         vim(),
         blameCompartment.of([]),
         lineNumbers(),
