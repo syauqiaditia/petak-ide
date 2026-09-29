@@ -3,6 +3,7 @@
   import { gitStore } from '../features/git/git.svelte.ts';
   import { runStore } from '../features/run/runStore.svelte';
   import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
+  import { toolchainStore } from '../features/toolchain/toolchainStore.svelte';
   import { formatAppState } from '../features/run/logic';
 
   let {
@@ -12,6 +13,7 @@
     fileType = 'Kotlin',
     cursorInfo = 'Ln 1, Col 1',
     onOpenProblems = () => {},
+    onOpenToolchains = () => {},
   } = $props<{
     branchName?: string | null;
     statusText?: string;
@@ -19,12 +21,14 @@
     fileType?: string;
     cursorInfo?: string;
     onOpenProblems?: () => void;
+    onOpenToolchains?: () => void;
   }>();
 
   let branch = $derived(gitStore.branch);
   let displayBranch = $derived(branch?.head || branchName || null);
   let ahead = $derived(branch?.upstream ? branch.ahead : 0);
   let behind = $derived(branch?.upstream ? branch.behind : 0);
+  let lspSummary = $derived(toolchainStore.currentLspSummary);
 </script>
 
 <div class="status-bar">
@@ -43,6 +47,30 @@
   <span class="status-indicator">
     <span class="dot"></span>
     {statusText}
+  </span>
+
+  <span
+    class="lsp-indicator"
+    class:is-ready={lspSummary.state === 'ready'}
+    class:is-starting={lspSummary.state === 'starting'}
+    class:is-failed={lspSummary.state === 'failed'}
+    onclick={() => onOpenToolchains?.()}
+    role="button"
+    tabindex="0"
+    title={lspSummary.details || lspSummary.label}
+    onkeydown={(e) => { if (e.key === 'Enter') onOpenToolchains?.(); }}
+  >
+    <span
+      class="dot"
+      style:background={lspSummary.state === 'ready'
+        ? '#7fc98f'
+        : lspSummary.state === 'starting'
+        ? '#e8b45a'
+        : lspSummary.state === 'failed'
+        ? '#f07a74'
+        : '#8b8f98'}
+    ></span>
+    {lspSummary.label}
   </span>
 
   {#if runStore.state !== 'stopped'}
@@ -131,6 +159,18 @@
   <span>UTF-8</span>
   <span class="vim-tag">VIM</span>
   <span>{fileType}</span>
+
+  {#if toolchainStore.toast}
+    <div class="lsp-floating-toast" role="alert">
+      <span class="toast-msg">{toolchainStore.toast.message}</span>
+      {#if toolchainStore.toast.actionText && toolchainStore.toast.onAction}
+        <button class="toast-btn" onclick={toolchainStore.toast.onAction}>
+          {toolchainStore.toast.actionText}
+        </button>
+      {/if}
+      <button class="toast-close" onclick={() => toolchainStore.clearToast()}>✕</button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -169,6 +209,69 @@
     align-items: center;
     gap: 6px;
     color: #7fc98f;
+  }
+  .lsp-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #8b8f98;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+  .lsp-indicator:hover {
+    background: #1e2025;
+    color: #d8d9dc;
+  }
+  .lsp-indicator.is-ready {
+    color: #7fc98f;
+  }
+  .lsp-indicator.is-starting {
+    color: #e8b45a;
+  }
+  .lsp-indicator.is-failed {
+    color: #f07a74;
+    background: #2a191a;
+  }
+  .lsp-floating-toast {
+    position: fixed;
+    bottom: 34px;
+    right: 18px;
+    background: #201718;
+    border: 1px solid #5a2729;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #f0a6a2;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    z-index: 9999;
+  }
+  .lsp-floating-toast .toast-msg {
+    max-width: 380px;
+  }
+  .lsp-floating-toast .toast-btn {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #461f22;
+    border: 1px solid #732a2e;
+    color: #ffffff;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .lsp-floating-toast .toast-btn:hover {
+    background: #5a262a;
+  }
+  .lsp-floating-toast .toast-close {
+    background: transparent;
+    border: none;
+    color: #9c6c6e;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0 4px;
   }
   .run-status-indicator {
     display: flex;

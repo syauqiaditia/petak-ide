@@ -21,8 +21,8 @@ pub enum ServerEvent {
     ApplyEdit { id: Value, edit: Value },
     /// Server process crashed unexpectedly
     Crashed,
-    /// Server status changed (starting, ready, stopped, crashed)
-    Status { state: String },
+    /// Server status changed (starting, ready, stopped, crashed, failed)
+    Status { state: String, reason: Option<String> },
 }
 
 /// Configuration for spawning an LSP server.
@@ -77,13 +77,14 @@ impl Server {
     where
         F: Fn(ServerEvent) + Send + Sync + 'static,
     {
-        let mut child = Command::new(&config.command)
-            .args(&config.args)
-            .stdin(Stdio::piped())
+        let mut cmd = Command::new(&config.command);
+        cmd.args(&config.args);
+        crate::toolchain::apply_env(&mut cmd);
+        cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| ServerError::Io(e.to_string()))?;
+            .stderr(Stdio::null());
+
+        let mut child = cmd.spawn().map_err(|e| ServerError::Io(e.to_string()))?;
 
         let stdout = child.stdout.take().unwrap();
         let stdin = child.stdin.take().unwrap();

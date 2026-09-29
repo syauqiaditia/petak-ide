@@ -305,35 +305,11 @@ pub fn build_emulator_args(avd: &str, headless: bool) -> io::Result<Vec<String>>
 }
 
 pub fn resolve_emulator_binary() -> String {
-    if let Ok(home) = std::env::var("ANDROID_HOME") {
-        let p = Path::new(&home).join("emulator").join("emulator");
-        if p.exists() {
-            return p.to_string_lossy().to_string();
-        }
-    }
-    if let Ok(home) = std::env::var("ANDROID_SDK_ROOT") {
-        let p = Path::new(&home).join("emulator").join("emulator");
-        if p.exists() {
-            return p.to_string_lossy().to_string();
-        }
-    }
-    "emulator".to_string()
+    crate::toolchain::resolve_emulator()
 }
 
 pub fn resolve_adb_binary() -> String {
-    if let Ok(home) = std::env::var("ANDROID_HOME") {
-        let p = Path::new(&home).join("platform-tools").join("adb");
-        if p.exists() {
-            return p.to_string_lossy().to_string();
-        }
-    }
-    if let Ok(home) = std::env::var("ANDROID_SDK_ROOT") {
-        let p = Path::new(&home).join("platform-tools").join("adb");
-        if p.exists() {
-            return p.to_string_lossy().to_string();
-        }
-    }
-    "adb".to_string()
+    crate::toolchain::resolve_adb()
 }
 
 /// Query the list of installed Android Virtual Devices (AVDs).

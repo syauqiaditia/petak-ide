@@ -146,7 +146,8 @@ export interface LspApplyEditPayload {
 export interface LspStatusPayload {
   lang: string;
   root: string;
-  state: 'starting' | 'ready' | 'stopped' | 'crashed';
+  state: 'starting' | 'ready' | 'stopped' | 'crashed' | 'failed';
+  reason?: string | null;
 }
 
 // -----------------------------------------------------------------------------
@@ -167,6 +168,15 @@ export interface Toolchain {
   emulator?: Tool | null;
   java?: Tool | null;
   xcrun?: Tool | null;
+  kotlinLs?: Tool | null;
+  sourcekit?: Tool | null;
+  effectivePath?: string | null;
+}
+
+export interface ToolchainConfig {
+  flutterSdk?: string | null;
+  androidSdk?: string | null;
+  kotlinLanguageServer?: string | null;
 }
 
 export type DevicePlatform = 'android' | 'ios' | 'web' | 'desktop';
@@ -739,6 +749,14 @@ export const api = {
 
   toolchainDetect(root: string): Promise<Toolchain> {
     return invoke<Toolchain>('toolchain_detect', { root });
+  },
+
+  toolchainGetConfig(): Promise<ToolchainConfig> {
+    return invoke<ToolchainConfig>('toolchain_get_config');
+  },
+
+  toolchainSaveConfig(config: ToolchainConfig): Promise<void> {
+    return invoke('toolchain_save_config', { config });
   },
 
   devicesList(): Promise<Device[]> {

@@ -52,6 +52,7 @@ impl IosPhysicalSession {
         } else {
             Command::new(&helper_path)
         };
+        crate::toolchain::apply_env(&mut cmd);
 
         cmd.args(&[
             "--mode",
