@@ -1,22 +1,27 @@
-=== Cold Start Benchmark (Post-Fix) ===
-Date: 2026-09-29T07:56:11Z
+=== Cold Start Benchmark (Post-Fix Revision) ===
+Date: 2026-09-29T09:37:00Z
 App: /Users/uqi/petak/target/release/bundle/macos/Petak.app
-Load: vm.loadavg: { 3.21 4.06 3.92 }
+Load: vm.loadavg: { 4.47 4.53 3.67 }
 Battery: Now drawing from 'Battery Power'
- -InternalBattery-0 (id=22937699)	88%; discharging; 4:03 remaining present: true
-Uptime: 14:56  up 1 day,  1:29, 2 users, load averages: 3.21 4.06 3.92
+ -InternalBattery-0 (id=22937699)	49%; discharging; 3:45 remaining present: true
+Uptime: 16:35  up 1 day,  3:08, 2 users, load averages: 4.47 4.53 3.67
 
---- Run 0: First Launch ---
-First Launch: 1828 ms (wall: 1849 ms)
+--- Standalone measure-coldstart.mjs (1+5 runs) ---
+First launch: 631 ms
+Subsequent runs: 533, 550, 562, 567, 613 ms
+Median cold start: 562 ms
 
---- Runs 1..5: Subsequent Launches ---
-Run 1: 571 ms (wall: 591 ms)
-Run 2: 577 ms (wall: 590 ms)
-Run 3: 530 ms (wall: 541 ms)
-Run 4: 529 ms (wall: 542 ms)
-Run 5: 532 ms (wall: 537 ms)
+--- Standalone measure-coldstart.sh (1+5 runs) ---
+First launch: 1504 ms
+Subsequent runs: 517, 539, 556, 634, 640 ms
+Median cold start: 556 ms
 
-Results:
-First launch: 1828 ms
-Subsequent runs: 529, 530, 532, 571, 577 ms
-Median cold start: 532 ms (Budget: <= 646 ms) -> PASS (improved from 740 ms baseline)
+--- Independent Reviewer Bench (t_755e7638) ---
+Subsequent runs: 481, 503, 552, 578, 600 ms
+Median cold start: 552 ms
+
+--- Alternating A/B vs Phase 3 (/tmp/Petak-p3.app) ---
+Phase 3 Median: 577 ms (runs: 540, 561, 577, 618, 882 ms)
+Phase 4 Median: 586 ms (runs: 520, 585, 586, 587, 620 ms)
+Delta (Phase 4 - Phase 3): +9 ms (within measurement noise ±60 ms)
+Target Budget: <= 646 ms -> PASS

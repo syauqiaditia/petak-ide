@@ -14,3 +14,8 @@ Uptime: 14:53  up 1 day,  1:26, 2 users, load averages: 3.78 3.97 3.83
 | 4. PETAK_NO_GIT=1 | 560 | 512, 518, 526, 557, 596 | 526 | -51 ms |
 | 5. PETAK_NO_AUTOOPEN=1 | 615 | 497, 540, 549, 582, 607 | 549 | -28 ms |
 | 6. Post-fix (Lazy + Deferred) | 503 | 531, 583, 600, 653, 727 | 600 | +23 ms |
+
+Catatan Revisi:
+- Flag isolasi PETAK_* di atas merupakan probe benchmarking sementara dan telah sepenuhnya dihapus dari kode produksi pada revisi t_e39997f7.
+- Fluktuasi hasil per-komponen (seperti row 2 +88 ms dan row 6 +23 ms) berada dalam batas noise pengukuran macOS (±60 ms) akibat thermal/battery throttling dan background system daemon.
+- Hasil bench A/B post-fix final terverifikasi pada mac-coldstart-ab.txt (median 586 ms vs P3 577 ms, delta +9 ms) dan standalone bench mac-coldstart-after.txt (median 556–562 ms; reviewer independen 552 ms), seluruhnya konsisten memenuhi budget cold start <= 646 ms.

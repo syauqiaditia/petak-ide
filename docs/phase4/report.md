@@ -62,7 +62,7 @@ Seluruh angka diukur secara riil dari hasil benchmarking server dan kartu riwaya
 | Metrik Budget | Target / Batas | Hasil Server (Core / Preview) | App Mac [diisi P4.M] | Status | Log / Bukti Mentah |
 |---|---|---|---|---|---|
 | **Ketik 10k baris (saat Logcat banjir)** | $\le$ 17.00 ms (1 frame @ 60Hz) | **avg 1.85 ms, p50: 1.71 ms, p95: 2.58 ms** (Baseline Fase 2) | **avg 0.90 ms, p50: 0.83 ms, p95: 1.10 ms** | **PASS (LOLOS)** | `docs/phase4/logs/mac-typing-10k.txt` |
-| **Cold Start App** | $\le$ 646 ms (+10% baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | **Median 532 ms** (runs: 529, 530, 532, 571, 577 ms; A/B vs P3 602 ms; evaluasi komponen di `mac-coldstart-components.txt`) | **PASS (LOLOS, <= 646 ms)** | `docs/phase4/logs/mac-coldstart-after.txt` |
+| **Cold Start App** | $\le$ 646 ms (+10% baseline 587 ms) | *Server headless (tidak menjalankan window Tauri)* | **Median 552–562 ms** (Post-fix standalone: median 556 ms via .sh / 562 ms via .mjs; bench independen reviewer: 552 ms; A/B bergantian vs P3: P4 586 ms vs P3 577 ms, delta +9 ms dalam rentang noise ±60 ms; baseline pra-fix A/B: 646 ms vs P3 602 ms) | **PASS (LOLOS, <= 646 ms)** | `docs/phase4/logs/mac-coldstart-ab.txt`, `docs/phase4/logs/mac-coldstart-after.txt` |
 | **RAM App Idle (tanpa run)** | < 150 MB | Baseline Fase 1: **134.8 MB** (App: 89.7 MB, WebContent: 45.2 MB) | **~24.5 MB** (App 6.35 MB + WebKit ~18 MB) | **PASS (LOLOS)** | `ps aux` Mac M2 |
 | **CPU Idle** | ~0% (bebas polling timer) | **0 timer polling**, device watch murni streaming via `adb track-devices`; status Gradle on-demand | **~0%** (track-devices streaming) | **PASS (LOLOS)** | `crates/core/src/run/device.rs` |
 | **Run Spawn Duration** | < 200 ms (call start → child proc) | **2.23 ms** (eksekusi riil card P4.2) | **2.23 ms** (core spawn proc streaming) | **PASS (LOLOS)** | Comment Card P4.2 (`t_b0bd628b`) |
@@ -121,7 +121,7 @@ Pengujian dilakukan langsung pada emulator Android headless `jatim_dev` di serve
 
 ### 5. Simulator iOS & Verifikasi Mesin Mac M2
 - **Screenshot iOS Simulator:** `docs/phase4/screens/mac-ios-simulator.png` (iPhone 17 Pro Booted di macOS Sequoia).
-- **Instalasi Release Bundle:** `/Applications/Petak.app` (18.16 MiB, MD5: `b045a99cae6af0fdd384ab4518dac674`) terpasang sukses menggantikan versi sebelumnya. Dilengkapi fitur gabungan Fase 2 (LSP), Fase 3 + P3.F (Git ops, merge/rebase-onto, autostash, UI strings English), dan Fase 4 (Run, device, logcat).
+- **Instalasi Release Bundle:** `/Applications/Petak.app` (18.19 MiB, MD5: `a0c7969bbb27fe1390a8c70573ef3caa`) terpasang sukses menggantikan versi sebelumnya. Dilengkapi fitur gabungan Fase 2 (LSP), Fase 3 + P3.F (Git ops, merge/rebase-onto, autostash, UI strings English), dan Fase 4 (Run, device, logcat).
 - **Deteksi Perangkat Nyata di Mac:** `docs/phase4/logs/mac-devices.txt` mendeteksi iPhone 17 Pro simulator (Booted) dan iPhone fisik UQi (`iOS 26.5`).
 - **Verifikasi Manual User:** Checklist pengujian interaktif disediakan di vault `Projects/Petak/tes-manual.md` bagian B untuk pengujian klik manual, hot reload, dan logcat langsung di Mac oleh UQi.
 

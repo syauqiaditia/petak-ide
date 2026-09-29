@@ -1,19 +1,19 @@
 === Cold Start A/B Benchmark ===
-Date: 2026-09-29T07:34:31.989Z
-Load: vm.loadavg: { 2.32 3.13 4.17 }
+Date: 2026-09-29T09:36:14.130Z
+Load: vm.loadavg: { 4.47 4.53 3.67 }
 Battery: Now drawing from 'Battery Power'
- -InternalBattery-0 (id=22937699)	95%; discharging; 5:39 remaining present: true
-Uptime: 14:33  up 1 day,  1:06, 2 users, load averages: 2.32 3.13 4.17
+ -InternalBattery-0 (id=22937699)	49%; discharging; 3:45 remaining present: true
+Uptime: 16:35  up 1 day,  3:08, 2 users, load averages: 4.47 4.53 3.67
 App A (Phase 3): /tmp/Petak-p3.app
-App B (Phase 4): /tmp/Petak-p4-head.app
+App B (Phase 4): /Users/uqi/petak/target/release/bundle/macos/Petak.app
 
-Phase 3 Warmup: 1900 ms
-Phase 3 Runs:   582, 599, 602, 657, 1170 ms
-Phase 3 Median: 602 ms
+Phase 3 Warmup: 1009 ms
+Phase 3 Runs:   540, 561, 577, 618, 882 ms
+Phase 3 Median: 577 ms
 
-Phase 4 Warmup: 596 ms
-Phase 4 Runs:   577, 606, 646, 676, 1577 ms
-Phase 4 Median: 646 ms
+Phase 4 Warmup: 588 ms
+Phase 4 Runs:   520, 585, 586, 587, 620 ms
+Phase 4 Median: 586 ms
 
-Gap (Phase 4 - Phase 3): +44 ms
-Conclusion: REAL REGRESSION detected (gap >= 30 ms)
+Gap (Phase 4 - Phase 3): +9 ms
+Conclusion: Noise or negligible (< 30 ms)
