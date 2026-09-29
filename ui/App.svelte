@@ -26,7 +26,7 @@
   let cursorInfo = $state('Ln 1, Col 1');
   let isPreview = $state(
     typeof window !== 'undefined' &&
-    (window.location.search.includes('preview') || !(window as any).__TAURI_IPC__)
+    (window.location.search.includes('preview') || !!(window as any).__PETAK_PREVIEW__)
   );
   let activeRailTab = $state(
     typeof window !== 'undefined' && (window.location.search.includes('git') || window.location.search.includes('tab=git'))

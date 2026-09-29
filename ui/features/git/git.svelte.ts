@@ -67,7 +67,13 @@ class GitStore {
   remotes = $state<GitRemote[]>([]);
 
   // Active sub tab ('commit' | 'log' | 'conflict')
-  activeSubTab = $state<'commit' | 'log' | 'conflict'>('commit');
+  activeSubTab = $state<'commit' | 'log' | 'conflict'>(
+    typeof window !== 'undefined' && (window.location.search.includes('log') || window.location.search.includes('sub=log'))
+      ? 'log'
+      : typeof window !== 'undefined' && window.location.search.includes('conflict')
+      ? 'conflict'
+      : 'commit'
+  );
 
   // Toast / notification banner with Undo support
   toast = $state<{

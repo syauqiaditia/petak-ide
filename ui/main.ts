@@ -1,5 +1,6 @@
 // Fallback mock for browser preview (when running outside Tauri runtime)
 if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+  (window as any).__PETAK_PREVIEW__ = true;
   (window as any).__TAURI_INTERNALS__ = {
     invoke: async (cmd: string, args: any) => {
       if (cmd === 'git_status') {

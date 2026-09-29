@@ -10,14 +10,6 @@
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
 
-  let activeSubTab = $state<'commit' | 'log' | 'conflict'>(
-    typeof window !== 'undefined' && (window.location.search.includes('log') || window.location.search.includes('sub=log'))
-      ? 'log'
-      : typeof window !== 'undefined' && window.location.search.includes('conflict')
-      ? 'conflict'
-      : 'commit'
-  );
-
   // Pull dropdown & Push modal state
   let pullDropdownOpen = $state(false);
   let pushModalOpen = $state(false);
@@ -27,18 +19,6 @@
   let pushForceWithLease = $state(false);
   let pushLoading = $state(false);
   let pushError = $state<string | null>(null);
-
-  $effect(() => {
-    if (gitStore.activeSubTab && gitStore.activeSubTab !== activeSubTab) {
-      activeSubTab = gitStore.activeSubTab;
-    }
-  });
-
-  $effect(() => {
-    if (activeSubTab && gitStore.activeSubTab !== activeSubTab) {
-      gitStore.activeSubTab = activeSubTab;
-    }
-  });
 
   $effect(() => {
     if (folderPath && folderPath !== gitStore.root) {
@@ -56,6 +36,13 @@
   });
 
   onMount(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.search.includes('log') || window.location.search.includes('sub=log')) {
+        gitStore.activeSubTab = 'log';
+      } else if (window.location.search.includes('conflict')) {
+        gitStore.activeSubTab = 'conflict';
+      }
+    }
     if (folderPath) {
       gitStore.refresh(folderPath);
     }
@@ -134,8 +121,8 @@
     <div class="tabs-group">
       <button
         class="tab-btn"
-        class:active={activeSubTab === 'commit'}
-        onclick={() => (activeSubTab = 'commit')}
+        class:active={gitStore.activeSubTab === 'commit'}
+        onclick={() => (gitStore.activeSubTab = 'commit')}
       >
         Commit
         {#if totalChanges > 0}
@@ -145,8 +132,8 @@
 
       <button
         class="tab-btn"
-        class:active={activeSubTab === 'log'}
-        onclick={() => (activeSubTab = 'log')}
+        class:active={gitStore.activeSubTab === 'log'}
+        onclick={() => (gitStore.activeSubTab = 'log')}
       >
         Log
       </button>
@@ -154,8 +141,8 @@
       {#if conflictCount > 0 || opRunning}
         <button
           class="tab-btn conflict-tab"
-          class:active={activeSubTab === 'conflict'}
-          onclick={() => (activeSubTab = 'conflict')}
+          class:active={gitStore.activeSubTab === 'conflict'}
+          onclick={() => (gitStore.activeSubTab = 'conflict')}
         >
           Conflicts
           <span class="count-badge conflict">{conflictCount || '!'}</span>
@@ -237,7 +224,7 @@
         Abort
       </button>
       {#if conflictCount > 0}
-        <button class="banner-btn conflicts" onclick={() => (activeSubTab = 'conflict')}>
+        <button class="banner-btn conflicts" onclick={() => (gitStore.activeSubTab = 'conflict')}>
           Open Conflicts
         </button>
       {/if}
@@ -249,19 +236,19 @@
 
   <!-- Git View Body -->
   <div class="git-view-body">
-    {#if activeSubTab === 'commit'}
+    {#if gitStore.activeSubTab === 'commit'}
       <div class="commit-layout">
         <CommitPanel />
         <DiffView />
       </div>
-    {:else if activeSubTab === 'log'}
+    {:else if gitStore.activeSubTab === 'log'}
       <div class="log-layout">
-        <BranchPanel onSelectTab={(t) => (activeSubTab = t)} />
+        <BranchPanel onSelectTab={(t) => (gitStore.activeSubTab = t)} />
         <LogView />
         <CommitDetail />
       </div>
     {:else}
-      <ConflictView onClose={() => (activeSubTab = 'commit')} />
+      <ConflictView onClose={() => (gitStore.activeSubTab = 'commit')} />
     {/if}
   </div>
 
