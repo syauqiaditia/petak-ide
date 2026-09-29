@@ -4,6 +4,7 @@ pub mod fsops;
 pub mod git;
 pub mod local_history;
 pub mod lsp;
+pub mod mirror;
 pub mod recent;
 pub mod run;
 pub mod search;
