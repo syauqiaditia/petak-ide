@@ -32,10 +32,12 @@
   let emulatorItems = $derived(pickerItems.filter((i) => i.group === 'Emulator'));
   let simulatorItems = $derived(pickerItems.filter((i) => i.group === 'Simulator'));
   let physicalItems = $derived(pickerItems.filter((i) => i.group === 'Physical'));
+  let desktopAndWebItems = $derived(pickerItems.filter((i) => i.group === 'Desktop' || i.group === 'Web'));
 
   let activeItem = $derived(
-    pickerItems.find((p) => p.id === runStore.selectedDeviceId) ||
-    (pickerItems.length > 0 ? pickerItems[0] : null)
+    runStore.selectedDeviceId
+      ? pickerItems.find((p) => p.id === runStore.selectedDeviceId && p.state === 'online') || null
+      : null
   );
 
   function formatDeviceLabel(name: string, sdk?: string): string {
@@ -143,7 +145,33 @@
               <span class="status-dot online"></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
-                <span class="item-desc">{item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {item.id}</span>
+                <span class="item-desc">
+                  {item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {item.transport ? item.transport.toUpperCase() : 'USB'} · {item.id}
+                </span>
+              </div>
+              {#if isSelected}
+                <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12l5 5 9-10"></path>
+                </svg>
+              {/if}
+            </button>
+          {/each}
+        {/if}
+
+        <!-- Desktop & Web Group -->
+        {#if desktopAndWebItems.length > 0}
+          <div class="menu-header" class:mt={emulatorItems.length > 0 || simulatorItems.length > 0 || physicalItems.length > 0}>DESKTOP & WEB</div>
+          {#each desktopAndWebItems as item}
+            {@const isSelected = activeItem?.id === item.id}
+            <button
+              class="menu-item"
+              class:selected={isSelected}
+              onclick={() => handleSelect(item.id)}
+            >
+              <span class="status-dot online"></span>
+              <div class="item-text">
+                <span class="item-title">{item.name}</span>
+                <span class="item-desc">{item.group} · {item.id}</span>
               </div>
               {#if isSelected}
                 <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

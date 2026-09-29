@@ -1,15 +1,27 @@
 <script lang="ts">
+  import { panelStore } from './panelStore.svelte';
+
   let {
     activeTab = $bindable('project'),
     onTabChange,
+    onToggleDevices,
   } = $props<{
     activeTab?: string;
     onTabChange?: (tab: string) => void;
+    onToggleDevices?: () => void;
   }>();
 
   function selectTab(tab: string) {
     activeTab = tab;
     onTabChange?.(tab);
+  }
+
+  function handleDevicesClick() {
+    if (onToggleDevices) {
+      onToggleDevices();
+    } else {
+      selectTab('devices');
+    }
   }
 </script>
 
@@ -55,10 +67,10 @@
 
   <button
     class="rail-btn"
-    class:active={activeTab === 'devices'}
-    onclick={() => selectTab('devices')}
+    class:active={panelStore.isRightOpen('devices') || activeTab === 'devices'}
+    onclick={handleDevicesClick}
     aria-label="Devices"
-    title="Devices"
+    title="Devices & Emulators"
   >
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
       <rect x="7" y="3" width="10" height="18" rx="2"></rect>

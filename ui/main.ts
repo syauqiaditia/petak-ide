@@ -447,6 +447,65 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
           },
         ];
       }
+      if (cmd === 'devices_snapshot') {
+        return {
+          emulators: [
+            {
+              id: 'emulator-5554',
+              name: 'Pixel 8',
+              kind: 'android-avd',
+              state: 'running',
+              deviceId: 'emulator-5554',
+              sdk: '35',
+              flutterId: 'emulator-5554',
+            },
+            {
+              id: 'Z_Fold',
+              name: 'Z_Fold',
+              kind: 'android-avd',
+              state: 'stopped',
+              deviceId: null,
+              flutterId: null,
+            },
+          ],
+          physical: [
+            {
+              id: '00008110-00012CCE0C09401E',
+              name: 'UQi (wireless)',
+              platform: 'ios',
+              transport: 'wifi',
+              state: 'online',
+              flutterId: '00008110-00012CCE0C09401E',
+            },
+          ],
+          others: [
+            {
+              id: 'macos',
+              name: 'macOS',
+              group: 'desktop',
+              state: 'online',
+              flutterId: 'macos',
+            },
+          ],
+        };
+      }
+      if (cmd === 'recent_projects_list') {
+        return [
+          { name: 'jatim-ist-mb-flutter', path: '/mnt/storage/projects/jatim-ist-mb-flutter', lastOpened: Date.now() - 3600000, exists: true },
+          { name: 'voinzy', path: '/mnt/storage/projects/voinzy', lastOpened: Date.now() - 7200000, exists: true },
+          { name: 'petak', path: '/mnt/storage/uqi-projects/petak', lastOpened: Date.now() - 86400000, exists: true },
+          { name: 'old-project-deleted', path: '/mnt/storage/projects/old-deleted', lastOpened: Date.now() - 172800000, exists: false },
+        ];
+      }
+      if (cmd === 'recent_projects_add' || cmd === 'recent_projects_remove') {
+        return null;
+      }
+      if (cmd === 'git_stage_paths' || cmd === 'git_unstage_paths' || cmd === 'git_delete_untracked') {
+        return null;
+      }
+      if (cmd === 'git_commit_selected') {
+        return { sha: '5e44a0b1234567890abcdef1234567890abcdef1' };
+      }
       if (cmd === 'devices_watch') return null;
       if (cmd === 'avd_list') {
         return [
@@ -605,6 +664,39 @@ if (typeof window !== 'undefined' && (window.location.search.includes('tab=logca
     }, 50);
 
     setTimeout(() => clearInterval(interval), 10000);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  if (window.location.search.includes('b3-devices') || window.location.search.includes('panel=devices')) {
+    setTimeout(async () => {
+      const { panelStore } = await import('./shell/panelStore.svelte');
+      panelStore.openRightPanel('devices');
+    }, 150);
+  }
+  if (window.location.search.includes('b3-mirror') || window.location.search.includes('panel=mirror')) {
+    setTimeout(async () => {
+      const { panelStore } = await import('./shell/panelStore.svelte');
+      panelStore.openRightPanel('mirror');
+    }, 150);
+  }
+  if (window.location.search.includes('b3-starting')) {
+    setTimeout(async () => {
+      const { runStore } = await import('./features/run/runStore.svelte');
+      runStore.uiState = 'starting';
+    }, 150);
+  }
+  if (window.location.search.includes('b3-running')) {
+    setTimeout(async () => {
+      const { runStore } = await import('./features/run/runStore.svelte');
+      runStore.uiState = 'running';
+    }, 150);
+  }
+  if (window.location.search.includes('b3-error')) {
+    setTimeout(async () => {
+      const { runStore } = await import('./features/run/runStore.svelte');
+      runStore.uiState = 'error';
+    }, 150);
   }
 }
 
