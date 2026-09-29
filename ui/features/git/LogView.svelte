@@ -671,7 +671,7 @@
         class="mi"
         disabled={!canSquash}
         onclick={openSquashModal}
-        title={!canSquash ? 'Pilih ≥ 2 commit berurutan (non-merge)' : 'Squash commits'}
+        title={!canSquash ? 'Select ≥ 2 contiguous non-merge commits' : 'Squash commits'}
       >
         <span>Squash Commits…</span>
         <span class="mi-shortcut">⌘⇧S</span>
@@ -681,7 +681,7 @@
         class="mi"
         disabled={!canReword}
         onclick={openRewordModal}
-        title={!canReword ? 'Pilih 1 commit non-merge' : 'Edit message'}
+        title={!canReword ? 'Select 1 non-merge commit' : 'Edit message'}
       >
         <span>Edit Commit Message…</span>
         <span class="mi-shortcut">F2</span>
@@ -691,7 +691,7 @@
         class="mi"
         disabled={!canFixup}
         onclick={handleFixup}
-        title={!canFixup ? 'Pilih 1 commit yang memiliki commit sebelumnya' : 'Fixup into previous commit'}
+        title={!canFixup ? 'Select 1 commit with a previous commit' : 'Fixup into previous commit'}
       >
         <span>Fixup into Previous</span>
       </button>
@@ -700,7 +700,7 @@
         class="mi danger"
         disabled={!canDrop}
         onclick={openDropModal}
-        title={!canDrop ? 'Pilih commit non-merge untuk drop' : 'Drop commit(s)'}
+        title={!canDrop ? 'Select non-merge commit(s) to drop' : 'Drop commit(s)'}
       >
         <span>Drop Commits</span>
       </button>
@@ -711,7 +711,7 @@
         class="mi"
         disabled={!canRebase}
         onclick={openRebaseFromHere}
-        title={!canRebase ? 'Pilih 1 commit non-merge' : 'Interactive rebase'}
+        title={!canRebase ? 'Select 1 non-merge commit' : 'Interactive rebase'}
       >
         <span>Interactively Rebase from Here…</span>
       </button>
@@ -784,9 +784,9 @@
       <div class="menu-sep"></div>
 
       <!-- Agent Placeholder (Disabled, Phase 5) -->
-      <button class="mi agent-disabled" disabled title="Tersedia di fase 5">
+      <button class="mi agent-disabled" disabled title="Available in Phase 5">
         <span>Write message with agent</span>
-        <span class="phase-badge">Fase 5</span>
+        <span class="phase-badge">Phase 5</span>
       </button>
     </div>
   {/if}
@@ -799,7 +799,7 @@
       onClose={() => (rebaseModalOpen = false)}
       onSuccess={(res) => {
         rebaseModalOpen = false;
-        gitStore.showToast('Rebase selesai', { type: 'success', backupRef: res.backupRef });
+        gitStore.showToast('Rebase completed', { type: 'success', backupRef: res.backupRef });
         gitStore.refresh();
       }}
     />
@@ -817,7 +817,7 @@
         </div>
         {#if isAnyPushed}
           <div class="modal-warning">
-            ⚠️ Perhatian: Commit ini sudah di-push ke remote. Nanti kamu butuh force push!
+            ⚠️ Warning: This commit has already been pushed to remote. You will need force push!
           </div>
         {/if}
         <div class="action-modal-body">
@@ -852,7 +852,7 @@
         </div>
         {#if isAnyPushed}
           <div class="modal-warning">
-            ⚠️ Perhatian: Commit ini sudah di-push ke remote. Nanti kamu butuh force push!
+            ⚠️ Warning: This commit has already been pushed to remote. You will need force push!
           </div>
         {/if}
         <div class="action-modal-body">
@@ -886,11 +886,11 @@
           <button class="close-x" onclick={() => (dropModalOpen = false)}>✕</button>
         </div>
         <div class="action-modal-body">
-          <p>Yakin ingin menghapus {selectedCount} commit yang dipilih?</p>
-          <p class="muted-note">Backup otomatis akan dibuat di <code>refs/petak/backup/...</code> sebelum rewrite.</p>
+          <p>Are you sure you want to drop the {selectedCount} selected commit{selectedCount > 1 ? 's' : ''}?</p>
+          <p class="muted-note">An automatic backup will be created in <code>refs/petak/backup/...</code> before rewrite.</p>
           {#if isAnyPushed}
             <div class="modal-warning">
-              ⚠️ Perhatian: Commit ini sudah di remote. Riwayat remote akan diverged!
+              ⚠️ Warning: This commit is already on remote. Remote history will diverge!
             </div>
           {/if}
         </div>
@@ -911,21 +911,21 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="action-modal red-danger-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
         <div class="action-modal-header danger-header">
-          <span class="modal-title">⚠️ Konfirmasi Reset Hard</span>
+          <span class="modal-title">⚠️ Confirm Hard Reset</span>
           <button class="close-x" onclick={() => (hardResetModalOpen = false)}>✕</button>
         </div>
         <div class="action-modal-body">
           <p style="color: #f0a6a2; font-weight: 500;">
-            Semua perubahan di worktree dan commit setelah {gitStore.selectedCommitSha?.slice(0, 7)} akan DIBUANG!
+            All changes in the worktree and commits after {gitStore.selectedCommitSha?.slice(0, 7)} will be DISCARDED!
           </p>
           <p class="muted-note" style="color: #d8d9dc;">
-            Backup otomatis akan dibuat sebelum reset dilakukan (refs/petak/backup/...). Kamu bisa Undo kapan saja dari tombol toast atau Backups list.
+            An automatic backup will be created before resetting (refs/petak/backup/...). You can Undo at any time from the toast button or Backups list.
           </p>
         </div>
         <div class="action-modal-footer">
           <button class="modal-btn cancel" onclick={() => (hardResetModalOpen = false)}>Cancel</button>
           <button class="modal-btn danger-btn" onclick={submitHardReset}>
-            Reset Hard Sekarang
+            Hard Reset Now
           </button>
         </div>
       </div>
@@ -970,24 +970,24 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="action-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
         <div class="action-modal-header">
-          <span class="modal-title">Commit Sudah di Remote</span>
+          <span class="modal-title">Commit Already on Remote</span>
           <button class="close-x" onclick={() => (pushedWarningModalOpen = false)}>✕</button>
         </div>
         <div class="action-modal-body">
           <div class="modal-warning" style="margin-bottom: 10px;">
-            ⚠️ Commit yang kamu pilih sudah ter-push ke remote repository (pushed=true).
+            ⚠️ The selected commit has already been pushed to the remote repository (pushed=true).
           </div>
           <p style="font-size: 13px; line-height: 20px; color: #b9bcc3;">
-            Melakukan rewrite (squash, reword, drop, atau reset) pada commit ini akan mengubah riwayat Git lokal sehingga nanti kamu butuh <code>git push --force-with-lease</code> untuk menyinkronkannya kembali.
+            Rewriting (squash, reword, drop, or reset) this commit will modify local Git history, requiring <code>git push --force-with-lease</code> to synchronize back.
           </p>
           <p style="font-size: 12.5px; color: #8b8f98;">
-            Yakin ingin melanjutkan aksi ini?
+            Are you sure you want to proceed with this action?
           </p>
         </div>
         <div class="action-modal-footer">
           <button class="modal-btn cancel" onclick={() => (pushedWarningModalOpen = false)}>Cancel</button>
           <button class="modal-btn confirm" onclick={confirmPushedAction}>
-            Lanjutkan
+            Proceed
           </button>
         </div>
       </div>

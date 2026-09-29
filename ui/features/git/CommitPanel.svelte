@@ -272,7 +272,7 @@
 
     {#if hasLine2Warning}
       <div class="hint-warning">
-        ⚠️ Baris ke-2 sebaiknya kosong (pemisah subject & deskripsi).
+        ⚠️ Line 2 should be empty (separates subject & description).
       </div>
     {/if}
 
@@ -297,7 +297,7 @@
       <button
         class="agent-msg-btn"
         disabled
-        title="Fase 5 — Write commit message with AI agent"
+        title="Phase 5 — Write commit message with AI agent"
       >
         ✨ Write with agent
       </button>

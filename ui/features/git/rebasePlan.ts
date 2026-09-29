@@ -24,20 +24,20 @@ export interface PlanSummary {
  */
 export function validateRebasePlan(items: GitRebaseItem[]): PlanValidationResult {
   if (!items || items.length === 0) {
-    return { valid: false, error: 'Rebase plan tidak boleh kosong' };
+    return { valid: false, error: 'Rebase plan cannot be empty' };
   }
 
   const first = items[0];
   if (first.action === 'squash' || first.action === 'fixup') {
     return {
       valid: false,
-      error: `Baris pertama tidak boleh '${first.action}' (harus ada commit sebelumnya)`,
+      error: `First commit cannot be '${first.action}' (must have a preceding commit)`,
     };
   }
 
   const allDropped = items.every((it) => it.action === 'drop');
   if (allDropped) {
-    return { valid: false, error: 'Tidak bisa drop seluruh commit dalam rebase' };
+    return { valid: false, error: 'Cannot drop all commits in rebase' };
   }
 
   return { valid: true };
