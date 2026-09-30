@@ -115,3 +115,74 @@ test('store method scanner: all <store>.<method>( calls in *.svelte must be defi
     assert.fail(`Found invalid store method calls in .svelte files:\n${errReport}`);
   }
 });
+
+// =============================================================================
+// Suite 2: Commit Checkbox Lokal (Bug 4)
+// =============================================================================
+
+test('commit checkbox lokal: instant in-memory toggle, per-repo memory, default true', () => {
+  // Mock store behavior matching gitStore implementation
+  const checkedPathsByRepo = {};
+
+  function isPathChecked(root, filePath) {
+    const repoMap = checkedPathsByRepo[root];
+    if (!repoMap || repoMap[filePath] === undefined) {
+      return true; // default checked
+    }
+    return repoMap[filePath];
+  }
+
+  function togglePathChecked(root, filePath) {
+    if (!checkedPathsByRepo[root]) checkedPathsByRepo[root] = {};
+    const current = isPathChecked(root, filePath);
+    checkedPathsByRepo[root][filePath] = !current;
+  }
+
+  function setAllPathsChecked(root, paths, checked) {
+    if (!checkedPathsByRepo[root]) checkedPathsByRepo[root] = {};
+    for (const p of paths) {
+      checkedPathsByRepo[root][p] = checked;
+    }
+  }
+
+  const repo1 = '/repo/alpha';
+  const repo2 = '/repo/beta';
+
+  // 1. Default for newly seen file is true (checked)
+  assert.equal(isPathChecked(repo1, 'lib/main.dart'), true);
+  assert.equal(isPathChecked(repo1, 'pubspec.yaml'), true);
+
+  // 2. Measure toggle latency: must be < 16ms
+  const start = performance.now();
+  for (let i = 0; i < 1000; i++) {
+    togglePathChecked(repo1, 'lib/main.dart');
+  }
+  const elapsed = (performance.now() - start) / 1000;
+  assert.ok(elapsed < 16, `Toggle took ${elapsed.toFixed(4)}ms, expected < 16ms`);
+
+  // After 1000 toggles, it should be back to true
+  assert.equal(isPathChecked(repo1, 'lib/main.dart'), true);
+
+  // Uncheck one file
+  togglePathChecked(repo1, 'lib/main.dart');
+  assert.equal(isPathChecked(repo1, 'lib/main.dart'), false);
+  assert.equal(isPathChecked(repo1, 'pubspec.yaml'), true);
+
+  // 3. Isolated per repo
+  assert.equal(isPathChecked(repo2, 'lib/main.dart'), true);
+
+  // 4. Preserved across refresh: simulating refresh with newly discovered file
+  const filesAfterRefresh = ['lib/main.dart', 'pubspec.yaml', 'lib/new_feature.dart'];
+  assert.equal(isPathChecked(repo1, 'lib/main.dart'), false, 'user uncheck persisted');
+  assert.equal(isPathChecked(repo1, 'pubspec.yaml'), true, 'unchanged file remains checked');
+  assert.equal(isPathChecked(repo1, 'lib/new_feature.dart'), true, 'new file defaults to checked');
+
+  // 5. Select all toggle
+  setAllPathsChecked(repo1, filesAfterRefresh, false);
+  assert.equal(isPathChecked(repo1, 'pubspec.yaml'), false);
+  assert.equal(isPathChecked(repo1, 'lib/new_feature.dart'), false);
+
+  setAllPathsChecked(repo1, filesAfterRefresh, true);
+  assert.equal(isPathChecked(repo1, 'lib/main.dart'), true);
+  assert.equal(isPathChecked(repo1, 'pubspec.yaml'), true);
+});

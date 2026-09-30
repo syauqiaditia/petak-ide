@@ -37,12 +37,13 @@
 
   let allChanges = $derived(filterUnifiedChanges(gitStore.status?.entries || []));
   let totalFiles = $derived(allChanges.length);
-  let checkedCount = $derived(countCheckedEntries(allChanges));
   let allFilePaths = $derived(allChanges.map((e) => e.path));
-  let stagedPaths = $derived(allChanges.filter(isEntryStaged).map((e) => e.path));
+  let checkedCount = $derived(allChanges.filter((e) => gitStore.isPathChecked(e.path)).length);
+  let checkedPaths = $derived(allChanges.filter((e) => gitStore.isPathChecked(e.path)).map((e) => e.path));
+  let stagedPaths = $derived(checkedPaths);
 
-  let allSelected = $derived(isAllSelected(checkedCount, totalFiles));
-  let partiallySelected = $derived(isPartiallySelected(checkedCount, totalFiles));
+  let allSelected = $derived(totalFiles > 0 && checkedCount === totalFiles);
+  let partiallySelected = $derived(checkedCount > 0 && checkedCount < totalFiles);
 
   let canCommit = $derived(
     canExecuteCommit(checkedCount, commitMessage, isAmend, isCommitting)
@@ -51,22 +52,14 @@
     getCommitButtonLabel(checkedCount, isAmend, isCommitting)
   );
 
-  async function handleToggleSelectAll() {
-    const plan = planSelectAllToggle(stagedPaths, allFilePaths);
-    if (plan.action === 'stage') {
-      await gitStore.stageFiles(plan.paths);
-    } else {
-      await gitStore.unstageFiles(plan.paths);
-    }
+  function handleToggleSelectAll() {
+    const shouldCheckAll = checkedCount !== totalFiles;
+    gitStore.setAllPathsChecked(allFilePaths, shouldCheckAll);
   }
 
-  async function handleToggleFile(entry: GitStatusEntry, e: MouseEvent) {
+  function handleToggleFile(entry: GitStatusEntry, e: MouseEvent) {
     e.stopPropagation();
-    if (isEntryStaged(entry)) {
-      await gitStore.unstageFiles([entry.path]);
-    } else {
-      await gitStore.stageFiles([entry.path]);
-    }
+    gitStore.togglePathChecked(entry.path);
   }
 
   function handleRowContextMenu(e: MouseEvent, entry: GitStatusEntry, inStaged: boolean) {
@@ -103,11 +96,7 @@
         gitStore.selectFile(path, contextTargetStaged ? 'staged' : 'worktree');
         break;
       case 'toggle_stage':
-        if (contextTargetStaged) {
-          await gitStore.unstageFiles([path]);
-        } else {
-          await gitStore.stageFiles([path]);
-        }
+        gitStore.togglePathChecked(path);
         break;
       case 'gitignore_add':
         if (gitStore.root) {
@@ -167,16 +156,11 @@
     isCommitting = true;
     commitError = null;
     try {
-      if (isAmend) {
-        await gitStore.commit(commitMessage.trim(), true);
+      if (gitStore.root) {
+        await api.gitCommitPaths(gitStore.root, checkedPaths, commitMessage.trim(), isAmend);
+        await gitStore.refresh();
       } else {
-        const paths = stagedPaths;
-        if (gitStore.root) {
-          await api.gitCommitSelected(gitStore.root, commitMessage.trim(), paths);
-          await gitStore.refresh();
-        } else {
-          await gitStore.commit(commitMessage.trim(), false);
-        }
+        await gitStore.commit(commitMessage.trim(), isAmend);
       }
       commitMessage = '';
       isAmend = false;
@@ -260,7 +244,7 @@
           <div class="empty-hint">No changes</div>
         {:else}
           {#each allChanges as entry (entry.path)}
-            {@const isChecked = isEntryStaged(entry)}
+            {@const isChecked = gitStore.isPathChecked(entry.path)}
             {@const { char, color } = getUnifiedStatusLetter(entry)}
             {@const { name, dir } = formatPath(entry.path)}
             {@const isSelected = gitStore.selectedFile?.path === entry.path}
