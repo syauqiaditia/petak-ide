@@ -27,9 +27,9 @@
       "csp": null
     }
   },
-  "resources": ["resources/scrcpy-server-v4.1"],
   "bundle": {
     "active": true,
+    "resources": ["resources/scrcpy-server-v4.1"],
     "targets": ["app", "dmg"],
     "icon": [
       "icons/32x32.png",
