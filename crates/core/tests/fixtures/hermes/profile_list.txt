@@ -1,0 +1,11 @@
+
+ Profile          Model                        Gateway      Alias        Distribution
+ ───────────────    ───────────────────────────    ───────────    ───────────    ────────────────────
+  default         claude-opus-5                running      —            —
+  designer        ag/gemini-3.8-flash-high     stopped      designer     —
+  manager         claude-sonnet-5-5            stopped      manager      —
+  reviewer        claude-sonnet-5              stopped      reviewer     —
+ ◆senior          ag/gemini-3.8-flash-high     stopped      senior       —
+  senior2         ag/gemini-3.8-flash-high     stopped      senior2      —
+  techlead        ag/claude-opus-4-6-thinkin   stopped      techlead     —
+

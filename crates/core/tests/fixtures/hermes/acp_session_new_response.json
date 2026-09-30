@@ -1,0 +1,372 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "models": {
+      "availableModels": [
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-fable-5.1",
+          "name": "Anthropic · claude-fable-5.1"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-fable-5",
+          "name": "Anthropic · claude-fable-5"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-5",
+          "name": "Anthropic · claude-opus-5"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-sonnet-5",
+          "name": "Anthropic · claude-sonnet-5"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-4-8",
+          "name": "Anthropic · claude-opus-4-8"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-4-7",
+          "name": "Anthropic · claude-opus-4-7"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-4-6",
+          "name": "Anthropic · claude-opus-4-6"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-sonnet-4-6",
+          "name": "Anthropic · claude-sonnet-4-6"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-4-5-20251101",
+          "name": "Anthropic · claude-opus-4-5-20251101"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-sonnet-4-5-20250929",
+          "name": "Anthropic · claude-sonnet-4-5-20250929"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-4-20250514",
+          "name": "Anthropic · claude-opus-4-20250514"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-sonnet-4-20250514",
+          "name": "Anthropic · claude-sonnet-4-20250514"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-haiku-4-5-20251001",
+          "name": "Anthropic · claude-haiku-4-5-20251001"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-opus-5-5",
+          "name": "Anthropic · claude-opus-5-5"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-sonnet-5-5",
+          "name": "Anthropic · claude-sonnet-5-5"
+        },
+        {
+          "description": "Provider: Anthropic",
+          "modelId": "anthropic:claude-fable-5-1",
+          "name": "Anthropic · claude-fable-5-1"
+        },
+        {
+          "description": "Provider: Custom endpoint • current",
+          "modelId": "custom:ag/claude-opus-4-6-thinking",
+          "name": "Custom endpoint · ag/claude-opus-4-6-thinking"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:jev-1.13-free",
+          "name": "OpenCode Free · jev-1.13-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:deepseek-v4-flash-free",
+          "name": "OpenCode Free · deepseek-v4-flash-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:muse-spark-1.3-contributor-free",
+          "name": "OpenCode Free · muse-spark-1.3-contributor-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:muse-spark-1.2-contributor-free",
+          "name": "OpenCode Free · muse-spark-1.2-contributor-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:mimo-v2.6-flash-free",
+          "name": "OpenCode Free · mimo-v2.6-flash-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:space-bunny-free",
+          "name": "OpenCode Free · space-bunny-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:longcat-2.5-preview-free",
+          "name": "OpenCode Free · longcat-2.5-preview-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:mimo-v2.5-free",
+          "name": "OpenCode Free · mimo-v2.5-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:ling-3.0-flash-fin-free",
+          "name": "OpenCode Free · ling-3.0-flash-fin-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:nemotron-3-ultra-free",
+          "name": "OpenCode Free · nemotron-3-ultra-free"
+        },
+        {
+          "description": "Provider: OpenCode Free",
+          "modelId": "opencode-free:nemotron-3.5-lightning-free",
+          "name": "OpenCode Free · nemotron-3.5-lightning-free"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.8-flash-high",
+          "name": "Antigravity · ag/gemini-3.8-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.8-flash-medium",
+          "name": "Antigravity · ag/gemini-3.8-flash-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.8-flash-low",
+          "name": "Antigravity · ag/gemini-3.8-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.8-flash",
+          "name": "Antigravity · ag/gemini-3.8-flash"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.7-flash-high",
+          "name": "Antigravity · ag/gemini-3.7-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.7-flash-medium",
+          "name": "Antigravity · ag/gemini-3.7-flash-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.7-flash-low",
+          "name": "Antigravity · ag/gemini-3.7-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.6-flash-high",
+          "name": "Antigravity · ag/gemini-3.6-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.6-flash-medium",
+          "name": "Antigravity · ag/gemini-3.6-flash-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.6-flash-low",
+          "name": "Antigravity · ag/gemini-3.6-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.5-flash-high",
+          "name": "Antigravity · ag/gemini-3.5-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3-flash-agent",
+          "name": "Antigravity · ag/gemini-3-flash-agent"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.5-flash-low",
+          "name": "Antigravity · ag/gemini-3.5-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.5-flash-extra-low",
+          "name": "Antigravity · ag/gemini-3.5-flash-extra-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-pro-agent",
+          "name": "Antigravity · ag/gemini-pro-agent"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3.1-pro-low",
+          "name": "Antigravity · ag/gemini-3.1-pro-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/claude-sonnet-4-6",
+          "name": "Antigravity · ag/claude-sonnet-4-6"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/claude-opus-4-6-thinking",
+          "name": "Antigravity · ag/claude-opus-4-6-thinking"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gpt-oss-120b-medium",
+          "name": "Antigravity · ag/gpt-oss-120b-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "antigravity:ag/gemini-3-flash",
+          "name": "Antigravity · ag/gemini-3-flash"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.8-flash-high",
+          "name": "ag/gemini-3.8-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.8-flash-medium",
+          "name": "ag/gemini-3.8-flash-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.8-flash-low",
+          "name": "ag/gemini-3.8-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.8-flash",
+          "name": "ag/gemini-3.8-flash"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.7-flash-high",
+          "name": "ag/gemini-3.7-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.7-flash-medium",
+          "name": "ag/gemini-3.7-flash-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.7-flash-low",
+          "name": "ag/gemini-3.7-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.6-flash-high",
+          "name": "ag/gemini-3.6-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.6-flash-medium",
+          "name": "ag/gemini-3.6-flash-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.6-flash-low",
+          "name": "ag/gemini-3.6-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.5-flash-high",
+          "name": "ag/gemini-3.5-flash-high"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3-flash-agent",
+          "name": "ag/gemini-3-flash-agent"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.5-flash-low",
+          "name": "ag/gemini-3.5-flash-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.5-flash-extra-low",
+          "name": "ag/gemini-3.5-flash-extra-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-pro-agent",
+          "name": "ag/gemini-pro-agent"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3.1-pro-low",
+          "name": "ag/gemini-3.1-pro-low"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/claude-sonnet-4-6",
+          "name": "ag/claude-sonnet-4-6"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/claude-opus-4-6-thinking",
+          "name": "ag/claude-opus-4-6-thinking"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gpt-oss-120b-medium",
+          "name": "ag/gpt-oss-120b-medium"
+        },
+        {
+          "description": "Provider: Antigravity",
+          "modelId": "custom:antigravity:ag/gemini-3-flash",
+          "name": "ag/gemini-3-flash"
+        }
+      ],
+      "currentModelId": "custom:ag/claude-opus-4-6-thinking"
+    },
+    "modes": {
+      "availableModes": [
+        {
+          "description": "Ask before edits.",
+          "id": "default",
+          "name": "Default"
+        },
+        {
+          "description": "Auto-allow workspace and /tmp edits; still asks for sensitive paths.",
+          "id": "accept_edits",
+          "name": "Accept Edits"
+        },
+        {
+          "description": "Auto-allow file edits for this session except sensitive paths.",
+          "id": "dont_ask",
+          "name": "Don't Ask"
+        }
+      ],
+      "currentModeId": "default"
+    },
+    "sessionId": "df7df874-f067-4c43-896c-72df9298881d"
+  }
+}
