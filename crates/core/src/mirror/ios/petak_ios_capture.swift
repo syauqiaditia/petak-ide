@@ -418,25 +418,62 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         // Give CoreMediaIO a moment to register iOS devices
         Thread.sleep(forTimeInterval: 0.5)
 
+        // Request Camera authorization if notDetermined so macOS permission dialog appears
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        if authStatus == .notDetermined {
+            let sema = DispatchSemaphore(value: 0)
+            AVCaptureDevice.requestAccess(for: .video) { _ in
+                sema.signal()
+            }
+            _ = sema.wait(timeout: .now() + 5.0)
+        }
+
+        let updatedStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        if updatedStatus == .denied || updatedStatus == .restricted {
+            emitStatus([
+                "status": "error",
+                "message": "Izin Kamera ditolak. Buka System Settings > Privacy & Security > Camera > nyalakan Petak, lalu restart Petak."
+            ])
+            exit(1)
+        }
+
         let session = AVCaptureSession()
         session.sessionPreset = .high
 
-        // Find connected iOS device
-        let discovery = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.external, .builtInWideAngleCamera],
-            mediaType: .video,
-            position: .unspecified
-        )
+        // Find connected iOS device using DiscoverySession with mediaType: nil / muxed
+        var devices: [AVCaptureDevice] = []
+        if #available(macOS 10.15, *) {
+            let discovery = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.external, .builtInWideAngleCamera],
+                mediaType: nil,
+                position: .unspecified
+            )
+            devices = discovery.devices
+        }
+        if devices.isEmpty {
+            devices = AVCaptureDevice.devices(for: .muxed) + AVCaptureDevice.devices(for: .video)
+        }
 
-        let targetDevice = discovery.devices.first { dev in
-            let name = dev.localizedName
-            return name.contains("iPhone") || name.contains("iPad") || (!self.config.udid.isEmpty && dev.uniqueID.contains(self.config.udid))
+        let iosDevices = devices.filter { dev in
+            let isIosModel = dev.modelID == "iOS Device" || dev.modelID.hasPrefix("iOS")
+            let isMuxed = dev.hasMediaType(.muxed)
+            let isLikelyIos = isIosModel || isMuxed || dev.localizedName.contains("iPhone") || dev.localizedName.contains("iPad")
+            return isLikelyIos
+        }
+
+        let targetDevice: AVCaptureDevice?
+        if !self.config.deviceName.isEmpty {
+            targetDevice = iosDevices.first { $0.localizedName.caseInsensitiveCompare(self.config.deviceName) == .orderedSame }
+                ?? iosDevices.first { $0.localizedName.localizedCaseInsensitiveContains(self.config.deviceName) }
+                ?? iosDevices.first
+        } else {
+            targetDevice = iosDevices.first
         }
 
         guard let device = targetDevice else {
             emitStatus([
-                "status": "error",
-                "message": "Physical iOS device not found. Ensure iPhone is connected via USB, unlocked, and 'Trust this Computer' is accepted."
+                "status": "needs_usb",
+                "message": "Mirror iPhone butuh kabel USB. Colok iPhone, buka kunci layar, pilih Trust"
             ])
             exit(1)
         }

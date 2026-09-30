@@ -3096,6 +3096,24 @@ pub async fn open_screen_recording_settings() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn mirror_camera_permission() -> Result<petak_core::mirror::CameraPermissionStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::mirror::check_camera_permission())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn open_privacy_camera() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::mirror::open_privacy_camera().map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn git_branches_tree(root: String) -> Result<petak_core::git::BranchList, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;

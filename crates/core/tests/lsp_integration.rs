@@ -39,11 +39,7 @@ fn fake_lsp_path() -> String {
 #[test]
 fn server_start_and_shutdown() {
     let fake = fake_lsp_path();
-    let config = ServerConfig {
-        command: fake,
-        args: vec![],
-        root_uri: "file:///tmp/test".to_string(),
-    };
+    let config = ServerConfig::new(fake, vec![], "file:///tmp/test");
 
     let crashed = Arc::new(AtomicBool::new(false));
     let crashed_clone = Arc::clone(&crashed);
@@ -68,11 +64,7 @@ fn server_start_and_shutdown() {
 #[test]
 fn server_receives_diagnostics_on_did_open() {
     let fake = fake_lsp_path();
-    let config = ServerConfig {
-        command: fake,
-        args: vec![],
-        root_uri: "file:///tmp/test".to_string(),
-    };
+    let config = ServerConfig::new(fake, vec![], "file:///tmp/test");
 
     let (tx, rx) = mpsc::channel();
     let server = Server::start(&config, move |event| {
@@ -111,11 +103,7 @@ fn server_receives_diagnostics_on_did_open() {
 #[test]
 fn server_request_response() {
     let fake = fake_lsp_path();
-    let config = ServerConfig {
-        command: fake,
-        args: vec![],
-        root_uri: "file:///tmp/test".to_string(),
-    };
+    let config = ServerConfig::new(fake, vec![], "file:///tmp/test");
 
     let server = Server::start(&config, |_| {}).expect("start server");
 
@@ -130,11 +118,7 @@ fn server_request_response() {
 #[test]
 fn server_responds_to_server_initiated_requests() {
     let fake = fake_lsp_path();
-    let config = ServerConfig {
-        command: fake,
-        args: vec![],
-        root_uri: "file:///tmp/test".to_string(),
-    };
+    let config = ServerConfig::new(fake, vec![], "file:///tmp/test");
 
     let server = Server::start(&config, |_| {}).expect("start server");
 

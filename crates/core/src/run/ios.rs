@@ -266,7 +266,7 @@ pub fn parse_devicectl_devices(input: &str) -> Result<Vec<Device>, serde_json::E
 
                     let name_lower = name.to_lowercase();
                     let transport = match transport_type.to_lowercase().as_str() {
-                        "wired" | "usb" => Some("wired".to_string()),
+                        "wired" | "usb" => Some("usb".to_string()),
                         "wifi" | "wireless" | "localnetwork" => Some("wifi".to_string()),
                         _ => {
                             if item.identifier.contains(':')
@@ -388,7 +388,7 @@ pub fn parse_devicectl_devices_table(table_str: &str) -> Vec<Device> {
         {
             Some("wifi".to_string())
         } else if line_lower.contains("wired") || line_lower.contains("usb") {
-            Some("wired".to_string())
+            Some("usb".to_string())
         } else {
             None
         };
@@ -550,7 +550,7 @@ mod tests {
         assert_eq!(dev.kind, DeviceKind::Physical);
         assert_eq!(dev.state, DeviceState::Online);
         assert_eq!(dev.connection, "connected");
-        assert_eq!(dev.transport.as_deref(), Some("wired"));
+        assert_eq!(dev.transport.as_deref(), Some("usb"));
         assert_eq!(dev.sdk, Some("iOS 17.4.1".to_string()));
     }
 
@@ -616,7 +616,7 @@ Prio               00008030-001234567890                 unavailable            
         let d1 = devices.iter().find(|d| d.id == "00008130-001234567890").unwrap();
         assert_eq!(d1.connection, "connected");
         assert_eq!(d1.state, DeviceState::Online);
-        assert_eq!(d1.transport.as_deref(), Some("wired"));
+        assert_eq!(d1.transport.as_deref(), Some("usb"));
         assert_eq!(d1.conn_state.as_deref(), Some("connected_usb"));
 
         let d2 = devices.iter().find(|d| d.id == "00008101-001234567890").unwrap();

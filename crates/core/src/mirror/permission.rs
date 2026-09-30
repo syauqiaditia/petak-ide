@@ -92,6 +92,51 @@ pub fn open_screen_recording_settings() -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraPermissionStatus {
+    pub status: String, // "notDetermined" | "restricted" | "denied" | "authorized"
+    pub granted: bool,
+}
+
+pub fn check_camera_permission() -> CameraPermissionStatus {
+    #[cfg(target_os = "macos")]
+    {
+        let out = std::process::Command::new("swift")
+            .arg("-e")
+            .arg("import AVFoundation; print(AVCaptureDevice.authorizationStatus(for: .video).rawValue)")
+            .output();
+        if let Ok(res) = out {
+            let s = String::from_utf8_lossy(&res.stdout).trim().to_string();
+            let status = match s.as_str() {
+                "3" => "authorized",
+                "2" => "denied",
+                "1" => "restricted",
+                _ => "notDetermined",
+            };
+            return CameraPermissionStatus {
+                status: status.to_string(),
+                granted: status == "authorized",
+            };
+        }
+    }
+
+    CameraPermissionStatus {
+        status: "authorized".to_string(),
+        granted: true,
+    }
+}
+
+pub fn open_privacy_camera() -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
+            .spawn()?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

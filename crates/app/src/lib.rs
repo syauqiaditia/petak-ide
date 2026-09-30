@@ -325,6 +325,8 @@ pub fn run() {
             commands::format_document,
             commands::mirror_permission_status,
             commands::open_screen_recording_settings,
+            commands::mirror_camera_permission,
+            commands::open_privacy_camera,
             // Phase 5 - Agents
             commands::agent_list_slots,
             commands::agent_start,

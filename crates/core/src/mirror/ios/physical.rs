@@ -3,6 +3,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use crate::exec::Exec;
 use crate::mirror::control::InputEvent;
@@ -70,6 +71,12 @@ impl IosPhysicalSession {
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+
         let mut child = cmd.spawn().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::Other,
@@ -89,6 +96,36 @@ impl IosPhysicalSession {
         let child_arc = Arc::new(Mutex::new(Some(child)));
         let child_arc2 = Arc::clone(&child_arc);
 
+        let has_live_frame = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let hlf_status = Arc::clone(&has_live_frame);
+        let hlf_reader = Arc::clone(&has_live_frame);
+
+        // 15-second watchdog timer on awaiting capture stream
+        let watchdog_tx = status_tx.clone();
+        let watchdog_child = Arc::clone(&child_arc);
+        let hlf_watchdog = Arc::clone(&has_live_frame);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(15));
+            if !hlf_watchdog.load(std::sync::atomic::Ordering::SeqCst) {
+                let _ = watchdog_tx.send(MirrorStatus::Failed {
+                    reason: "Awaiting AVFoundation screen capture stream timed out (15s)".to_string(),
+                });
+                if let Ok(mut guard) = watchdog_child.lock() {
+                    if let Some(mut proc) = guard.take() {
+                        #[cfg(unix)]
+                        {
+                            let pid = proc.id() as i32;
+                            unsafe {
+                                libc::killpg(pid, libc::SIGKILL);
+                            }
+                        }
+                        let _ = proc.kill();
+                        let _ = proc.wait();
+                    }
+                }
+            }
+        });
+
         // Stderr monitor thread
         let status_tx_clone = status_tx.clone();
         let stderr_thread = thread::spawn(move || {
@@ -101,6 +138,7 @@ impl IosPhysicalSession {
                             if let Some(status_str) = val.get("status").and_then(|v| v.as_str()) {
                                 match status_str {
                                     "live" => {
+                                        hlf_status.store(true, std::sync::atomic::Ordering::SeqCst);
                                         let w = val
                                             .get("width")
                                             .and_then(|v| v.as_u64())
@@ -115,6 +153,23 @@ impl IosPhysicalSession {
                                             width: w,
                                             height: h,
                                         });
+                                    }
+                                    "needs_usb" => {
+                                        let message = val
+                                            .get("message")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("Mirror iPhone butuh kabel USB. Colok iPhone, buka kunci layar, pilih Trust")
+                                            .to_string();
+                                        let _ = status_tx_clone.send(MirrorStatus::NeedsUsb { message });
+                                    }
+                                    "failed" => {
+                                        let reason = val
+                                            .get("reason")
+                                            .or_else(|| val.get("message"))
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("Awaiting capture stream timed out")
+                                            .to_string();
+                                        let _ = status_tx_clone.send(MirrorStatus::Failed { reason });
                                     }
                                     "disconnected" => {
                                         let reason = val
@@ -150,6 +205,7 @@ impl IosPhysicalSession {
             loop {
                 match read_ios_frame_packet(&mut reader) {
                     Ok(Some(packet)) => {
+                        hlf_reader.store(true, std::sync::atomic::Ordering::SeqCst);
                         if frame_tx.send(packet).is_err() {
                             break;
                         }
@@ -170,7 +226,15 @@ impl IosPhysicalSession {
             }
             if let Ok(mut guard) = child_arc2.lock() {
                 if let Some(mut proc) = guard.take() {
+                    #[cfg(unix)]
+                    {
+                        let pid = proc.id() as i32;
+                        unsafe {
+                            libc::killpg(pid, libc::SIGKILL);
+                        }
+                    }
                     let _ = proc.kill();
+                    let _ = proc.wait();
                 }
             }
         });
@@ -205,7 +269,15 @@ impl IosPhysicalSession {
     pub fn stop(&self) {
         if let Ok(mut guard) = self.child.lock() {
             if let Some(mut proc) = guard.take() {
+                #[cfg(unix)]
+                {
+                    let pid = proc.id() as i32;
+                    unsafe {
+                        libc::killpg(pid, libc::SIGKILL);
+                    }
+                }
                 let _ = proc.kill();
+                let _ = proc.wait();
             }
         }
     }
