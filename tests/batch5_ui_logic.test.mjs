@@ -55,3 +55,45 @@ test('api consistency: all api.<name>( calls across ui/ must be defined in api.t
     assert.fail(`Found missing api methods in ui/lib/api.ts:\n${details}`);
   }
 });
+
+// =============================================================================
+// Suite 2: Mirror Per-Platform Logic (Bug 3)
+// =============================================================================
+import {
+  classifyMirrorDevice,
+  formatMirrorConnectingInfo,
+  sanitizeMirrorErrorMessage,
+} from '../ui/features/mirror/mirrorErrorLogic.ts';
+
+test('mirror classification: separates android, ios-physical, and ios-simulator', () => {
+  // Physical iPhone
+  const iphonePhys = classifyMirrorDevice({ id: '00008110-0012', name: "UQi's iPhone", platform: 'ios', kind: 'physical' });
+  assert.equal(iphonePhys.platform, 'ios');
+  assert.equal(iphonePhys.kind, 'ios-physical');
+  assert.equal(iphonePhys.isPhysical, true);
+
+  // iOS Simulator
+  const iosSim = classifyMirrorDevice({ id: 'sim-123', name: 'iPhone 15 Pro', platform: 'ios', kind: 'ios-sim' });
+  assert.equal(iosSim.platform, 'ios');
+  assert.equal(iosSim.kind, 'ios-simulator');
+  assert.equal(iosSim.isPhysical, false);
+
+  // Android device
+  const androidDev = classifyMirrorDevice({ id: 'emulator-5554', name: 'Pixel 8', platform: 'android', kind: 'emulator' });
+  assert.equal(androidDev.platform, 'android');
+  assert.equal(androidDev.kind, 'android');
+});
+
+test('mirror connecting & error: never mentions scrcpy for iOS and honest physical copy', () => {
+  const iphonePhys = { platform: 'ios', kind: 'ios-physical', isPhysical: true };
+  const connInfo = formatMirrorConnectingInfo(iphonePhys, '00008110-0012');
+  assert.match(connInfo.title, /iPhone/i);
+  assert.doesNotMatch(connInfo.desc, /scrcpy/i);
+
+  // Structured error containing scrcpy
+  const err = { platform: 'ios', code: 'DEVICE_UNLOCKED_REQUIRED', message: 'Failed to start scrcpy handshake: device locked' };
+  const sanitized = sanitizeMirrorErrorMessage(err, iphonePhys);
+  assert.equal(sanitized.isScrcpyMentioned, true);
+  assert.doesNotMatch(sanitized.message, /scrcpy/i);
+  assert.match(sanitized.message, /device locked/i);
+});
