@@ -1,6 +1,20 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { MirrorStatus, InputEvent, MirrorInfo } from '../features/mirror/types';
+import type {
+  MergeRequest,
+  GitLabUser,
+  PipelineInfo,
+  JobInfo,
+  Discussion,
+  Note,
+  TokenScopeMode,
+  PaginatedList,
+  MrListQuery,
+  InlinePositionParams,
+  MergeRequestParams,
+  MergeStatusEvaluation,
+} from '../features/mr/types';
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -1295,5 +1309,224 @@ export const api = {
     } catch {
       // ignore
     }
+  },
+
+  // ---------------------------------------------------------------------------
+  // GitLab MR Viewer Methods (Phase 5 Track B)
+  // ---------------------------------------------------------------------------
+
+  async mrGetTokenScope(root?: string): Promise<TokenScopeMode> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return 'readOnly';
+    }
+    return invoke<TokenScopeMode>('mr_get_token_scope', { root: root ?? null });
+  },
+
+  async mrCurrentUser(root?: string): Promise<GitLabUser> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_CURRENT_USER } = await import('../features/mr/fixtures');
+      return DEMO_CURRENT_USER;
+    }
+    return invoke<GitLabUser>('mr_current_user', { root: root ?? null });
+  },
+
+  async mrList(query: MrListQuery, root?: string): Promise<PaginatedList<MergeRequest>> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_MERGE_REQUESTS } = await import('../features/mr/fixtures');
+      return {
+        items: DEMO_MERGE_REQUESTS,
+        pagination: { page: 1, perPage: 20, total: DEMO_MERGE_REQUESTS.length, totalPages: 1 },
+      };
+    }
+    return invoke<PaginatedList<MergeRequest>>('mr_list', { root: root ?? null, query });
+  },
+
+  async mrDetail(iid: number, root?: string): Promise<MergeRequest> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_MERGE_REQUESTS } = await import('../features/mr/fixtures');
+      const found = DEMO_MERGE_REQUESTS.find((m) => m.iid === iid);
+      if (!found) throw new Error(`MR !${iid} not found`);
+      return found;
+    }
+    return invoke<MergeRequest>('mr_detail', { root: root ?? null, iid });
+  },
+
+  async mrPipelines(iid: number, root?: string): Promise<PipelineInfo[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_MERGE_REQUESTS } = await import('../features/mr/fixtures');
+      const found = DEMO_MERGE_REQUESTS.find((m) => m.iid === iid);
+      return found?.headPipeline ? [found.headPipeline] : [];
+    }
+    return invoke<PipelineInfo[]>('mr_pipelines', { root: root ?? null, iid });
+  },
+
+  async mrPipelineJobs(pipelineId: number, root?: string): Promise<JobInfo[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return [
+        { id: 1, name: 'test', stage: 'test', status: 'success', duration: 42 },
+        { id: 2, name: 'build', stage: 'build', status: 'success', duration: 120 },
+      ];
+    }
+    return invoke<JobInfo[]>('mr_pipeline_jobs', { root: root ?? null, pipelineId });
+  },
+
+  async mrDiffs(iid: number, headSha?: string, root?: string): Promise<GitDiffFile[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_DIFF_FILES } = await import('../features/mr/fixtures');
+      return DEMO_DIFF_FILES[iid] || [];
+    }
+    return invoke<GitDiffFile[]>('mr_diffs', { root: root ?? null, iid, headSha: headSha ?? null });
+  },
+
+  async mrDiscussions(iid: number, root?: string): Promise<Discussion[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_DISCUSSIONS } = await import('../features/mr/fixtures');
+      return DEMO_DISCUSSIONS[iid] || [];
+    }
+    return invoke<Discussion[]>('mr_discussions', { root: root ?? null, iid });
+  },
+
+  async mrCreateNote(iid: number, body: string, root?: string): Promise<Note> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_CURRENT_USER } = await import('../features/mr/fixtures');
+      return {
+        id: Date.now(),
+        body,
+        author: DEMO_CURRENT_USER,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        system: false,
+        resolvable: false,
+        resolved: null,
+      };
+    }
+    return invoke<Note>('mr_create_note', { root: root ?? null, iid, body });
+  },
+
+  async mrCreateInlineDiscussion(
+    iid: number,
+    body: string,
+    position: InlinePositionParams,
+    root?: string
+  ): Promise<Discussion> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_CURRENT_USER } = await import('../features/mr/fixtures');
+      return {
+        id: `disc-${Date.now()}`,
+        individualNote: false,
+        notes: [
+          {
+            id: Date.now(),
+            body,
+            author: DEMO_CURRENT_USER,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            system: false,
+            resolvable: true,
+            resolved: false,
+            position,
+          },
+        ],
+      };
+    }
+    return invoke<Discussion>('mr_create_inline_discussion', {
+      root: root ?? null,
+      iid,
+      body,
+      position,
+    });
+  },
+
+  async mrReplyDiscussion(
+    iid: number,
+    discussionId: string,
+    body: string,
+    root?: string
+  ): Promise<Note> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_CURRENT_USER } = await import('../features/mr/fixtures');
+      return {
+        id: Date.now(),
+        body,
+        author: DEMO_CURRENT_USER,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        system: false,
+        resolvable: false,
+        resolved: null,
+      };
+    }
+    return invoke<Note>('mr_reply_discussion', {
+      root: root ?? null,
+      iid,
+      discussionId,
+      body,
+    });
+  },
+
+  async mrResolveDiscussion(
+    iid: number,
+    discussionId: string,
+    resolved: boolean,
+    root?: string
+  ): Promise<Discussion> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return {
+        id: discussionId,
+        individualNote: false,
+        notes: [],
+      };
+    }
+    return invoke<Discussion>('mr_resolve_discussion', {
+      root: root ?? null,
+      iid,
+      discussionId,
+      resolved,
+    });
+  },
+
+  async mrApprove(iid: number, sha?: string, root?: string): Promise<any> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return { approved: true };
+    }
+    return invoke('mr_approve', { root: root ?? null, iid, sha: sha ?? null });
+  },
+
+  async mrUnapprove(iid: number, root?: string): Promise<any> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return { approved: false };
+    }
+    return invoke('mr_unapprove', { root: root ?? null, iid });
+  },
+
+  async mrMerge(iid: number, params: MergeRequestParams, root?: string): Promise<MergeRequest> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_MERGE_REQUESTS } = await import('../features/mr/fixtures');
+      const found = DEMO_MERGE_REQUESTS.find((m) => m.iid === iid);
+      if (!found) throw new Error(`MR !${iid} not found`);
+      return { ...found, state: 'merged', detailedMergeStatus: 'merged' };
+    }
+    return invoke<MergeRequest>('mr_merge', { root: root ?? null, iid, params });
+  },
+
+  async mrCancelMwps(iid: number, root?: string): Promise<MergeRequest> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_MERGE_REQUESTS } = await import('../features/mr/fixtures');
+      const found = DEMO_MERGE_REQUESTS.find((m) => m.iid === iid);
+      if (!found) throw new Error(`MR !${iid} not found`);
+      return found;
+    }
+    return invoke<MergeRequest>('mr_cancel_mwps', { root: root ?? null, iid });
+  },
+
+  async mrCheckout(iid: number, remote?: string, root?: string): Promise<string> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return `Switched to branch 'mr-${iid}'`;
+    }
+    return invoke<string>('mr_checkout', { root: root ?? null, iid, remote: remote ?? null });
+  },
+
+  async mrEvaluateMergeStatus(status?: string): Promise<MergeStatusEvaluation> {
+    return invoke<MergeStatusEvaluation>('mr_evaluate_merge_status', { status: status ?? null });
   },
 };

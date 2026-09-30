@@ -547,6 +547,56 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       if (cmd === 'logcat_start') return null;
       if (cmd === 'logcat_stop') return null;
       if (cmd === 'open_url') return null;
+
+      // GitLab MR Viewer (Phase 5)
+      if (cmd === 'mr_get_token_scope') {
+        if (typeof window !== 'undefined' && window.location.search.includes('no-token')) {
+          return 'none';
+        }
+        if (typeof window !== 'undefined' && window.location.search.includes('scope=api')) {
+          return 'full';
+        }
+        return 'readOnly';
+      }
+      if (cmd === 'mr_current_user') {
+        const { DEMO_CURRENT_USER } = await import('./features/mr/fixtures');
+        return DEMO_CURRENT_USER;
+      }
+      if (cmd === 'mr_list') {
+        const { DEMO_MERGE_REQUESTS } = await import('./features/mr/fixtures');
+        return {
+          items: DEMO_MERGE_REQUESTS,
+          pagination: { page: 1, perPage: 20, total: DEMO_MERGE_REQUESTS.length, totalPages: 1 },
+        };
+      }
+      if (cmd === 'mr_detail') {
+        const { DEMO_MERGE_REQUESTS } = await import('./features/mr/fixtures');
+        return DEMO_MERGE_REQUESTS.find((m) => m.iid === args?.iid) || DEMO_MERGE_REQUESTS[0];
+      }
+      if (cmd === 'mr_diffs') {
+        const { DEMO_DIFF_FILES } = await import('./features/mr/fixtures');
+        return DEMO_DIFF_FILES[args?.iid] || [];
+      }
+      if (cmd === 'mr_discussions') {
+        const { DEMO_DISCUSSIONS } = await import('./features/mr/fixtures');
+        return DEMO_DISCUSSIONS[args?.iid] || [];
+      }
+      if (cmd === 'mr_pipelines') {
+        const { DEMO_MERGE_REQUESTS } = await import('./features/mr/fixtures');
+        const m = DEMO_MERGE_REQUESTS.find((mr) => mr.iid === args?.iid);
+        return m?.headPipeline ? [m.headPipeline] : [];
+      }
+      if (cmd === 'mr_checkout') {
+        return `Switched to branch 'mr-${args?.iid}'`;
+      }
+      if (cmd === 'mr_evaluate_merge_status') {
+        return {
+          mergeable: args?.status === 'mergeable' || args?.status === 'can_be_merged',
+          canMwps: args?.status === 'ci_still_running',
+          reason: args?.status,
+        };
+      }
+
       if (cmd.startsWith('plugin:event|')) return 1;
       return null;
     },
