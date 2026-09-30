@@ -257,3 +257,58 @@ test('double shift detector: unit tests with fake timer', () => {
 
   assert.equal(triggerCount, 1, 'Holding shift with repeat events must not trigger');
 });
+
+// =============================================================================
+// Suite 4: Title Bar Interactive Exclusion Logic (Item 6)
+// =============================================================================
+import { isTitleBarInteractive } from '../ui/shell/titleBarLogic.ts';
+
+test('title bar drag: interactive element exclusion logic', () => {
+  // Mock DOM node hierarchy helper
+  function createMockNode(tagName, classList = [], role = null, parent = null) {
+    const classes = new Set(classList);
+    return {
+      tagName: tagName.toUpperCase(),
+      classList: {
+        contains: (c) => classes.has(c),
+      },
+      getAttribute: (attr) => (attr === 'role' ? role : null),
+      parentElement: parent,
+    };
+  }
+
+  const titlebar = createMockNode('div', ['titlebar'], null, null);
+
+  // 1. Plain non-interactive areas
+  assert.equal(isTitleBarInteractive(null), false);
+  assert.equal(isTitleBarInteractive(titlebar), false);
+
+  const spacer = createMockNode('div', ['spacer'], null, titlebar);
+  assert.equal(isTitleBarInteractive(spacer), false);
+
+  const trafficLights = createMockNode('div', ['traffic-lights-spacer'], null, titlebar);
+  assert.equal(isTitleBarInteractive(trafficLights), false);
+
+  // 2. Direct button
+  const runBtn = createMockNode('button', ['run-btn'], null, titlebar);
+  assert.equal(isTitleBarInteractive(runBtn), true);
+
+  // 3. Child icon/span inside a button
+  const svgInsideBtn = createMockNode('svg', [], null, runBtn);
+  assert.equal(isTitleBarInteractive(svgInsideBtn), true);
+
+  const pathInsideSvg = createMockNode('path', [], null, svgInsideBtn);
+  assert.equal(isTitleBarInteractive(pathInsideSvg), true);
+
+  // 4. Role='button' or role='menuitem'
+  const customMenuItem = createMockNode('div', ['item'], 'menuitem', titlebar);
+  assert.equal(isTitleBarInteractive(customMenuItem), true);
+
+  // 5. Input or select
+  const inputEl = createMockNode('input', [], null, titlebar);
+  assert.equal(isTitleBarInteractive(inputEl), true);
+
+  // 6. Interactive classes
+  const projectPopup = createMockNode('div', ['project-popup-menu'], null, titlebar);
+  assert.equal(isTitleBarInteractive(projectPopup), true);
+});
