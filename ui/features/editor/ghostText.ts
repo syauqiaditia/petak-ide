@@ -296,7 +296,7 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
 
         const prefix = match[0];
         const reqId = ++this.requestId;
-        const delay = options.debounceMs ?? 120;
+        const delay = options.debounceMs ?? 250;
 
         this.timer = setTimeout(async () => {
           // Check stale conditions (Step 5)
@@ -323,12 +323,18 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
             const matching = (results || []).filter((r: SuggestItem) => r.freq >= 2);
             if (matching.length > 0) {
               const top = matching[0];
-              const ghost = computeGhostFromSuggest(prefix, top);
+              let ghost = computeGhostFromSuggest(prefix, top);
               if (ghost) {
-                view.dispatch({
-                  effects: [setGhostTextEffect.of({ text: ghost, from: head })],
-                });
-                return;
+                // Batasi inline preview ke baris tunggal agar tidak mengagetkan saat mengetik
+                if (ghost.includes('\n')) {
+                  ghost = ghost.split('\n')[0];
+                }
+                if (ghost) {
+                  view.dispatch({
+                    effects: [setGhostTextEffect.of({ text: ghost, from: head })],
+                  });
+                  return;
+                }
               }
             }
 
@@ -336,12 +342,17 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
             if (options.getTopLspCompletion) {
               const lspTop = await options.getTopLspCompletion(prefix);
               if (this.requestId === reqId && !this.destroyed && lspTop) {
-                const ghost = computeGhostFromCompletion(prefix, lspTop);
+                let ghost = computeGhostFromCompletion(prefix, lspTop);
                 if (ghost) {
-                  view.dispatch({
-                    effects: [setGhostTextEffect.of({ text: ghost, from: head })],
-                  });
-                  return;
+                  if (ghost.includes('\n')) {
+                    ghost = ghost.split('\n')[0];
+                  }
+                  if (ghost) {
+                    view.dispatch({
+                      effects: [setGhostTextEffect.of({ text: ghost, from: head })],
+                    });
+                    return;
+                  }
                 }
               }
             }

@@ -7,12 +7,26 @@ export type MirrorUiState =
   | 'error'
   | 'view-only';
 
-export type MirrorStatus =
-  | { state: 'Connecting' }
-  | { state: 'Live'; width: number; height: number }
-  | { state: 'Rotated'; width: number; height: number }
-  | { state: 'Disconnected'; reason?: string }
-  | { state: 'Error'; message: string };
+export interface MirrorStatus {
+  state:
+    | 'Connecting'
+    | 'connecting'
+    | 'Live'
+    | 'live'
+    | 'Rotated'
+    | 'rotated'
+    | 'Disconnected'
+    | 'disconnected'
+    | 'Error'
+    | 'error'
+    | 'failed'
+    | 'needs_usb'
+    | string;
+  message?: string;
+  reason?: string;
+  width?: number;
+  height?: number;
+}
 
 export type TouchAction = 'down' | 'move' | 'up';
 export type KeyAction = 'down' | 'up';

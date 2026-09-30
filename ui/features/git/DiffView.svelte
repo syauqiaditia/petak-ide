@@ -464,6 +464,8 @@
     display: flex;
     flex-direction: column;
     content-visibility: auto;
+    overflow-x: auto;
+    white-space: pre;
   }
 
   .hunk-block {
@@ -542,14 +544,13 @@
     display: flex;
     align-items: center;
     white-space: pre;
-    overflow: hidden;
+    overflow-x: auto;
   }
 
   .cell-text {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: pre;
   }
 
   .gutter {

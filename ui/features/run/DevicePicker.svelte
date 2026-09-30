@@ -119,10 +119,10 @@
               class:selected={isSelected}
               onclick={() => handleSelect(item.id)}
             >
-              <span class="status-dot online"></span>
+              <span class="status-dot" class:online={item.state === 'online'} class:booting={item.state === 'booting'}></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
-                <span class="item-desc">Android Emulator · {item.id}</span>
+                <span class="item-desc">{item.state === 'booting' ? 'Booting…' : `Android Emulator · ${item.id}`}</span>
               </div>
               {#if isSelected}
                 <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6ea8ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -318,6 +318,15 @@
   }
   .status-dot.online {
     background: #7fc98f;
+  }
+  .status-dot.booting {
+    background: #e8b45a;
+    box-shadow: 0 0 6px rgba(232, 180, 90, 0.4);
+    animation: statusPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes statusPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
   }
   .status-dot.paired {
     background: #8b8f98;

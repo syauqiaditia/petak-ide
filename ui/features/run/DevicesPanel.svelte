@@ -190,7 +190,9 @@
             </div>
 
             <div class="device-meta">
-              <span class="state-label" class:online={isRunning} class:failed={isFailed}>{emuState}</span>
+              <span class="state-label" class:online={isRunning} class:booting={isBooting} class:failed={isFailed}>
+                {isBooting ? 'Booting…' : emuState}
+              </span>
               {#if emu.deviceId}
                 <span>•</span>
                 <span class="mono-id">{emu.deviceId}</span>

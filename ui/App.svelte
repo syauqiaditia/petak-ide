@@ -1564,11 +1564,13 @@
   />
 
   <div class="main-body">
-    <Rail
-      bind:activeTab={activeRailTab}
-      onToggleAgents={toggleAgentsPanel}
-      isAgentsOpen={isAgentPanelOpen}
-    />
+    {#if currentFolderPath}
+      <Rail
+        bind:activeTab={activeRailTab}
+        onToggleAgents={toggleAgentsPanel}
+        isAgentsOpen={isAgentPanelOpen}
+      />
+    {/if}
     <div class="center-area">
       {#if showDashboard}
         <DashboardView

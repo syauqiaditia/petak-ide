@@ -76,7 +76,7 @@ export function renderMarkdownToHtml(raw: string): string {
       const langClass = hasLang ? ` class="language-${escapeHtml(firstLine)}"` : '';
 
       htmlParts.push(
-        `<pre class="cm-lsp-code-block"><code${langClass}>${escapedCode}</code></pre>`
+        `<div class="cm-lsp-signature-wrap"><pre class="cm-lsp-code-block"><code${langClass}>${escapedCode}</code></pre></div>`
       );
     } else {
       const paragraphs = block.split(/\n\s*\n/);

@@ -13,9 +13,27 @@ class SettingsStore {
       ? localStorage.getItem('petak.general.reopen_last') === 'true'
       : false // Default is OFF
   );
+  language = $state<'id' | 'en'>(
+    typeof localStorage !== 'undefined' && localStorage.getItem('petak.language') === 'en'
+      ? 'en'
+      : 'id' // Default is 'id'
+  );
 
   constructor() {
     this.applyTheme(this.theme);
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = this.language;
+    }
+  }
+
+  setLanguage(newLang: 'id' | 'en') {
+    this.language = newLang;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('petak.language', newLang);
+    }
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = newLang;
+    }
   }
 
   toggleTheme() {

@@ -6,6 +6,7 @@
   import { toolchainStore } from '../features/toolchain/toolchainStore.svelte';
   import { formatAppState } from '../features/run/logic';
   import { api } from '../lib/api';
+  import { editorSettings } from '../features/editor/editorSettings.svelte';
 
   let {
     branchName = '',
@@ -219,7 +220,9 @@
 
   <span>{cursorInfo}</span>
   <span>UTF-8</span>
-  <span class="vim-tag">VIM</span>
+  {#if editorSettings.vimMode}
+    <span class="vim-tag">VIM</span>
+  {/if}
   <span>{fileType}</span>
 
   {#if toolchainStore.toast}

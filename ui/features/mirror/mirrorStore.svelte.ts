@@ -71,11 +71,8 @@ class MirrorStore {
 
     // Listen to mirror-status events (e.g. needs_usb, failed, etc.)
     api.onMirrorStatus?.((payload) => {
-      if (payload.status?.state === 'needs_usb') {
-        this.status = 'error';
-        this.errorMessage =
-          payload.status.message ||
-          'needs_usb: iPhone Fisik membutuhkan kabel USB langsung ke Mac (tidak mendukung Wi-Fi / ncm).';
+      if (payload.status) {
+        this.handleMirrorStatus(payload.status);
       }
     });
   }
@@ -294,33 +291,49 @@ class MirrorStore {
   }
 
   handleMirrorStatus(status: MirrorStatus) {
-    switch (status.state) {
-      case 'Connecting':
+    const rawState = (status.state || '').toLowerCase();
+    switch (rawState) {
+      case 'connecting':
         this.status = 'connecting';
         break;
-      case 'Live':
+      case 'live':
         this.status = this.isViewOnly ? 'view-only' : 'live';
         if (status.width && status.height) {
           this.deviceWidth = status.width;
           this.deviceHeight = status.height;
         }
         break;
-      case 'Rotated':
+      case 'rotated':
         if (status.width && status.height) {
           this.deviceWidth = status.width;
           this.deviceHeight = status.height;
         }
         this.status = this.isViewOnly ? 'view-only' : 'live';
         break;
-      case 'Disconnected':
+      case 'disconnected':
         this.status = 'disconnected';
         this.disconnectReason = status.reason || 'Device disconnected or USB detached';
         this.fps = 0;
         break;
-      case 'Error':
+      case 'needs_usb':
         this.status = 'error';
-        this.errorMessage = status.message;
+        this.errorMessage =
+          status.message ||
+          'needs_usb: iPhone Fisik membutuhkan kabel USB langsung ke Mac (tidak mendukung Wi-Fi / ncm).';
         this.fps = 0;
+        break;
+      case 'failed':
+      case 'error':
+        this.status = 'error';
+        this.errorMessage = status.message || 'Mirroring session failed or encountered an error';
+        this.fps = 0;
+        break;
+      default:
+        if (rawState.includes('fail') || rawState.includes('error')) {
+          this.status = 'error';
+          this.errorMessage = status.message || rawState;
+          this.fps = 0;
+        }
         break;
     }
   }
