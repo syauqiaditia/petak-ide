@@ -96,6 +96,10 @@ impl IosPhysicalSession {
         let child_arc = Arc::new(Mutex::new(Some(child)));
         let child_arc2 = Arc::clone(&child_arc);
 
+        let recent_stderr = Arc::new(Mutex::new(Vec::<String>::new()));
+        let recent_stderr_writer = Arc::clone(&recent_stderr);
+        let recent_stderr_reader = Arc::clone(&recent_stderr);
+
         let has_live_frame = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let hlf_status = Arc::clone(&has_live_frame);
         let hlf_reader = Arc::clone(&has_live_frame);
@@ -133,6 +137,11 @@ impl IosPhysicalSession {
             for line in reader.lines() {
                 if let Ok(l) = line {
                     let trimmed = l.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    crate::run::device::append_emulator_log(&format!("[ios-capture-stderr] {}", trimmed));
+
                     if trimmed.starts_with('{') && trimmed.ends_with('}') {
                         if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
                             if let Some(status_str) = val.get("status").and_then(|v| v.as_str()) {
@@ -193,6 +202,14 @@ impl IosPhysicalSession {
                                 }
                             }
                         }
+                    } else {
+                        // Non-JSON line: save to recent_stderr buffer (keep last 30 lines)
+                        if let Ok(mut buf) = recent_stderr_writer.lock() {
+                            if buf.len() >= 30 {
+                                buf.remove(0);
+                            }
+                            buf.push(trimmed.to_string());
+                        }
                     }
                 }
             }
@@ -211,9 +228,47 @@ impl IosPhysicalSession {
                         }
                     }
                     Ok(None) => {
-                        let _ = status_tx_clone2.send(MirrorStatus::Disconnected {
-                            reason: "physical iOS capture process exited".to_string(),
-                        });
+                        // EOF on stdout: Process has exited or closed its stdout.
+                        // Give stderr thread a moment to drain remaining lines.
+                        thread::sleep(Duration::from_millis(50));
+
+                        let exit_status = if let Ok(mut guard) = child_arc2.lock() {
+                            if let Some(ref mut proc) = *guard {
+                                proc.try_wait().ok().flatten()
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                        let stderr_summary = if let Ok(buf) = recent_stderr_reader.lock() {
+                            if buf.is_empty() {
+                                None
+                            } else {
+                                Some(buf.join("\n"))
+                            }
+                        } else {
+                            None
+                        };
+
+                        if let Some(status) = exit_status {
+                            if !status.success() {
+                                let reason = stderr_summary.unwrap_or_else(|| {
+                                    format!("physical iOS capture helper failed with {}", status)
+                                });
+                                let _ = status_tx_clone2.send(MirrorStatus::Error { message: reason });
+                                break;
+                            }
+                        }
+
+                        if let Some(err_lines) = stderr_summary {
+                            let _ = status_tx_clone2.send(MirrorStatus::Error { message: err_lines });
+                        } else {
+                            let _ = status_tx_clone2.send(MirrorStatus::Disconnected {
+                                reason: "physical iOS capture process exited".to_string(),
+                            });
+                        }
                         break;
                     }
                     Err(e) => {

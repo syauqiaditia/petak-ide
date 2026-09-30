@@ -1758,7 +1758,8 @@ pub async fn emulator_start(
     avd: String,
     headless: Option<bool>,
 ) -> Result<(), String> {
-    avd_start(app, state, avd, None, None, headless).await
+    let is_headless = headless.unwrap_or(true);
+    avd_start(app, state, avd, None, None, Some(is_headless)).await
 }
 
 #[tauri::command]
@@ -2619,12 +2620,15 @@ pub async fn mirror_start(
     serial: String,
     max_size: Option<u16>,
 ) -> Result<petak_core::mirror::session::MirrorInfo, String> {
-    let serial_clone = serial.clone();
+    let exec = petak_core::exec::SystemExec;
+    let resolved_serial = petak_core::run::resolve_running_avd_serial(&exec, &serial)
+        .unwrap_or_else(|| serial.clone());
+    let serial_for_start = resolved_serial.clone();
     let max = max_size.unwrap_or(1920);
 
     let (info, session, frame_rx, status_rx) =
         tauri::async_runtime::spawn_blocking(move || {
-            petak_core::mirror::session::MirrorSession::start(&serial_clone, max)
+            petak_core::mirror::session::MirrorSession::start(&serial_for_start, max)
                 .map_err(|e| e.to_string())
         })
         .await
@@ -2633,27 +2637,44 @@ pub async fn mirror_start(
     // Status event forwarder
     let app_status = app.clone();
     let serial_for_status = serial.clone();
+    let actual_status_serial = resolved_serial.clone();
     std::thread::spawn(move || {
         while let Ok(status) = status_rx.recv() {
             let _ = app_status.emit(
                 "mirror-status",
                 serde_json::json!({ "serial": serial_for_status, "status": status }),
             );
+            if actual_status_serial != serial_for_status {
+                let _ = app_status.emit(
+                    "mirror-status",
+                    serde_json::json!({ "serial": actual_status_serial, "status": status }),
+                );
+            }
         }
     });
 
     // Frame forwarder
     let app_frame = app.clone();
     let serial_for_frame = serial.clone();
+    let actual_frame_serial = resolved_serial.clone();
     std::thread::spawn(move || {
         while let Ok(packet) = frame_rx.recv() {
             let _ = app_frame.emit(
                 "mirror-frame",
                 MirrorFramePayload {
                     serial: serial_for_frame.clone(),
-                    data: packet,
+                    data: packet.clone(),
                 },
             );
+            if actual_frame_serial != serial_for_frame {
+                let _ = app_frame.emit(
+                    "mirror-frame",
+                    MirrorFramePayload {
+                        serial: actual_frame_serial.clone(),
+                        data: packet,
+                    },
+                );
+            }
         }
     });
 
@@ -2669,9 +2690,24 @@ pub async fn mirror_stop(
     state: tauri::State<'_, MirrorState>,
     serial: String,
 ) -> Result<(), String> {
-    let removed = {
-        let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
-        sessions.remove(&serial)
+    let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
+    let removed = if let Some(s) = sessions.remove(&serial) {
+        Some(s)
+    } else {
+        let exec = petak_core::exec::SystemExec;
+        let alt = petak_core::run::resolve_running_avd_serial(&exec, &serial);
+        let found_key = alt.as_ref().and_then(|a| {
+            if sessions.contains_key(a) {
+                Some(a.clone())
+            } else {
+                None
+            }
+        }).or_else(|| {
+            sessions.keys().find(|k| {
+                petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(&serial)
+            }).cloned()
+        });
+        found_key.and_then(|k| sessions.remove(&k))
     };
     // Drop kills the server process + removes forward
     drop(removed);
@@ -2688,7 +2724,18 @@ pub async fn mirror_input(
     if let Some(session) = sessions.get(&serial) {
         session.send_input(&event).map_err(|e| e.to_string())
     } else {
-        Err(format!("No mirror session for {}", serial))
+        let exec = petak_core::exec::SystemExec;
+        let alt = petak_core::run::resolve_running_avd_serial(&exec, &serial);
+        let found = alt.as_ref().and_then(|a| sessions.get(a)).or_else(|| {
+            sessions.iter().find(|(k, _)| {
+                petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(&serial)
+            }).map(|(_, v)| v)
+        });
+        if let Some(session) = found {
+            session.send_input(&event).map_err(|e| e.to_string())
+        } else {
+            Err(format!("No mirror session for {}", serial))
+        }
     }
 }
 
@@ -2699,7 +2746,8 @@ pub async fn mirror_screenshot(
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
-        petak_core::mirror::session::take_screenshot(&exec, &serial, path.as_deref())
+        let resolved = petak_core::run::resolve_running_avd_serial(&exec, &serial).unwrap_or(serial);
+        petak_core::mirror::session::take_screenshot(&exec, &resolved, path.as_deref())
             .map_err(|e| e.to_string())
     })
     .await
@@ -2748,16 +2796,7 @@ pub async fn avd_start(
     let is_wipe = wipe_data.unwrap_or(false);
 
     tauri::async_runtime::spawn_blocking(move || {
-        let is_headless = headless.unwrap_or_else(|| {
-            #[cfg(target_os = "macos")]
-            {
-                false
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err()
-            }
-        });
+        let is_headless = headless.unwrap_or(true);
 
         append_emulator_log(&format!("Starting AVD '{}' (cold={}, wipe={}, headless={})", avd_name, is_cold, is_wipe, is_headless));
 
@@ -2885,20 +2924,24 @@ pub async fn avd_start(
 
             if booted || found_serial.is_some() || start_time.elapsed() >= std::time::Duration::from_secs(15) {
                 append_emulator_log(&format!("AVD '{}' is running (serial: {:?})", mon_avd, found_serial));
-                let _ = app_mon.emit(
-                    "emulator-status",
-                    serde_json::json!({
-                        "id": mon_avd,
-                        "state": "running"
-                    }),
-                );
-                let _ = app_mon.emit(
-                    "device-ready",
-                    serde_json::json!({
-                        "id": mon_avd,
-                        "kind": "android-avd"
-                    }),
-                );
+                let mut status_payload = serde_json::json!({
+                    "id": mon_avd,
+                    "state": "running"
+                });
+                let mut ready_payload = serde_json::json!({
+                    "id": mon_avd,
+                    "kind": "android-avd"
+                });
+                if let Some(ref ser) = found_serial {
+                    if let Some(obj) = status_payload.as_object_mut() {
+                        obj.insert("serial".to_string(), serde_json::Value::String(ser.clone()));
+                    }
+                    if let Some(obj) = ready_payload.as_object_mut() {
+                        obj.insert("serial".to_string(), serde_json::Value::String(ser.clone()));
+                    }
+                }
+                let _ = app_mon.emit("emulator-status", status_payload);
+                let _ = app_mon.emit("device-ready", ready_payload);
             } else {
                 let collected: Vec<String> = stderr_lines.into_iter().collect();
                 let err_text = if collected.is_empty() { "Timeout menunggu emulator booting".to_string() } else { collected.join("\n") };

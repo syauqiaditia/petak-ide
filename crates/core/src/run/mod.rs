@@ -20,7 +20,7 @@ pub use device::{
     devices_snapshot, emulator_log_path, is_valid_avd_name, is_valid_device_id, list_avds, merge_devices,
     parse_adb_devices, parse_emulator_avds, parse_flutter_devices, parse_track_devices_frame,
     parse_track_devices_payload, resolve_adb_binary, resolve_android_avd_home,
-    resolve_emulator_binary, spawn_emulator_detached, start_emulator, watch_devices, Avd, Device,
+    resolve_emulator_binary, resolve_running_avd_serial, spawn_emulator_detached, start_emulator, watch_devices, Avd, Device,
     DeviceKind, DevicePlatform, DeviceState, DevicesSnapshot, EmulatorInfo, PhysicalDevice,
     SnapshotDevice, DeviceInfo,
 };
