@@ -53,16 +53,117 @@ export function formatInlineMarkdown(escapedText: string): string {
 }
 
 /**
+ * Parse markdown text section into HTML paragraphs, lists, and doc tags.
+ */
+function parseMarkdownSection(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let currentListType: 'ul' | 'ol' | null = null;
+  let currentListItems: string[] = [];
+  let currentParaLines: string[] = [];
+
+  function flushList() {
+    if (currentListType && currentListItems.length > 0) {
+      const tag = currentListType;
+      const cls = tag === 'ul' ? 'cm-lsp-bullet-list' : 'cm-lsp-numbered-list';
+      result.push(`<${tag} class="cm-lsp-list ${cls}">${currentListItems.map((li) => `<li>${li}</li>`).join('')}</${tag}>`);
+      currentListType = null;
+      currentListItems = [];
+    }
+  }
+
+  function flushPara() {
+    if (currentParaLines.length > 0) {
+      const escaped = escapeHtml(currentParaLines.join(' ').trim());
+      if (escaped) {
+        result.push(`<p class="cm-lsp-para">${formatInlineMarkdown(escaped)}</p>`);
+      }
+      currentParaLines = [];
+    }
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      flushPara();
+      continue;
+    }
+
+    // Check bullet list: * item or - item or + item
+    const bulletMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (bulletMatch) {
+      flushPara();
+      if (currentListType && currentListType !== 'ul') {
+        flushList();
+      }
+      currentListType = 'ul';
+      const itemContent = formatInlineMarkdown(escapeHtml(bulletMatch[1].trim()));
+      currentListItems.push(itemContent);
+      continue;
+    }
+
+    // Check numbered list: 1. item or 2. item
+    const numberMatch = line.match(/^\s*(\d+)\.\s+(.*)$/);
+    if (numberMatch) {
+      flushPara();
+      if (currentListType && currentListType !== 'ol') {
+        flushList();
+      }
+      currentListType = 'ol';
+      const itemContent = formatInlineMarkdown(escapeHtml(numberMatch[2].trim()));
+      currentListItems.push(itemContent);
+      continue;
+    }
+
+    // Check doc tags: @param, @return, @returns, @throws, @deprecated, @see, etc.
+    const tagMatch = line.match(/^\s*(@[a-zA-Z0-9_-]+)\s*(.*)$/);
+    if (tagMatch) {
+      flushList();
+      flushPara();
+      const tagName = escapeHtml(tagMatch[1]);
+      const tagDesc = formatInlineMarkdown(escapeHtml(tagMatch[2].trim()));
+      result.push(
+        `<div class="cm-lsp-doc-tag"><span class="cm-lsp-tag-name">${tagName}</span><span class="cm-lsp-tag-content">${tagDesc}</span></div>`
+      );
+      continue;
+    }
+
+    // Indented continuation of list item
+    if (currentListType && /^\s{2,}\S/.test(line)) {
+      const lastIdx = currentListItems.length - 1;
+      if (lastIdx >= 0) {
+        currentListItems[lastIdx] += ' ' + formatInlineMarkdown(escapeHtml(trimmed));
+        continue;
+      }
+    }
+
+    // Otherwise, normal text line
+    flushList();
+    currentParaLines.push(trimmed);
+  }
+
+  flushList();
+  flushPara();
+
+  return result.join('');
+}
+
+/**
  * Render raw markdown into sanitized HTML string.
+ * Separates function signature header from body documentation.
  */
 export function renderMarkdownToHtml(raw: string): string {
   if (!raw || !raw.trim()) return '';
 
   const normalized = raw.replace(/\r\n/g, '\n');
   const blocks = normalized.split(/(```[\s\S]*?```)/g);
-  const htmlParts: string[] = [];
+  const signatureParts: string[] = [];
+  const bodyParts: string[] = [];
+  let isFirstCodeBlock = true;
 
-  for (const block of blocks) {
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
     if (!block.trim()) continue;
 
     if (block.startsWith('```') && block.endsWith('```')) {
@@ -75,22 +176,31 @@ export function renderMarkdownToHtml(raw: string): string {
       const escapedCode = escapeHtml(codeText);
       const langClass = hasLang ? ` class="language-${escapeHtml(firstLine)}"` : '';
 
-      htmlParts.push(
-        `<div class="cm-lsp-signature-wrap"><pre class="cm-lsp-code-block"><code${langClass}>${escapedCode}</code></pre></div>`
-      );
+      const codeHtml = `<div class="cm-lsp-signature-wrap"><pre class="cm-lsp-code-block"><code${langClass}>${escapedCode}</code></pre></div>`;
+
+      // If this is the first code block, treat it as the signature header
+      if (isFirstCodeBlock) {
+        signatureParts.push(codeHtml);
+        isFirstCodeBlock = false;
+      } else {
+        bodyParts.push(codeHtml);
+      }
     } else {
-      const paragraphs = block.split(/\n\s*\n/);
-      for (const para of paragraphs) {
-        const trimmed = para.trim();
-        if (!trimmed) continue;
-        const escaped = escapeHtml(trimmed);
-        const formatted = formatInlineMarkdown(escaped).replace(/\n/g, '<br/>');
-        htmlParts.push(`<p class="cm-lsp-para">${formatted}</p>`);
+      const sectionHtml = parseMarkdownSection(block);
+      if (sectionHtml) {
+        bodyParts.push(sectionHtml);
       }
     }
   }
 
-  return htmlParts.join('');
+  let result = '';
+  if (signatureParts.length > 0) {
+    result += `<div class="cm-lsp-header-signature">${signatureParts.join('')}</div>`;
+  }
+  if (bodyParts.length > 0) {
+    result += `<div class="cm-lsp-doc-body">${bodyParts.join('')}</div>`;
+  }
+  return result || signatureParts.join('') || bodyParts.join('');
 }
 
 /**

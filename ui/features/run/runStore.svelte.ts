@@ -515,7 +515,7 @@ class RunStore {
     }
   }
 
-  async avdStart(name: string, cold: boolean = false, wipeData: boolean = false) {
+  async avdStart(name: string, cold: boolean = false, wipeData: boolean = false, headless: boolean = true) {
     this.emulatorStatuses = {
       ...this.emulatorStatuses,
       [name]: { state: 'booting' },
@@ -548,7 +548,7 @@ class RunStore {
     }
     this.startAutoPolling(name);
     try {
-      await api.avdStart(name, cold, wipeData);
+      await api.avdStart(name, cold, wipeData, headless);
     } catch (e: any) {
       this.stopAutoPolling();
       const errMsg = e?.message || (typeof e === 'string' ? e : 'Failed to start AVD');

@@ -1338,18 +1338,11 @@
       console.warn('Failed to listen to fs-changed:', e);
     }
 
-    // 2. Load recent folders and auto-open first recent folder if available (deferred so initial window/editor paint is instant)
+    // 2. Load recent folders (never auto-open on launch; always show Xcode-style Starting Point first)
     setTimeout(async () => {
       try {
         const recents = await api.recentFolders();
         recentFolders = recents;
-        if (settingsStore.reopenLastProjectOnLaunch && recents && recents.length > 0) {
-          try {
-            await openFolder(recents[0]);
-          } catch (e) {
-            console.warn('Could not auto-open recent folder:', recents[0], e);
-          }
-        }
       } catch (e) {
         console.warn('Failed to load recent folders:', e);
       }
