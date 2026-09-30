@@ -24,10 +24,15 @@
   let MrViewComponent = $state<any>(null);
   let DevicesPanelComponent = $state<any>(null);
   let DeviceMirrorPanelComponent = $state<any>(null);
+  let AgentsPanelComponent = $state<any>(null);
   let isAgentPanelOpen = $state<boolean>(
     typeof window !== 'undefined' &&
     (window.location.search.includes('agent=true') || window.location.search.includes('preview-agent'))
   );
+
+  function toggleAgentsPanel() {
+    isAgentPanelOpen = !isAgentPanelOpen;
+  }
 
   $effect(() => {
     if (activeRailTab === 'git' && !GitViewComponent) {
@@ -44,6 +49,9 @@
     }
     if (panelStore.activeRightPanel === 'mirror' && !DeviceMirrorPanelComponent) {
       import('./features/mirror/DeviceMirrorPanel.svelte').then((m) => (DeviceMirrorPanelComponent = m.default));
+    }
+    if (isAgentPanelOpen && !AgentsPanelComponent) {
+      import('./features/agents/AgentsPanel.svelte').then((m) => (AgentsPanelComponent = m.default));
     }
   });
 
@@ -1482,11 +1490,15 @@
       }
     }, 50);
 
-    // Global keyboard shortcut for Mirror (Cmd-Shift-D / Ctrl-Shift-D)
+    // Global keyboard shortcut for Mirror (Cmd-Shift-D / Ctrl-Shift-D) & Agents (Cmd-6)
     const handleKeydownMirror = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
         e.preventDefault();
         mirrorStore.toggle();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '6') {
+        e.preventDefault();
+        toggleAgentsPanel();
       }
     };
     window.addEventListener('keydown', handleKeydownMirror);
@@ -1523,6 +1535,8 @@
     <Rail
       bind:activeTab={activeRailTab}
       onToggleDevices={() => panelStore.toggleRightPanel('devices')}
+      onToggleAgents={toggleAgentsPanel}
+      isAgentsOpen={isAgentPanelOpen}
     />
     <div class="center-area">
       <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
@@ -1577,30 +1591,29 @@
 
     <!-- Slot: Phase 5 Agent Panel (reserved, collapsible, immediately LEFT of Device Mirror) -->
     {#if isAgentPanelOpen}
-      <div class="agent-panel-slot">
-        <div class="agent-toolbar-top">
-          <span class="agent-title">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
-            </svg>
-            Claude Code
-          </span>
-          <span class="agent-badge">Working</span>
-          <button class="agent-close-btn" onclick={() => (isAgentPanelOpen = false)} aria-label="Close Agent Panel">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-        <div class="agent-body-content">
-          <div class="agent-card">
-            <span class="agent-goal-label">Goal:</span> Fix discount calculation when voucher is applied.
+      {#if AgentsPanelComponent}
+        <AgentsPanelComponent onClose={() => (isAgentPanelOpen = false)} />
+      {:else}
+        <div class="agent-panel-slot">
+          <div class="agent-toolbar-top">
+            <span class="agent-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
+              </svg>
+              AI Agents
+            </span>
+            <span class="agent-badge">Loading...</span>
+            <button class="agent-close-btn" onclick={() => (isAgentPanelOpen = false)} aria-label="Close Agent Panel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"></path>
+              </svg>
+            </button>
           </div>
-          <div class="agent-status-text">
-            Checking <code>CheckoutViewModel.kt</code> and running verification on Pixel 8.
+          <div class="agent-body-content">
+            <div class="agent-status-text">Memuat panel agen...</div>
           </div>
         </div>
-      </div>
+      {/if}
     {:else}
       <div class="agent-panel-slot-empty" style="display: none;" aria-hidden="true"></div>
     {/if}
@@ -1743,27 +1756,9 @@
     font-size: 12px;
     color: #8b8f98;
   }
-  .agent-card {
-    background: #1a1b1f;
-    border: 1px solid #26282d;
-    border-radius: 8px;
-    padding: 10px;
-  }
-  .agent-goal-label {
-    color: #e6e7ea;
-    font-weight: 500;
-  }
   .agent-status-text {
     color: #d8d9dc;
     line-height: 18px;
-  }
-  .agent-status-text code {
-    font-family: 'JetBrains Mono', monospace;
-    background: #1f2a3d;
-    color: #6ea8ff;
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-size: 11px;
   }
   .preview-badge {
     position: fixed;

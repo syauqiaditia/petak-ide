@@ -15,6 +15,16 @@ import type {
   MergeRequestParams,
   MergeStatusEvaluation,
 } from '../features/mr/types';
+import type {
+  SlotSummary,
+  SlotConfig,
+  PromptResponse,
+  HermesDetectionResult,
+  TeamConfig,
+  PendingPermissionRequest,
+  Proposal,
+  UsageReport,
+} from '../features/agents/types';
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -1528,5 +1538,175 @@ export const api = {
 
   async mrEvaluateMergeStatus(status?: string): Promise<MergeStatusEvaluation> {
     return invoke<MergeStatusEvaluation>('mr_evaluate_merge_status', { status: status ?? null });
+  },
+
+  // ── Agent Commands (Phase 5 Track A) ──────────────────────────────────────
+  async agentListSlots(): Promise<SlotSummary[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_SLOTS } = await import('../features/agents/fixtures');
+      return DEMO_SLOTS;
+    }
+    return invoke<SlotSummary[]>('agent_list_slots');
+  },
+
+  async agentStart(slotId: string): Promise<SlotSummary> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_SLOTS } = await import('../features/agents/fixtures');
+      const found = DEMO_SLOTS.find((s) => s.id === slotId) || DEMO_SLOTS[0];
+      return { ...found, status: 'ready' };
+    }
+    return invoke<SlotSummary>('agent_start', { slotId });
+  },
+
+  async agentPrompt(slotId: string, prompt: string): Promise<PromptResponse> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return {
+        sessionId: `demo-${slotId}`,
+        message: `[DEMO] Agent responded to: "${prompt}"`,
+        stopReason: 'end_turn',
+      };
+    }
+    return invoke<PromptResponse>('agent_prompt', { slotId, prompt });
+  },
+
+  async agentCancel(slotId: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_cancel', { slotId });
+  },
+
+  async agentStop(slotId: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_stop', { slotId });
+  },
+
+  async agentDetectHermes(): Promise<HermesDetectionResult> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_HERMES_DETECTION } = await import('../features/agents/fixtures');
+      return DEMO_HERMES_DETECTION;
+    }
+    return invoke<HermesDetectionResult>('agent_detect_hermes');
+  },
+
+  async agentLoadTeam(): Promise<TeamConfig> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_TEAM_CONFIG } = await import('../features/agents/fixtures');
+      return DEMO_TEAM_CONFIG;
+    }
+    return invoke<TeamConfig>('agent_load_team');
+  },
+
+  async agentSaveTeam(team: TeamConfig): Promise<string> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return '.petak/team.json';
+    }
+    return invoke<string>('agent_save_team', { team });
+  },
+
+  async agentAddSlot(config: SlotConfig): Promise<SlotSummary> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return {
+        id: config.id,
+        label: config.label,
+        kind: config.kind,
+        status: 'idle',
+        capabilities: { load_session: false, supports_set_model: false, available_models: [] },
+        history_len: 0,
+        config,
+      };
+    }
+    return invoke<SlotSummary>('agent_add_slot', { config });
+  },
+
+  async agentUpdateSlot(config: SlotConfig): Promise<SlotSummary> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return {
+        id: config.id,
+        label: config.label,
+        kind: config.kind,
+        status: 'idle',
+        capabilities: { load_session: false, supports_set_model: false, available_models: [] },
+        history_len: 0,
+        config,
+      };
+    }
+    return invoke<SlotSummary>('agent_update_slot', { config });
+  },
+
+  async agentRemoveSlot(slotId: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_remove_slot', { slotId });
+  },
+
+  async agentGetAllowlist(): Promise<string[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEFAULT_ALLOWLIST } = await import('../features/agents/agentsLogic');
+      return DEFAULT_ALLOWLIST;
+    }
+    return invoke<string[]>('agent_get_allowlist');
+  },
+
+  async agentSetAllowlist(allowlist: string[]): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_set_allowlist', { allowlist });
+  },
+
+  async agentListPendingPermissions(): Promise<PendingPermissionRequest[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_PENDING_PERMISSIONS } = await import('../features/agents/fixtures');
+      return DEMO_PENDING_PERMISSIONS;
+    }
+    return invoke<PendingPermissionRequest[]>('agent_list_pending_permissions');
+  },
+
+  async agentRespondPermission(requestId: string, allow: boolean): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_respond_permission', { requestId, allow });
+  },
+
+  async agentListProposals(slotId?: string): Promise<Proposal[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_PROPOSALS } = await import('../features/agents/fixtures');
+      return slotId ? DEMO_PROPOSALS.filter((p) => p.slotId === slotId) : DEMO_PROPOSALS;
+    }
+    return invoke<Proposal[]>('agent_list_proposals', { slotId: slotId ?? null });
+  },
+
+  async agentAcceptProposal(proposalId: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_accept_proposal', { proposalId });
+  },
+
+  async agentRejectProposal(proposalId: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_reject_proposal', { proposalId });
+  },
+
+  async agentAcceptHunk(proposalId: string, hunkIdx: number): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('agent_accept_hunk', { proposalId, hunkIdx });
+  },
+
+  async agentGetUsage(slotId: string): Promise<UsageReport> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_USAGE_REPORTS } = await import('../features/agents/fixtures');
+      return DEMO_USAGE_REPORTS[slotId] || { reported: false, displayText: 'tidak melapor' };
+    }
+    return invoke<UsageReport>('agent_get_usage', { slotId });
   },
 };

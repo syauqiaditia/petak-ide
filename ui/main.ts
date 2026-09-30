@@ -597,6 +597,46 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
         };
       }
 
+      // AI Agents (Phase 5 Track A)
+      if (cmd === 'agent_list_slots') {
+        const { DEMO_SLOTS } = await import('./features/agents/fixtures');
+        return DEMO_SLOTS;
+      }
+      if (cmd === 'agent_detect_hermes') {
+        const { DEMO_HERMES_DETECTION } = await import('./features/agents/fixtures');
+        return DEMO_HERMES_DETECTION;
+      }
+      if (cmd === 'agent_load_team') {
+        const { DEMO_TEAM_CONFIG } = await import('./features/agents/fixtures');
+        return DEMO_TEAM_CONFIG;
+      }
+      if (cmd === 'agent_list_pending_permissions') {
+        const { DEMO_PENDING_PERMISSIONS } = await import('./features/agents/fixtures');
+        return DEMO_PENDING_PERMISSIONS;
+      }
+      if (cmd === 'agent_list_proposals') {
+        const { DEMO_PROPOSALS } = await import('./features/agents/fixtures');
+        return DEMO_PROPOSALS;
+      }
+      if (cmd === 'agent_get_usage') {
+        const { DEMO_USAGE_REPORTS } = await import('./features/agents/fixtures');
+        return DEMO_USAGE_REPORTS[args?.slotId] || { reported: false, displayText: 'tidak melapor' };
+      }
+      if (cmd === 'agent_start' || cmd === 'agent_add_slot' || cmd === 'agent_update_slot') {
+        const { DEMO_SLOTS } = await import('./features/agents/fixtures');
+        return DEMO_SLOTS[0];
+      }
+      if (cmd === 'agent_prompt') {
+        return {
+          sessionId: `demo-${args?.slotId || 's1'}`,
+          message: `[DEMO] Agent responded to: "${args?.prompt || ''}"`,
+          stopReason: 'end_turn',
+        };
+      }
+      if (cmd.startsWith('agent_')) {
+        return null;
+      }
+
       if (cmd.startsWith('plugin:event|')) return 1;
       return null;
     },

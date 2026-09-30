@@ -1,0 +1,495 @@
+import { api, type UnlistenFn } from '../../lib/api';
+import { listen } from '@tauri-apps/api/event';
+import type {
+  SlotSummary,
+  SlotConfig,
+  Proposal,
+  PendingPermissionRequest,
+  ChatMessage,
+  UsageReport,
+  TeamConfig,
+  HermesDetectionResult,
+  HermesProfileInfo,
+  PermissionMode,
+  FixWithAgentDraft,
+  SlotEvent,
+} from './types';
+import {
+  applyDisciplineDirectives,
+  DEFAULT_ALLOWLIST,
+  isCommandInAllowlist,
+} from './agentsLogic';
+import {
+  DEMO_SLOTS,
+  DEMO_CHAT_MESSAGES,
+  DEMO_PROPOSALS,
+  DEMO_PENDING_PERMISSIONS,
+  DEMO_HERMES_DETECTION,
+  DEMO_TEAM_CONFIG,
+  DEMO_USAGE_REPORTS,
+} from './fixtures';
+
+class AgentsStore {
+  constructor() {
+    if (typeof window !== 'undefined') {
+      (window as any).__agentsStore = this;
+    }
+  }
+
+  slots = $state<SlotSummary[]>([]);
+  activeSlotId = $state<string | null>(null);
+  chatHistory = $state<Record<string, ChatMessage[]>>({});
+  proposals = $state<Proposal[]>([]);
+  pendingPermissions = $state<PendingPermissionRequest[]>([]);
+  hermesDetection = $state<HermesDetectionResult | null>(null);
+  teamConfig = $state<TeamConfig | null>(null);
+  usageReports = $state<Record<string, UsageReport>>({});
+
+  isTeamEditorOpen = $state(false);
+  isFixWithAgentOpen = $state(false);
+  fixWithAgentDraft = $state<FixWithAgentDraft | null>(null);
+  isFullAccessWarningOpen = $state(false);
+  pendingFullSlotId = $state<string | null>(null);
+
+  isPonytailActive = $state(true); // Default true (Ponytail rule)
+  isCavemanActive = $state(false);
+
+  isLoading = $state(false);
+  isStreaming = $state(false);
+  streamingContent = $state('');
+  error = $state<string | null>(null);
+
+  private unlistenEvent: UnlistenFn | null = null;
+  private initialized = false;
+
+  get activeSlot(): SlotSummary | null {
+    if (!this.activeSlotId) return this.slots[0] || null;
+    return this.slots.find((s) => s.id === this.activeSlotId) || null;
+  }
+
+  get activeMessages(): ChatMessage[] {
+    const id = this.activeSlotId || (this.slots[0] ? this.slots[0].id : null);
+    if (!id) return [];
+    return this.chatHistory[id] || [];
+  }
+
+  get activeProposals(): Proposal[] {
+    const id = this.activeSlotId;
+    if (!id) return this.proposals.filter((p) => p.status === 'pending');
+    return this.proposals.filter((p) => p.slotId === id && p.status === 'pending');
+  }
+
+  get activeUsage(): UsageReport | null {
+    const id = this.activeSlotId;
+    if (!id) return null;
+    return this.usageReports[id] || null;
+  }
+
+  get activePendingPermission(): PendingPermissionRequest | null {
+    const id = this.activeSlotId;
+    if (!id) return this.pendingPermissions[0] || null;
+    return this.pendingPermissions.find((p) => p.slotId === id) || null;
+  }
+
+  async init() {
+    if (this.initialized) return;
+    this.initialized = true;
+
+    // Load initial data
+    await this.loadSlots();
+    await this.loadProposals();
+    await this.loadPermissions();
+    await this.detectHermes();
+
+    // Listen for agent-event from backend if inside Tauri
+    if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      try {
+        this.unlistenEvent = await listen<any>('agent-event', (event) => {
+          this.handleSlotEvent(event.payload);
+        });
+      } catch (err) {
+        console.warn('Could not attach agent-event listener:', err);
+      }
+    }
+  }
+
+  destroy() {
+    if (this.unlistenEvent) {
+      this.unlistenEvent();
+      this.unlistenEvent = null;
+    }
+    this.initialized = false;
+  }
+
+  private handleSlotEvent(event: any) {
+    if (!event) return;
+
+    if (event.StatusChanged) {
+      const { slot_id, status } = event.StatusChanged;
+      const idx = this.slots.findIndex((s) => s.id === slot_id);
+      if (idx !== -1) {
+        this.slots[idx] = { ...this.slots[idx], status };
+      }
+    } else if (event.Update) {
+      const { slot_id, update } = event.Update;
+      // Handle streaming token update or usage update
+      if (update && update.content) {
+        this.streamingContent += update.content;
+      }
+      if (update && update.usage) {
+        this.usageReports[slot_id] = {
+          reported: true,
+          totalTokens: update.usage.totalTokens,
+          cost: update.usage.cost,
+          contextPercentage: update.usage.contextPercentage,
+          displayText: update.usage.displayText || '',
+        };
+      }
+    } else if (event.PermissionRequested) {
+      const { slot_id, request_id, tool_call } = event.PermissionRequested;
+      this.pendingPermissions = [
+        ...this.pendingPermissions.filter((p) => p.requestId !== request_id),
+        {
+          requestId: request_id,
+          slotId: slot_id,
+          sessionId: '',
+          toolCall: tool_call,
+          createdAt: Date.now(),
+        },
+      ];
+    } else if (event.ProposalCreated) {
+      this.loadProposals();
+    }
+  }
+
+  async loadSlots() {
+    try {
+      this.isLoading = true;
+      const slots = await api.agentListSlots();
+      this.slots = slots;
+      if (!this.activeSlotId && slots.length > 0) {
+        this.activeSlotId = slots[0].id;
+      }
+
+      // Populate demo chat history if empty and in demo mode
+      if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+        this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+        this.usageReports = { ...DEMO_USAGE_REPORTS };
+      }
+    } catch (e: any) {
+      this.error = e?.message || String(e);
+      // Fallback to demo slots in browser
+      this.slots = DEMO_SLOTS;
+      this.activeSlotId = DEMO_SLOTS[0].id;
+      this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+      this.usageReports = { ...DEMO_USAGE_REPORTS };
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  selectSlot(id: string) {
+    this.activeSlotId = id;
+    this.error = null;
+  }
+
+  async startSlot(id: string) {
+    try {
+      const updated = await api.agentStart(id);
+      const idx = this.slots.findIndex((s) => s.id === id);
+      if (idx !== -1) {
+        this.slots[idx] = updated;
+      }
+    } catch (e: any) {
+      this.error = `Failed to start slot: ${e?.message || e}`;
+    }
+  }
+
+  async stopSlot(id: string) {
+    try {
+      await api.agentStop(id);
+      const idx = this.slots.findIndex((s) => s.id === id);
+      if (idx !== -1) {
+        this.slots[idx] = { ...this.slots[idx], status: 'stopped', active_pid: null };
+      }
+    } catch (e: any) {
+      this.error = `Failed to stop slot: ${e?.message || e}`;
+    }
+  }
+
+  async sendPrompt(rawPrompt: string) {
+    if (!rawPrompt.trim() || !this.activeSlotId) return;
+    const slotId = this.activeSlotId;
+
+    const formattedPrompt = applyDisciplineDirectives(
+      rawPrompt.trim(),
+      this.isPonytailActive,
+      this.isCavemanActive
+    );
+
+    const userMsg: ChatMessage = {
+      id: `usr-${Date.now()}`,
+      timestamp: Date.now(),
+      role: 'user',
+      content: rawPrompt.trim(),
+    };
+
+    if (!this.chatHistory[slotId]) {
+      this.chatHistory[slotId] = [];
+    }
+    this.chatHistory[slotId] = [...this.chatHistory[slotId], userMsg];
+
+    // Set slot status to busy
+    const idx = this.slots.findIndex((s) => s.id === slotId);
+    if (idx !== -1) {
+      this.slots[idx] = { ...this.slots[idx], status: 'busy' };
+    }
+
+    this.isStreaming = true;
+    this.streamingContent = '';
+
+    try {
+      const response = await api.agentPrompt(slotId, formattedPrompt);
+      const agentMsg: ChatMessage = {
+        id: `agent-${Date.now()}`,
+        timestamp: Date.now(),
+        role: 'agent',
+        content: response.message || this.streamingContent || 'Aksi selesai.',
+        stop_reason: response.stopReason,
+      };
+      this.chatHistory[slotId] = [...this.chatHistory[slotId], agentMsg];
+
+      // Refresh proposals in case agent created diffs
+      await this.loadProposals();
+    } catch (e: any) {
+      const errMsg: ChatMessage = {
+        id: `err-${Date.now()}`,
+        timestamp: Date.now(),
+        role: 'system',
+        content: `Error: ${e?.message || e}`,
+      };
+      this.chatHistory[slotId] = [...this.chatHistory[slotId], errMsg];
+    } finally {
+      this.isStreaming = false;
+      this.streamingContent = '';
+      if (idx !== -1) {
+        this.slots[idx] = { ...this.slots[idx], status: 'ready' };
+      }
+    }
+  }
+
+  async cancelActivePrompt() {
+    if (!this.activeSlotId) return;
+    try {
+      await api.agentCancel(this.activeSlotId);
+      this.isStreaming = false;
+      this.streamingContent = '';
+      const idx = this.slots.findIndex((s) => s.id === this.activeSlotId);
+      if (idx !== -1) {
+        this.slots[idx] = { ...this.slots[idx], status: 'ready' };
+      }
+    } catch (e: any) {
+      console.warn('Cancel failed:', e);
+    }
+  }
+
+  async respondPermission(requestId: string, allow: boolean) {
+    try {
+      await api.agentRespondPermission(requestId, allow);
+      this.pendingPermissions = this.pendingPermissions.filter((p) => p.requestId !== requestId);
+      // Append note to active chat
+      if (this.activeSlotId) {
+        const note: ChatMessage = {
+          id: `perm-note-${Date.now()}`,
+          timestamp: Date.now(),
+          role: 'system',
+          content: allow ? '✓ Izin eksekusi disetujui pengguna.' : '✕ Izin eksekusi ditolak pengguna.',
+        };
+        this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
+      }
+    } catch (e: any) {
+      this.error = `Gagal merespons izin: ${e?.message || e}`;
+    }
+  }
+
+  async loadPermissions() {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      this.pendingPermissions = [...DEMO_PENDING_PERMISSIONS];
+      return;
+    }
+    try {
+      this.pendingPermissions = (await api.agentListPendingPermissions()) || [];
+    } catch (e) {
+      this.pendingPermissions = [];
+    }
+  }
+
+  async loadProposals() {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      this.proposals = [...DEMO_PROPOSALS];
+      return;
+    }
+    try {
+      this.proposals = (await api.agentListProposals(this.activeSlotId || undefined)) || [];
+    } catch (e) {
+      this.proposals = [];
+    }
+  }
+
+  async acceptProposal(proposalId: string) {
+    try {
+      await api.agentAcceptProposal(proposalId);
+      this.proposals = this.proposals.filter((p) => p.id !== proposalId);
+      if (this.activeSlotId) {
+        const note: ChatMessage = {
+          id: `sys-${Date.now()}`,
+          timestamp: Date.now(),
+          role: 'system',
+          content: `✓ Seluruh perubahan usulan (${proposalId}) diterima dan disimpan ke disk. Snapshot Local History telah dibuat.`,
+        };
+        this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
+      }
+    } catch (e: any) {
+      this.error = `Gagal menerima proposal: ${e?.message || e}`;
+    }
+  }
+
+  async rejectProposal(proposalId: string) {
+    try {
+      await api.agentRejectProposal(proposalId);
+      this.proposals = this.proposals.filter((p) => p.id !== proposalId);
+      if (this.activeSlotId) {
+        const note: ChatMessage = {
+          id: `sys-${Date.now()}`,
+          timestamp: Date.now(),
+          role: 'system',
+          content: `✕ Usulan perubahan (${proposalId}) ditolak.`,
+        };
+        this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
+      }
+    } catch (e: any) {
+      this.error = `Gagal menolak proposal: ${e?.message || e}`;
+    }
+  }
+
+  async acceptHunk(proposalId: string, hunkIdx: number) {
+    try {
+      await api.agentAcceptHunk(proposalId, hunkIdx);
+      // Re-load proposals
+      await this.loadProposals();
+    } catch (e: any) {
+      this.error = `Gagal menerima hunk: ${e?.message || e}`;
+    }
+  }
+
+  async detectHermes() {
+    try {
+      this.hermesDetection = await api.agentDetectHermes();
+    } catch (e) {
+      if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+        this.hermesDetection = DEMO_HERMES_DETECTION;
+      }
+    }
+  }
+
+  async loadTeam() {
+    try {
+      this.teamConfig = await api.agentLoadTeam();
+    } catch (e) {
+      if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+        this.teamConfig = DEMO_TEAM_CONFIG;
+      }
+    }
+  }
+
+  async saveTeam(team: TeamConfig) {
+    try {
+      await api.agentSaveTeam(team);
+      this.teamConfig = team;
+      await this.loadSlots();
+    } catch (e: any) {
+      this.error = `Gagal menyimpan konfigurasi tim: ${e?.message || e}`;
+    }
+  }
+
+  async addSlotFromHermes(profile: HermesProfileInfo) {
+    const newSlot: SlotConfig = {
+      id: `hermes-${profile.name}-${Date.now().toString(36)}`,
+      label: profile.name.charAt(0).toUpperCase() + profile.name.slice(1),
+      kind: 'hermes',
+      command: null,
+      hermesProfile: profile.name,
+      model: profile.model || 'auto',
+      fallbackModel: null,
+      permission: 'ask',
+      cwd: 'project',
+    };
+
+    try {
+      await api.agentAddSlot(newSlot);
+      await this.loadSlots();
+      this.selectSlot(newSlot.id);
+    } catch (e: any) {
+      this.error = `Gagal menambahkan slot: ${e?.message || e}`;
+    }
+  }
+
+  setPermissionMode(slotId: string, mode: PermissionMode) {
+    if (mode === 'full') {
+      this.pendingFullSlotId = slotId;
+      this.isFullAccessWarningOpen = true;
+      return;
+    }
+    this.applyPermissionMode(slotId, mode);
+  }
+
+  confirmFullAccess() {
+    if (this.pendingFullSlotId) {
+      this.applyPermissionMode(this.pendingFullSlotId, 'full');
+      this.pendingFullSlotId = null;
+    }
+    this.isFullAccessWarningOpen = false;
+  }
+
+  cancelFullAccess() {
+    this.pendingFullSlotId = null;
+    this.isFullAccessWarningOpen = false;
+  }
+
+  private applyPermissionMode(slotId: string, mode: PermissionMode) {
+    const idx = this.slots.findIndex((s) => s.id === slotId);
+    if (idx !== -1) {
+      const updatedConfig = { ...this.slots[idx].config, permission: mode };
+      this.slots[idx] = { ...this.slots[idx], config: updatedConfig };
+      api.agentUpdateSlot(updatedConfig).catch((err) => {
+        console.warn('Update slot permission failed:', err);
+      });
+    }
+  }
+
+  openFixWithAgent(draft: FixWithAgentDraft) {
+    this.fixWithAgentDraft = draft;
+    if (draft.slotId) {
+      this.activeSlotId = draft.slotId;
+    }
+    this.isFixWithAgentOpen = true;
+  }
+
+  async submitFixWithAgent() {
+    if (!this.fixWithAgentDraft) return;
+    const prompt = this.fixWithAgentDraft.userPrompt;
+    this.isFixWithAgentOpen = false;
+    this.fixWithAgentDraft = null;
+    await this.sendPrompt(prompt);
+  }
+
+  togglePonytail() {
+    this.isPonytailActive = !this.isPonytailActive;
+  }
+
+  toggleCaveman() {
+    this.isCavemanActive = !this.isCavemanActive;
+  }
+}
+
+export const agentsStore = new AgentsStore();
