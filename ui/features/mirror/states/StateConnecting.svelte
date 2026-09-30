@@ -1,15 +1,16 @@
 <script lang="ts">
   import { mirrorStore } from '../mirrorStore.svelte';
+  import { classifyMirrorDevice, formatMirrorConnectingInfo } from '../mirrorErrorLogic';
 
   let serial = $derived(mirrorStore.serial || mirrorStore.deviceName);
+  let classification = $derived(classifyMirrorDevice(mirrorStore.selectedDevice, serial));
+  let info = $derived(formatMirrorConnectingInfo(classification, serial));
 </script>
 
 <div class="connecting-box">
   <div class="spinner-ring" role="progressbar" aria-label="Connecting to device"></div>
-  <div class="connecting-title">Starting scrcpy Server…</div>
-  <div class="connecting-desc">
-    Pushing server v4.1 to {serial}, forwarding adb tunnel, and awaiting H.264 stream.
-  </div>
+  <div class="connecting-title">{info.title}</div>
+  <div class="connecting-desc">{info.desc}</div>
   <button class="btn-secondary" onclick={() => mirrorStore.close()} aria-label="Cancel Connection">
     Cancel
   </button>

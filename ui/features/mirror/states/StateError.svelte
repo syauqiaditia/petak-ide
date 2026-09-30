@@ -2,10 +2,11 @@
   import { onMount } from 'svelte';
   import { mirrorStore } from '../mirrorStore.svelte';
   import { api, type MirrorPermissionStatus } from '../../../lib/api';
+  import { classifyMirrorDevice, sanitizeMirrorErrorMessage } from '../mirrorErrorLogic';
 
   let { onOpenLogcat }: { onOpenLogcat?: () => void } = $props();
 
-  let message = $derived(
+  let rawMessage = $derived(
     mirrorStore.errorMessage || 'Mirror service terminated during connection.'
   );
 
@@ -19,16 +20,23 @@
     }
   });
 
+  let classification = $derived(
+    classifyMirrorDevice(mirrorStore.selectedDevice, mirrorStore.deviceId)
+  );
+
+  let sanitized = $derived(
+    sanitizeMirrorErrorMessage(rawMessage, classification)
+  );
+  let message = $derived(sanitized.message);
+
   let isScreenRecordingError = $derived(
     /screen\s*recording|screen\s*capture|kTCCServiceScreenCapture|tcc|permission|denied|authorized/i.test(message) ||
-    (mirrorStore.isViewOnly && !message.toLowerCase().includes('scrcpy')) ||
     (permStatus !== null && (!permStatus.granted || permStatus.restartNeeded))
   );
 
+  let isIos = $derived(classification.platform === 'ios');
   let isIphonePhysical = $derived(
-    permStatus?.kind === 'physical' ||
-    (mirrorStore.selectedDevice?.kind === 'physical' && mirrorStore.selectedDevice?.platform === 'ios') ||
-    mirrorStore.deviceId.toLowerCase().includes('iphone')
+    classification.kind === 'ios-physical' || permStatus?.kind === 'physical'
   );
 </script>
 
@@ -39,12 +47,14 @@
       <line x1="15" y1="9" x2="9" y2="15"></line>
       <line x1="9" y1="9" x2="15" y2="15"></line>
     </svg>
-    <span>{isScreenRecordingError ? 'Screen Recording Permission' : 'Mirror Connection Failed'}</span>
+    <span>
+      {isScreenRecordingError ? 'Screen Recording Permission' : isIos ? (isIphonePhysical ? 'iPhone Mirror (View-Only)' : 'iOS Simulator Mirror Failed') : 'Mirror Connection Failed'}
+    </span>
   </div>
 
-  {#if isScreenRecordingError}
+  {#if isIos}
     {#if isIphonePhysical}
-      <!-- iPhone Fisik via USB (Bug 8) -->
+      <!-- iPhone Fisik via USB (Bug 3/8) -->
       <div class="permission-guide physical">
         <p class="guide-intro">
           iPhone Fisik via USB (View-Only):
@@ -53,11 +63,11 @@
           <li>Pastikan iPhone terhubung ke Mac dengan <strong>kabel USB</strong></li>
           <li>Pastikan layar iPhone <strong>tidak terkunci (unlocked)</strong></li>
           <li>Ketuk <strong>Trust This Computer</strong> pada layar iPhone dan masukkan PIN jika diminta</li>
-          <li>Aktifkan izin <strong>Screen Recording</strong> jika macOS memintanya</li>
+          <li>Berikan izin <strong>Screen Recording / Camera</strong> pada macOS jika diminta</li>
         </ol>
       </div>
     {:else if permStatus?.restartNeeded}
-      <!-- Perlu Restart Petak (Bug 8) -->
+      <!-- Perlu Restart Petak -->
       <div class="permission-guide warning">
         <p class="guide-intro">
           Izin Screen Recording telah aktif di macOS!
@@ -67,7 +77,7 @@
         </p>
       </div>
     {:else}
-      <!-- iOS Simulator Display (Bug 8: hanya untuk simulator) -->
+      <!-- iOS Simulator Display -->
       <div class="permission-guide">
         <p class="guide-intro">
           macOS memerlukan izin Screen Recording untuk mirroring iOS Simulator:
@@ -80,10 +90,25 @@
         </ol>
       </div>
     {/if}
+
+    {#if message && message !== 'Mirror service terminated during connection.'}
+      <div class="error-desc-code">
+        <code>{message}</code>
+      </div>
+    {/if}
   {:else}
-    <div class="error-desc-summary">
-      scrcpy server handshake failed. Please ensure USB debugging is authorized on your Android device.
-    </div>
+    <!-- Android Platform -->
+    {#if isScreenRecordingError}
+      <div class="permission-guide">
+        <p class="guide-intro">
+          Perlu izin display recording atau USB debugging pada perangkat Android.
+        </p>
+      </div>
+    {:else}
+      <div class="error-desc-summary">
+        scrcpy server handshake failed. Please ensure USB debugging is authorized on your Android device.
+      </div>
+    {/if}
 
     <div class="error-desc-code">
       <code>{message}</code>
@@ -91,7 +116,7 @@
   {/if}
 
   <div class="error-actions">
-    {#if isScreenRecordingError}
+    {#if isScreenRecordingError || isIos}
       <button class="btn-primary" onclick={() => api.openScreenRecordingSettings()} aria-label="Open System Settings">
         Open System Settings
       </button>
@@ -104,7 +129,7 @@
     <button class="btn-danger" onclick={() => mirrorStore.reconnect()} aria-label="Retry Handshake">
       Retry Handshake
     </button>
-    {#if onOpenLogcat && !isScreenRecordingError}
+    {#if onOpenLogcat && !isIos}
       <button class="btn-secondary" onclick={onOpenLogcat} aria-label="View Logcat">
         View Logcat
       </button>

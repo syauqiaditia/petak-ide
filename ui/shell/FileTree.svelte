@@ -1127,12 +1127,6 @@
           <polyline points="4 10 12 18 20 10"/>
         </svg>
       </button>
-      <button class="open-btn" onclick={onPickFolder} title="Open Folder">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-        </svg>
-        <span>Open</span>
-      </button>
     </div>
   </div>
 
@@ -1484,22 +1478,6 @@
   .icon-btn:hover {
     color: #d8d9dc;
     background: #1f2026;
-  }
-  .open-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: #6ea8ff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.15s;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-  }
-  .open-btn:hover {
-    background: #1f2a3d;
   }
   .root-folder {
     display: flex;

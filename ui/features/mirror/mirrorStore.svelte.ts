@@ -115,6 +115,10 @@ class MirrorStore {
     this.pendingInputTimestamp = performance.now();
   }
 
+  get selectedDevice() {
+    return runStore.devices.find((d) => d.id === this.serial) || runStore.selectedDevice || null;
+  }
+
   syncDevice() {
     const dev = runStore.selectedDevice;
     if (dev) {
@@ -227,7 +231,8 @@ class MirrorStore {
       // In dev/preview or when command fails:
       if (this.activeRunSerial === targetSerial) {
         this.status = 'error';
-        this.errorMessage = String(err?.message || err || 'Failed to start mirror session');
+        const raw = err?.message || (typeof err === 'object' && err?.message ? err.message : String(err || 'Failed to start mirror session'));
+        this.errorMessage = raw;
       }
     }
   }

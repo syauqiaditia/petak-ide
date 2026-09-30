@@ -4,6 +4,7 @@
   import { api, type KotlinLsStatus, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
   import { editorSettings } from '../editor/editorSettings.svelte';
   import { getFormatOnSaveConfig, setFormatOnSave } from '../editor/formatLogic';
+  import AccountsSettings from '../accounts/AccountsSettings.svelte';
 
   let formatOnSaveState = $state<Record<string, boolean>>({});
 
@@ -209,6 +210,8 @@
           {/if}
           <button class="save-btn" onclick={handleSaveConfig}>Save & Re-detect</button>
         </div>
+
+        <AccountsSettings />
       </div>
     {/if}
 

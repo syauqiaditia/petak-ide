@@ -5,10 +5,50 @@
  * Commit = Staged saja (Commit (N))
  */
 
+import type { GitStatusEntry } from './types.ts';
+
 export interface CommitSelectionState {
   stagedPaths: string[];
   changedPaths: string[];
   untrackedPaths: string[];
+}
+
+export function isEntryStaged(entry: GitStatusEntry): boolean {
+  return entry.index !== 'unmodified' && entry.index !== 'untracked';
+}
+
+export function filterUnifiedChanges(entries: GitStatusEntry[] = []): GitStatusEntry[] {
+  return entries.filter(
+    (e) => e.index !== 'unmodified' || e.worktree !== 'unmodified' || e.conflicted
+  );
+}
+
+export function countCheckedEntries(entries: GitStatusEntry[] = []): number {
+  return entries.filter(isEntryStaged).length;
+}
+
+export function getUnifiedStatusLetter(entry: GitStatusEntry): { char: string; color: string } {
+  if (entry.conflicted) {
+    return { char: '!', color: '#e8b45a' };
+  }
+  const isStaged = isEntryStaged(entry);
+  const state = isStaged ? entry.index : entry.worktree;
+  switch (state) {
+    case 'modified':
+      return { char: 'M', color: '#9cc3ff' };
+    case 'added':
+      return { char: 'A', color: '#7fc98f' };
+    case 'deleted':
+      return { char: 'D', color: '#f07a74' };
+    case 'renamed':
+      return { char: 'R', color: '#6ea8ff' };
+    case 'copied':
+      return { char: 'C', color: '#7fc98f' };
+    case 'untracked':
+      return { char: '?', color: '#7fc98f' };
+    default:
+      return { char: 'M', color: '#8b8f98' };
+  }
 }
 
 export function getTotalFilesCount(state: CommitSelectionState): number {

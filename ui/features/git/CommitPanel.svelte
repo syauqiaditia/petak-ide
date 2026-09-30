@@ -8,6 +8,12 @@
     isPartiallySelected,
     planSelectAllToggle,
     getFileContextActions,
+    getCommitButtonLabel,
+    canExecuteCommit,
+    isEntryStaged,
+    filterUnifiedChanges,
+    countCheckedEntries,
+    getUnifiedStatusLetter,
     type FileContextAction,
   } from './commitSelectionLogic';
 
@@ -29,16 +35,21 @@
     }
   });
 
-  let allFilePaths = $derived([
-    ...gitStore.stagedEntries.map((e) => e.path),
-    ...gitStore.changesEntries.map((e) => e.path),
-    ...gitStore.untrackedEntries.map((e) => e.path),
-  ]);
-  let totalFiles = $derived(allFilePaths.length);
-  let stagedPaths = $derived(gitStore.stagedEntries.map((e) => e.path));
+  let allChanges = $derived(filterUnifiedChanges(gitStore.status?.entries || []));
+  let totalFiles = $derived(allChanges.length);
+  let checkedCount = $derived(countCheckedEntries(allChanges));
+  let allFilePaths = $derived(allChanges.map((e) => e.path));
+  let stagedPaths = $derived(allChanges.filter(isEntryStaged).map((e) => e.path));
 
-  let allSelected = $derived(isAllSelected(gitStore.stagedEntries.length, totalFiles));
-  let partiallySelected = $derived(isPartiallySelected(gitStore.stagedEntries.length, totalFiles));
+  let allSelected = $derived(isAllSelected(checkedCount, totalFiles));
+  let partiallySelected = $derived(isPartiallySelected(checkedCount, totalFiles));
+
+  let canCommit = $derived(
+    canExecuteCommit(checkedCount, commitMessage, isAmend, isCommitting)
+  );
+  let commitBtnLabel = $derived(
+    getCommitButtonLabel(checkedCount, isAmend, isCommitting)
+  );
 
   async function handleToggleSelectAll() {
     const plan = planSelectAllToggle(stagedPaths, allFilePaths);
@@ -46,6 +57,15 @@
       await gitStore.stageFiles(plan.paths);
     } else {
       await gitStore.unstageFiles(plan.paths);
+    }
+  }
+
+  async function handleToggleFile(entry: GitStatusEntry, e: MouseEvent) {
+    e.stopPropagation();
+    if (isEntryStaged(entry)) {
+      await gitStore.unstageFiles([entry.path]);
+    } else {
+      await gitStore.stageFiles([entry.path]);
     }
   }
 
@@ -127,12 +147,6 @@
   let subjectLen = $derived(subject.length);
   let hasLine2Warning = $derived(lines.length > 1 && lines[1].trim().length > 0);
 
-  let canCommit = $derived(
-    !isCommitting &&
-    commitMessage.trim().length > 0 &&
-    (gitStore.stagedEntries.length > 0 || isAmend)
-  );
-
   async function handleAmendToggle(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
     isAmend = checked;
@@ -156,7 +170,7 @@
       if (isAmend) {
         await gitStore.commit(commitMessage.trim(), true);
       } else {
-        const paths = gitStore.stagedEntries.map((e) => e.path);
+        const paths = stagedPaths;
         if (gitStore.root) {
           await api.gitCommitSelected(gitStore.root, commitMessage.trim(), paths);
           await gitStore.refresh();
@@ -207,7 +221,7 @@
 <svelte:window onclick={() => { if (contextMenuOpen) contextMenuOpen = false; }} />
 
 <div class="commit-panel">
-  <!-- Select All Bar (F3) -->
+  <!-- Select All Bar (F3 / Feature C) -->
   {#if totalFiles > 0}
     <div class="select-all-bar">
       <label class="select-all-label">
@@ -218,136 +232,56 @@
           indeterminate={partiallySelected}
           onchange={handleToggleSelectAll}
         />
-        <span class="select-all-text">Select All ({gitStore.stagedEntries.length}/{totalFiles})</span>
+        <span class="select-all-text">Select All ({checkedCount}/{totalFiles})</span>
       </label>
     </div>
   {/if}
 
-  <!-- File Groups List -->
+  <!-- Single Unified Changes List (Feature C) -->
   <div class="files-container">
-    <!-- 1. Staged Changes -->
     <div class="group-section">
       <div class="group-header">
         <label class="group-header-label">
           <input
             type="checkbox"
             class="file-checkbox"
-            checked={gitStore.stagedEntries.length > 0}
-            disabled={gitStore.stagedEntries.length === 0}
-            onchange={() => gitStore.unstageAll()}
-            title="Unstage all"
+            checked={allSelected}
+            indeterminate={partiallySelected}
+            disabled={totalFiles === 0}
+            onchange={handleToggleSelectAll}
+            title={allSelected ? "Deselect All" : "Select All"}
           />
-          <span class="group-title">STAGED ({gitStore.stagedEntries.length})</span>
+          <span class="group-title">CHANGES ({totalFiles})</span>
         </label>
-        {#if gitStore.stagedEntries.length > 0}
-          <button
-            class="action-btn"
-            title="Unstage all"
-            onclick={() => gitStore.unstageAll()}
-          >
-            Unstage All
-          </button>
-        {/if}
       </div>
 
       <div class="group-list">
-        {#if gitStore.stagedEntries.length === 0}
-          <div class="empty-hint">No staged changes</div>
+        {#if totalFiles === 0}
+          <div class="empty-hint">No changes</div>
         {:else}
-          {#each gitStore.stagedEntries as entry (entry.path)}
-            {@const { char, color } = getStatusLetter(entry, true)}
+          {#each allChanges as entry (entry.path)}
+            {@const isChecked = isEntryStaged(entry)}
+            {@const { char, color } = getUnifiedStatusLetter(entry)}
             {@const { name, dir } = formatPath(entry.path)}
-            {@const isSelected =
-              gitStore.selectedFile?.path === entry.path &&
-              gitStore.selectedFile?.kind === 'staged'}
-            <div
-              class="file-row"
-              class:selected={isSelected}
-              onclick={() => gitStore.selectFile(entry.path, 'staged')}
-              oncontextmenu={(e) => handleRowContextMenu(e, entry, true)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => {
-                if (e.key === 'Enter') gitStore.selectFile(entry.path, 'staged');
-              }}
-            >
-              <input
-                type="checkbox"
-                class="file-checkbox"
-                checked={true}
-                title="Unstage file"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  gitStore.unstageFiles([entry.path]);
-                }}
-              />
-              <span class="status-badge" style="color: {color};">{char}</span>
-              <span class="file-name" title={entry.path}>{name}</span>
-              {#if dir}
-                <span class="file-dir">{dir}</span>
-              {/if}
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </div>
-
-    <!-- 2. Changes (Worktree) -->
-    <div class="group-section">
-      <div class="group-header">
-        <label class="group-header-label">
-          <input
-            type="checkbox"
-            class="file-checkbox"
-            checked={false}
-            disabled={gitStore.changesEntries.length === 0}
-            onchange={() => gitStore.stageAll()}
-            title="Stage all changes"
-          />
-          <span class="group-title">CHANGES ({gitStore.changesEntries.length})</span>
-        </label>
-        {#if gitStore.changesEntries.length > 0}
-          <button
-            class="action-btn"
-            title="Stage all changes"
-            onclick={() => gitStore.stageAll()}
-          >
-            Stage All
-          </button>
-        {/if}
-      </div>
-
-      <div class="group-list">
-        {#if gitStore.changesEntries.length === 0}
-          <div class="empty-hint">No unstaged changes</div>
-        {:else}
-          {#each gitStore.changesEntries as entry (entry.path)}
-            {@const { char, color } = getStatusLetter(entry, false)}
-            {@const { name, dir } = formatPath(entry.path)}
-            {@const isSelected =
-              gitStore.selectedFile?.path === entry.path &&
-              gitStore.selectedFile?.kind === 'worktree'}
+            {@const isSelected = gitStore.selectedFile?.path === entry.path}
             <div
               class="file-row"
               class:selected={isSelected}
               class:conflicted={entry.conflicted}
-              onclick={() => gitStore.selectFile(entry.path, 'worktree')}
-              oncontextmenu={(e) => handleRowContextMenu(e, entry, false)}
+              onclick={() => gitStore.selectFile(entry.path, isChecked ? 'staged' : 'worktree')}
+              oncontextmenu={(e) => handleRowContextMenu(e, entry, isChecked)}
               role="button"
               tabindex="0"
               onkeydown={(e) => {
-                if (e.key === 'Enter') gitStore.selectFile(entry.path, 'worktree');
+                if (e.key === 'Enter') gitStore.selectFile(entry.path, isChecked ? 'staged' : 'worktree');
               }}
             >
               <input
                 type="checkbox"
                 class="file-checkbox"
-                checked={false}
-                title="Stage file"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  gitStore.stageFiles([entry.path]);
-                }}
+                checked={isChecked}
+                title={isChecked ? "Uncheck to exclude from commit" : "Check to include in commit"}
+                onclick={(e) => handleToggleFile(entry, e)}
               />
               <span class="status-badge" style="color: {color};">{char}</span>
               <span class="file-name" title={entry.path}>{name}</span>
@@ -361,74 +295,6 @@
         {/if}
       </div>
     </div>
-
-    <!-- 3. Untracked -->
-    {#if gitStore.untrackedEntries.length > 0}
-      <div class="group-section">
-        <div class="group-header">
-          <label class="group-header-label">
-            <input
-              type="checkbox"
-              class="file-checkbox"
-              checked={false}
-              onchange={() => {
-                const paths = gitStore.untrackedEntries.map((e) => e.path);
-                gitStore.stageFiles(paths);
-              }}
-              title="Stage untracked files"
-            />
-            <span class="group-title">UNTRACKED ({gitStore.untrackedEntries.length})</span>
-          </label>
-          <button
-            class="action-btn"
-            title="Stage untracked files"
-            onclick={() => {
-              const paths = gitStore.untrackedEntries.map((e) => e.path);
-              gitStore.stageFiles(paths);
-            }}
-          >
-            Stage All
-          </button>
-        </div>
-
-        <div class="group-list">
-          {#each gitStore.untrackedEntries as entry (entry.path)}
-            {@const { char, color } = getStatusLetter(entry, false)}
-            {@const { name, dir } = formatPath(entry.path)}
-            {@const isSelected =
-              gitStore.selectedFile?.path === entry.path &&
-              gitStore.selectedFile?.kind === 'worktree'}
-            <div
-              class="file-row"
-              class:selected={isSelected}
-              onclick={() => gitStore.selectFile(entry.path, 'worktree')}
-              oncontextmenu={(e) => handleRowContextMenu(e, entry, false)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => {
-                if (e.key === 'Enter') gitStore.selectFile(entry.path, 'worktree');
-              }}
-            >
-              <input
-                type="checkbox"
-                class="file-checkbox"
-                checked={false}
-                title="Stage file"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  gitStore.stageFiles([entry.path]);
-                }}
-              />
-              <span class="status-badge" style="color: {color};">{char}</span>
-              <span class="file-name" title={entry.path}>{name}</span>
-              {#if dir}
-                <span class="file-dir">{dir}</span>
-              {/if}
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
   </div>
 
   <!-- Commit Box at Bottom -->
@@ -484,13 +350,7 @@
         disabled={!canCommit}
         onclick={doCommit}
       >
-        {#if isCommitting}
-          Committing...
-        {:else if isAmend}
-          Amend Commit
-        {:else}
-          Commit ({gitStore.stagedEntries.length})
-        {/if}
+        {commitBtnLabel}
       </button>
     </div>
   </div>

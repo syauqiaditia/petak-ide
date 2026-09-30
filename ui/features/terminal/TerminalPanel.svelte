@@ -14,6 +14,15 @@
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
   import { runStore } from '../run/runStore.svelte';
   import { logcatStore } from '../run/logcatStore.svelte';
+  import {
+    clampBottomPanelHeight,
+    toggleMaximizeBottomPanel,
+    DEFAULT_BOTTOM_PANEL_HEIGHT,
+  } from './bottomPanelResize';
+
+  let panelHeight = $state<number>(DEFAULT_BOTTOM_PANEL_HEIGHT);
+  let restoredHeight = $state<number>(DEFAULT_BOTTOM_PANEL_HEIGHT);
+  let isDragging = $state(false);
 
   let {
     folderPath = '',
@@ -278,8 +287,67 @@
       resizeObserver.observe(bodyElement);
     }
 
+    // Load persisted bottom panel height (Feature B)
+    try {
+      const savedStorage = typeof localStorage !== 'undefined' ? localStorage.getItem('petak.bottom_panel_height') : null;
+      let initialH = savedStorage ? parseInt(savedStorage, 10) : toolchainStore.config.bottom_panel_height;
+      if (!initialH || isNaN(initialH)) {
+        initialH = DEFAULT_BOTTOM_PANEL_HEIGHT;
+      }
+      const clamped = clampBottomPanelHeight(initialH, window.innerHeight || 800);
+      panelHeight = clamped;
+      restoredHeight = clamped;
+    } catch {}
+
     await createNewTab();
   });
+
+  function handleResizeStart(e: MouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    isDragging = true;
+    const startY = e.clientY;
+    const startH = panelHeight;
+
+    function onMouseMove(ev: MouseEvent) {
+      const delta = startY - ev.clientY;
+      panelHeight = clampBottomPanelHeight(startH + delta, window.innerHeight || 800);
+    }
+
+    function onMouseUp() {
+      isDragging = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      savePanelHeight(panelHeight);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function handleToggleMaximize(e: MouseEvent) {
+    e.preventDefault();
+    const res = toggleMaximizeBottomPanel(panelHeight, restoredHeight, window.innerHeight || 800);
+    panelHeight = res.height;
+    restoredHeight = res.nextRestoredHeight;
+    savePanelHeight(panelHeight);
+  }
+
+  async function savePanelHeight(h: number) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('petak.bottom_panel_height', String(h));
+    }
+    try {
+      const cfg = await api.toolchainGetConfig();
+      await api.toolchainSaveConfig({
+        ...cfg,
+        bottom_panel_height: h,
+        bottomPanelHeight: h,
+      });
+    } catch (err) {
+      console.warn('Failed to save bottom_panel_height:', err);
+    }
+  }
 
   onDestroy(() => {
     if (resizeObserver) {
@@ -305,7 +373,17 @@
   });
 </script>
 
-<div class="terminal-panel">
+<div class="terminal-panel" style:height="{panelHeight}px">
+  <div
+    class="panel-resize-handle"
+    class:active={isDragging}
+    role="separator"
+    aria-orientation="horizontal"
+    aria-label="Resize bottom panel"
+    onmousedown={handleResizeStart}
+    ondblclick={handleToggleMaximize}
+    title="Drag border untuk ubah tinggi, double-click untuk toggle maximize/restore"
+  ></div>
   <div class="panel-header">
     <div class="tabs-list">
       <!-- Run Tab -->
@@ -536,6 +614,7 @@
 
 <style>
   .terminal-panel {
+    position: relative;
     height: 232px;
     flex-shrink: 0;
     display: flex;
@@ -545,6 +624,23 @@
     user-select: none;
     -webkit-user-select: none;
     z-index: 5;
+  }
+
+  .panel-resize-handle {
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    height: 7px;
+    cursor: row-resize;
+    z-index: 100;
+    background: transparent;
+    transition: background 0.15s;
+  }
+
+  .panel-resize-handle:hover,
+  .panel-resize-handle.active {
+    background: #6ea8ff;
   }
 
   .panel-header {

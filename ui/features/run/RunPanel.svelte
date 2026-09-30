@@ -75,6 +75,30 @@
       </button>
     {/if}
 
+    <button
+      class="action-btn restart-action-btn"
+      onclick={() => runStore.restartDaemon()}
+      title="Restart Flutter Daemon"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+      </svg>
+      Restart Flutter Daemon
+    </button>
+
+    <button
+      class="action-btn restart-action-btn"
+      onclick={() => runStore.restartConnection()}
+      title="Restart connection"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+      Restart connection
+    </button>
+
     {#if runStore.state === 'running' || runStore.state === 'reloading'}
       <button
         class="action-btn reload-btn"
@@ -87,17 +111,17 @@
 
       <button
         class="action-btn restart-btn"
-        onclick={() => runStore.reload(true)}
+        onclick={() => runStore.hotRestart()}
         title="Hot Restart"
         disabled={runStore.isReloading}
       >
-        🔄 Restart
+        🔄 Hot Restart
       </button>
 
       <button
         class="action-btn stop-btn"
         onclick={() => runStore.stopRun()}
-        title="Stop App"
+        title="Stop"
       >
         ⏹ Stop
       </button>

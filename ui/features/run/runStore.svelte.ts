@@ -208,6 +208,55 @@ class RunStore {
     this.selectedDeviceId = pruneDeviceSelection(this.selectedDeviceId, this.devices);
   }
 
+  async refreshDevices() {
+    try {
+      const list = await api.devicesRefresh();
+      if (Array.isArray(list)) {
+        this.updateDevices(list as any);
+      }
+    } catch {
+      try {
+        const snap = await api.devicesSnapshot();
+        if (snap) {
+          this.updateSnapshot(snap);
+        } else {
+          const list = await api.devicesList();
+          this.updateDevices(list);
+        }
+      } catch {}
+    }
+  }
+
+  async restartDaemon() {
+    this.uiState = 'idle';
+    this.state = 'stopped';
+    this.runId = null;
+    this.pid = null;
+    try {
+      await api.runRestartDaemon();
+    } catch (e) {
+      console.warn('[runStore] Failed to restart daemon:', e);
+    }
+    await this.refreshDevices();
+  }
+
+  async restartConnection() {
+    this.uiState = 'idle';
+    this.state = 'stopped';
+    this.runId = null;
+    this.pid = null;
+    try {
+      await api.runRestartConnection();
+    } catch (e) {
+      console.warn('[runStore] Failed to restart connection:', e);
+    }
+    await this.refreshDevices();
+  }
+
+  async hotRestart() {
+    return this.reload(true);
+  }
+
   async refreshAvds() {
     this.avdsLoading = true;
     try {

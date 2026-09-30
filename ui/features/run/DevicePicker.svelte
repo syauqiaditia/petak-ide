@@ -1,10 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { runStore } from './runStore.svelte';
-  import { groupDevices, type PickerDeviceItem } from './deviceLogic';
+  import {
+    groupDevices,
+    getDeviceStatusLabel,
+    getDeviceTooltip,
+    type PickerDeviceItem,
+  } from './deviceLogic';
   import { popupStore } from '../../shell/popupStore.svelte';
 
   let open = $derived(popupStore.isOpen('device'));
+  let isRefreshing = $state(false);
+
+  async function handleRefreshDevices(e: MouseEvent) {
+    e.stopPropagation();
+    if (isRefreshing) return;
+    isRefreshing = true;
+    try {
+      await runStore.refreshDevices();
+    } finally {
+      isRefreshing = false;
+    }
+  }
 
   onMount(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('picker-open')) {
@@ -145,16 +162,19 @@
           <div class="menu-header" class:mt={emulatorItems.length > 0 || simulatorItems.length > 0}>PHYSICAL DEVICES</div>
           {#each connectedPhysical as item}
             {@const isSelected = activeItem?.id === item.id}
+            {@const statusLabel = getDeviceStatusLabel(item)}
+            {@const tooltip = getDeviceTooltip(item)}
             <button
               class="menu-item"
               class:selected={isSelected}
               onclick={() => handleSelect(item.id)}
+              title={tooltip}
             >
               <span class="status-dot online"></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
                 <span class="item-desc">
-                  {item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {item.transport === 'wifi' ? 'Wi-Fi' : 'USB'} · {item.id}
+                  {item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {statusLabel} · {item.id}
                 </span>
               </div>
               {#if isSelected}
@@ -190,45 +210,63 @@
           {/each}
         {/if}
 
-        <!-- Paired but Not Connected Devices -->
+        <!-- Paired but Not Connected / Locked Devices -->
         {#if pairedPhysical.length > 0}
           <div class="menu-header mt not-connected">NOT CONNECTED</div>
           {#each pairedPhysical as item}
+            {@const statusLabel = getDeviceStatusLabel(item)}
+            {@const tooltip = getDeviceTooltip(item)}
+            {@const isLocked = item.connState === 'locked'}
             <div
               class="menu-item paired"
-              title="Device belum terhubung (status: Paired). Hubungkan via kabel USB atau aktifkan koneksi jaringan."
+              class:locked={isLocked}
+              title={tooltip}
               role="button"
               tabindex="-1"
             >
-              <span class="status-dot paired"></span>
+              <span class="status-dot" class:paired={!isLocked} class:locked={isLocked}></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
                 <span class="item-desc">
-                  {item.platform === 'ios' ? 'iPhone' : 'Android'} · {item.transport === 'wifi' ? 'Wi-Fi' : 'USB'} · Paired • tidak terhubung
+                  {item.platform === 'ios' ? 'iPhone' : 'Android'} · {statusLabel}
                 </span>
               </div>
-              <span class="paired-tag">Paired</span>
+              <span class="paired-tag" class:locked-tag={isLocked}>{isLocked ? 'Locked' : 'Paired'}</span>
             </div>
           {/each}
         {/if}
       {/if}
 
-      {#if onOpenDevicesPanel}
-        <div class="divider"></div>
+      <div class="divider"></div>
+      <div class="menu-footer-actions">
         <button
-          class="menu-action-btn"
-          onclick={() => {
-            popupStore.close('device');
-            onOpenDevicesPanel();
-          }}
+          class="menu-action-btn refresh-btn"
+          onclick={handleRefreshDevices}
+          disabled={isRefreshing}
+          title="Refresh devices (panggil devices_refresh)"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <rect x="7" y="3" width="10" height="18" rx="2"></rect>
-            <path d="M11 18h2"></path>
+          <svg class:spin={isRefreshing} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
           </svg>
-          Manage Devices & Emulators…
+          {isRefreshing ? 'Refreshing…' : 'Refresh Devices'}
         </button>
-      {/if}
+
+        {#if onOpenDevicesPanel}
+          <button
+            class="menu-action-btn"
+            onclick={() => {
+              popupStore.close('device');
+              onOpenDevicesPanel();
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <rect x="7" y="3" width="10" height="18" rx="2"></rect>
+              <path d="M11 18h2"></path>
+            </svg>
+            Manage Devices & Emulators…
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -283,6 +321,9 @@
   }
   .status-dot.paired {
     background: #8b8f98;
+  }
+  .status-dot.locked {
+    background: #e8b45a;
   }
   .dropdown-menu {
     position: absolute;
@@ -351,6 +392,17 @@
     padding: 1px 6px;
     border-radius: 4px;
     flex-shrink: 0;
+  }
+  .locked-tag {
+    color: #e8b45a;
+    background: #322818;
+  }
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   .item-text {
     flex: 1;

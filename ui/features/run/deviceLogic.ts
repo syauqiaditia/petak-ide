@@ -21,8 +21,11 @@ export interface SnapshotPhysical {
   id: string;
   name: string;
   platform: DevicePlatform;
-  transport: DeviceTransport;
+  transport: DeviceTransport | 'wired' | string;
   connection?: DeviceConnection;
+  connState?: string;
+  tunnelState?: string | null;
+  pairingState?: string | null;
   state?: string;
   sdk?: string;
   flutterId?: string | null;
@@ -49,11 +52,54 @@ export interface PickerDeviceItem {
   group: 'Emulator' | 'Simulator' | 'Physical' | 'Desktop' | 'Web';
   state: 'online' | 'booting' | 'running' | 'offline';
   connection: DeviceConnection;
-  transport?: DeviceTransport;
+  connState?: string;
+  tunnelState?: string | null;
+  pairingState?: string | null;
+  transport?: DeviceTransport | 'wired' | string;
   platform: DevicePlatform;
   flutterId?: string | null;
   sdk?: string;
   runnable?: boolean;
+}
+
+export function getDeviceStatusLabel(item: {
+  connState?: string;
+  connection?: string;
+  transport?: string | null;
+}): string {
+  const isWired = item.transport === 'wired';
+  const isWifi = item.transport === 'wifi';
+
+  if (item.connState === 'locked') {
+    return 'Terkunci/Perlu dibuka';
+  }
+
+  if (item.connState === 'connected_usb') {
+    return isWired ? 'Terhubung (USB)' : 'Terhubung';
+  }
+
+  if (item.connState === 'connected_wifi' || (item.connection === 'connected' && isWifi)) {
+    return 'Terhubung (Wi-Fi)';
+  }
+
+  if (item.connection === 'connected') {
+    return isWired ? 'Terhubung (USB)' : 'Terhubung';
+  }
+
+  if (item.connState === 'disconnected' || item.connection === 'paired' || item.connection === 'offline') {
+    return 'Tidak terhubung';
+  }
+
+  return 'Tidak terhubung';
+}
+
+export function getDeviceTooltip(item: {
+  tunnelState?: string | null;
+  pairingState?: string | null;
+}): string {
+  const tunnel = item.tunnelState ?? 'None';
+  const pairing = item.pairingState ?? 'None';
+  return `tunnelState: ${tunnel} · pairingState: ${pairing}`;
 }
 
 export interface GroupedDevices {
@@ -141,16 +187,21 @@ export function groupDevices(
   } else {
     // Fallback parsing from legacy devices & avds
     for (const dev of legacyDevices) {
-      if (dev.kind === 'physical') {
+      if (dev.kind === 'physical' || (dev as any).kind === 'ios-physical') {
         const isWifi = dev.id.includes(':') || dev.id.includes('wireless') || (dev as any).transport === 'wifi';
-        const transport: DeviceTransport = (dev as any).transport || (isWifi ? 'wifi' : 'usb');
-        const connection: DeviceConnection = (dev as any).connection || (dev.state === 'online' ? 'connected' : 'offline');
+        const rawTransport = (dev as any).transport;
+        const transport = rawTransport || (isWifi ? 'wifi' : 'wired');
+        const connState = (dev as any).connState || ((dev as any).state === 'online' ? (transport === 'wired' ? 'connected_usb' : 'connected_wifi') : 'disconnected');
+        const connection: DeviceConnection = (dev as any).connection || (connState === 'locked' ? 'paired' : dev.state === 'online' ? 'connected' : 'offline');
         physicalDevices.push({
           id: dev.id,
           name: dev.name,
           platform: dev.platform,
           transport,
           connection,
+          connState,
+          tunnelState: (dev as any).tunnelState ?? null,
+          pairingState: (dev as any).pairingState ?? null,
           state: dev.state,
           sdk: dev.sdk ?? undefined,
           flutterId: dev.state === 'online' && connection === 'connected' ? dev.id : null,
@@ -261,13 +312,17 @@ export function groupDevices(
       // Hidden from dropdown!
       continue;
     }
-    if (conn === 'paired') {
+    const isLocked = phys.connState === 'locked';
+    if (conn === 'paired' || isLocked) {
       pickerItems.push({
         id: phys.id,
         name: phys.name,
         group: 'Physical',
         state: 'offline',
         connection: 'paired',
+        connState: phys.connState,
+        tunnelState: phys.tunnelState,
+        pairingState: phys.pairingState,
         platform: phys.platform,
         flutterId: phys.flutterId ?? null,
         transport: phys.transport,
@@ -281,6 +336,9 @@ export function groupDevices(
         group: 'Physical',
         state: 'online',
         connection: 'connected',
+        connState: phys.connState,
+        tunnelState: phys.tunnelState,
+        pairingState: phys.pairingState,
         platform: phys.platform,
         flutterId: phys.flutterId ?? phys.id,
         transport: phys.transport,
