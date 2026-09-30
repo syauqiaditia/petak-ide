@@ -45,6 +45,8 @@ pub fn parse_simctl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::E
                 continue;
             }
 
+            crate::run::device::register_simulator_udid(&item.udid);
+
             let state = match item.state.as_str() {
                 "Booted" => DeviceState::Online,
                 "Shutdown" => DeviceState::Offline,
@@ -73,6 +75,13 @@ pub fn parse_simctl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::E
                 group: Some("simulator".to_string()),
                 transport: None,
                 connection,
+                conn_state: Some(if state == DeviceState::Online {
+                    "connected_usb".to_string()
+                } else {
+                    "disconnected".to_string()
+                }),
+                tunnel_state: None,
+                pairing_state: None,
             });
         }
     }
@@ -256,21 +265,40 @@ pub fn parse_devicectl_devices(input: &str) -> Result<Vec<Device>, serde_json::E
                         .unwrap_or("");
 
                     let name_lower = name.to_lowercase();
-                    let transport = if transport_type == "wifi"
-                        || transport_type == "wireless"
-                        || transport_type == "localNetwork"
-                        || name_lower.contains("wireless")
-                        || name_lower.contains("wifi")
-                        || item.identifier.contains(':')
-                    {
-                        Some("wifi".to_string())
-                    } else if transport_type == "wired"
-                        || transport_type == "usb"
-                        || connection == "connected"
-                    {
-                        Some("usb".to_string())
+                    let transport = match transport_type.to_lowercase().as_str() {
+                        "wired" | "usb" => Some("wired".to_string()),
+                        "wifi" | "wireless" | "localnetwork" => Some("wifi".to_string()),
+                        _ => {
+                            if item.identifier.contains(':')
+                                || name_lower.contains("wireless")
+                                || name_lower.contains("wifi")
+                            {
+                                Some("wifi".to_string())
+                            } else {
+                                None
+                            }
+                        }
+                    };
+
+                    let tunnel_state = item
+                        .connection_properties
+                        .as_ref()
+                        .and_then(|c| c.tunnel_state.clone());
+                    let pairing_state = item
+                        .connection_properties
+                        .as_ref()
+                        .and_then(|c| c.pairing_state.clone());
+
+                    let conn_state = if connection == "connected" {
+                        if transport.as_deref() == Some("wifi") {
+                            Some("connected_wifi".to_string())
+                        } else {
+                            Some("connected_usb".to_string())
+                        }
+                    } else if tunnel.contains("locked") || pairing.contains("locked") {
+                        Some("locked".to_string())
                     } else {
-                        Some("unknown".to_string())
+                        Some("disconnected".to_string())
                     };
 
                     devices.push(Device {
@@ -284,6 +312,9 @@ pub fn parse_devicectl_devices(input: &str) -> Result<Vec<Device>, serde_json::E
                         group: Some("physical".to_string()),
                         transport,
                         connection,
+                        conn_state,
+                        tunnel_state,
+                        pairing_state,
                     });
                 }
             }
@@ -356,13 +387,22 @@ pub fn parse_devicectl_devices_table(table_str: &str) -> Vec<Device> {
             || id.contains(':')
         {
             Some("wifi".to_string())
-        } else if line_lower.contains("wired")
-            || line_lower.contains("usb")
-            || connection == "connected"
-        {
-            Some("usb".to_string())
+        } else if line_lower.contains("wired") || line_lower.contains("usb") {
+            Some("wired".to_string())
         } else {
-            Some("unknown".to_string())
+            None
+        };
+
+        let conn_state = if connection == "connected" {
+            if transport.as_deref() == Some("wifi") {
+                Some("connected_wifi".to_string())
+            } else {
+                Some("connected_usb".to_string())
+            }
+        } else if line_lower.contains("locked") {
+            Some("locked".to_string())
+        } else {
+            Some("disconnected".to_string())
         };
 
         devices.push(Device {
@@ -376,6 +416,9 @@ pub fn parse_devicectl_devices_table(table_str: &str) -> Vec<Device> {
             group: Some("physical".to_string()),
             transport,
             connection,
+            conn_state,
+            tunnel_state: None,
+            pairing_state: None,
         });
     }
     devices
@@ -489,7 +532,8 @@ mod tests {
                             "osVersionNumber": "17.4.1"
                         },
                         "connectionProperties": {
-                            "tunnelState": "connected"
+                            "tunnelState": "connected",
+                            "transportType": "wired"
                         },
                         "visibility": "visible"
                     }
@@ -506,7 +550,7 @@ mod tests {
         assert_eq!(dev.kind, DeviceKind::Physical);
         assert_eq!(dev.state, DeviceState::Online);
         assert_eq!(dev.connection, "connected");
-        assert_eq!(dev.transport.as_deref(), Some("usb"));
+        assert_eq!(dev.transport.as_deref(), Some("wired"));
         assert_eq!(dev.sdk, Some("iOS 17.4.1".to_string()));
     }
 
@@ -525,7 +569,7 @@ Prio               00008030-001234567890                 unavailable            
         let d_connected = devices.iter().find(|d| d.id == "00008130-001234567890").unwrap();
         assert_eq!(d_connected.connection, "connected");
         assert_eq!(d_connected.state, DeviceState::Online);
-        assert_eq!(d_connected.transport.as_deref(), Some("usb"));
+        assert_eq!(d_connected.transport.as_deref(), None);
         assert_eq!(d_connected.flutter_id.as_deref(), Some("00008130-001234567890"));
 
         let d_paired = devices.iter().find(|d| d.id == "00008101-001234567890").unwrap();
@@ -572,17 +616,24 @@ Prio               00008030-001234567890                 unavailable            
         let d1 = devices.iter().find(|d| d.id == "00008130-001234567890").unwrap();
         assert_eq!(d1.connection, "connected");
         assert_eq!(d1.state, DeviceState::Online);
-        assert_eq!(d1.transport.as_deref(), Some("usb"));
+        assert_eq!(d1.transport.as_deref(), Some("wired"));
+        assert_eq!(d1.conn_state.as_deref(), Some("connected_usb"));
 
         let d2 = devices.iter().find(|d| d.id == "00008101-001234567890").unwrap();
         assert_eq!(d2.connection, "paired");
         assert_eq!(d2.state, DeviceState::Offline);
         assert_eq!(d2.transport.as_deref(), Some("wifi"));
+        assert_eq!(d2.conn_state.as_deref(), Some("disconnected"));
+        assert_eq!(d2.pairing_state.as_deref(), Some("paired"));
+        assert_eq!(d2.tunnel_state.as_deref(), Some("available (paired)"));
         assert_eq!(d2.flutter_id, None);
 
         let d3 = devices.iter().find(|d| d.id == "00008030-001234567890").unwrap();
         assert_eq!(d3.connection, "unavailable");
         assert_eq!(d3.state, DeviceState::Offline);
+        assert_eq!(d3.transport.as_deref(), None);
+        assert_eq!(d3.conn_state.as_deref(), Some("disconnected"));
+        assert_eq!(d3.tunnel_state.as_deref(), Some("unavailable"));
         assert_eq!(d3.flutter_id, None);
     }
 }

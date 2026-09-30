@@ -364,6 +364,17 @@ pub fn run() {
             commands::mr_cancel_mwps,
             commands::mr_checkout,
             commands::mr_evaluate_merge_status,
+            // Batch 5
+            commands::lsp_restart,
+            commands::devices_refresh,
+            commands::run_restart_daemon,
+            commands::run_restart_connection,
+            commands::run_hot_restart,
+            commands::accounts_get,
+            commands::accounts_save,
+            commands::accounts_test,
+            commands::accounts_clear,
+            commands::mirror_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

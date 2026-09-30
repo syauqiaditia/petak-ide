@@ -69,6 +69,7 @@ fn test_resolver_fake_home_sdk_and_fvmrc_and_override() {
         flutter_sdk: Some(custom_dir.path().to_string_lossy().to_string()),
         android_sdk: None,
         kotlin_language_server: None,
+        ..Default::default()
     };
     let path_with_override = compute_effective_path_with(
         Some(tmp_home.path()),

@@ -82,12 +82,21 @@ impl Server {
         crate::toolchain::apply_env(&mut cmd);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| ServerError::Io(e.to_string()))?;
 
         let stdout = child.stdout.take().unwrap();
         let stdin = child.stdin.take().unwrap();
+        if let Some(stderr) = child.stderr.take() {
+            thread::spawn(move || {
+                use std::io::BufRead;
+                let reader = std::io::BufReader::new(stderr);
+                for line in reader.lines().flatten() {
+                    eprintln!("[lsp stderr] {}", line);
+                }
+            });
+        }
         let writer = Arc::new(Mutex::new(BufWriter::new(stdin)));
 
         let pending: Arc<Mutex<HashMap<i64, Sender<Result<Value, ServerError>>>>> =
@@ -198,7 +207,7 @@ impl Server {
         let init_result = server.request_with_timeout(
             "initialize",
             &client_capabilities(&config.root_uri),
-            Duration::from_secs(30),
+            Duration::from_secs(60),
         )?;
 
         *server.capabilities.lock().unwrap() = Some(init_result.clone());

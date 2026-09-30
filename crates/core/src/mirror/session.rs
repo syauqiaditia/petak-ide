@@ -101,18 +101,55 @@ impl MirrorSession {
         let _ = status_tx.send(MirrorStatus::Connecting);
 
         // 1. Resolve and push server jar
-        let jar_path = server::resolve_server_jar()?;
-        server::push_server(exec.as_ref(), serial, &jar_path)?;
+        let jar_path = match server::resolve_server_jar() {
+            Ok(p) => p,
+            Err(e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "android",
+                    "code": "server_jar_missing",
+                    "message": format!("Scrcpy server jar tidak ditemukan: {}", e)
+                });
+                return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+            }
+        };
+        if let Err(e) = server::push_server(exec.as_ref(), serial, &jar_path) {
+            let err_obj = serde_json::json!({
+                "platform": "android",
+                "code": "adb_push_failed",
+                "message": format!("Gagal mengirim scrcpy-server ke device {}: {}", serial, e)
+            });
+            return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+        }
 
         // 2. Generate random scid
         let scid: u32 = rand_scid();
 
         // 3. Setup adb forward
-        let port = server::setup_forward(exec.as_ref(), serial, scid)?;
+        let port = match server::setup_forward(exec.as_ref(), serial, scid) {
+            Ok(p) => p,
+            Err(e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "android",
+                    "code": "adb_forward_failed",
+                    "message": format!("Gagal setup adb forward untuk {}: {}", serial, e)
+                });
+                return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+            }
+        };
 
         // 4. Start server process
         let (proc_tx, _proc_rx) = mpsc::channel();
-        let server_proc = server::start_server(spawn.as_ref(), serial, scid, max_size, proc_tx)?;
+        let server_proc = match server::start_server(spawn.as_ref(), serial, scid, max_size, proc_tx) {
+            Ok(p) => p,
+            Err(e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "android",
+                    "code": "scrcpy_start_failed",
+                    "message": format!("Gagal menjalankan scrcpy-server di device {}: {}", serial, e)
+                });
+                return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+            }
+        };
 
         let scrcpy_server = server::ScrcpyServer {
             device: serial.to_string(),
@@ -126,11 +163,31 @@ impl MirrorSession {
         thread::sleep(Duration::from_millis(800));
 
         // 5. Connect video + control sockets
-        let (video_stream, control_stream) = server::connect_sockets(port)?;
+        let (video_stream, control_stream) = match server::connect_sockets(port) {
+            Ok(s) => s,
+            Err(e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "android",
+                    "code": "scrcpy_connect_failed",
+                    "message": format!("Gagal menghubungkan video/control socket ke scrcpy-server: {}", e)
+                });
+                return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+            }
+        };
 
         // 6. Read codec meta
         let mut video_reader = io::BufReader::new(video_stream);
-        let meta = protocol::read_codec_meta(&mut video_reader)?;
+        let meta = match protocol::read_codec_meta(&mut video_reader) {
+            Ok(m) => m,
+            Err(e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "android",
+                    "code": "codec_meta_failed",
+                    "message": format!("Gagal membaca metadata codec dari scrcpy-server: {}", e)
+                });
+                return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+            }
+        };
 
         let info = MirrorInfo {
             serial: serial.to_string(),

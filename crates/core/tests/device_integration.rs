@@ -92,3 +92,60 @@ fn test_device_watch_real_emulator() {
     assert!(emulator_gone, "Emulator {} did not disappear after adb emu kill", dev_id);
     println!("=== test_device_watch_real_emulator PASSED ===");
 }
+
+#[test]
+#[ignore]
+fn test_spawn_emulator_detached_real_server() {
+    println!("\n=== Starting test_spawn_emulator_detached_real_server ===");
+
+    let log_path = petak_core::run::emulator_log_path().expect("emulator_log_path exists");
+    println!("Emulator log path: {:?}", log_path);
+
+    println!("Spawning detached headless emulator 'jatim_dev'...");
+    let start_time = Instant::now();
+    let mut child = petak_core::run::spawn_emulator_detached("jatim_dev", false, false, true)
+        .expect("spawn_emulator_detached failed");
+
+    let pid = child.id();
+    println!("Detached emulator spawned successfully with PID: {:?}", pid);
+    assert!(pid > 0);
+
+    // Verify log file was written
+    assert!(log_path.exists(), "emulator.log must exist");
+    let initial_log = std::fs::read_to_string(&log_path).unwrap_or_default();
+    assert!(initial_log.contains("spawn_emulator_detached"));
+
+    // Poll adb devices for up to 90s
+    let adb = petak_core::run::resolve_adb_binary();
+    let mut found_serial = None;
+    let deadline = Instant::now() + Duration::from_secs(90);
+
+    while Instant::now() < deadline {
+        if let Ok(out) = Command::new(&adb).args(["devices"]).output() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for line in stdout.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[0].starts_with("emulator-") && parts[1] == "device" {
+                    println!("Found running emulator in adb: {}", parts[0]);
+                    found_serial = Some(parts[0].to_string());
+                    break;
+                }
+            }
+        }
+        if found_serial.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1000));
+    }
+
+    let serial = found_serial.expect("Timed out waiting for emulator to appear in adb devices");
+    println!("Emulator appeared in adb in {:.2}s: {}", start_time.elapsed().as_secs_f32(), serial);
+
+    // Stop emulator cleanly
+    println!("Stopping emulator {}...", serial);
+    let _ = Command::new(&adb).args(["-s", &serial, "emu", "kill"]).status();
+    let _ = child.kill();
+    std::thread::sleep(Duration::from_secs(3));
+
+    println!("=== test_spawn_emulator_detached_real_server PASSED ===");
+}

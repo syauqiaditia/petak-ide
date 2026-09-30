@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod agent;
 pub mod exec;
 pub mod format;

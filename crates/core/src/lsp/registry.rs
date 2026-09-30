@@ -531,6 +531,64 @@ impl Registry {
         }
     }
 
+    /// Restart running servers for a specific language, or all running servers if `lang` is None.
+    /// Preserves open documents and re-sends textDocument/didOpen to the new servers.
+    pub fn restart(&self, lang: Option<Lang>) -> Result<(), ServerError> {
+        let target_keys: Vec<ServerKey> = {
+            let servers = self.servers.lock().unwrap();
+            servers
+                .keys()
+                .filter(|k| lang.map_or(true, |l| k.lang == l))
+                .cloned()
+                .collect()
+        };
+
+        for key in target_keys {
+            let old_opt = {
+                let mut servers = self.servers.lock().unwrap();
+                servers.remove(&key)
+            };
+
+            if let Some(old) = old_opt {
+                let docs: Vec<OpenDoc> = old.open_docs.values().cloned().collect();
+                old.server.kill();
+                (self.event_callback)(
+                    key.lang,
+                    key.root.clone(),
+                    ServerEvent::Status {
+                        state: "stopped".into(),
+                        reason: None,
+                    },
+                );
+
+                match self.start_server(key.lang, &key.root) {
+                    Ok(mut fresh) => {
+                        for doc in docs {
+                            let _ = fresh
+                                .server
+                                .notify("textDocument/didOpen", &did_open_params(&doc));
+                            fresh.open_docs.insert(doc.uri.clone(), doc);
+                        }
+                        let mut servers = self.servers.lock().unwrap();
+                        servers.insert(key, fresh);
+                    }
+                    Err(e) => {
+                        (self.event_callback)(
+                            key.lang,
+                            key.root,
+                            ServerEvent::Status {
+                                state: "crashed".into(),
+                                reason: Some(format!("failed to restart: {}", e)),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// How many servers are currently running.
     pub fn server_count(&self) -> usize {
         self.servers.lock().unwrap().len()
@@ -715,5 +773,14 @@ mod tests {
         // Fallback to file parent
         let root2 = Registry::find_root(&file, Lang::Dart, None);
         assert_eq!(root2, file.parent().unwrap());
+    }
+
+    #[test]
+    fn test_registry_restart_empty() {
+        let registry = Registry::new(Arc::new(WallClock), |_lang, _root, _event| {});
+        assert!(registry.restart(None).is_ok());
+        assert!(registry.restart(Some(Lang::Kotlin)).is_ok());
+        assert!(registry.restart(Some(Lang::Dart)).is_ok());
+        assert_eq!(registry.server_count(), 0);
     }
 }

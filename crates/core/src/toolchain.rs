@@ -16,6 +16,12 @@ pub struct ToolchainConfig {
     pub android_sdk: Option<String>,
     #[serde(alias = "kotlinLanguageServer", default)]
     pub kotlin_language_server: Option<String>,
+    #[serde(rename = "bottom_panel_height", alias = "bottomPanelHeight", default)]
+    pub bottom_panel_height: Option<u32>,
+    #[serde(rename = "gitlab_url", alias = "gitlabUrl", default)]
+    pub gitlab_url: Option<String>,
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Global lazy cache for the effective PATH.
@@ -88,6 +94,23 @@ pub fn apply_env_for_root(cmd: &mut Command, root: Option<&Path>) {
     }
     if let Some(flutter_root) = resolve_flutter_root(root) {
         cmd.env("FLUTTER_ROOT", &flutter_root);
+    }
+
+    if let Ok(g) = std::env::var("GRADLE_USER_HOME") {
+        cmd.env("GRADLE_USER_HOME", g);
+    } else {
+        let default_gradle = Path::new("/mnt/storage/uqi-cache/gradle");
+        if default_gradle.exists() {
+            cmd.env("GRADLE_USER_HOME", default_gradle);
+        }
+    }
+    if let Ok(p) = std::env::var("PUB_CACHE") {
+        cmd.env("PUB_CACHE", p);
+    } else {
+        let default_pub = Path::new("/mnt/storage/uqi-cache/pub-cache");
+        if default_pub.exists() {
+            cmd.env("PUB_CACHE", default_pub);
+        }
     }
 }
 
@@ -590,10 +613,26 @@ fn collect_kotlin_ls_paths(home: Option<&Path>, dirs: &mut Vec<PathBuf>) {
 
     // App-support dir: ~/Library/Application Support/Petak/lsp/server/bin (macOS)
     // or ~/.local/share/Petak/lsp/server/bin (Linux)
+    // Check both server/bin and nested server/server/bin
     if let Some(data) = dirs::data_dir() {
-        let app_support = data.join("Petak").join("lsp").join("server").join("bin");
-        if app_support.exists() {
-            dirs.push(app_support);
+        let lsp_dir = data.join("Petak").join("lsp");
+        for p in &[
+            lsp_dir.join("server").join("bin"),
+            lsp_dir.join("server").join("server").join("bin"),
+            lsp_dir.join("bin"),
+        ] {
+            if p.exists() {
+                dirs.push(p.clone());
+            }
+        }
+    }
+
+    for p in &[
+        PathBuf::from("/mnt/storage/uqi-cache/lsp/server/bin"),
+        PathBuf::from("/mnt/storage/uqi-cache/lsp/server/server/bin"),
+    ] {
+        if p.exists() {
+            dirs.push(p.clone());
         }
     }
 
@@ -767,6 +806,23 @@ pub fn resolve_emulator() -> String {
     "emulator".to_string()
 }
 
+/// Resolve Kotlin Language Server binary in a specific base directory (e.g. data_dir/Petak/lsp).
+/// Checks both flat (server/bin) and nested (server/server/bin) layouts.
+pub fn resolve_kotlin_ls_in_dir(lsp_dir: &Path) -> Option<PathBuf> {
+    let candidates = [
+        lsp_dir.join("server").join("bin").join("kotlin-language-server"),
+        lsp_dir.join("server").join("server").join("bin").join("kotlin-language-server"),
+        lsp_dir.join("bin").join("kotlin-language-server"),
+        lsp_dir.join("kotlin-language-server"),
+    ];
+    for cand in &candidates {
+        if cand.is_file() {
+            return Some(cand.clone());
+        }
+    }
+    None
+}
+
 /// Resolve Kotlin Language Server binary.
 pub fn resolve_kotlin_ls() -> Option<PathBuf> {
     let path = effective_path();
@@ -785,22 +841,27 @@ pub fn resolve_kotlin_ls() -> Option<PathBuf> {
         if bin2.is_file() {
             return Some(bin2);
         }
+        let bin3 = p.join("server").join("bin").join("kotlin-language-server");
+        if bin3.is_file() {
+            return Some(bin3);
+        }
     }
 
     // Check application data dir: <data_dir>/Petak/lsp
     if let Some(data) = dirs::data_dir() {
         let lsp_dir = data.join("Petak").join("lsp");
-        let p1 = lsp_dir.join("bin").join("kotlin-language-server");
-        if p1.is_file() {
-            return Some(p1);
+        if let Some(p) = resolve_kotlin_ls_in_dir(&lsp_dir) {
+            return Some(p);
         }
-        let p2 = lsp_dir.join("server").join("bin").join("kotlin-language-server");
-        if p2.is_file() {
-            return Some(p2);
-        }
-        let p3 = lsp_dir.join("kotlin-language-server");
-        if p3.is_file() {
-            return Some(p3);
+    }
+
+    // Check server cache / fallback directories
+    for s_dir in &[
+        Path::new("/mnt/storage/uqi-cache/lsp"),
+        Path::new("/mnt/storage/uqi-cache/lsp/server"),
+    ] {
+        if let Some(p) = resolve_kotlin_ls_in_dir(s_dir) {
+            return Some(p);
         }
     }
 
@@ -1016,10 +1077,17 @@ pub fn extract_and_install_kls_zip(zip_path: &Path, install_dir: &Path) -> Resul
         .join("server")
         .join("bin")
         .join("kotlin-language-server");
+    let bin_nested = install_dir
+        .join("server")
+        .join("server")
+        .join("bin")
+        .join("kotlin-language-server");
     let actual_bin = if bin_path.is_file() {
         bin_path
     } else if bin_alt.is_file() {
         bin_alt
+    } else if bin_nested.is_file() {
+        bin_nested
     } else {
         return Err(format!(
             "kotlin-language-server binary tidak ditemukan setelah extract di {}",
@@ -1120,25 +1188,51 @@ where
 
     progress("verifying", Some(80.0), "Memverifikasi instalasi...");
 
-    // Verify it runs
-    let verify = std::process::Command::new(&actual_bin)
-        .arg("--version")
-        .output();
-    match verify {
-        Ok(out) if out.status.success() || !out.stderr.is_empty() => {
-            // OK — some versions print to stderr
+    // Verifikasi = file executable + java>=11 (JANGAN --version)
+    if !actual_bin.is_file() {
+        let msg = format!("File binary {} tidak ditemukan", actual_bin.display());
+        progress("error", None, &msg);
+        return Err(msg);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = actual_bin.metadata() {
+            let perm = metadata.permissions();
+            if perm.mode() & 0o111 == 0 {
+                let msg = format!(
+                    "File binary {} tidak memiliki izin eksekusi",
+                    actual_bin.display()
+                );
+                progress("error", None, &msg);
+                return Err(msg);
+            }
         }
-        Ok(out) => {
-            let msg = String::from_utf8_lossy(&out.stderr);
-            let err_msg = format!("kotlin-language-server --version gagal: {}", msg.trim());
-            progress("error", None, &err_msg);
-            return Err(err_msg);
-        }
-        Err(e) => {
-            let err_msg = format!("Gagal menjalankan kotlin-language-server: {}", e);
-            progress("error", None, &err_msg);
-            return Err(err_msg);
-        }
+    }
+
+    let (java_ok, java_version) = check_java();
+    if !java_ok {
+        let msg = if let Some(ref v) = java_version {
+            format!(
+                "Java tidak memenuhi syarat (dibutuhkan JDK 11+). Terdeteksi: {}",
+                v
+            )
+        } else {
+            "Java (JDK 11+) tidak ditemukan. Pastikan JDK sudah terpasang.".to_string()
+        };
+        progress("error", None, &msg);
+        return Err(msg);
+    }
+
+    // Simpan path terinstal ke config.json
+    let mut cfg = load_config();
+    cfg.kotlin_language_server = Some(actual_bin.to_string_lossy().to_string());
+    if let Err(e) = save_config(&cfg) {
+        eprintln!(
+            "[toolchain] warning: gagal menyimpan kotlin_language_server ke config.json: {}",
+            e
+        );
     }
 
     progress(
@@ -1243,6 +1337,7 @@ mod tests {
             flutter_sdk: Some(custom_dir.path().to_string_lossy().to_string()),
             android_sdk: None,
             kotlin_language_server: None,
+            ..Default::default()
         };
 
         let path = compute_effective_path_with(
@@ -1302,5 +1397,46 @@ mod tests {
                 assert!(installed_bin.to_string_lossy().contains("kotlin-language-server"));
             }
         }
+    }
+
+    #[test]
+    fn test_resolve_kotlin_ls_two_layouts() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Layout 1: flat server/bin/kotlin-language-server
+        let flat_dir = tmp.path().join("flat");
+        let flat_bin_dir = flat_dir.join("server").join("bin");
+        std::fs::create_dir_all(&flat_bin_dir).unwrap();
+        let flat_bin = flat_bin_dir.join("kotlin-language-server");
+        std::fs::write(&flat_bin, "#!/bin/sh\n").unwrap();
+
+        let resolved_flat = resolve_kotlin_ls_in_dir(&flat_dir);
+        assert_eq!(resolved_flat, Some(flat_bin));
+
+        // Layout 2: nested server/server/bin/kotlin-language-server
+        let nested_dir = tmp.path().join("nested");
+        let nested_bin_dir = nested_dir.join("server").join("server").join("bin");
+        std::fs::create_dir_all(&nested_bin_dir).unwrap();
+        let nested_bin = nested_bin_dir.join("kotlin-language-server");
+        std::fs::write(&nested_bin, "#!/bin/sh\n").unwrap();
+
+        let resolved_nested = resolve_kotlin_ls_in_dir(&nested_dir);
+        assert_eq!(resolved_nested, Some(nested_bin));
+    }
+
+    #[test]
+    fn test_bottom_panel_height_config_roundtrip() {
+        let json = r#"{"bottom_panel_height": 280, "flutterSdk": "/path/to/flutter"}"#;
+        let cfg: ToolchainConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.bottom_panel_height, Some(280));
+        assert_eq!(cfg.flutter_sdk.as_deref(), Some("/path/to/flutter"));
+
+        let serialized = serde_json::to_string(&cfg).unwrap();
+        assert!(serialized.contains("bottom_panel_height"));
+
+        // Test camelCase alias roundtrip
+        let json_camel = r#"{"bottomPanelHeight": 320}"#;
+        let cfg_camel: ToolchainConfig = serde_json::from_str(json_camel).unwrap();
+        assert_eq!(cfg_camel.bottom_panel_height, Some(320));
     }
 }
