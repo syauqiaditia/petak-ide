@@ -1,0 +1,199 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  checkPermission,
+  isCommandInAllowlist,
+  proposalToDiffFile,
+  formatUsageText,
+  truncateToolOutput,
+  buildFixWithAgentDraft,
+  applyDisciplineDirectives,
+  isValidSlotTransition,
+  DEFAULT_ALLOWLIST,
+} from '../ui/features/agents/agentsLogic.ts';
+
+test('permission: read mode always denies modification/execution', () => {
+  assert.equal(checkPermission('read', 'flutter test'), 'denied');
+  assert.equal(checkPermission('read', 'npm test'), 'denied');
+  assert.equal(checkPermission('read', 'rm -rf .'), 'denied');
+});
+
+test('permission: full mode always approves', () => {
+  assert.equal(checkPermission('full', 'rm -rf /tmp/test'), 'approved');
+  assert.equal(checkPermission('full', 'flutter run'), 'approved');
+});
+
+test('permission: auto mode approves allowlisted commands and asks for others', () => {
+  assert.equal(checkPermission('auto', 'flutter test test/app_test.dart'), 'approved');
+  assert.equal(checkPermission('auto', 'cargo test -p petak-core'), 'approved');
+  assert.equal(checkPermission('auto', 'npm run build'), 'approved');
+  assert.equal(checkPermission('auto', 'gradlew build'), 'approved');
+  assert.equal(checkPermission('auto', './gradlew assembleDebug'), 'approved');
+
+  // Non-allowlisted command triggers ask
+  assert.equal(checkPermission('auto', 'git push origin main'), 'ask');
+  assert.equal(checkPermission('auto', 'rm -rf build/'), 'ask');
+});
+
+test('permission: ask mode always requests confirmation', () => {
+  assert.equal(checkPermission('ask', 'flutter test'), 'ask');
+  assert.equal(checkPermission('ask', 'npm test'), 'ask');
+});
+
+test('allowlist: command matching logic', () => {
+  assert.equal(isCommandInAllowlist('flutter test', DEFAULT_ALLOWLIST), true);
+  assert.equal(isCommandInAllowlist('pod install --repo-update', DEFAULT_ALLOWLIST), true);
+  assert.equal(isCommandInAllowlist('cargo check --all-targets', DEFAULT_ALLOWLIST), true);
+  assert.equal(isCommandInAllowlist('sh -c "rm -rf *"', DEFAULT_ALLOWLIST), false);
+  assert.equal(isCommandInAllowlist('', DEFAULT_ALLOWLIST), false);
+});
+
+test('proposalToDiffFile: converts core proposal to DiffView format', () => {
+  const proposal = {
+    id: 'prop-1',
+    slotId: 's1',
+    sessionId: 'sess-1',
+    path: 'lib/main.dart',
+    oldContent: 'void main() {}',
+    newContent: 'void main() { runApp(App()); }',
+    status: 'pending',
+    timestamp: 1000,
+    hunks: [
+      {
+        old_start: 1,
+        old_lines: 1,
+        new_start: 1,
+        new_lines: 1,
+        lines: [
+          { kind: 'del', text: 'void main() {}', old_lineno: 1, new_lineno: null },
+          { kind: 'add', text: 'void main() { runApp(App()); }', old_lineno: null, new_lineno: 1 },
+        ],
+      },
+    ],
+  };
+
+  const diffFile = proposalToDiffFile(proposal);
+  assert.equal(diffFile.oldPath, 'lib/main.dart');
+  assert.equal(diffFile.newPath, 'lib/main.dart');
+  assert.equal(diffFile.status, 'modified');
+  assert.equal(diffFile.hunks.length, 1);
+  assert.equal(diffFile.hunks[0].lines.length, 2);
+  assert.equal(diffFile.hunks[0].lines[0].kind, 'del');
+  assert.equal(diffFile.hunks[0].lines[1].kind, 'add');
+});
+
+test('formatUsageText: honest usage reporting', () => {
+  const unreported = formatUsageText({ reported: false, displayText: 'tidak melapor' });
+  assert.equal(unreported.isReported, false);
+  assert.equal(unreported.text, 'Penggunaan kuota: agen tidak melapor');
+
+  const reported = formatUsageText({
+    reported: true,
+    totalTokens: 51200,
+    cost: 0.25,
+    contextPercentage: 25.5,
+    displayText: 'Context: 25% · Tokens: 51.2k · Biaya: ~$0.25',
+  });
+  assert.equal(reported.isReported, true);
+  assert.match(reported.text, /51\.2k/);
+  assert.match(reported.text, /0\.25/);
+});
+
+test('truncateToolOutput: trims long output cleanly', () => {
+  const shortText = 'Success: 1 test passed';
+  assert.equal(truncateToolOutput(shortText, 50).isTruncated, false);
+  assert.equal(truncateToolOutput(shortText, 50).text, shortText);
+
+  const longText = 'x'.repeat(400);
+  const truncated = truncateToolOutput(longText, 200);
+  assert.equal(truncated.isTruncated, true);
+  assert.match(truncated.text, /output dipotong/);
+  assert.ok(truncated.text.length < 350);
+});
+
+test('buildFixWithAgentDraft: constructs transparent and editable prompt', () => {
+  const draft = buildFixWithAgentDraft({
+    errorMessage: 'RangeError (index): Invalid value: Valid value range is empty: 0',
+    filePath: 'lib/view/home_page.dart',
+    line: 45,
+    col: 12,
+    codeContext: 'final item = items[0];',
+    toolchainSummary: 'Flutter 3.24.3 · Dart 3.5.3',
+    gitSummary: 'On branch feat/fix-items, 1 file modified',
+    slotId: 's1',
+  });
+
+  assert.equal(draft.slotId, 's1');
+  assert.match(draft.userPrompt, /RangeError/);
+  assert.match(draft.userPrompt, /lib\/view\/home_page\.dart:45:12/);
+  assert.match(draft.userPrompt, /final item = items\[0\];/);
+  assert.match(draft.userPrompt, /Flutter 3\.24\.3/);
+  assert.match(draft.userPrompt, /feat\/fix-items/);
+});
+
+test('applyDisciplineDirectives: injects Ponytail and Caveman rules', () => {
+  const rawPrompt = 'Perbaiki crash di login screen';
+
+  const ponyOnly = applyDisciplineDirectives(rawPrompt, true, false);
+  assert.match(ponyOnly, /PONYTAIL/);
+  assert.ok(!ponyOnly.includes('CAVEMAN'));
+  assert.match(ponyOnly, /Perbaiki crash di login screen/);
+
+  const both = applyDisciplineDirectives(rawPrompt, true, true);
+  assert.match(both, /PONYTAIL/);
+  assert.match(both, /CAVEMAN/);
+
+  const neither = applyDisciplineDirectives(rawPrompt, false, false);
+  assert.equal(neither, rawPrompt);
+});
+
+test('isValidSlotTransition: checks state machine validity', () => {
+  assert.equal(isValidSlotTransition('idle', 'starting'), true);
+  assert.equal(isValidSlotTransition('starting', 'ready'), true);
+  assert.equal(isValidSlotTransition('ready', 'busy'), true);
+  assert.equal(isValidSlotTransition('busy', 'ready'), true);
+  assert.equal(isValidSlotTransition('busy', 'failed'), true);
+  assert.equal(isValidSlotTransition('stopped', 'starting'), true);
+});
+
+test('proposal state handling: accept and reject transitions', () => {
+  const proposals = [
+    { id: 'p1', path: 'lib/auth.dart', status: 'pending' },
+    { id: 'p2', path: 'lib/cart.dart', status: 'pending' },
+  ];
+
+  // Simulating proposal acceptance
+  const accepted = proposals.map((p) => (p.id === 'p1' ? { ...p, status: 'accepted' } : p));
+  assert.equal(accepted.find((p) => p.id === 'p1').status, 'accepted');
+  assert.equal(accepted.find((p) => p.id === 'p2').status, 'pending');
+
+  // Simulating proposal rejection
+  const rejected = proposals.map((p) => (p.id === 'p2' ? { ...p, status: 'rejected' } : p));
+  assert.equal(rejected.find((p) => p.id === 'p2').status, 'rejected');
+});
+
+test('permission card response: pending queue management', () => {
+  let pending = [
+    { requestId: 'req-1', toolCall: { name: 'terminal' } },
+    { requestId: 'req-2', toolCall: { name: 'fs/write_text_file' } },
+  ];
+
+  // User responds to req-1
+  const respondedId = 'req-1';
+  pending = pending.filter((p) => p.requestId !== respondedId);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].requestId, 'req-2');
+});
+
+test('buildFixWithAgentDraft: works gracefully with minimal context', () => {
+  const minimalDraft = buildFixWithAgentDraft({
+    errorMessage: 'SyntaxError: Unexpected token',
+    slotId: 's2',
+  });
+
+  assert.equal(minimalDraft.slotId, 's2');
+  assert.match(minimalDraft.userPrompt, /SyntaxError: Unexpected token/);
+  assert.match(minimalDraft.userPrompt, /Tolong analisis error/);
+});
+
