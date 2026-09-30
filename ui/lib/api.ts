@@ -1,6 +1,6 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { MirrorStatus, InputEvent, MirrorInfo } from '../features/mirror/types';
+import type { MirrorStatus, InputEvent, MirrorInfo } from '../features/mirror/types.ts';
 import type {
   MergeRequest,
   GitLabUser,
@@ -14,7 +14,7 @@ import type {
   InlinePositionParams,
   MergeRequestParams,
   MergeStatusEvaluation,
-} from '../features/mr/types';
+} from '../features/mr/types.ts';
 import type {
   SlotSummary,
   SlotConfig,
@@ -24,7 +24,7 @@ import type {
   PendingPermissionRequest,
   Proposal,
   UsageReport,
-} from '../features/agents/types';
+} from '../features/agents/types.ts';
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -239,6 +239,32 @@ export interface ToolchainConfig {
   androidSdk?: string | null;
   kotlinLanguageServer?: string | null;
   ghostText?: boolean | null;
+  bottom_panel_height?: number | null;
+  bottomPanelHeight?: number | null;
+}
+
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  kind?: 'android' | 'ios-simulator' | 'ios-physical' | string;
+  connState?: 'connected_usb' | 'connected_wifi' | 'locked' | 'disconnected' | string;
+  transport?: null | 'wired' | 'wifi' | string;
+  tunnelState?: string | null;
+  pairingState?: string | null;
+  platform?: DevicePlatform;
+  state?: string;
+  sdk?: string | null;
+}
+
+export interface AccountInfo {
+  url: string;
+  hasToken: boolean;
+}
+
+export interface AccountTestResult {
+  ok: boolean;
+  user?: string | null;
+  error?: string | null;
 }
 
 export interface SuggestItem {
@@ -426,8 +452,8 @@ import type {
   GitPullMode,
   GitCommit,
   GitBlameLine,
-} from '../features/git/types';
-export * from '../features/git/types';
+} from '../features/git/types.ts';
+export * from '../features/git/types.ts';
 
 export const api = {
   listDir(path: string): Promise<Entry[]> {
@@ -897,6 +923,10 @@ export const api = {
     return listen<LspApplyEditPayload>('lsp-apply-edit', (event) => cb(event.payload));
   },
 
+  lspRestart(language?: string): Promise<void> {
+    return invoke('lsp_restart', { language: language ?? null });
+  },
+
   // ---------------------------------------------------------------------------
   // Run, Toolchain, Device, Logcat Methods
   // ---------------------------------------------------------------------------
@@ -919,6 +949,10 @@ export const api = {
 
   devicesWatch(): Promise<void> {
     return invoke('devices_watch');
+  },
+
+  devicesRefresh(): Promise<DeviceInfo[]> {
+    return invoke<DeviceInfo[]>('devices_refresh');
   },
 
   devicesSnapshot(): Promise<DevicesSnapshot> {
@@ -1072,8 +1106,20 @@ export const api = {
     return invoke<ReloadResult>('run_reload', { runId, full });
   },
 
-  runStop(runId: number): Promise<void> {
-    return invoke('run_stop', { runId });
+  runStop(runId?: number): Promise<void> {
+    return invoke('run_stop', { runId: runId ?? null });
+  },
+
+  runRestartDaemon(): Promise<void> {
+    return invoke('run_restart_daemon');
+  },
+
+  runRestartConnection(): Promise<void> {
+    return invoke('run_restart_connection');
+  },
+
+  runHotRestart(): Promise<ReloadResult> {
+    return invoke('run_hot_restart');
   },
 
   logcatStart(deviceId: string, appId?: string): Promise<void> {
@@ -1131,6 +1177,30 @@ export const api = {
 
   osReveal(path: string): Promise<void> {
     return invoke('os_reveal', { path });
+  },
+
+  showInFolder(path: string): Promise<void> {
+    return this.osReveal(path);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Account / Token Store Methods (Batch 5)
+  // ---------------------------------------------------------------------------
+
+  accountsGet(): Promise<AccountInfo> {
+    return invoke<AccountInfo>('accounts_get');
+  },
+
+  accountsSave(url: string, token: string): Promise<void> {
+    return invoke('accounts_save', { url, token });
+  },
+
+  accountsTest(url?: string, token?: string): Promise<AccountTestResult> {
+    return invoke<AccountTestResult>('accounts_test', { url: url ?? null, token: token ?? null });
+  },
+
+  accountsClear(): Promise<void> {
+    return invoke('accounts_clear');
   },
 
   osOpenDefault(path: string): Promise<void> {
