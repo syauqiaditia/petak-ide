@@ -22,6 +22,12 @@ pub struct Device {
     pub group: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transport: Option<String>,
+    #[serde(default = "default_device_connection")]
+    pub connection: String,
+}
+
+pub fn default_device_connection() -> String {
+    "connected".to_string()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,12 +95,12 @@ pub fn parse_adb_devices(output: &str) -> Vec<Device> {
         };
 
         let state_str = parts.next().unwrap_or("offline");
-        let state = match state_str {
-            "device" => DeviceState::Online,
-            "offline" => DeviceState::Offline,
-            "unauthorized" => DeviceState::Unauthorized,
-            "bootloader" | "authorizing" => DeviceState::Booting,
-            _ => DeviceState::Offline,
+        let (state, connection) = match state_str {
+            "device" => (DeviceState::Online, "connected".to_string()),
+            "offline" => (DeviceState::Offline, "offline".to_string()),
+            "unauthorized" => (DeviceState::Unauthorized, "offline".to_string()),
+            "bootloader" | "authorizing" => (DeviceState::Booting, "offline".to_string()),
+            _ => (DeviceState::Offline, "offline".to_string()),
         };
 
         let kind = if id.starts_with("emulator-") {
@@ -119,15 +125,18 @@ pub fn parse_adb_devices(output: &str) -> Vec<Device> {
             "physical"
         };
         let transport = if kind == DeviceKind::Physical {
-            if id.contains(':') {
+            let line_lower = line.to_lowercase();
+            if id.contains(':') || line_lower.contains("wireless") || line_lower.contains("wifi") {
                 Some("wifi".to_string())
-            } else {
+            } else if line_lower.contains("usb:") || line_lower.contains(" usb ") {
                 Some("usb".to_string())
+            } else {
+                Some("unknown".to_string())
             }
         } else {
             None
         };
-        let flutter_id = if state == DeviceState::Online {
+        let flutter_id = if state == DeviceState::Online && connection == "connected" {
             Some(id.to_string())
         } else {
             None
@@ -143,6 +152,7 @@ pub fn parse_adb_devices(output: &str) -> Vec<Device> {
             flutter_id,
             group: Some(group.to_string()),
             transport,
+            connection,
         });
     }
     devices
@@ -230,6 +240,12 @@ pub fn parse_flutter_devices(json_str: &str) -> Result<Vec<Device>, serde_json::
             DeviceState::Online
         };
 
+        let connection = if is_offline {
+            "offline".to_string()
+        } else {
+            "connected".to_string()
+        };
+
         let flutter_id = if state == DeviceState::Online {
             Some(id.clone())
         } else {
@@ -246,10 +262,22 @@ pub fn parse_flutter_devices(json_str: &str) -> Result<Vec<Device>, serde_json::
 
         let transport = if kind == DeviceKind::Physical {
             let lower_name = name.to_lowercase();
+            let lower_id = id.to_lowercase();
             if lower_name.contains("wireless") || lower_name.contains("wifi") || id.contains(':') {
                 Some("wifi".to_string())
-            } else {
+            } else if let Some(t) = item.get("transport").and_then(|v| v.as_str()) {
+                let t_lower = t.to_lowercase();
+                if t_lower.contains("wifi") || t_lower.contains("wireless") {
+                    Some("wifi".to_string())
+                } else if t_lower.contains("usb") || t_lower.contains("wire") {
+                    Some("usb".to_string())
+                } else {
+                    Some(t_lower)
+                }
+            } else if lower_name.contains("usb") || lower_id.contains("usb") {
                 Some("usb".to_string())
+            } else {
+                Some("unknown".to_string())
             }
         } else {
             None
@@ -265,6 +293,7 @@ pub fn parse_flutter_devices(json_str: &str) -> Result<Vec<Device>, serde_json::
             flutter_id,
             group: Some(group),
             transport,
+            connection,
         });
     }
 
@@ -344,12 +373,12 @@ pub fn parse_track_devices_payload(payload: &str) -> Vec<Device> {
         };
 
         let state_str = parts.next().unwrap_or("offline");
-        let state = match state_str {
-            "device" => DeviceState::Online,
-            "offline" => DeviceState::Offline,
-            "unauthorized" => DeviceState::Unauthorized,
-            "bootloader" | "authorizing" => DeviceState::Booting,
-            _ => DeviceState::Offline,
+        let (state, connection) = match state_str {
+            "device" => (DeviceState::Online, "connected".to_string()),
+            "offline" => (DeviceState::Offline, "offline".to_string()),
+            "unauthorized" => (DeviceState::Unauthorized, "offline".to_string()),
+            "bootloader" | "authorizing" => (DeviceState::Booting, "offline".to_string()),
+            _ => (DeviceState::Offline, "offline".to_string()),
         };
 
         let kind = if id.starts_with("emulator-") {
@@ -364,15 +393,18 @@ pub fn parse_track_devices_payload(payload: &str) -> Vec<Device> {
             "physical"
         };
         let transport = if kind == DeviceKind::Physical {
-            if id.contains(':') {
+            let line_lower = line.to_lowercase();
+            if id.contains(':') || line_lower.contains("wireless") || line_lower.contains("wifi") {
                 Some("wifi".to_string())
-            } else {
+            } else if line_lower.contains("usb:") || line_lower.contains(" usb ") {
                 Some("usb".to_string())
+            } else {
+                Some("unknown".to_string())
             }
         } else {
             None
         };
-        let flutter_id = if state == DeviceState::Online {
+        let flutter_id = if state == DeviceState::Online && connection == "connected" {
             Some(id.to_string())
         } else {
             None
@@ -388,6 +420,7 @@ pub fn parse_track_devices_payload(payload: &str) -> Vec<Device> {
             flutter_id,
             group: Some(group.to_string()),
             transport,
+            connection,
         });
     }
     devices
@@ -581,6 +614,8 @@ pub struct SnapshotDevice {
     pub transport: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sdk: Option<String>,
+    #[serde(default = "default_device_connection")]
+    pub connection: String,
 }
 
 /// Snapshot of all devices, grouped for the UI.
@@ -615,7 +650,7 @@ pub struct PhysicalDevice {
     pub id: String,
     pub name: String,
     pub platform: String,  // "android" | "ios"
-    pub transport: String, // "usb" | "wifi"
+    pub transport: String, // "usb" | "wifi" | "unknown"
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -624,6 +659,8 @@ pub struct PhysicalDevice {
     pub group: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sdk: Option<String>,
+    #[serde(default = "default_device_connection")]
+    pub connection: String,
 }
 
 /// Merge devices from multiple sources (`flutter devices --machine`, adb, simctl, devicectl, avds)
@@ -674,12 +711,14 @@ pub fn merge_devices(
             group: group_str,
             transport: dev.transport.clone(),
             sdk: dev.sdk.clone(),
+            connection: dev.connection.clone(),
         });
     }
 
     // 2. ADB devices
     for dev in adb_devs {
         if let Some(existing) = unified.iter_mut().find(|d| d.id == dev.id) {
+            existing.connection = dev.connection.clone();
             match dev.state {
                 DeviceState::Offline | DeviceState::Unauthorized => {
                     existing.state = "offline".to_string();
@@ -699,6 +738,9 @@ pub fn merge_devices(
             if existing.name == existing.id && dev.name != dev.id {
                 existing.name = dev.name.clone();
             }
+            if existing.transport.is_none() {
+                existing.transport = dev.transport.clone();
+            }
         } else {
             let is_emu = dev.id.starts_with("emulator-") || dev.kind == DeviceKind::Emulator;
             let group_str = if is_emu { "emulator" } else { "physical" };
@@ -707,19 +749,21 @@ pub fn merge_devices(
                 DeviceState::Booting => "booting",
                 _ => "offline",
             };
-            let flutter_id = if state_str == "online" {
+            let flutter_id = if state_str == "online" && dev.connection == "connected" {
                 Some(dev.id.clone())
             } else {
                 None
             };
             let transport = if !is_emu {
-                if dev.id.contains(':')
+                if let Some(ref t) = dev.transport {
+                    Some(t.clone())
+                } else if dev.id.contains(':')
                     || dev.name.to_lowercase().contains("wireless")
                     || dev.name.to_lowercase().contains("wifi")
                 {
                     Some("wifi".to_string())
                 } else {
-                    Some("usb".to_string())
+                    Some("unknown".to_string())
                 }
             } else {
                 None
@@ -733,6 +777,7 @@ pub fn merge_devices(
                 group: group_str.to_string(),
                 transport,
                 sdk: dev.sdk.clone(),
+                connection: dev.connection.clone(),
             });
         }
     }
@@ -745,6 +790,7 @@ pub fn merge_devices(
                 existing.name = avd.name.clone();
                 existing.state = "online".to_string();
                 existing.flutter_id = Some(emu_id.clone());
+                existing.connection = "connected".to_string();
             } else {
                 unified.push(SnapshotDevice {
                     id: emu_id.clone(),
@@ -755,6 +801,7 @@ pub fn merge_devices(
                     group: "emulator".to_string(),
                     transport: None,
                     sdk: None,
+                    connection: "connected".to_string(),
                 });
             }
         } else if !unified.iter().any(|d| d.id == avd.name || d.name == avd.name) {
@@ -767,6 +814,7 @@ pub fn merge_devices(
                 group: "emulator".to_string(),
                 transport: None,
                 sdk: None,
+                connection: "offline".to_string(),
             });
         }
     }
@@ -774,6 +822,7 @@ pub fn merge_devices(
     // 4. iOS Simulators (simctl)
     for sim in simctl_devs {
         if let Some(existing) = unified.iter_mut().find(|d| d.id == sim.id) {
+            existing.connection = sim.connection.clone();
             match sim.state {
                 DeviceState::Online => {
                     existing.state = "online".to_string();
@@ -808,37 +857,45 @@ pub fn merge_devices(
                 group: "simulator".to_string(),
                 transport: None,
                 sdk: sim.sdk.clone(),
+                connection: sim.connection.clone(),
             });
         }
     }
 
     // 5. iOS Physical (devicectl)
     for dev in devicectl_devs {
+        let is_connected = dev.connection == "connected";
+        let state_str = if is_connected {
+            "online".to_string()
+        } else {
+            "offline".to_string()
+        };
+        let flutter_id = if is_connected {
+            Some(dev.id.clone())
+        } else {
+            None
+        };
+
         if let Some(existing) = unified.iter_mut().find(|d| d.id == dev.id) {
-            existing.state = "online".to_string();
-            if existing.flutter_id.is_none() {
-                existing.flutter_id = Some(dev.id.clone());
+            existing.connection = dev.connection.clone();
+            existing.state = state_str;
+            existing.flutter_id = flutter_id;
+            if let Some(ref t) = dev.transport {
+                existing.transport = Some(t.clone());
             }
             existing.group = "physical".to_string();
             existing.platform = "ios".to_string();
         } else {
-            let transport = if dev.name.to_lowercase().contains("wireless")
-                || dev.name.to_lowercase().contains("wifi")
-                || dev.id.contains(':')
-            {
-                Some("wifi".to_string())
-            } else {
-                Some("usb".to_string())
-            };
             unified.push(SnapshotDevice {
                 id: dev.id.clone(),
                 name: dev.name.clone(),
                 platform: "ios".to_string(),
-                state: "online".to_string(),
-                flutter_id: Some(dev.id.clone()),
+                state: state_str,
+                flutter_id,
                 group: "physical".to_string(),
-                transport,
+                transport: dev.transport.clone(),
                 sdk: dev.sdk.clone(),
+                connection: dev.connection.clone(),
             });
         }
     }
@@ -923,11 +980,12 @@ pub fn merge_devices(
                 id: d.id.clone(),
                 name: d.name.clone(),
                 platform: d.platform.clone(),
-                transport: d.transport.clone().unwrap_or_else(|| "usb".to_string()),
+                transport: d.transport.clone().unwrap_or_else(|| "unknown".to_string()),
                 state: Some(d.state.clone()),
                 flutter_id: d.flutter_id.clone(),
                 group: Some("physical".to_string()),
                 sdk: d.sdk.clone(),
+                connection: d.connection.clone(),
             });
         }
     }
@@ -962,17 +1020,16 @@ pub fn devices_snapshot(exec: &dyn Exec) -> DevicesSnapshot {
 
     // 2. Android AVDs (emulator -list-avds) and running emulators (adb devices)
     let avds = list_avds(exec);
-    let running_android = if let Ok(out) =
-        exec.run(Path::new("."), &adb, &["devices", "-l"], &[], None)
-    {
-        if out.status.success() {
-            parse_adb_devices(&String::from_utf8_lossy(&out.stdout))
+    let running_android =
+        if let Ok(out) = exec.run(Path::new("."), &adb, &["devices", "-l"], &[], None) {
+            if out.status.success() {
+                parse_adb_devices(&String::from_utf8_lossy(&out.stdout))
+            } else {
+                Vec::new()
+            }
         } else {
             Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
+        };
 
     // Map running emulator IDs to their names
     let mut avd_to_device_id = std::collections::HashMap::new();
@@ -1041,10 +1098,25 @@ pub fn check_device_runnable<'a>(
         .iter()
         .find(|d| d.id == device_id || d.flutter_id.as_deref() == Some(device_id))
     {
-        if dev.state != "online" || dev.flutter_id.is_none() {
+        if dev.connection == "paired" {
+            return Err(format!(
+                "Perangkat '{}' ({}) berstatus Paired (tidak terhubung). Hubungkan via kabel USB atau aktifkan koneksi jaringan.",
+                dev.name, dev.id
+            ));
+        }
+        if dev.connection == "unavailable"
+            || dev.connection == "offline"
+            || dev.state != "online"
+            || dev.flutter_id.is_none()
+        {
+            let status_msg = if dev.connection != "connected" {
+                &dev.connection
+            } else {
+                &dev.state
+            };
             return Err(format!(
                 "Perangkat '{}' ({}) sedang {} (tidak online). Pilih perangkat yang aktif untuk menjalankan aplikasi.",
-                dev.name, dev.id, dev.state
+                dev.name, dev.id, status_msg
             ));
         }
         Ok(dev)
@@ -1549,6 +1621,7 @@ emulator-5558          unauthorized transport_id:5
             flutter_id: Some("DF9AF706-ED11-4FEC-91C5-588C843400FE".to_string()),
             group: Some("simulator".to_string()),
             transport: None,
+            connection: "connected".to_string(),
         }];
 
         // Devicectl also has UQi (duplicate of flutter devices)
@@ -1562,6 +1635,7 @@ emulator-5558          unauthorized transport_id:5
             flutter_id: Some("00008110-00012CCE0C09401E".to_string()),
             group: Some("physical".to_string()),
             transport: Some("wifi".to_string()),
+            connection: "connected".to_string(),
         }];
 
         let running_avds = std::collections::HashMap::new();
@@ -1584,6 +1658,7 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(uqi_matches[0].group, "physical");
         assert_eq!(uqi_matches[0].transport.as_deref(), Some("wifi"));
         assert_eq!(uqi_matches[0].state, "online");
+        assert_eq!(uqi_matches[0].connection, "connected");
         assert_eq!(uqi_matches[0].flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
 
         // Deduplication verified: iPhone 17 Pro occurs exactly once
@@ -1591,15 +1666,18 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(sim_matches.len(), 1);
         assert_eq!(sim_matches[0].group, "simulator");
         assert_eq!(sim_matches[0].state, "online");
+        assert_eq!(sim_matches[0].connection, "connected");
 
         // emulator-5554 is offline
         let emu = snapshot.devices.iter().find(|d| d.id == "emulator-5554").unwrap();
         assert_eq!(emu.state, "offline");
+        assert_eq!(emu.connection, "offline");
         assert_eq!(emu.flutter_id, None);
 
         // Pixel_7 is offline
         let p7 = snapshot.devices.iter().find(|d| d.id == "Pixel_7").unwrap();
         assert_eq!(p7.state, "offline");
+        assert_eq!(p7.connection, "offline");
         assert_eq!(p7.flutter_id, None);
     }
 
@@ -1618,6 +1696,7 @@ emulator-5558          unauthorized transport_id:5
                     group: "emulator".to_string(),
                     transport: None,
                     sdk: None,
+                    connection: "offline".to_string(),
                 },
                 SnapshotDevice {
                     id: "00008110-00012CCE0C09401E".to_string(),
@@ -1628,6 +1707,18 @@ emulator-5558          unauthorized transport_id:5
                     group: "physical".to_string(),
                     transport: Some("wifi".to_string()),
                     sdk: Some("iOS 26.5".to_string()),
+                    connection: "connected".to_string(),
+                },
+                SnapshotDevice {
+                    id: "00008101-001234567890".to_string(),
+                    name: "UQi (paired)".to_string(),
+                    platform: "ios".to_string(),
+                    state: "offline".to_string(),
+                    flutter_id: None,
+                    group: "physical".to_string(),
+                    transport: Some("wifi".to_string()),
+                    sdk: Some("iOS 17.4".to_string()),
+                    connection: "paired".to_string(),
                 },
             ],
         };
@@ -1641,9 +1732,43 @@ emulator-5558          unauthorized transport_id:5
         let err2 = check_device_runnable(&snapshot, "nonexistent-id").unwrap_err();
         assert!(err2.contains("tidak ditemukan") || err2.contains("offline"));
 
+        // Paired device must be rejected with Indonesian error mentioning Paired and USB/network
+        let err3 = check_device_runnable(&snapshot, "00008101-001234567890").unwrap_err();
+        assert!(err3.contains("Paired"));
+        assert!(err3.contains("kabel USB"));
+
         // Online device must be accepted
         let ok_dev = check_device_runnable(&snapshot, "00008110-00012CCE0C09401E").unwrap();
         assert_eq!(ok_dev.id, "00008110-00012CCE0C09401E");
         assert_eq!(ok_dev.flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
+    }
+
+    #[test]
+    fn test_adb_offline_and_unauthorized_state_and_connection() {
+        let fixture = "List of devices attached\n\
+R5CR30XYZ              unauthorized usb:1-1 product:a52sxq model:SM_A528B device:a52sxq transport_id:2\n\
+192.168.1.105:5555     offline product:pixel device:oriole transport_id:3\n\
+R58M1234567            device usb:1-2 product:s23 model:SM_S911B device:dm1q transport_id:4\n";
+
+        let devs = parse_adb_devices(fixture);
+        assert_eq!(devs.len(), 3);
+
+        let unauth = devs.iter().find(|d| d.id == "R5CR30XYZ").unwrap();
+        assert_eq!(unauth.state, DeviceState::Unauthorized);
+        assert_eq!(unauth.connection, "offline");
+        assert_eq!(unauth.flutter_id, None);
+        assert_eq!(unauth.transport.as_deref(), Some("usb"));
+
+        let offline_wifi = devs.iter().find(|d| d.id == "192.168.1.105:5555").unwrap();
+        assert_eq!(offline_wifi.state, DeviceState::Offline);
+        assert_eq!(offline_wifi.connection, "offline");
+        assert_eq!(offline_wifi.flutter_id, None);
+        assert_eq!(offline_wifi.transport.as_deref(), Some("wifi"));
+
+        let online = devs.iter().find(|d| d.id == "R58M1234567").unwrap();
+        assert_eq!(online.state, DeviceState::Online);
+        assert_eq!(online.connection, "connected");
+        assert_eq!(online.flutter_id.as_deref(), Some("R58M1234567"));
+        assert_eq!(online.transport.as_deref(), Some("usb"));
     }
 }

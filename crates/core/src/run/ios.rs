@@ -57,6 +57,11 @@ pub fn parse_simctl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::E
                 None
             };
 
+            let connection = match state {
+                DeviceState::Online => "connected".to_string(),
+                _ => "offline".to_string(),
+            };
+
             devices.push(Device {
                 id: item.udid,
                 name: item.name,
@@ -67,6 +72,7 @@ pub fn parse_simctl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::E
                 flutter_id,
                 group: Some("simulator".to_string()),
                 transport: None,
+                connection,
             });
         }
     }
@@ -165,70 +171,195 @@ struct DevicectlDeviceProperties {
 struct DevicectlConnectionProperties {
     #[serde(default, rename = "tunnelState")]
     tunnel_state: Option<String>,
+    #[serde(default, rename = "pairingState")]
+    pairing_state: Option<String>,
+    #[serde(default, rename = "transportType")]
+    transport_type: Option<String>,
 }
 
-/// Parse output of `xcrun devicectl list devices --json-output`.
-/// Note: Tested via fixtures; live Mac verification pending.
-pub fn parse_devicectl_devices(json_str: &str) -> Result<Vec<Device>, serde_json::Error> {
-    let parsed: DevicectlOutput = serde_json::from_str(json_str)?;
-    let mut devices = Vec::new();
+/// Parse output of `xcrun devicectl list devices --json-output` or plain text table.
+pub fn parse_devicectl_devices(input: &str) -> Result<Vec<Device>, serde_json::Error> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
 
-    if let Some(res) = parsed.result {
-        for item in res.devices {
-            let name = item
-                .device_properties
-                .as_ref()
-                .and_then(|p| p.name.clone())
-                .unwrap_or_else(|| item.identifier.clone());
+    if trimmed.starts_with('{') {
+        if let Ok(parsed) = serde_json::from_str::<DevicectlOutput>(trimmed) {
+            let mut devices = Vec::new();
+            if let Some(res) = parsed.result {
+                for item in res.devices {
+                    let name = item
+                        .device_properties
+                        .as_ref()
+                        .and_then(|p| p.name.clone())
+                        .unwrap_or_else(|| item.identifier.clone());
 
-            let sdk = item
-                .device_properties
-                .as_ref()
-                .and_then(|p| p.os_version_number.clone())
-                .map(|v| format!("iOS {}", v));
+                    let sdk = item
+                        .device_properties
+                        .as_ref()
+                        .and_then(|p| p.os_version_number.clone())
+                        .map(|v| format!("iOS {}", v));
 
-            let is_connected = item
-                .connection_properties
-                .as_ref()
-                .and_then(|c| c.tunnel_state.as_deref())
-                == Some("connected")
-                || item.visibility.as_deref() == Some("visible");
+                    let tunnel = item
+                        .connection_properties
+                        .as_ref()
+                        .and_then(|c| c.tunnel_state.as_deref())
+                        .unwrap_or("");
+                    let pairing = item
+                        .connection_properties
+                        .as_ref()
+                        .and_then(|c| c.pairing_state.as_deref())
+                        .unwrap_or("");
+                    let vis = item.visibility.as_deref().unwrap_or("");
 
-            let state = if is_connected {
-                DeviceState::Online
-            } else {
-                DeviceState::Offline
-            };
+                    let connection = if tunnel == "connected" {
+                        "connected".to_string()
+                    } else if tunnel.contains("paired") || pairing == "paired" {
+                        "paired".to_string()
+                    } else if tunnel == "unavailable" || vis == "unavailable" {
+                        "unavailable".to_string()
+                    } else {
+                        "offline".to_string()
+                    };
 
-            let flutter_id = if state == DeviceState::Online {
-                Some(item.identifier.clone())
-            } else {
-                None
-            };
-            let transport = if name.to_lowercase().contains("wireless")
-                || name.to_lowercase().contains("wifi")
-                || item.identifier.contains(':')
-            {
-                Some("wifi".to_string())
-            } else {
-                Some("usb".to_string())
-            };
+                    let state = if connection == "connected" {
+                        DeviceState::Online
+                    } else {
+                        DeviceState::Offline
+                    };
 
-            devices.push(Device {
-                id: item.identifier,
-                name,
-                platform: DevicePlatform::Ios,
-                kind: DeviceKind::Physical,
-                state,
-                sdk,
-                flutter_id,
-                group: Some("physical".to_string()),
-                transport,
-            });
+                    let flutter_id = if state == DeviceState::Online {
+                        Some(item.identifier.clone())
+                    } else {
+                        None
+                    };
+
+                    let transport_type = item
+                        .connection_properties
+                        .as_ref()
+                        .and_then(|c| c.transport_type.as_deref())
+                        .unwrap_or("");
+
+                    let name_lower = name.to_lowercase();
+                    let transport = if transport_type == "wifi"
+                        || transport_type == "wireless"
+                        || transport_type == "localNetwork"
+                        || name_lower.contains("wireless")
+                        || name_lower.contains("wifi")
+                        || item.identifier.contains(':')
+                    {
+                        Some("wifi".to_string())
+                    } else if transport_type == "wired" || transport_type == "usb" {
+                        Some("usb".to_string())
+                    } else if connection == "connected" {
+                        Some("usb".to_string())
+                    } else {
+                        Some("unknown".to_string())
+                    };
+
+                    devices.push(Device {
+                        id: item.identifier,
+                        name,
+                        platform: DevicePlatform::Ios,
+                        kind: DeviceKind::Physical,
+                        state,
+                        sdk,
+                        flutter_id,
+                        group: Some("physical".to_string()),
+                        transport,
+                        connection,
+                    });
+                }
+            }
+            return Ok(devices);
         }
     }
 
-    Ok(devices)
+    Ok(parse_devicectl_devices_table(trimmed))
+}
+
+/// Parse text table output of `xcrun devicectl list devices`.
+pub fn parse_devicectl_devices_table(table_str: &str) -> Vec<Device> {
+    let mut devices = Vec::new();
+    for line in table_str.lines() {
+        let line = line.trim();
+        if line.is_empty()
+            || line.starts_with("Name")
+            || line.starts_with("---")
+            || line.starts_with("===")
+            || line.starts_with("Showing")
+        {
+            continue;
+        }
+
+        // State detection: connected, available (paired), unavailable
+        let (connection, state) = if line.contains("available (paired)") {
+            ("paired".to_string(), DeviceState::Offline)
+        } else if line.contains("connected") {
+            ("connected".to_string(), DeviceState::Online)
+        } else if line.contains("unavailable") {
+            ("unavailable".to_string(), DeviceState::Offline)
+        } else if line.contains("disconnected") || line.contains("offline") {
+            ("offline".to_string(), DeviceState::Offline)
+        } else {
+            continue;
+        };
+
+        // Find identifier: UDID pattern (contains hyphen or 40-char hex)
+        let mut id_opt = None;
+        let mut name_parts = Vec::new();
+
+        for token in line.split_whitespace() {
+            if is_valid_udid(token) && (token.contains('-') || token.len() == 40) {
+                id_opt = Some(token.to_string());
+                break;
+            }
+            name_parts.push(token);
+        }
+
+        let id = match id_opt {
+            Some(id) => id,
+            None => continue,
+        };
+
+        let name = if name_parts.is_empty() {
+            id.clone()
+        } else {
+            name_parts.join(" ")
+        };
+
+        let flutter_id = if state == DeviceState::Online {
+            Some(id.clone())
+        } else {
+            None
+        };
+
+        let line_lower = line.to_lowercase();
+        let transport = if line_lower.contains("wireless") || line_lower.contains("wifi") || id.contains(':') {
+            Some("wifi".to_string())
+        } else if line_lower.contains("wired") || line_lower.contains("usb") {
+            Some("usb".to_string())
+        } else if connection == "connected" {
+            Some("usb".to_string())
+        } else {
+            Some("unknown".to_string())
+        };
+
+        devices.push(Device {
+            id,
+            name,
+            platform: DevicePlatform::Ios,
+            kind: DeviceKind::Physical,
+            state,
+            sdk: None,
+            flutter_id,
+            group: Some("physical".to_string()),
+            transport,
+            connection,
+        });
+    }
+    devices
 }
 
 #[cfg(test)]
@@ -355,6 +486,84 @@ mod tests {
         assert_eq!(dev.platform, DevicePlatform::Ios);
         assert_eq!(dev.kind, DeviceKind::Physical);
         assert_eq!(dev.state, DeviceState::Online);
+        assert_eq!(dev.connection, "connected");
+        assert_eq!(dev.transport.as_deref(), Some("usb"));
         assert_eq!(dev.sdk, Some("iOS 17.4.1".to_string()));
+    }
+
+    #[test]
+    fn test_parse_devicectl_3_states_table_fixture() {
+        let fixture = r#"
+Name               Identifier                            State                  Model
+iPhone 15 Pro      00008130-001234567890                 connected              iPhone 15 Pro
+UQi                00008101-001234567890                 available (paired)     iPhone 12
+Prio               00008030-001234567890                 unavailable            iPhone 11
+"#;
+
+        let devices = parse_devicectl_devices(fixture).unwrap();
+        assert_eq!(devices.len(), 3);
+
+        let d_connected = devices.iter().find(|d| d.id == "00008130-001234567890").unwrap();
+        assert_eq!(d_connected.connection, "connected");
+        assert_eq!(d_connected.state, DeviceState::Online);
+        assert_eq!(d_connected.transport.as_deref(), Some("usb"));
+        assert_eq!(d_connected.flutter_id.as_deref(), Some("00008130-001234567890"));
+
+        let d_paired = devices.iter().find(|d| d.id == "00008101-001234567890").unwrap();
+        assert_eq!(d_paired.connection, "paired");
+        assert_eq!(d_paired.state, DeviceState::Offline);
+        assert_eq!(d_paired.flutter_id, None);
+
+        let d_unavail = devices.iter().find(|d| d.id == "00008030-001234567890").unwrap();
+        assert_eq!(d_unavail.connection, "unavailable");
+        assert_eq!(d_unavail.state, DeviceState::Offline);
+        assert_eq!(d_unavail.flutter_id, None);
+    }
+
+    #[test]
+    fn test_parse_devicectl_3_states_json_fixture() {
+        let fixture = r#"{
+            "result": {
+                "devices": [
+                    {
+                        "identifier": "00008130-001234567890",
+                        "deviceProperties": { "name": "iPhone 15 Pro", "osVersionNumber": "17.4" },
+                        "connectionProperties": { "tunnelState": "connected", "transportType": "wired" },
+                        "visibility": "visible"
+                    },
+                    {
+                        "identifier": "00008101-001234567890",
+                        "deviceProperties": { "name": "UQi", "osVersionNumber": "17.4" },
+                        "connectionProperties": { "tunnelState": "available (paired)", "pairingState": "paired", "transportType": "wifi" },
+                        "visibility": "visible"
+                    },
+                    {
+                        "identifier": "00008030-001234567890",
+                        "deviceProperties": { "name": "Prio", "osVersionNumber": "17.0" },
+                        "connectionProperties": { "tunnelState": "unavailable" },
+                        "visibility": "unavailable"
+                    }
+                ]
+            }
+        }"#;
+
+        let devices = parse_devicectl_devices(fixture).unwrap();
+        assert_eq!(devices.len(), 3);
+
+        let d1 = devices.iter().find(|d| d.id == "00008130-001234567890").unwrap();
+        assert_eq!(d1.connection, "connected");
+        assert_eq!(d1.state, DeviceState::Online);
+        assert_eq!(d1.transport.as_deref(), Some("usb"));
+
+        let d2 = devices.iter().find(|d| d.id == "00008101-001234567890").unwrap();
+        assert_eq!(d2.connection, "paired");
+        assert_eq!(d2.state, DeviceState::Offline);
+        assert_eq!(d2.transport.as_deref(), Some("wifi"));
+        assert_eq!(d2.flutter_id, None);
+
+        let d3 = devices.iter().find(|d| d.id == "00008030-001234567890").unwrap();
+        assert_eq!(d3.connection, "unavailable");
+        assert_eq!(d3.state, DeviceState::Offline);
+        assert_eq!(d3.flutter_id, None);
     }
 }
