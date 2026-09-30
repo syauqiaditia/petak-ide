@@ -1,4 +1,7 @@
-use petak_core::agent::{PromptResponse, SlotManager, SlotSummary};
+use petak_core::agent::{
+    HermesDetectionResult, PendingPermissionRequest, PromptResponse, Proposal, SlotConfig,
+    SlotManager, SlotSummary, TeamConfig, UsageReport,
+};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -10,6 +13,16 @@ impl Default for AgentState {
     fn default() -> Self {
         Self {
             manager: Arc::new(SlotManager::with_defaults(None)),
+        }
+    }
+}
+
+fn sync_project_root(app: &tauri::AppHandle, manager: &SlotManager) {
+    if let Some(curr_root) = app.try_state::<crate::commands::CurrentProjectRoot>() {
+        if let Ok(guard) = curr_root.0.lock() {
+            if let Some(ref r) = *guard {
+                manager.set_project_root(Some(std::path::PathBuf::from(r)));
+            }
         }
     }
 }
@@ -64,4 +77,176 @@ pub async fn agent_stop(
     tauri::async_runtime::spawn_blocking(move || manager.stop_slot(&slot_id))
         .await
         .map_err(|e| e.to_string())?
+}
+
+// ── Hermes detection ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_detect_hermes(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<HermesDetectionResult, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::detect_hermes(root.as_deref()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Team configuration & slot management ───────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_load_team(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<TeamConfig, String> {
+    sync_project_root(&app, &state.manager);
+    let manager = Arc::clone(&state.manager);
+    tauri::async_runtime::spawn_blocking(move || {
+        let (team, _) = manager.load_team();
+        Ok(team)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_save_team(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    team: TeamConfig,
+) -> Result<String, String> {
+    sync_project_root(&app, &state.manager);
+    let manager = Arc::clone(&state.manager);
+    tauri::async_runtime::spawn_blocking(move || {
+        let saved_path = manager.save_team(&team)?;
+        manager.apply_team(&team)?;
+        Ok(saved_path.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_add_slot(
+    state: tauri::State<'_, AgentState>,
+    config: SlotConfig,
+) -> Result<SlotSummary, String> {
+    state.manager.add_slot(config)
+}
+
+#[tauri::command]
+pub async fn agent_update_slot(
+    state: tauri::State<'_, AgentState>,
+    config: SlotConfig,
+) -> Result<SlotSummary, String> {
+    state.manager.update_slot(config)
+}
+
+#[tauri::command]
+pub async fn agent_remove_slot(
+    state: tauri::State<'_, AgentState>,
+    slot_id: String,
+) -> Result<(), String> {
+    state.manager.remove_slot(&slot_id)
+}
+
+// ── Permission engine ───────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_allowlist(
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<String>, String> {
+    Ok(state.manager.permission_manager().get_allowlist())
+}
+
+#[tauri::command]
+pub async fn agent_set_allowlist(
+    state: tauri::State<'_, AgentState>,
+    allowlist: Vec<String>,
+) -> Result<(), String> {
+    state.manager.permission_manager().set_allowlist(allowlist);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn agent_list_pending_permissions(
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<PendingPermissionRequest>, String> {
+    Ok(state.manager.permission_manager().list_pending())
+}
+
+#[tauri::command]
+pub async fn agent_respond_permission(
+    state: tauri::State<'_, AgentState>,
+    request_id: String,
+    allow: bool,
+) -> Result<(), String> {
+    state.manager.permission_manager().respond(&request_id, allow)
+}
+
+// ── Proposal buffer ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_list_proposals(
+    state: tauri::State<'_, AgentState>,
+    slot_id: Option<String>,
+) -> Result<Vec<Proposal>, String> {
+    Ok(state
+        .manager
+        .proposal_buffer()
+        .list_proposals(slot_id.as_deref()))
+}
+
+#[tauri::command]
+pub async fn agent_accept_proposal(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    proposal_id: String,
+) -> Result<(), String> {
+    sync_project_root(&app, &state.manager);
+    let lh_store = state
+        .manager
+        .project_root()
+        .and_then(|r| crate::commands::lh_store_dir(&app, &r.to_string_lossy()).ok());
+
+    let prop_buf = state.manager.proposal_buffer();
+    prop_buf.accept_proposal(&proposal_id, lh_store.as_deref())
+}
+
+#[tauri::command]
+pub async fn agent_reject_proposal(
+    state: tauri::State<'_, AgentState>,
+    proposal_id: String,
+) -> Result<(), String> {
+    state.manager.proposal_buffer().reject_proposal(&proposal_id)
+}
+
+#[tauri::command]
+pub async fn agent_accept_hunk(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    proposal_id: String,
+    hunk_idx: usize,
+) -> Result<(), String> {
+    sync_project_root(&app, &state.manager);
+    let lh_store = state
+        .manager
+        .project_root()
+        .and_then(|r| crate::commands::lh_store_dir(&app, &r.to_string_lossy()).ok());
+
+    let prop_buf = state.manager.proposal_buffer();
+    prop_buf.accept_hunk(&proposal_id, hunk_idx, lh_store.as_deref())
+}
+
+// ── Usage meter ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_usage(
+    state: tauri::State<'_, AgentState>,
+    slot_id: String,
+) -> Result<UsageReport, String> {
+    state.manager.get_slot_usage(&slot_id)
 }

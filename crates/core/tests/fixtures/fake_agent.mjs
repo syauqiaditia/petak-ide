@@ -11,6 +11,8 @@ const rl = readline.createInterface({
 let activeSessions = new Map();
 let currentPromptTimer = null;
 let currentPromptResolve = null;
+let pendingRpc = new Map();
+let nextRpcId = 9000;
 
 function send(msg) {
   process.stdout.write(JSON.stringify(msg) + '\n');
@@ -30,6 +32,16 @@ rl.on('line', (line) => {
       error: { code: -32700, message: 'Parse error: ' + String(err) },
     });
     return;
+  }
+
+  // Check if this is a response to our client-initiated RPC request
+  if (msg.id !== undefined && msg.id !== null && (msg.result !== undefined || msg.error !== undefined)) {
+    if (pendingRpc.has(msg.id)) {
+      const cb = pendingRpc.get(msg.id);
+      pendingRpc.delete(msg.id);
+      cb(msg);
+      return;
+    }
   }
 
   // Handle requests / notifications
@@ -98,7 +110,85 @@ rl.on('line', (line) => {
     const sessionId = msg.params?.sessionId;
     const promptText = msg.params?.prompt?.[0]?.text || '';
 
-    if (promptText.startsWith('slow')) {
+    if (promptText.startsWith('perm:')) {
+      const cmd = promptText.slice(5);
+      const rpcId = ++nextRpcId;
+      pendingRpc.set(rpcId, (resp) => {
+        send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            stopReason: 'end_turn',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            _meta: { permResult: resp.result, permError: resp.error },
+          },
+        });
+      });
+      send({
+        jsonrpc: '2.0',
+        id: rpcId,
+        method: 'session/request_permission',
+        params: {
+          sessionId,
+          toolCall: {
+            tool: 'bash',
+            arguments: { command: cmd },
+            command: cmd,
+          },
+        },
+      });
+    } else if (promptText.startsWith('write:')) {
+      const rest = promptText.slice(6);
+      const colonIdx = rest.indexOf(':');
+      const path = colonIdx >= 0 ? rest.slice(0, colonIdx) : rest;
+      const content = colonIdx >= 0 ? rest.slice(colonIdx + 1) : '';
+
+      const rpcId = ++nextRpcId;
+      pendingRpc.set(rpcId, (resp) => {
+        send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            stopReason: 'end_turn',
+            usage: { inputTokens: 12, outputTokens: 6 },
+            _meta: { writeResult: resp.result, writeError: resp.error },
+          },
+        });
+      });
+      send({
+        jsonrpc: '2.0',
+        id: rpcId,
+        method: 'fs/write_text_file',
+        params: {
+          sessionId,
+          path,
+          content,
+        },
+      });
+    } else if (promptText.startsWith('read:')) {
+      const path = promptText.slice(5);
+      const rpcId = ++nextRpcId;
+      pendingRpc.set(rpcId, (resp) => {
+        send({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            stopReason: 'end_turn',
+            usage: { inputTokens: 8, outputTokens: 4 },
+            _meta: { readResult: resp.result, readError: resp.error },
+          },
+        });
+      });
+      send({
+        jsonrpc: '2.0',
+        id: rpcId,
+        method: 'fs/read_text_file',
+        params: {
+          sessionId,
+          path,
+        },
+      });
+    } else if (promptText.startsWith('slow')) {
       // Stream updates slowly so cancel can be tested
       let count = 0;
       currentPromptTimer = setInterval(() => {

@@ -1,5 +1,5 @@
-mod commands;
 mod agent_commands;
+mod commands;
 
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
@@ -17,7 +17,8 @@ pub fn run() {
         .manage(commands::MirrorState::default())
         .manage(commands::CurrentProjectRoot::default())
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } = event {
+            if let tauri::WindowEvent::Destroyed | tauri::WindowEvent::CloseRequested { .. } = event
+            {
                 if let Some(state) = window.try_state::<commands::TermSessions>() {
                     if let Ok(mut sessions) = state.lock() {
                         for (_, session) in sessions.drain() {
@@ -46,44 +47,57 @@ pub fn run() {
             let app_handle_for_events = app_handle.clone();
             let registry = std::sync::Arc::new(petak_core::lsp::Registry::new(
                 std::sync::Arc::new(petak_core::lsp::WallClock),
-                move |lang, root, event| {
-                    match event {
-                        petak_core::lsp::ServerEvent::Notification { method, params } => {
-                            if method == "textDocument/publishDiagnostics" {
-                                if let Some(uri_val) = params.get("uri").and_then(|u| u.as_str()) {
-                                    let path = petak_core::lsp::registry::uri_to_path(uri_val)
-                                        .map(|p| p.to_string_lossy().to_string())
-                                        .unwrap_or_else(|| uri_val.to_string());
-                                    let diagnostics = params.get("diagnostics").cloned().unwrap_or(serde_json::json!([]));
-                                    let _ = app_handle_for_events.emit("lsp-diagnostics", serde_json::json!({
+                move |lang, root, event| match event {
+                    petak_core::lsp::ServerEvent::Notification { method, params } => {
+                        if method == "textDocument/publishDiagnostics" {
+                            if let Some(uri_val) = params.get("uri").and_then(|u| u.as_str()) {
+                                let path = petak_core::lsp::registry::uri_to_path(uri_val)
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| uri_val.to_string());
+                                let diagnostics = params
+                                    .get("diagnostics")
+                                    .cloned()
+                                    .unwrap_or(serde_json::json!([]));
+                                let _ = app_handle_for_events.emit(
+                                    "lsp-diagnostics",
+                                    serde_json::json!({
                                         "path": path,
                                         "diagnostics": diagnostics,
-                                    }));
-                                }
+                                    }),
+                                );
                             }
                         }
-                        petak_core::lsp::ServerEvent::Status { state, reason } => {
-                            let _ = app_handle_for_events.emit("lsp-status", serde_json::json!({
+                    }
+                    petak_core::lsp::ServerEvent::Status { state, reason } => {
+                        let _ = app_handle_for_events.emit(
+                            "lsp-status",
+                            serde_json::json!({
                                 "lang": lang.as_str(),
                                 "root": root.to_string_lossy().to_string(),
                                 "state": state,
                                 "reason": reason,
-                            }));
-                        }
-                        petak_core::lsp::ServerEvent::Crashed => {
-                            let _ = app_handle_for_events.emit("lsp-status", serde_json::json!({
+                            }),
+                        );
+                    }
+                    petak_core::lsp::ServerEvent::Crashed => {
+                        let _ = app_handle_for_events.emit(
+                            "lsp-status",
+                            serde_json::json!({
                                 "lang": lang.as_str(),
                                 "root": root.to_string_lossy().to_string(),
                                 "state": "crashed",
                                 "reason": Some("server process died unexpectedly"),
-                            }));
-                        }
-                        petak_core::lsp::ServerEvent::ApplyEdit { id, edit } => {
-                            let _ = app_handle_for_events.emit("lsp-apply-edit", serde_json::json!({
+                            }),
+                        );
+                    }
+                    petak_core::lsp::ServerEvent::ApplyEdit { id, edit } => {
+                        let _ = app_handle_for_events.emit(
+                            "lsp-apply-edit",
+                            serde_json::json!({
                                 "id": id,
                                 "edit": edit,
-                            }));
-                        }
+                            }),
+                        );
                     }
                 },
             ));
@@ -91,11 +105,9 @@ pub fn run() {
             app.manage(registry.clone());
 
             let reg_tick = registry.clone();
-            std::thread::spawn(move || {
-                loop {
-                    std::thread::sleep(std::time::Duration::from_secs(30));
-                    reg_tick.tick();
-                }
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                reg_tick.tick();
             });
 
             let agent_state = commands::AgentState::default();
@@ -107,11 +119,9 @@ pub fn run() {
             app.manage(agent_state);
 
             let agent_tick_mgr = agent_mgr.clone();
-            std::thread::spawn(move || {
-                loop {
-                    std::thread::sleep(std::time::Duration::from_secs(30));
-                    agent_tick_mgr.tick_idle_reap();
-                }
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                agent_tick_mgr.tick_idle_reap();
             });
 
             #[cfg(target_os = "macos")]
@@ -130,8 +140,7 @@ pub fn run() {
                             .separator()
                             .quit()
                             .build()?,
-                        &SubmenuBuilder::new(app_handle, "File")
-                            .build()?,
+                        &SubmenuBuilder::new(app_handle, "File").build()?,
                         &SubmenuBuilder::new(app_handle, "Edit")
                             .undo()
                             .redo()
@@ -313,6 +322,21 @@ pub fn run() {
             commands::agent_prompt,
             commands::agent_cancel,
             commands::agent_stop,
+            commands::agent_detect_hermes,
+            commands::agent_load_team,
+            commands::agent_save_team,
+            commands::agent_add_slot,
+            commands::agent_update_slot,
+            commands::agent_remove_slot,
+            commands::agent_get_allowlist,
+            commands::agent_set_allowlist,
+            commands::agent_respond_permission,
+            commands::agent_list_pending_permissions,
+            commands::agent_list_proposals,
+            commands::agent_accept_proposal,
+            commands::agent_reject_proposal,
+            commands::agent_accept_hunk,
+            commands::agent_get_usage,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,

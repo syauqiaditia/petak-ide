@@ -13,6 +13,8 @@ use std::time::Duration;
 pub type PendingResponseSender = Sender<Result<Value, AcpError>>;
 pub type PendingMap = Arc<Mutex<HashMap<i64, PendingResponseSender>>>;
 pub type UpdateCallback = Arc<dyn Fn(Value) + Send + Sync + 'static>;
+pub type RequestCallback =
+    Arc<dyn Fn(&str, Value) -> Option<Result<Value, (i64, String)>> + Send + Sync + 'static>;
 
 #[derive(Debug, Clone)]
 pub enum AcpError {
@@ -132,6 +134,23 @@ impl AcpClient {
     where
         F: Fn(Value) + Send + Sync + 'static,
     {
+        Self::spawn_with_handler::<F, fn(&str, Value) -> Option<Result<Value, (i64, String)>>>(
+            cmd_str, args, env, cwd, on_update, None,
+        )
+    }
+
+    pub fn spawn_with_handler<F, H>(
+        cmd_str: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        cwd: Option<&Path>,
+        on_update: F,
+        on_request: Option<H>,
+    ) -> Result<Self, AcpError>
+    where
+        F: Fn(Value) + Send + Sync + 'static,
+        H: Fn(&str, Value) -> Option<Result<Value, (i64, String)>> + Send + Sync + 'static,
+    {
         let mut cmd = Command::new(cmd_str);
         cmd.args(args);
         crate::toolchain::apply_env_for_root(&mut cmd, cwd);
@@ -175,8 +194,11 @@ impl AcpClient {
         let alive_clone = Arc::clone(&alive);
         let stopping_clone = Arc::clone(&stopping);
         let on_update_fn: UpdateCallback = Arc::new(on_update);
+        let on_request_fn: Option<RequestCallback> =
+            on_request.map(|h| Arc::new(h) as RequestCallback);
 
         // Reader thread for stdout (NDJSON messages)
+        let writer_for_requests = Arc::clone(&writer);
         let reader_thread = thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line_res in reader.lines() {
@@ -222,6 +244,52 @@ impl AcpClient {
                             }
                         }
                         continue;
+                    }
+                }
+
+                // Check for client-initiated RPC requests from agent
+                if let (Some(id_val), Some(method_val)) = (msg.get("id"), msg.get("method")) {
+                    if let (Some(id_num), Some(method_str)) = (id_val.as_i64(), method_val.as_str())
+                    {
+                        let params_val = msg.get("params").cloned().unwrap_or(Value::Null);
+                        if let Some(ref handler) = on_request_fn {
+                            let handler_clone = Arc::clone(handler);
+                            let writer_clone = Arc::clone(&writer_for_requests);
+                            let method_owned = method_str.to_string();
+                            thread::spawn(move || {
+                                let resp_val = match handler_clone(&method_owned, params_val) {
+                                    Some(Ok(res)) => serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "id": id_num,
+                                        "result": res,
+                                    }),
+                                    Some(Err((code, msg))) => serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "id": id_num,
+                                        "error": {
+                                            "code": code,
+                                            "message": msg,
+                                        }
+                                    }),
+                                    None => serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "id": id_num,
+                                        "error": {
+                                            "code": -32601,
+                                            "message": format!("Method not found: {method_owned}"),
+                                        }
+                                    }),
+                                };
+                                if let Ok(serialized) = serde_json::to_string(&resp_val) {
+                                    if let Ok(mut w) = writer_clone.lock() {
+                                        let _ = w.write_all(serialized.as_bytes());
+                                        let _ = w.write_all(b"\n");
+                                        let _ = w.flush();
+                                    }
+                                }
+                            });
+                            continue;
+                        }
                     }
                 }
 
