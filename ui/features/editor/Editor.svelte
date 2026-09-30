@@ -58,6 +58,8 @@
   import { createDiffFileFromTexts } from '../../shell/diffUtils';
   import { gitStore } from '../git/git.svelte.ts';
   import type { GitDiffFile, GitBlameLine } from '../git/types';
+  import { createCodeFoldingExtension, saveFileFoldState, restoreFileFoldState } from './folding';
+  import FindReplaceBar from './FindReplaceBar.svelte';
 
   let {
     folderPath = '',
@@ -90,6 +92,9 @@
   let currentSwappedPath: string | null = null;
   let unlistenDiagnostics: UnlistenFn | null = null;
   let unlistenApplyEdit: UnlistenFn | null = null;
+
+  let findReplaceOpen = $state(false);
+  let findReplaceMode = $state<'find' | 'replace'>('find');
 
   const petakTheme = EditorView.theme(
     {
@@ -491,6 +496,7 @@
         flashLineField,
         lintGutter(),
         lintTheme,
+        createCodeFoldingExtension(),
         createLspSyncExtension(() => currentSwappedPath),
         createLspAutocompleteExtension(() => currentSwappedPath),
         createLspHoverExtension(() => currentSwappedPath),
@@ -734,6 +740,16 @@
       if (view && currentSwappedPath) {
         triggerCodeActions(view, currentSwappedPath);
       }
+    } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'f' || e.code === 'KeyF')) {
+      e.preventDefault();
+      e.stopPropagation();
+      findReplaceMode = 'find';
+      findReplaceOpen = true;
+    } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'r' || e.code === 'KeyR')) {
+      e.preventDefault();
+      e.stopPropagation();
+      findReplaceMode = 'replace';
+      findReplaceOpen = true;
     }
   }
 
@@ -833,6 +849,7 @@
 
     if (activePath !== currentSwappedPath && view) {
       if (currentSwappedPath) {
+        saveFileFoldState(currentSwappedPath, view.state);
         const prevTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
         if (prevTab && view) {
           prevTab.state = view.state;
@@ -846,6 +863,7 @@
           active.state = createEditorState(active.savedContent, active.name);
         }
         view.setState(active.state);
+        restoreFileFoldState(active.path, view);
         view.focus();
 
         onTabOpen(active.path, active.savedContent);
@@ -949,6 +967,16 @@
     oncontextmenu={handleEditorContextMenu}
     class:hidden={tabsManager.tabs.length === 0}
   ></div>
+
+  <FindReplaceBar
+    {view}
+    isOpen={findReplaceOpen}
+    mode={findReplaceMode}
+    onClose={() => {
+      findReplaceOpen = false;
+      view?.focus();
+    }}
+  />
 
   {#if renameStore.visible}
     <div
