@@ -202,3 +202,43 @@ test('bottom panel maximize/restore toggle on double-click', () => {
   assert.equal(restoreResult.isMaximized, false);
   assert.equal(restoreResult.height, 250);
 });
+
+// =============================================================================
+// Suite 6: Single-List Commit Selection & Staging (Feature C)
+// =============================================================================
+import {
+  isEntryStaged,
+  filterUnifiedChanges,
+  countCheckedEntries,
+  getUnifiedStatusLetter,
+} from '../ui/features/git/commitSelectionLogic.ts';
+
+test('commit single list: unified changes filter & checkbox state consistency', () => {
+  const entries = [
+    { path: 'clean.dart', index: 'unmodified', worktree: 'unmodified', conflicted: false },
+    { path: 'staged_ext.dart', index: 'modified', worktree: 'unmodified', conflicted: false },
+    { path: 'worktree_mod.dart', index: 'unmodified', worktree: 'modified', conflicted: false },
+    { path: 'untracked.dart', index: 'untracked', worktree: 'untracked', conflicted: false },
+    { path: 'both.dart', index: 'modified', worktree: 'modified', conflicted: false },
+    { path: 'conflict.dart', index: 'modified', worktree: 'modified', conflicted: true },
+  ];
+
+  // 1. Unified filter excludes clean files
+  const changed = filterUnifiedChanges(entries);
+  assert.equal(changed.length, 5);
+  assert.equal(changed.some((e) => e.path === 'clean.dart'), false);
+
+  // 2. Checked state: externally staged files are immediately checked
+  assert.equal(isEntryStaged(entries[1]), true); // staged_ext.dart is checked
+  assert.equal(isEntryStaged(entries[2]), false); // worktree_mod.dart is unchecked
+  assert.equal(isEntryStaged(entries[3]), false); // untracked is unchecked
+  assert.equal(isEntryStaged(entries[4]), true);  // both.dart has staged index -> checked
+
+  // 3. Count checked
+  assert.equal(countCheckedEntries(changed), 3); // entries[1], entries[4], entries[5]
+
+  // 4. Status letters
+  assert.equal(getUnifiedStatusLetter(entries[5]).char, '!');
+  assert.equal(getUnifiedStatusLetter(entries[1]).char, 'M');
+  assert.equal(getUnifiedStatusLetter(entries[3]).char, '?');
+});
