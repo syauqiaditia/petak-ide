@@ -29,7 +29,10 @@
   },
   "bundle": {
     "active": true,
-    "resources": ["resources/scrcpy-server-v4.1"],
+    "resources": [
+      "resources/scrcpy-server-v4.1",
+      "../core/src/mirror/ios/petak_ios_capture.swift"
+    ],
     "targets": ["app", "dmg"],
     "macOS": {
       "infoPlist": "Info.plist"

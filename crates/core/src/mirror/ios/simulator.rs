@@ -269,16 +269,49 @@ pub fn ensure_simulator_booted(exec: &dyn Exec, udid: &str) -> io::Result<()> {
 
 /// Resolve the path to `petak_ios_capture.swift` or compiled binary.
 pub fn resolve_swift_helper_path() -> PathBuf {
-    // 1. Check relative to CARGO_MANIFEST_DIR / source tree
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let src_path = Path::new(&manifest_dir).join("src/mirror/ios/petak_ios_capture.swift");
-    if src_path.exists() {
+    resolve_swift_helper_path_internal(
+        std::env::current_exe().ok().as_deref(),
+        std::env::var("CARGO_MANIFEST_DIR").ok().as_deref(),
+    )
+}
+
+pub fn resolve_swift_helper_path_internal(
+    current_exe: Option<&Path>,
+    manifest_dir: Option<&str>,
+) -> PathBuf {
+    // 1. App bundle Resources (macOS) or beside executable:
+    //    .app/Contents/MacOS/Petak -> .app/Contents/Resources/petak_ios_capture.swift
+    if let Some(exe) = current_exe {
+        if let Some(parent) = exe.parent() {
+            let res_swift = parent.join("../Resources/petak_ios_capture.swift");
+            if res_swift.is_file() {
+                return res_swift.canonicalize().unwrap_or(res_swift);
+            }
+            let res_bin = parent.join("../Resources/petak_ios_capture");
+            if res_bin.is_file() {
+                return res_bin.canonicalize().unwrap_or(res_bin);
+            }
+            let beside_swift = parent.join("petak_ios_capture.swift");
+            if beside_swift.is_file() {
+                return beside_swift.canonicalize().unwrap_or(beside_swift);
+            }
+            let beside_bin = parent.join("petak_ios_capture");
+            if beside_bin.is_file() {
+                return beside_bin.canonicalize().unwrap_or(beside_bin);
+            }
+        }
+    }
+
+    // 2. Check relative to CARGO_MANIFEST_DIR / source tree
+    let manifest = manifest_dir.unwrap_or(".");
+    let src_path = Path::new(manifest).join("src/mirror/ios/petak_ios_capture.swift");
+    if src_path.is_file() {
         return src_path;
     }
 
-    // 2. Check binary in /tmp or standard cache
+    // 3. Check binary in /tmp or standard cache
     let bin_path = PathBuf::from("/mnt/storage/uqi-cache/bin/petak-ios-capture");
-    if bin_path.exists() {
+    if bin_path.is_file() {
         return bin_path;
     }
 
@@ -355,5 +388,23 @@ mod tests {
             path.to_string_lossy().contains("petak_ios_capture.swift")
                 || path.to_string_lossy().contains("petak-ios-capture")
         );
+    }
+
+    #[test]
+    fn test_resolve_swift_helper_path_mac_bundle_resources() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let macos_dir = tmp_dir.path().join("Contents/MacOS");
+        let resources_dir = tmp_dir.path().join("Contents/Resources");
+        std::fs::create_dir_all(&macos_dir).unwrap();
+        std::fs::create_dir_all(&resources_dir).unwrap();
+
+        let helper_swift = resources_dir.join("petak_ios_capture.swift");
+        std::fs::write(&helper_swift, "// swift capture script").unwrap();
+
+        let fake_exe = macos_dir.join("Petak");
+        std::fs::write(&fake_exe, "").unwrap();
+
+        let resolved = resolve_swift_helper_path_internal(Some(&fake_exe), None);
+        assert_eq!(resolved, helper_swift);
     }
 }

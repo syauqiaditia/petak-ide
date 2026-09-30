@@ -23,63 +23,101 @@ const SERVER_REMOTE_PATH: &str = "/data/local/tmp/scrcpy-server.jar";
 const SCRCPY_SERVER_SHA256: &str = "deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae";
 
 /// Resolve the local path to the scrcpy-server jar.
-/// Order: env PETAK_SCRCPY_SERVER -> Tauri resource dir -> app-support dir.
+/// Order: env PETAK_SCRCPY_SERVER -> Tauri resource dir -> app-support dir -> Homebrew/system paths.
 pub fn resolve_server_jar() -> io::Result<String> {
-    let jar_name = format!("scrcpy-server-v{}", SCRCPY_VERSION);
+    resolve_server_jar_internal(
+        std::env::var("PETAK_SCRCPY_SERVER").ok().as_deref(),
+        std::env::current_exe().ok().as_deref(),
+        dirs::data_dir().as_deref(),
+        &[
+            Path::new("/opt/homebrew/share/scrcpy"),
+            Path::new("/usr/local/share/scrcpy"),
+            Path::new("/usr/share/scrcpy"),
+        ],
+    )
+}
+
+pub fn resolve_server_jar_internal(
+    env_override: Option<&str>,
+    current_exe: Option<&Path>,
+    data_dir: Option<&Path>,
+    system_dirs: &[&Path],
+) -> io::Result<String> {
+    let jar_names = [format!("scrcpy-server-v{}", SCRCPY_VERSION), "scrcpy-server".to_string()];
 
     // 1. Env override
-    if let Ok(env_path) = std::env::var("PETAK_SCRCPY_SERVER") {
+    if let Some(env_path) = env_override {
         if !env_path.trim().is_empty() {
-            let p = Path::new(&env_path);
+            let p = Path::new(env_path);
             if !p.is_file() {
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("PETAK_SCRCPY_SERVER file tidak ditemukan: {}", env_path),
                 ));
             }
-            verify_server_jar(&env_path)?;
-            return Ok(env_path);
+            verify_server_jar(env_path)?;
+            return Ok(env_path.to_string());
         }
     }
 
     // 2. Tauri resource dir (bundled in app)
-    //    At runtime the resource is next to the binary:
     //    macOS: Petak.app/Contents/Resources/<jar>
     //    Linux: <dir>/resources/<jar>  (or next to binary)
-    if let Ok(exe) = std::env::current_exe() {
-        // macOS bundle: exe is at .app/Contents/MacOS/Petak
+    if let Some(exe) = current_exe {
         if let Some(macos_dir) = exe.parent() {
-            let resources = macos_dir.join("../Resources").join(&jar_name);
-            if resources.is_file() {
-                let p = resources.to_string_lossy().to_string();
-                verify_server_jar(&p)?;
-                return Ok(p);
-            }
-            // Linux / dev: resources/ next to exe
-            let beside = macos_dir.join(&jar_name);
-            if beside.is_file() {
-                let p = beside.to_string_lossy().to_string();
-                verify_server_jar(&p)?;
-                return Ok(p);
+            for name in &jar_names {
+                let resources = macos_dir.join("../Resources").join(name);
+                if resources.is_file() {
+                    let p = resources.to_string_lossy().to_string();
+                    if verify_server_jar(&p).is_ok() {
+                        return Ok(p);
+                    }
+                }
+                let beside = macos_dir.join(name);
+                if beside.is_file() {
+                    let p = beside.to_string_lossy().to_string();
+                    if verify_server_jar(&p).is_ok() {
+                        return Ok(p);
+                    }
+                }
             }
         }
     }
 
     // 3. App-support dir: ~/Library/Application Support/Petak/scrcpy/
     //    or ~/.local/share/Petak/scrcpy/ on Linux
-    if let Some(data) = dirs::data_dir() {
-        let app_support = data.join("Petak").join("scrcpy").join(&jar_name);
-        if app_support.is_file() {
-            let p = app_support.to_string_lossy().to_string();
-            verify_server_jar(&p)?;
-            return Ok(p);
+    if let Some(data) = data_dir {
+        for name in &jar_names {
+            let app_support = data.join("Petak").join("scrcpy").join(name);
+            if app_support.is_file() {
+                let p = app_support.to_string_lossy().to_string();
+                if verify_server_jar(&p).is_ok() {
+                    return Ok(p);
+                }
+            }
+        }
+    }
+
+    // 4. System / Homebrew paths:
+    //    /opt/homebrew/share/scrcpy/scrcpy-server (Apple Silicon)
+    //    /usr/local/share/scrcpy/scrcpy-server (Intel Mac)
+    //    /usr/share/scrcpy/scrcpy-server (Linux)
+    for dir in system_dirs {
+        for name in &jar_names {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                let p = candidate.to_string_lossy().to_string();
+                if verify_server_jar(&p).is_ok() {
+                    return Ok(p);
+                }
+            }
         }
     }
 
     Err(io::Error::new(
         io::ErrorKind::NotFound,
         format!(
-            "scrcpy-server-v{} tidak ditemukan. Pastikan file sudah dibundle di app atau ada di ~/Library/Application Support/Petak/scrcpy/",
+            "scrcpy-server-v{} tidak ditemukan. Pastikan file sudah dibundle di app atau ada di ~/Library/Application Support/Petak/scrcpy/, /opt/homebrew/share/scrcpy/, /usr/local/share/scrcpy/, atau /usr/share/scrcpy/",
             SCRCPY_VERSION
         ),
     ))
@@ -260,8 +298,11 @@ impl Drop for ScrcpyServer {
 mod tests {
     use super::*;
 
+    static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_resolve_server_jar_env_nonexistent() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap();
         std::env::set_var("PETAK_SCRCPY_SERVER", "/nonexistent/path/server.jar");
         let result = resolve_server_jar();
         std::env::remove_var("PETAK_SCRCPY_SERVER");
@@ -271,6 +312,7 @@ mod tests {
 
     #[test]
     fn test_resolve_server_jar_env_valid() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap();
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../app/resources")
@@ -290,6 +332,7 @@ mod tests {
 
     #[test]
     fn test_resolve_server_jar_env_sha256_mismatch() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap();
         let mut tmp = tempfile::NamedTempFile::new().unwrap();
         use std::io::Write;
         tmp.write_all(b"corrupted jar data").unwrap();
@@ -305,6 +348,47 @@ mod tests {
     fn test_verify_server_jar_bad_path() {
         let result = verify_server_jar("/nonexistent/file");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_server_jar_system_homebrew_apple_silicon_name_scrcpy_server() {
+        let bundled = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../app/resources")
+            .join(format!("scrcpy-server-v{}", SCRCPY_VERSION));
+        if bundled.is_file() {
+            let tmp_dir = tempfile::tempdir().unwrap();
+            let brew_scrcpy = tmp_dir.path().join("opt_homebrew/share/scrcpy");
+            std::fs::create_dir_all(&brew_scrcpy).unwrap();
+            let target_jar = brew_scrcpy.join("scrcpy-server");
+            std::fs::copy(&bundled, &target_jar).unwrap();
+
+            let result = resolve_server_jar_internal(
+                None,
+                None,
+                None,
+                &[&brew_scrcpy],
+            );
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), target_jar.to_string_lossy().to_string());
+        }
+    }
+
+    #[test]
+    fn test_resolve_server_jar_system_homebrew_sha256_mismatch_ignored() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let brew_scrcpy = tmp_dir.path().join("opt_homebrew/share/scrcpy");
+        std::fs::create_dir_all(&brew_scrcpy).unwrap();
+        let target_jar = brew_scrcpy.join("scrcpy-server");
+        std::fs::write(&target_jar, b"invalid sha256 jar").unwrap();
+
+        let result = resolve_server_jar_internal(
+            None,
+            None,
+            None,
+            &[&brew_scrcpy],
+        );
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
