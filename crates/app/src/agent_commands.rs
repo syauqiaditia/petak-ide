@@ -3,6 +3,7 @@ use petak_core::agent::{
     SlotManager, SlotSummary, TeamConfig, UsageReport,
 };
 use std::sync::Arc;
+use tauri::Manager;
 
 #[derive(Clone)]
 pub struct AgentState {
