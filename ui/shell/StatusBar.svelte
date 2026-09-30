@@ -5,10 +5,12 @@
   import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
   import { toolchainStore } from '../features/toolchain/toolchainStore.svelte';
   import { formatAppState } from '../features/run/logic';
+  import { api } from '../lib/api';
 
   let {
     branchName = '',
     statusText = 'Ready',
+    statusKind = undefined,
     isBench = false,
     fileType = 'Kotlin',
     cursorInfo = 'Ln 1, Col 1',
@@ -17,6 +19,7 @@
   } = $props<{
     branchName?: string | null;
     statusText?: string;
+    statusKind?: 'normal' | 'error' | 'warning';
     isBench?: boolean;
     fileType?: string;
     cursorInfo?: string;
@@ -29,6 +32,49 @@
   let ahead = $derived(branch?.upstream ? branch.ahead : 0);
   let behind = $derived(branch?.upstream ? branch.behind : 0);
   let lspSummary = $derived(toolchainStore.currentLspSummary);
+
+  let resolvedStatusKind = $derived(
+    statusKind ||
+    (statusText.toLowerCase().includes('failed') || statusText.toLowerCase().includes('error')
+      ? 'error'
+      : statusText.toLowerCase().includes('warn')
+      ? 'warning'
+      : 'normal')
+  );
+
+  let statusColor = $derived(
+    resolvedStatusKind === 'error'
+      ? '#f07a74'
+      : resolvedStatusKind === 'warning'
+      ? '#e8b45a'
+      : '#7fc98f'
+  );
+
+  let isInstallingKls = $state(false);
+  let klsProgressText = $state('');
+
+  async function handleInstallKls() {
+    if (isInstallingKls) return;
+    isInstallingKls = true;
+    klsProgressText = 'Downloading…';
+    let unlisten: any = null;
+    try {
+      unlisten = await api.onKlsInstallProgress((p) => {
+        klsProgressText = p.message || `${p.stage}…`;
+      });
+      await api.klsInstall();
+      klsProgressText = 'Restarting LSP…';
+      await toolchainStore.refresh();
+      await api.lspRestart();
+      toolchainStore.showToast('Kotlin Language Server installed and ready!');
+    } catch (err: any) {
+      toolchainStore.showToast(`Failed to install Kotlin LS: ${err?.message || err}`);
+    } finally {
+      isInstallingKls = false;
+      klsProgressText = '';
+      if (unlisten) unlisten();
+    }
+  }
 </script>
 
 <div class="status-bar">
@@ -44,8 +90,8 @@
     </span>
   {/if}
 
-  <span class="status-indicator">
-    <span class="dot"></span>
+  <span class="status-indicator" style:color={statusColor}>
+    <span class="dot" style:background={statusColor}></span>
     {statusText}
   </span>
 
@@ -72,6 +118,22 @@
     ></span>
     {lspSummary.label}
   </span>
+
+  {#if lspSummary.state === 'failed' && (lspSummary.label.includes('Kotlin') || fileType === 'Kotlin')}
+    <button
+      class="install-kls-btn"
+      disabled={isInstallingKls}
+      onclick={handleInstallKls}
+      title="Install Kotlin Language Server (RAM ~600-900MB, lazy)"
+    >
+      {#if isInstallingKls}
+        <span class="kls-spinner"></span>
+        <span>{klsProgressText || 'Installing…'}</span>
+      {:else}
+        <span>Install Kotlin Language Server</span>
+      {/if}
+    </button>
+  {/if}
 
   {#if runStore.state !== 'stopped'}
     {@const stateInfo = formatAppState(runStore.state)}
@@ -233,6 +295,41 @@
   .lsp-indicator.is-failed {
     color: #f07a74;
     background: #2a191a;
+  }
+  .install-kls-btn {
+    height: 20px;
+    padding: 0 8px;
+    background: #3b2022;
+    border: 1px solid #6b3337;
+    border-radius: 4px;
+    color: #fca5a5;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s;
+  }
+  .install-kls-btn:hover:not(:disabled) {
+    background: #4a282b;
+    border-color: #8c4247;
+    color: #fff;
+  }
+  .install-kls-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+  .kls-spinner {
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid rgba(252, 165, 165, 0.3);
+    border-top-color: #fca5a5;
+    border-radius: 50%;
+    animation: kls-spin 0.8s linear infinite;
+  }
+  @keyframes kls-spin {
+    to { transform: rotate(360deg); }
   }
   .lsp-floating-toast {
     position: fixed;

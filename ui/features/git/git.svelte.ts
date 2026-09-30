@@ -40,7 +40,7 @@ class GitStore {
   nextCursor = $state<number | null>(0);
   logLoading = $state<boolean>(false);
   logError = $state<string | null>(null);
-  logFilter = $state<GitLogFilter>({});
+  logFilter = $state<GitLogFilter>({ branches: [] });
 
   selectedCommitSha = $state<string | null>(null);
   selectedCommitShas = $state<string[]>([]);

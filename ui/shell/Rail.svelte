@@ -4,24 +4,14 @@
   let {
     activeTab = $bindable('project'),
     onTabChange,
-    onToggleDevices,
   } = $props<{
     activeTab?: string;
     onTabChange?: (tab: string) => void;
-    onToggleDevices?: () => void;
   }>();
 
   function selectTab(tab: string) {
     activeTab = tab;
     onTabChange?.(tab);
-  }
-
-  function handleDevicesClick() {
-    if (onToggleDevices) {
-      onToggleDevices();
-    } else {
-      selectTab('devices');
-    }
   }
 </script>
 
@@ -77,19 +67,6 @@
   >
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
       <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
-    </svg>
-  </button>
-
-  <button
-    class="rail-btn"
-    class:active={panelStore.isRightOpen('devices') || activeTab === 'devices'}
-    onclick={handleDevicesClick}
-    aria-label="Devices"
-    title="Devices & Emulators"
-  >
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-      <rect x="7" y="3" width="10" height="18" rx="2"></rect>
-      <path d="M11 18h2"></path>
     </svg>
   </button>
 

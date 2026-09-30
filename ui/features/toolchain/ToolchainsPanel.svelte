@@ -3,6 +3,14 @@
   import { toolchainStore, type LspState } from './toolchainStore.svelte';
   import { api, type KotlinLsStatus, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
   import { editorSettings } from '../editor/editorSettings.svelte';
+  import { getFormatOnSaveConfig, setFormatOnSave } from '../editor/formatLogic';
+
+  let formatOnSaveState = $state<Record<string, boolean>>({});
+
+  function handleToggleFormatOnSave(lang: string, enabled: boolean) {
+    setFormatOnSave(lang, enabled);
+    formatOnSaveState = { ...formatOnSaveState, [lang]: enabled };
+  }
 
   let {
     root = '',
@@ -66,6 +74,7 @@
 
   onMount(() => {
     loadKotlinStatus();
+    formatOnSaveState = getFormatOnSaveConfig();
     return () => {
       if (unlistenProgress) unlistenProgress();
     };
@@ -229,6 +238,33 @@
           {/if}
         </div>
       {/each}
+    </div>
+
+    <!-- Format on Save Section (Fitur A) -->
+    <div class="section-title">FORMAT ON SAVE (CODE BEAUTIFIER)</div>
+    <div class="format-card">
+      <div class="format-desc">Format berkas secara otomatis saat disimpan (⌘S). Default: nonaktif (OFF).</div>
+      <div class="format-grid">
+        {#each [
+          { id: 'dart', label: 'Dart (dart format)' },
+          { id: 'kotlin', label: 'Kotlin (fwcd / ktlint)' },
+          { id: 'swift', label: 'Swift (swift-format)' },
+          { id: 'json', label: 'JSON (pretty-print)' },
+          { id: 'yaml', label: 'YAML (prettier)' },
+          { id: 'javascript', label: 'JS / TS (prettier)' },
+          { id: 'html', label: 'HTML / CSS (prettier)' },
+          { id: 'markdown', label: 'Markdown (prettier)' },
+        ] as fmt}
+          <label class="format-toggle-row">
+            <input
+              type="checkbox"
+              checked={formatOnSaveState[fmt.id] ?? false}
+              onchange={(e) => handleToggleFormatOnSave(fmt.id, (e.target as HTMLInputElement).checked)}
+            />
+            <span>{fmt.label}</span>
+          </label>
+        {/each}
+      </div>
     </div>
 
     <!-- Detected Tools Section -->
@@ -504,6 +540,35 @@
     font-size: 11px;
     font-weight: 600;
     color: #6ea8ff;
+  }
+  .format-card {
+    background: #18191d;
+    border: 1px solid #282a30;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+  }
+  .format-desc {
+    font-size: 11px;
+    color: #8b8f98;
+    margin-bottom: 8px;
+  }
+  .format-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .format-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11.5px;
+    color: #d8d9dc;
+    cursor: pointer;
+  }
+  .format-toggle-row input {
+    cursor: pointer;
+    accent-color: #3b5998;
   }
   .field-group {
     display: flex;

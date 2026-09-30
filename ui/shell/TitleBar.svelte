@@ -3,20 +3,30 @@
   import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
   import { gitStore } from '../features/git/git.svelte';
   import { panelStore } from './panelStore.svelte';
+  import { popupStore } from './popupStore.svelte';
   import { getRunVisualAttrs } from '../features/run/runStateMachine';
   import { api, type RecentProject } from '../lib/api';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
 
-  let branchPopupOpen = $state(
-    typeof window !== 'undefined' && window.location.search.includes('branch-open')
-  );
+  let branchPopupOpen = $derived(popupStore.isOpen('branch'));
   let branchSearch = $state('');
 
-  let projectPopupOpen = $state(
-    typeof window !== 'undefined' && window.location.search.includes('project-open')
-  );
+  let projectPopupOpen = $derived(popupStore.isOpen('project'));
   let recentProjects = $state<RecentProject[]>([]);
+
+  function toggleProjectPopup(e: MouseEvent) {
+    e.stopPropagation();
+    popupStore.toggle('project');
+    if (popupStore.isOpen('project')) {
+      loadRecentProjects();
+    }
+  }
+
+  function toggleBranchPopup(e: MouseEvent) {
+    e.stopPropagation();
+    popupStore.toggle('branch');
+  }
 
   $effect(() => {
     if (projectPopupOpen && recentProjects.length === 0) {
@@ -51,7 +61,7 @@
       }
       return;
     }
-    projectPopupOpen = false;
+    popupStore.close('project');
     onSelectProject?.(p.path);
   }
 
@@ -72,7 +82,7 @@
   );
 
   async function handleSelectBranch(bName: string) {
-    branchPopupOpen = false;
+    popupStore.close('branch');
     await gitStore.branchCheckout(bName, true);
   }
 
@@ -101,14 +111,20 @@
 
   let hasConfig = $derived(runStore.selectedConfig !== null);
   let hasDevice = $derived(runStore.selectedDevice !== null);
-  let isDeviceOnline = $derived(runStore.selectedDevice?.state === 'online');
+  let isDeviceOnline = $derived(
+    runStore.selectedDevice?.state === 'online' &&
+    (runStore.selectedDevice?.connection === undefined || runStore.selectedDevice?.connection === 'connected')
+  );
+  let isDevicePaired = $derived(runStore.selectedDevice?.connection === 'paired');
   let isGradle = $derived(runStore.selectedConfig?.kind === 'gradle');
 
   let runAttrs = $derived(getRunVisualAttrs(runStore.uiState, isDeviceOnline, hasConfig));
 
-  let runDisabled = $derived(runAttrs.runDisabled);
+  let runDisabled = $derived(runAttrs.runDisabled || isDevicePaired);
   let runTooltip = $derived(
-    runStore.uiState === 'starting'
+    isDevicePaired
+      ? 'Device belum terhubung (status: Paired). Hubungkan via kabel USB atau aktifkan koneksi jaringan.'
+      : runStore.uiState === 'starting'
       ? 'Starting app…'
       : runStore.uiState === 'running'
       ? 'App running'
@@ -154,10 +170,12 @@
   }
 </script>
 
-<svelte:window onclick={() => {
-  if (branchPopupOpen) branchPopupOpen = false;
-  if (projectPopupOpen) projectPopupOpen = false;
-}} />
+<svelte:window
+  onclick={() => popupStore.closeAll()}
+  onkeydown={(e) => {
+    if (e.key === 'Escape') popupStore.handleEscape();
+  }}
+/>
 
 <div class="titlebar" data-tauri-drag-region>
   <!-- macOS window control spacer -->
@@ -235,7 +253,7 @@
           <button
             class="project-open-folder-btn"
             onclick={() => {
-              projectPopupOpen = false;
+              popupStore.close('project');
               onPickFolder?.();
             }}
           >
@@ -254,10 +272,7 @@
     <div class="branch-wrap">
       <button
         class="branch-btn"
-        onclick={(e) => {
-          e.stopPropagation();
-          branchPopupOpen = !branchPopupOpen;
-        }}
+        onclick={toggleBranchPopup}
         title="Git Branch: {branchName} (Click to switch branch)"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -427,7 +442,8 @@
     class="mirror-toggle-btn"
     class:active={panelStore.isRightOpen('mirror')}
     aria-label="Toggle Device Mirror"
-    title="Toggle Device Mirror (⌘⇧D)"
+    title={isDevicePaired ? 'Device belum terhubung (status: Paired)' : 'Toggle Device Mirror (⌘⇧D)'}
+    disabled={isDevicePaired}
     onclick={() => mirrorStore.toggle()}
   >
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -435,6 +451,21 @@
       <path d="M10 18h4"></path>
     </svg>
     <span>Mirror</span>
+  </button>
+
+  <!-- Manage Devices & Emulators Button (Bug 6) -->
+  <button
+    class="devices-toggle-btn"
+    class:active={panelStore.isRightOpen('devices')}
+    aria-label="Manage Devices & Emulators"
+    title="Manage Devices & Emulators"
+    onclick={() => panelStore.toggleRightPanel('devices')}
+  >
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <rect x="7" y="3" width="10" height="18" rx="2"></rect>
+      <path d="M11 18h2"></path>
+    </svg>
+    <span>Devices</span>
   </button>
 
   <div class="spacer" data-tauri-drag-region></div>
@@ -865,6 +896,30 @@
     background: #1e2025;
   }
   .mirror-toggle-btn.active {
+    background: #1f2a3d;
+    border-color: #2a3d5e;
+    color: #6ea8ff;
+  }
+  .devices-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 9px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #8b8f98;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .devices-toggle-btn:hover {
+    color: #d8d9dc;
+    background: #1e2025;
+  }
+  .devices-toggle-btn.active {
     background: #1f2a3d;
     border-color: #2a3d5e;
     color: #6ea8ff;

@@ -4,7 +4,7 @@
  * Exactly one left sidebar active (project OR git OR agents). Opening one closes the other.
  */
 
-export type RightPanelId = 'mirror' | 'devices' | 'agent' | null;
+export type RightPanelId = 'mirror' | 'devices' | 'agent' | 'mr' | null;
 export type LeftSidebarId = 'project' | 'git' | 'mr' | 'agents' | 'settings';
 
 export class PanelExclusivityManager {

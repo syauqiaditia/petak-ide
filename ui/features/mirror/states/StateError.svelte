@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { mirrorStore } from '../mirrorStore.svelte';
+  import { api, type MirrorPermissionStatus } from '../../../lib/api';
 
   let { onOpenLogcat }: { onOpenLogcat?: () => void } = $props();
 
@@ -7,9 +9,26 @@
     mirrorStore.errorMessage || 'Mirror service terminated during connection.'
   );
 
+  let permStatus = $state<MirrorPermissionStatus | null>(null);
+
+  onMount(async () => {
+    try {
+      permStatus = await api.mirrorPermissionStatus(mirrorStore.deviceId);
+    } catch {
+      permStatus = null;
+    }
+  });
+
   let isScreenRecordingError = $derived(
     /screen\s*recording|screen\s*capture|kTCCServiceScreenCapture|tcc|permission|denied|authorized/i.test(message) ||
-    (mirrorStore.isViewOnly && !message.toLowerCase().includes('scrcpy'))
+    (mirrorStore.isViewOnly && !message.toLowerCase().includes('scrcpy')) ||
+    (permStatus !== null && (!permStatus.granted || permStatus.restartNeeded))
+  );
+
+  let isIphonePhysical = $derived(
+    permStatus?.kind === 'physical' ||
+    (mirrorStore.selectedDevice?.kind === 'physical' && mirrorStore.selectedDevice?.platform === 'ios') ||
+    mirrorStore.deviceId.toLowerCase().includes('iphone')
   );
 </script>
 
@@ -24,17 +43,43 @@
   </div>
 
   {#if isScreenRecordingError}
-    <div class="permission-guide">
-      <p class="guide-intro">
-        macOS requires Screen Recording permission to mirror the iOS Simulator display:
-      </p>
-      <ol class="guide-steps">
-        <li>Open <strong>System Settings</strong> → <strong>Privacy & Security</strong></li>
-        <li>Select <strong>Screen & System Audio Recording</strong></li>
-        <li>Enable <strong>Petak</strong> in the application list</li>
-        <li>Return here and click <strong>Retry Handshake</strong></li>
-      </ol>
-    </div>
+    {#if isIphonePhysical}
+      <!-- iPhone Fisik via USB (Bug 8) -->
+      <div class="permission-guide physical">
+        <p class="guide-intro">
+          iPhone Fisik via USB (View-Only):
+        </p>
+        <ol class="guide-steps">
+          <li>Pastikan iPhone terhubung ke Mac dengan <strong>kabel USB</strong></li>
+          <li>Pastikan layar iPhone <strong>tidak terkunci (unlocked)</strong></li>
+          <li>Ketuk <strong>Trust This Computer</strong> pada layar iPhone dan masukkan PIN jika diminta</li>
+          <li>Aktifkan izin <strong>Screen Recording</strong> jika macOS memintanya</li>
+        </ol>
+      </div>
+    {:else if permStatus?.restartNeeded}
+      <!-- Perlu Restart Petak (Bug 8) -->
+      <div class="permission-guide warning">
+        <p class="guide-intro">
+          Izin Screen Recording telah aktif di macOS!
+        </p>
+        <p class="guide-subtext">
+          Aplikasi <strong>Petak perlu di-restart</strong> agar sistem macOS memuat izin baru tersebut.
+        </p>
+      </div>
+    {:else}
+      <!-- iOS Simulator Display (Bug 8: hanya untuk simulator) -->
+      <div class="permission-guide">
+        <p class="guide-intro">
+          macOS memerlukan izin Screen Recording untuk mirroring iOS Simulator:
+        </p>
+        <ol class="guide-steps">
+          <li>Buka <strong>System Settings</strong> → <strong>Privacy & Security</strong></li>
+          <li>Pilih <strong>Screen & System Audio Recording</strong></li>
+          <li>Aktifkan <strong>Petak</strong> pada daftar aplikasi</li>
+          <li>Kembali ke sini dan klik <strong>Retry Handshake</strong></li>
+        </ol>
+      </div>
+    {/if}
   {:else}
     <div class="error-desc-summary">
       scrcpy server handshake failed. Please ensure USB debugging is authorized on your Android device.
@@ -46,6 +91,16 @@
   {/if}
 
   <div class="error-actions">
+    {#if isScreenRecordingError}
+      <button class="btn-primary" onclick={() => api.openScreenRecordingSettings()} aria-label="Open System Settings">
+        Open System Settings
+      </button>
+      {#if permStatus?.restartNeeded}
+        <button class="btn-warning" onclick={() => window.location.reload()} aria-label="Restart Petak">
+          Restart Petak
+        </button>
+      {/if}
+    {/if}
     <button class="btn-danger" onclick={() => mirrorStore.reconnect()} aria-label="Retry Handshake">
       Retry Handshake
     </button>
@@ -63,7 +118,7 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
-    max-width: 320px;
+    max-width: 340px;
     gap: 12px;
     padding: 18px;
     background: #2a1d1e;
@@ -87,11 +142,23 @@
     font-size: 11.5px;
     line-height: 1.45;
     color: #d8d9dc;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .permission-guide.warning {
+    background: #282012;
+    border-color: #553e18;
   }
   .guide-intro {
     margin: 0 0 6px 0;
     color: #f5c4c1;
     font-weight: 500;
+  }
+  .guide-subtext {
+    margin: 0;
+    color: #e8b45a;
+    font-size: 11px;
+    line-height: 1.4;
   }
   .guide-steps {
     margin: 0;
@@ -125,8 +192,40 @@
   }
   .error-actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 8px;
     margin-top: 4px;
+  }
+  .btn-primary {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: #3b5998;
+    color: #ffffff;
+    font-weight: 500;
+    font-size: 11.5px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover {
+    background: #4a6eb5;
+  }
+  .btn-warning {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: #e8b45a;
+    color: #1e1400;
+    font-weight: 600;
+    font-size: 11.5px;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-warning:hover {
+    opacity: 0.9;
   }
   .btn-danger {
     height: 32px;

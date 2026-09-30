@@ -47,7 +47,9 @@ export interface ProjectSwitchResetResult {
  * Filter and sort recent projects list: maximum 10 items.
  */
 export function formatRecentProjects(list: RecentProject[], max: number = 10): RecentProject[] {
-  return (list || []).slice(0, max);
+  return [...(list || [])]
+    .sort((a, b) => (b.lastOpened || 0) - (a.lastOpened || 0))
+    .slice(0, max);
 }
 
 /**

@@ -32,6 +32,36 @@ export interface RecentProject {
   exists: boolean;
 }
 
+export interface MirrorPermissionStatus {
+  granted: boolean;
+  restartNeeded: boolean;
+  kind: 'simulator' | 'physical';
+  notes?: string;
+}
+
+export interface FormatRange {
+  startLine: number;
+  endLine: number;
+}
+
+export interface FormatResult {
+  formatted: string;
+  tool: string;
+}
+
+export interface EmulatorStatusEvent {
+  id: string;
+  state: 'stopped' | 'booting' | 'running' | 'failed';
+  error?: string;
+}
+
+export interface KlsInstallProgressEvent {
+  stage: 'checking' | 'downloading' | 'extracting' | 'verifying' | 'done' | 'error';
+  pct?: number;
+  error?: string;
+  message: string;
+}
+
 export interface FsChangedPayload {
   paths: string[];
 }
@@ -462,9 +492,17 @@ export const api = {
     cursor?: number,
     limit?: number
   ): Promise<GitLogPage> {
+    const finalFilter: GitLogFilter = {
+      branches: filter?.branches ?? [],
+      ...(filter?.author ? { author: filter.author } : {}),
+      ...(filter?.since ? { since: filter.since } : {}),
+      ...(filter?.until ? { until: filter.until } : {}),
+      ...(filter?.path ? { path: filter.path } : {}),
+      ...(filter?.text ? { text: filter.text } : {}),
+    };
     return invoke<GitLogPage>('git_log', {
       root,
-      filter: filter ?? null,
+      filter: finalFilter,
       cursor: cursor ?? null,
       limit: limit ?? null,
     });
@@ -628,19 +666,21 @@ export const api = {
 
   async recentProjectsList(): Promise<RecentProject[]> {
     try {
-      return await invoke<RecentProject[]>('recent_projects_list');
+      const list = await invoke<RecentProject[]>('recent_projects_list');
+      if (list && list.length > 0) return list;
     } catch {
-      const folders = await this.recentFolders().catch(() => []);
-      return folders.slice(0, 10).map((p) => {
-        const parts = p.split('/').filter(Boolean);
-        return {
-          name: parts[parts.length - 1] || p,
-          path: p,
-          lastOpened: Date.now(),
-          exists: true,
-        };
-      });
+      // ignore and fallback
     }
+    const folders = await this.recentFolders().catch(() => []);
+    return folders.slice(0, 10).map((p) => {
+      const parts = p.split('/').filter(Boolean);
+      return {
+        name: parts[parts.length - 1] || p,
+        path: p,
+        lastOpened: Date.now(),
+        exists: true,
+      };
+    });
   },
 
   async recentProjectsAdd(path: string): Promise<void> {
@@ -911,9 +951,9 @@ export const api = {
     });
   },
 
-  async avdStart(name: string, cold: boolean = false): Promise<void> {
+  async avdStart(name: string, cold: boolean = false, wipeData: boolean = false): Promise<void> {
     try {
-      await invoke('avd_start', { name, cold });
+      await invoke('avd_start', { name, cold, wipeData });
     } catch {
       await invoke('emulator_start', { avd: name, headless: null });
     }
@@ -923,12 +963,53 @@ export const api = {
     return invoke('avd_stop', { name });
   },
 
+  avdWipe(name: string): Promise<void> {
+    return invoke('avd_wipe', { name });
+  },
+
+  avdDelete(name: string): Promise<void> {
+    return invoke('avd_delete', { name });
+  },
+
   simBoot(udid: string): Promise<void> {
     return invoke('sim_boot', { udid });
   },
 
   simShutdown(udid: string): Promise<void> {
     return invoke('sim_shutdown', { udid });
+  },
+
+  simOpenApp(): Promise<void> {
+    return invoke('sim_open_app');
+  },
+
+  mirrorPermissionStatus(deviceId?: string): Promise<MirrorPermissionStatus> {
+    return invoke<MirrorPermissionStatus>('mirror_permission_status', { deviceId }).catch(() => ({
+      granted: true,
+      restartNeeded: false,
+      kind: 'simulator' as const,
+    }));
+  },
+
+  openScreenRecordingSettings(): Promise<void> {
+    return invoke('open_screen_recording_settings');
+  },
+
+  formatDocument(params: {
+    path?: string;
+    lang: string;
+    text: string;
+    range?: FormatRange;
+  }): Promise<FormatResult> {
+    return invoke<FormatResult>('format_document', params);
+  },
+
+  onEmulatorStatus(callback: (event: EmulatorStatusEvent) => void): Promise<UnlistenFn> {
+    return listen<EmulatorStatusEvent>('emulator-status', (e) => callback(e.payload));
+  },
+
+  onKlsInstallProgress(callback: (event: KlsInstallProgressEvent) => void): Promise<UnlistenFn> {
+    return listen<KlsInstallProgressEvent>('kls-install-progress', (e) => callback(e.payload));
   },
 
   kotlinLsStatus(): Promise<KotlinLsStatus> {
@@ -941,8 +1022,20 @@ export const api = {
     }));
   },
 
-  kotlinLsInstall(): Promise<void> {
-    return invoke('kotlin_ls_install');
+  async kotlinLsInstall(): Promise<void> {
+    try {
+      await invoke('kls_install');
+    } catch {
+      await invoke('kotlin_ls_install');
+    }
+  },
+
+  async klsInstall(): Promise<void> {
+    try {
+      await invoke('kls_install');
+    } catch {
+      await invoke('kotlin_ls_install');
+    }
   },
 
   avdList(): Promise<Avd[]> {

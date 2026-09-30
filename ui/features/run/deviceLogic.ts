@@ -14,11 +14,15 @@ export interface SnapshotEmulator {
   flutterId?: string | null;
 }
 
+export type DeviceConnection = 'connected' | 'paired' | 'offline' | 'unavailable';
+export type DeviceTransport = 'usb' | 'wifi' | 'unknown';
+
 export interface SnapshotPhysical {
   id: string;
   name: string;
   platform: DevicePlatform;
-  transport: 'usb' | 'wifi';
+  transport: DeviceTransport;
+  connection?: DeviceConnection;
   state?: string;
   sdk?: string;
   flutterId?: string | null;
@@ -29,6 +33,7 @@ export interface SnapshotOther {
   name: string;
   group: 'desktop' | 'web';
   state: 'online' | 'offline';
+  connection?: DeviceConnection;
   flutterId?: string | null;
 }
 
@@ -42,11 +47,13 @@ export interface PickerDeviceItem {
   id: string;
   name: string;
   group: 'Emulator' | 'Simulator' | 'Physical' | 'Desktop' | 'Web';
-  state: 'online' | 'booting' | 'running';
+  state: 'online' | 'booting' | 'running' | 'offline';
+  connection: DeviceConnection;
+  transport?: DeviceTransport;
   platform: DevicePlatform;
   flutterId?: string | null;
-  transport?: 'usb' | 'wifi';
   sdk?: string;
+  runnable?: boolean;
 }
 
 export interface GroupedDevices {
@@ -68,28 +75,31 @@ export function pruneDeviceSelection(
   availableDevices: Array<{
     id: string;
     state?: string;
+    connection?: DeviceConnection;
+    runnable?: boolean;
     flutterId?: string | null;
   }>
 ): string {
+  const isEligible = (d: { state?: string; connection?: DeviceConnection; runnable?: boolean; flutterId?: string | null }) => {
+    const isOnline = d.state === 'online' || d.state === 'running';
+    const isConnected = d.connection === undefined || d.connection === 'connected';
+    const isRunnable = d.runnable !== false;
+    const hasFlutter = d.flutterId !== null;
+    return isOnline && isConnected && isRunnable && hasFlutter;
+  };
+
   if (!currentSelectedId) {
-    const firstOnline = availableDevices.find(
-      (d) => (d.state === 'online' || d.state === 'running') && d.flutterId !== null
-    );
+    const firstOnline = availableDevices.find(isEligible);
     return firstOnline ? firstOnline.id : '';
   }
 
   const current = availableDevices.find((d) => d.id === currentSelectedId);
-  const isOnline = current && (current.state === 'online' || current.state === 'running');
-  const isValidFlutter = current && current.flutterId !== null;
-
-  if (current && isOnline && isValidFlutter) {
+  if (current && isEligible(current)) {
     return current.id;
   }
 
   // Current is missing or offline or invalid -> prune!
-  const firstOnline = availableDevices.find(
-    (d) => (d.state === 'online' || d.state === 'running') && d.flutterId !== null
-  );
+  const firstOnline = availableDevices.find(isEligible);
   return firstOnline ? firstOnline.id : '';
 }
 
@@ -133,14 +143,17 @@ export function groupDevices(
     for (const dev of legacyDevices) {
       if (dev.kind === 'physical') {
         const isWifi = dev.id.includes(':') || dev.id.includes('wireless') || (dev as any).transport === 'wifi';
+        const transport: DeviceTransport = (dev as any).transport || (isWifi ? 'wifi' : 'usb');
+        const connection: DeviceConnection = (dev as any).connection || (dev.state === 'online' ? 'connected' : 'offline');
         physicalDevices.push({
           id: dev.id,
           name: dev.name,
           platform: dev.platform,
-          transport: isWifi ? 'wifi' : 'usb',
+          transport,
+          connection,
           state: dev.state,
           sdk: dev.sdk ?? undefined,
-          flutterId: dev.state === 'online' ? dev.id : null,
+          flutterId: dev.state === 'online' && connection === 'connected' ? dev.id : null,
         });
       } else if (dev.platform === 'ios') {
         iosSimulators.push({
@@ -168,6 +181,7 @@ export function groupDevices(
           name: dev.name,
           group: 'desktop',
           state: dev.state === 'online' ? 'online' : 'offline',
+          connection: dev.state === 'online' ? 'connected' : 'offline',
           flutterId: dev.state === 'online' ? dev.id : null,
         });
       } else if (dev.platform === 'web' || dev.id === 'chrome') {
@@ -176,6 +190,7 @@ export function groupDevices(
           name: dev.name,
           group: 'web',
           state: dev.state === 'online' ? 'online' : 'offline',
+          connection: dev.state === 'online' ? 'connected' : 'offline',
           flutterId: dev.state === 'online' ? dev.id : null,
         });
       }
@@ -210,9 +225,11 @@ export function groupDevices(
         name: emu.name,
         group: 'Emulator',
         state: emu.state === 'running' ? 'online' : 'booting',
+        connection: 'connected',
         platform: 'android',
         flutterId: emu.flutterId ?? (emu.deviceId || emu.id),
         sdk: emu.sdk,
+        runnable: true,
       });
     }
   }
@@ -225,25 +242,50 @@ export function groupDevices(
         name: sim.name,
         group: 'Simulator',
         state: sim.state === 'running' ? 'online' : 'booting',
+        connection: 'connected',
         platform: 'ios',
         flutterId: sim.flutterId ?? (sim.deviceId || sim.id),
         sdk: sim.sdk,
+        runnable: true,
       });
     }
   }
 
-  // 3. Physical devices (only online / not offline, and flutterId != null)
+  // 3. Physical devices:
+  // - connected: online, runnable
+  // - paired: disabled, "Paired • tidak terhubung"
+  // - unavailable: hidden from pickerItems!
   for (const phys of physicalDevices) {
-    if (phys.state !== 'offline' && phys.flutterId !== null) {
+    const conn: DeviceConnection = phys.connection || (phys.state === 'offline' ? 'offline' : 'connected');
+    if (conn === 'unavailable' || conn === 'offline') {
+      // Hidden from dropdown!
+      continue;
+    }
+    if (conn === 'paired') {
+      pickerItems.push({
+        id: phys.id,
+        name: phys.name,
+        group: 'Physical',
+        state: 'offline',
+        connection: 'paired',
+        platform: phys.platform,
+        flutterId: phys.flutterId ?? null,
+        transport: phys.transport,
+        sdk: phys.sdk,
+        runnable: false,
+      });
+    } else if (conn === 'connected') {
       pickerItems.push({
         id: phys.id,
         name: phys.name,
         group: 'Physical',
         state: 'online',
+        connection: 'connected',
         platform: phys.platform,
         flutterId: phys.flutterId ?? phys.id,
         transport: phys.transport,
         sdk: phys.sdk,
+        runnable: true,
       });
     }
   }
@@ -256,8 +298,10 @@ export function groupDevices(
         name: d.name,
         group: 'Desktop',
         state: 'online',
+        connection: 'connected',
         platform: 'desktop',
         flutterId: d.flutterId ?? d.id,
+        runnable: true,
       });
     }
   }
@@ -270,8 +314,10 @@ export function groupDevices(
         name: w.name,
         group: 'Web',
         state: 'online',
+        connection: 'connected',
         platform: 'web',
         flutterId: w.flutterId ?? w.id,
+        runnable: true,
       });
     }
   }

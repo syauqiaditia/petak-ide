@@ -435,7 +435,28 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
             platform: 'android',
             kind: 'emulator',
             state: 'online',
+            connection: 'connected',
+            transport: 'usb',
             sdk: '35',
+          },
+          {
+            id: '00008110-00012CCE0C09401E',
+            name: 'iPhone UQi',
+            platform: 'ios',
+            kind: 'physical',
+            state: 'offline',
+            connection: 'paired',
+            transport: 'wifi',
+            sdk: '18.1',
+          },
+          {
+            id: 'iphone-prio',
+            name: 'iPhone Prio',
+            platform: 'ios',
+            kind: 'physical',
+            state: 'offline',
+            connection: 'unavailable',
+            transport: 'usb',
           },
           {
             id: '00008101-001234',
@@ -443,6 +464,7 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
             platform: 'ios',
             kind: 'simulator',
             state: 'offline',
+            connection: 'connected',
             sdk: '17.5',
           },
         ];
@@ -471,11 +493,21 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
           physical: [
             {
               id: '00008110-00012CCE0C09401E',
-              name: 'UQi (wireless)',
+              name: 'iPhone UQi',
               platform: 'ios',
               transport: 'wifi',
-              state: 'online',
-              flutterId: '00008110-00012CCE0C09401E',
+              connection: 'paired',
+              state: 'offline',
+              flutterId: null,
+            },
+            {
+              id: 'iphone-prio',
+              name: 'iPhone Prio',
+              platform: 'ios',
+              transport: 'usb',
+              connection: 'unavailable',
+              state: 'offline',
+              flutterId: null,
             },
           ],
           others: [
@@ -547,6 +579,26 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       if (cmd === 'logcat_start') return null;
       if (cmd === 'logcat_stop') return null;
       if (cmd === 'open_url') return null;
+      if (cmd === 'mirror_permission_status') {
+        const url = typeof window !== 'undefined' ? window.location.search : '';
+        if (url.includes('perm-restart')) {
+          return { granted: true, restartNeeded: true, kind: 'simulator' };
+        }
+        if (url.includes('perm-physical')) {
+          return { granted: false, restartNeeded: false, kind: 'physical' };
+        }
+        return { granted: false, restartNeeded: false, kind: 'simulator' };
+      }
+      if (cmd === 'open_screen_recording_settings') return null;
+      if (cmd === 'sim_boot' || cmd === 'sim_shutdown' || cmd === 'sim_open_app') return null;
+      if (cmd === 'avd_start' || cmd === 'avd_stop' || cmd === 'avd_wipe' || cmd === 'avd_delete') return null;
+      if (cmd === 'kls_install' || cmd === 'kotlin_ls_install') return null;
+      if (cmd === 'format_document') {
+        return {
+          formatted: args?.text || '',
+          tool: args?.lang === 'dart' ? 'dart format' : args?.lang === 'kotlin' ? 'ktlint' : 'prettier',
+        };
+      }
 
       // GitLab MR Viewer (Phase 5)
       if (cmd === 'mr_get_token_scope') {

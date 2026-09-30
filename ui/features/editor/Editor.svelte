@@ -35,6 +35,12 @@
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
   import { renameStore, triggerRename, executeRename } from './lsp/rename.svelte';
   import { formatDocument } from './lsp/format';
+  import {
+    formatDocumentOrSelection,
+    isFormatOnSaveEnabled,
+    detectLanguage,
+  } from './formatLogic';
+  import { popupStore } from '../../shell/popupStore.svelte';
   import { triggerCodeActions, queueLightbulbCheck } from './lsp/codeAction.svelte';
   import CodeActionPopup from './lsp/CodeActionPopup.svelte';
   import { applyWorkspaceEdit } from './lsp/applyEdit';
@@ -548,6 +554,10 @@
   export async function handleSave() {
     const active = tabsManager.activeTab;
     if (!active || !view) return;
+    const lang = detectLanguage(active.path);
+    if (isFormatOnSaveEnabled(lang)) {
+      await formatDocumentOrSelection(view, active.path, undefined, onStatusChange);
+    }
     const currentText = view.state.doc.toString();
     try {
       await api.saveFile(active.path, currentText);
@@ -615,9 +625,78 @@
     await triggerRename(view, currentSwappedPath);
   }
 
-  export async function handleFormat() {
+  export async function handleFormat(range?: { startLine: number; endLine: number }) {
     if (!view || !currentSwappedPath) return;
-    await formatDocument(view, currentSwappedPath, onStatusChange);
+    let effectiveRange = range;
+    if (!effectiveRange) {
+      const selection = view.state.selection.main;
+      if (!selection.empty) {
+        const startLine = view.state.doc.lineAt(selection.from).number;
+        const endLine = view.state.doc.lineAt(selection.to).number;
+        effectiveRange = { startLine, endLine };
+      }
+    }
+    await formatDocumentOrSelection(view, currentSwappedPath, effectiveRange, onStatusChange);
+  }
+
+  let editorContextMenuVisible = $state(false);
+  let editorContextMenuPos = $state({ x: 0, y: 0 });
+  let editorContextMenuItems = $state<any[]>([]);
+
+  function handleEditorContextMenu(e: MouseEvent) {
+    if (!view || !currentSwappedPath) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    popupStore.closeAll();
+    const selection = view.state.selection.main;
+    const hasSelection = !selection.empty;
+
+    editorContextMenuItems = [
+      {
+        label: 'Format Document',
+        shortcut: '⌥⌘L',
+        action: () => handleFormat(),
+      },
+      ...(hasSelection
+        ? [
+            {
+              label: 'Format Selection',
+              action: () => {
+                const startLine = view.state.doc.lineAt(selection.from).number;
+                const endLine = view.state.doc.lineAt(selection.to).number;
+                handleFormat({ startLine, endLine });
+              },
+            },
+          ]
+        : []),
+      { separator: true },
+      {
+        label: 'Go to Definition',
+        shortcut: '⌘B / F12',
+        action: () => handleGoToDefinition(),
+      },
+      {
+        label: 'Find Usages',
+        shortcut: '⌥F7',
+        action: () => handleFindUsages(),
+      },
+      {
+        label: 'Rename Symbol',
+        shortcut: '⇧F6',
+        action: () => handleRename(),
+      },
+      { separator: true },
+      {
+        label: 'Save',
+        shortcut: '⌘S',
+        action: () => handleSave(),
+      },
+    ];
+
+    editorContextMenuPos = { x: e.clientX, y: e.clientY };
+    editorContextMenuVisible = true;
+    popupStore.open('contextMenu');
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -641,7 +720,11 @@
       e.preventDefault();
       e.stopPropagation();
       handleRename();
-    } else if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')) {
+    } else if (
+      (e.metaKey || e.ctrlKey) &&
+      ((e.altKey && !e.shiftKey && (e.key.toLowerCase() === 'l' || e.code === 'KeyL')) ||
+       (e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'i' || e.code === 'KeyI')))
+    ) {
       e.preventDefault();
       e.stopPropagation();
       handleFormat();
@@ -860,7 +943,12 @@
   {/if}
 
   <!-- Editor container -->
-  <div class="editor-container" bind:this={container} class:hidden={tabsManager.tabs.length === 0}></div>
+  <div
+    class="editor-container"
+    bind:this={container}
+    oncontextmenu={handleEditorContextMenu}
+    class:hidden={tabsManager.tabs.length === 0}
+  ></div>
 
   {#if renameStore.visible}
     <div
@@ -923,6 +1011,18 @@
       y={blameMenuPos.y}
       items={blameMenuItems}
       onclose={() => (blameMenuVisible = false)}
+    />
+  {/if}
+
+  {#if editorContextMenuVisible && popupStore.isOpen('contextMenu')}
+    <ContextMenu
+      x={editorContextMenuPos.x}
+      y={editorContextMenuPos.y}
+      items={editorContextMenuItems}
+      onclose={() => {
+        editorContextMenuVisible = false;
+        popupStore.close('contextMenu');
+      }}
     />
   {/if}
 
