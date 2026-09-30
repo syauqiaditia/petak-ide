@@ -172,6 +172,15 @@ export function createCodeFoldingExtension() {
       openText: '▾',
       closedText: '▸',
     }),
+    EditorView.theme({
+      '.cm-foldPlaceholder': {
+        background: '#2a2d32',
+        border: '1px solid #3c3c3c',
+        color: '#8b8f98',
+        borderRadius: '3px',
+        padding: '0 4px',
+      },
+    }),
     petakFoldService,
     keymap.of(foldKeybindings),
   ];

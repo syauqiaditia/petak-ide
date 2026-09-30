@@ -5,7 +5,11 @@
 
 export class EditorSettings {
   ghostText: boolean = true;
+  vimMode: boolean = false;
+  codeFolding: boolean = true;
   private listeners: Set<(enabled: boolean) => void> = new Set();
+  private vimListeners: Set<(enabled: boolean) => void> = new Set();
+  private foldListeners: Set<(enabled: boolean) => void> = new Set();
 
   constructor(initialGhostText: boolean = true) {
     this.ghostText = initialGhostText;
@@ -17,12 +21,30 @@ export class EditorSettings {
     return () => this.listeners.delete(listener);
   }
 
+  onVimModeChange(listener: (enabled: boolean) => void): () => void {
+    this.vimListeners.add(listener);
+    return () => this.vimListeners.delete(listener);
+  }
+
+  onCodeFoldingChange(listener: (enabled: boolean) => void): () => void {
+    this.foldListeners.add(listener);
+    return () => this.foldListeners.delete(listener);
+  }
+
   loadFromStorage(): void {
     if (typeof localStorage !== 'undefined') {
       try {
         const val = localStorage.getItem('editor.ghostText');
         if (val !== null) {
           this.ghostText = val === 'true';
+        }
+        const vimVal = localStorage.getItem('editor.vimMode');
+        if (vimVal !== null) {
+          this.vimMode = vimVal === 'true';
+        }
+        const foldVal = localStorage.getItem('editor.codeFolding');
+        if (foldVal !== null) {
+          this.codeFolding = foldVal !== 'false';
         }
       } catch {
         // ignore
@@ -40,6 +62,42 @@ export class EditorSettings {
       }
     }
     for (const listener of this.listeners) {
+      try {
+        listener(enabled);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  setVimMode(enabled: boolean): void {
+    this.vimMode = enabled;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('editor.vimMode', String(enabled));
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.vimListeners) {
+      try {
+        listener(enabled);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  setCodeFolding(enabled: boolean): void {
+    this.codeFolding = enabled;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('editor.codeFolding', String(enabled));
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.foldListeners) {
       try {
         listener(enabled);
       } catch {

@@ -146,14 +146,14 @@ export async function triggerCodeActions(
   const editorRect = view.dom.getBoundingClientRect();
 
   let left = coords ? coords.left : editorRect.left + 50;
-  let top = coords ? coords.bottom + 4 : editorRect.top + 50;
+  let top = coords ? coords.bottom + 8 : editorRect.top + 50;
 
   // Keep within window bounds
   if (left + 380 > window.innerWidth) {
     left = window.innerWidth - 390;
   }
   if (top + 300 > window.innerHeight) {
-    top = coords ? coords.top - 260 : top - 260;
+    top = coords ? coords.top - 280 : top - 280;
   }
 
   codeActionState.actions = actions;
@@ -313,9 +313,10 @@ export function queueLightbulbCheck(
         const head = view.state.selection.main.head;
         const coords = view.coordsAtPos(head);
         if (coords) {
+          const placeBelow = coords.bottom + 28 <= window.innerHeight;
           codeActionState.lightbulbCoords = {
-            left: coords.left - 24,
-            top: coords.top + 2,
+            left: coords.left,
+            top: placeBelow ? coords.bottom + 6 : coords.top - 26,
           };
           codeActionState.lightbulbActionsCount = actions.length;
           codeActionState.lightbulbVisible = true;

@@ -472,13 +472,46 @@ class RunStore {
       [event.id]: { state: event.state, error: event.error },
     };
     if (event.state === 'running') {
+      this.stopAutoPolling();
       this.refreshDevices().then(() => {
         this.selectDevice(event.id);
       }).catch(() => {});
-    } else if (event.state === 'failed' && event.error) {
-      import('../toolchain/toolchainStore.svelte').then((m) => {
-        m.toolchainStore.showToast(`Emulator "${event.id}" failed: ${event.error?.slice(0, 120)}`);
-      }).catch(() => {});
+    } else if (event.state === 'failed') {
+      this.stopAutoPolling();
+      if (event.error) {
+        import('../toolchain/toolchainStore.svelte').then((m) => {
+          m.toolchainStore.showToast(`Emulator "${event.id}" failed: ${event.error?.slice(0, 120)}`);
+        }).catch(() => {});
+      }
+    }
+  }
+
+  private autoPollTimer: any = null;
+
+  startAutoPolling(name: string) {
+    if (this.autoPollTimer) {
+      clearInterval(this.autoPollTimer);
+      this.autoPollTimer = null;
+    }
+    this.autoPollTimer = setInterval(async () => {
+      await this.refreshDevices();
+      const status = this.emulatorStatuses[name];
+      const onlineDev = this.devices.find(
+        (d) => (d.name === name || d.id === name || (status as any)?.deviceId === d.id) && d.state === 'online'
+      );
+      if (onlineDev || status?.state === 'running' || status?.state === 'failed') {
+        this.stopAutoPolling();
+        if (onlineDev) {
+          this.selectDevice(onlineDev.id);
+        }
+      }
+    }, 2000);
+  }
+
+  stopAutoPolling() {
+    if (this.autoPollTimer) {
+      clearInterval(this.autoPollTimer);
+      this.autoPollTimer = null;
     }
   }
 
@@ -487,14 +520,43 @@ class RunStore {
       ...this.emulatorStatuses,
       [name]: { state: 'booting' },
     };
+    const existingIdx = this.devices.findIndex((d) => d.name === name || d.id === name);
+    if (existingIdx !== -1) {
+      const nextDevices = [...this.devices];
+      nextDevices[existingIdx] = {
+        ...nextDevices[existingIdx],
+        state: 'booting' as any,
+      };
+      this.devices = nextDevices;
+    } else {
+      this.devices = [
+        ...this.devices,
+        {
+          id: name,
+          name,
+          platform: 'android',
+          kind: 'emulator',
+          state: 'booting' as any,
+        },
+      ];
+    }
+    if (this.snapshot?.emulators) {
+      const emu = this.snapshot.emulators.find((e) => e.name === name || e.id === name);
+      if (emu) {
+        emu.state = 'booting';
+      }
+    }
+    this.startAutoPolling(name);
     try {
       await api.avdStart(name, cold, wipeData);
     } catch (e: any) {
+      this.stopAutoPolling();
       const errMsg = e?.message || (typeof e === 'string' ? e : 'Failed to start AVD');
       this.emulatorStatuses = {
         ...this.emulatorStatuses,
         [name]: { state: 'failed', error: errMsg },
       };
+      this.devices = this.devices.filter((d) => d.id !== name || (d.state as string) !== 'booting');
       import('../toolchain/toolchainStore.svelte').then((m) => {
         m.toolchainStore.showToast(`AVD "${name}" failed: ${errMsg}`);
       }).catch(() => {});

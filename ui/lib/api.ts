@@ -1102,6 +1102,10 @@ export const api = {
     }
   },
 
+  async installKotlinLs(): Promise<void> {
+    return this.kotlinLsInstall();
+  },
+
   async klsInstall(): Promise<void> {
     try {
       await invoke('kls_install');

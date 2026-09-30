@@ -157,6 +157,13 @@
         opacity: '0.65',
         fontStyle: 'normal',
       },
+      '.cm-foldPlaceholder': {
+        background: '#2a2d32',
+        border: '1px solid #3c3c3c',
+        color: '#8b8f98',
+        borderRadius: '3px',
+        padding: '0 4px',
+      },
     },
     { dark: true }
   );
@@ -191,6 +198,16 @@
   let blameMenuPos = $state({ x: 0, y: 0 });
   let blameMenuItems = $state<MenuItem[]>([]);
   const blameCompartment = new Compartment();
+  const vimCompartment = new Compartment();
+
+  $effect(() => {
+    const isVim = editorSettings.vimMode;
+    if (view) {
+      view.dispatch({
+        effects: vimCompartment.reconfigure(isVim ? vim() : []),
+      });
+    }
+  });
 
   let tabContextMenuVisible = $state(false);
   let tabContextMenuPos = $state({ x: 0, y: 0 });
@@ -481,7 +498,7 @@
       extensions: [
         createEditorKeymapExtension(),
         EditorState.allowMultipleSelections.of(true),
-        vim(),
+        vimCompartment.of(editorSettings.vimMode ? vim() : []),
         blameCompartment.of([]),
         lineNumbers(),
         highlightActiveLineGutter(),

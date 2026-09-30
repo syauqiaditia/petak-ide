@@ -31,17 +31,19 @@
   let kotlinInstallError = $state<string | null>(null);
   let unlistenProgress: UnlistenFn | null = null;
 
-  const categories = [
-    { id: 'general', label: 'General', icon: '⚙' },
+  let isId = $derived(settingsStore.language === 'id');
+
+  let categories = $derived([
+    { id: 'general', label: isId ? 'Umum' : 'General', icon: '⚙' },
     { id: 'editor', label: 'Editor', icon: '📝' },
-    { id: 'toolchains', label: 'Toolchains & SDK', icon: '🛠' },
+    { id: 'toolchains', label: isId ? 'Toolchain & SDK' : 'Toolchains & SDK', icon: '🛠' },
     { id: 'git', label: 'Git', icon: '🔀' },
-    { id: 'accounts', label: 'Accounts', icon: '👤' },
-    { id: 'agents', label: 'Agents', icon: '🤖' },
-    { id: 'devices', label: 'Devices', icon: '📱' },
-    { id: 'keymap', label: 'Keymap', icon: '⌨' },
-    { id: 'about', label: 'About', icon: 'ℹ' },
-  ] as const;
+    { id: 'accounts', label: isId ? 'Akun' : 'Accounts', icon: '👤' },
+    { id: 'agents', label: isId ? 'Agen AI' : 'Agents', icon: '🤖' },
+    { id: 'devices', label: isId ? 'Perangkat' : 'Devices', icon: '📱' },
+    { id: 'keymap', label: isId ? 'Pintasan Tombol' : 'Keymap', icon: '⌨' },
+    { id: 'about', label: isId ? 'Tentang' : 'About', icon: 'ℹ' },
+  ]);
 
   onMount(() => {
     formatOnSave = getFormatOnSaveConfig();
@@ -126,17 +128,17 @@
     <!-- Top Header -->
     <div class="settings-header">
       <div class="header-left">
-        <span class="settings-title">Settings</span>
+        <span class="settings-title">{isId ? 'Pengaturan' : 'Settings'}</span>
       </div>
       <div class="header-search">
         <input
           type="text"
           class="search-input"
-          placeholder="Search settings (Cmd-,)…"
+          placeholder={isId ? 'Cari pengaturan (Cmd-,)…' : 'Search settings (Cmd-,)…'}
           bind:value={searchQuery}
         />
       </div>
-      <button class="close-btn" onclick={onclose} title="Close Settings (Esc)" aria-label="Close Settings">
+      <button class="close-btn" onclick={onclose} title={isId ? 'Tutup Pengaturan (Esc)' : 'Close Settings (Esc)'} aria-label="Close Settings">
         ✕
       </button>
     </div>
@@ -160,12 +162,12 @@
       <!-- Content Area -->
       <div class="settings-content">
         {#if settingsStore.activeCategory === 'general'}
-          <div class="section-title">General Settings</div>
+          <div class="section-title">{isId ? 'Pengaturan Umum' : 'General Settings'}</div>
           <div class="setting-group">
             <label class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Theme</span>
-                <span class="setting-desc">Switch between dark and light appearance</span>
+                <span class="setting-name">{isId ? 'Tema Tampilan' : 'Theme'}</span>
+                <span class="setting-desc">{isId ? 'Beralih antara tampilan gelap dan terang' : 'Switch between dark and light appearance'}</span>
               </div>
               <div class="theme-toggle-wrap">
                 <button
@@ -187,8 +189,8 @@
 
             <label class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Reopen last project on launch</span>
-                <span class="setting-desc">Automatically open the previous workspace when launching Petak (default: OFF, shows Dashboard)</span>
+                <span class="setting-name">{isId ? 'Buka proyek terakhir otomatis saat mulai' : 'Reopen last project on launch'}</span>
+                <span class="setting-desc">{isId ? 'Otomatis membuka workspace sebelumnya saat Petak dibuka (default: Nonaktif, tampilkan Dashboard)' : 'Automatically open the previous workspace when launching Petak (default: OFF, shows Dashboard)'}</span>
               </div>
               <input
                 type="checkbox"
@@ -200,10 +202,14 @@
 
             <div class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Interface Language</span>
-                <span class="setting-desc">Preferred language for toasts and tooltips</span>
+                <span class="setting-name">{isId ? 'Bahasa Antarmuka' : 'Interface Language'}</span>
+                <span class="setting-desc">{isId ? 'Bahasa pilihan untuk tampilan antarmuka dan notifikasi' : 'Preferred language for toasts and tooltips'}</span>
               </div>
-              <select class="setting-select">
+              <select
+                class="setting-select"
+                value={settingsStore.language}
+                onchange={(e) => settingsStore.setLanguage((e.target as HTMLSelectElement).value as 'id' | 'en')}
+              >
                 <option value="id">Bahasa Indonesia (Default)</option>
                 <option value="en">English</option>
               </select>
@@ -211,12 +217,12 @@
           </div>
 
         {:else if settingsStore.activeCategory === 'editor'}
-          <div class="section-title">Editor Settings</div>
+          <div class="section-title">{isId ? 'Pengaturan Editor' : 'Editor Settings'}</div>
           <div class="setting-group">
             <label class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">AI Ghost Text (Inline Completions)</span>
-                <span class="setting-desc">Show gray suggestion ahead of cursor (Tab to accept, Esc to dismiss)</span>
+                <span class="setting-name">{isId ? 'AI Ghost Text (Saran Inline)' : 'AI Ghost Text (Inline Completions)'}</span>
+                <span class="setting-desc">{isId ? 'Tampilkan saran abu-abu di depan kursor (Tab untuk menerima, Esc untuk menutup)' : 'Show gray suggestion ahead of cursor (Tab to accept, Esc to dismiss)'}</span>
               </div>
               <input
                 type="checkbox"
@@ -228,8 +234,8 @@
 
             <label class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Code Folding</span>
-                <span class="setting-desc">Display fold indicators in gutter and enable Cmd-Alt-minus/plus collapse</span>
+                <span class="setting-name">{isId ? 'Pelipatan Kode (Code Folding)' : 'Code Folding'}</span>
+                <span class="setting-desc">{isId ? 'Tampilkan indikator pelipatan di gutter dan aktifkan pintasan Cmd-Alt-minus/plus' : 'Display fold indicators in gutter and enable Cmd-Alt-minus/plus collapse'}</span>
               </div>
               <input
                 type="checkbox"
@@ -241,8 +247,8 @@
 
             <label class="setting-row">
               <div class="setting-info">
-                <span class="setting-name">Vim Mode</span>
-                <span class="setting-desc">Enable standard modal Vim keybindings inside CodeMirror</span>
+                <span class="setting-name">{isId ? 'Mode Vim' : 'Vim Mode'}</span>
+                <span class="setting-desc">{isId ? 'Aktifkan navigasi dan modal keybindings standar Vim di dalam CodeMirror' : 'Enable standard modal Vim keybindings inside CodeMirror'}</span>
               </div>
               <input
                 type="checkbox"
@@ -252,7 +258,7 @@
               />
             </label>
 
-            <div class="section-subtitle">Format On Save</div>
+            <div class="section-subtitle">{isId ? 'Format Saat Menyimpan (Format On Save)' : 'Format On Save'}</div>
             <div class="format-lang-grid">
               {#each ['dart', 'kotlin', 'swift'] as lang}
                 <label class="format-lang-row">
@@ -269,10 +275,10 @@
           </div>
 
         {:else if settingsStore.activeCategory === 'toolchains'}
-          <div class="section-title">Toolchains & SDK Configuration</div>
+          <div class="section-title">{isId ? 'Konfigurasi Toolchain & SDK' : 'Toolchains & SDK Configuration'}</div>
           <div class="setting-group">
             <div class="field-item">
-              <label for="tc-flutter">Flutter SDK Path</label>
+              <label for="tc-flutter">{isId ? 'Jalur Flutter SDK' : 'Flutter SDK Path'}</label>
               <input
                 id="tc-flutter"
                 type="text"
@@ -283,7 +289,7 @@
             </div>
 
             <div class="field-item">
-              <label for="tc-android">Android SDK / ANDROID_HOME</label>
+              <label for="tc-android">{isId ? 'Jalur Android SDK / ANDROID_HOME' : 'Android SDK / ANDROID_HOME'}</label>
               <input
                 id="tc-android"
                 type="text"
@@ -294,7 +300,7 @@
             </div>
 
             <div class="field-item">
-              <label for="tc-kotlin">Kotlin Language Server Binary</label>
+              <label for="tc-kotlin">{isId ? 'Binary Kotlin Language Server' : 'Kotlin Language Server Binary'}</label>
               <input
                 id="tc-kotlin"
                 type="text"
@@ -306,10 +312,10 @@
 
             <div class="actions-row">
               <button class="btn-primary" onclick={handleSaveToolchains}>
-                Save & Re-detect
+                {isId ? 'Simpan & Deteksi Ulang' : 'Save & Re-detect'}
               </button>
               <button class="btn-secondary" onclick={handleInstallKotlinLs} disabled={isInstallingKotlin}>
-                {isInstallingKotlin ? 'Installing Kotlin LS…' : 'Install Kotlin Language Server'}
+                {isInstallingKotlin ? (isId ? 'Memasang Kotlin LS…' : 'Installing Kotlin LS…') : (isId ? 'Pasang Kotlin Language Server' : 'Install Kotlin Language Server')}
               </button>
             </div>
 
@@ -330,11 +336,11 @@
           </div>
 
         {:else if settingsStore.activeCategory === 'accounts'}
-          <div class="section-title">Accounts & Integrations</div>
+          <div class="section-title">{isId ? 'Akun & Integrasi' : 'Accounts & Integrations'}</div>
           <AccountsSettings />
 
         {:else if settingsStore.activeCategory === 'git'}
-          <div class="section-title">Git Preferences</div>
+          <div class="section-title">{isId ? 'Preferensi Git' : 'Git Preferences'}</div>
           <div class="setting-group">
             <div class="setting-info">
               <span class="setting-name">In-Memory Local Commit Checkboxes</span>
