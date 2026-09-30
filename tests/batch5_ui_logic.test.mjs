@@ -97,3 +97,41 @@ test('mirror connecting & error: never mentions scrcpy for iOS and honest physic
   assert.doesNotMatch(sanitized.message, /scrcpy/i);
   assert.match(sanitized.message, /device locked/i);
 });
+
+// =============================================================================
+// Suite 3: Device Dropdown Status & Labels (Bug 4)
+// =============================================================================
+import {
+  getDeviceStatusLabel,
+  getDeviceTooltip,
+  groupDevices,
+} from '../ui/features/run/deviceLogic.ts';
+
+test('device status label: accurate Indonesian copy & never USB unless wired', () => {
+  // 1. Wired USB
+  assert.equal(getDeviceStatusLabel({ connState: 'connected_usb', transport: 'wired' }), 'Terhubung (USB)');
+  assert.equal(getDeviceStatusLabel({ connection: 'connected', transport: 'wired' }), 'Terhubung (USB)');
+
+  // 2. Connected but transport unknown or null -> MUST NOT show USB
+  assert.equal(getDeviceStatusLabel({ connState: 'connected_usb', transport: null }), 'Terhubung');
+  assert.equal(getDeviceStatusLabel({ connection: 'connected', transport: 'unknown' }), 'Terhubung');
+
+  // 3. Wi-Fi
+  assert.equal(getDeviceStatusLabel({ connState: 'connected_wifi', transport: 'wifi' }), 'Terhubung (Wi-Fi)');
+  assert.equal(getDeviceStatusLabel({ connection: 'connected', transport: 'wifi' }), 'Terhubung (Wi-Fi)');
+
+  // 4. Locked
+  assert.equal(getDeviceStatusLabel({ connState: 'locked' }), 'Terkunci/Perlu dibuka');
+
+  // 5. Disconnected / Paired
+  assert.equal(getDeviceStatusLabel({ connState: 'disconnected' }), 'Tidak terhubung');
+  assert.equal(getDeviceStatusLabel({ connection: 'paired' }), 'Tidak terhubung');
+});
+
+test('device tooltip: displays tunnelState and pairingState accurately', () => {
+  const tooltip1 = getDeviceTooltip({ tunnelState: 'active', pairingState: 'paired' });
+  assert.equal(tooltip1, 'tunnelState: active · pairingState: paired');
+
+  const tooltip2 = getDeviceTooltip({ tunnelState: null, pairingState: null });
+  assert.equal(tooltip2, 'tunnelState: None · pairingState: None');
+});
