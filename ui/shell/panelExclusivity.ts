@@ -5,7 +5,7 @@
  */
 
 export type RightPanelId = 'mirror' | 'devices' | 'agent' | null;
-export type LeftSidebarId = 'project' | 'git' | 'agents' | 'settings';
+export type LeftSidebarId = 'project' | 'git' | 'mr' | 'agents' | 'settings';
 
 export class PanelExclusivityManager {
   private _activeRightPanel: RightPanelId = null;

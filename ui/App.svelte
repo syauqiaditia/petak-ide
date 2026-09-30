@@ -21,6 +21,7 @@
   import { toolchainStore } from './features/toolchain/toolchainStore.svelte';
 
   let GitViewComponent = $state<any>(null);
+  let MrViewComponent = $state<any>(null);
   let DevicesPanelComponent = $state<any>(null);
   let DeviceMirrorPanelComponent = $state<any>(null);
   let isAgentPanelOpen = $state<boolean>(
@@ -31,6 +32,9 @@
   $effect(() => {
     if (activeRailTab === 'git' && !GitViewComponent) {
       import('./features/git/GitView.svelte').then((m) => (GitViewComponent = m.default));
+    }
+    if (activeRailTab === 'mr' && !MrViewComponent) {
+      import('./features/mr/MrView.svelte').then((m) => (MrViewComponent = m.default));
     }
     if (activeRailTab === 'settings') {
       openToolchains();
@@ -1427,6 +1431,8 @@
           activeRailTab = 'devices';
         } else if (window.location.search.includes('tab=git')) {
           activeRailTab = 'git';
+        } else if (window.location.search.includes('tab=mr') || window.location.search.includes('preview-mr')) {
+          activeRailTab = 'mr';
         } else if (window.location.search.includes('tab=toolchains')) {
           activeRailTab = 'settings';
         }
@@ -1553,6 +1559,10 @@
 
       {#if activeRailTab === 'git' && GitViewComponent}
         <GitViewComponent folderPath={currentFolderPath} />
+      {/if}
+
+      {#if activeRailTab === 'mr' && MrViewComponent}
+        <MrViewComponent folderPath={currentFolderPath} />
       {/if}
 
       {#if terminalOpen && TerminalPanelComponent}
