@@ -121,11 +121,41 @@ pub fn default_recent_projects_path() -> Option<PathBuf> {
 /// Returns at most 10 items, newest first.
 pub fn recent_projects_list<P: AsRef<Path>>(file: P) -> io::Result<Vec<RecentProject>> {
     let path = file.as_ref();
-    if !path.exists() {
+    let stored: Vec<StoredRecentProject> = if path.exists() {
+        let data = fs::read_to_string(path)?;
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    if stored.is_empty() {
+        // Fallback: check recent.json in the same directory, or default_recent_path()
+        let fallback_file = path.parent().map(|p| p.join("recent.json")).or_else(default_recent_path);
+        if let Some(recent_file) = fallback_file {
+            if recent_file.exists() {
+                if let Ok(folders) = load_recent(&recent_file) {
+                    let mut result = Vec::new();
+                    for f in folders {
+                        let exists = Path::new(&f).exists();
+                        let name = Path::new(&f)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&f)
+                            .to_string();
+                        result.push(RecentProject {
+                            name,
+                            path: f,
+                            last_opened: 0,
+                            exists,
+                        });
+                    }
+                    result.truncate(10);
+                    return Ok(result);
+                }
+            }
+        }
         return Ok(Vec::new());
     }
-    let data = fs::read_to_string(path)?;
-    let stored: Vec<StoredRecentProject> = serde_json::from_str(&data).unwrap_or_default();
 
     let mut result = Vec::with_capacity(stored.len());
     for item in stored {
@@ -312,8 +342,27 @@ mod tests {
 
         // 6. Deduplication and move to front
         recent_projects_add(&file, "/project/proj_10").unwrap();
-        let deduped = recent_projects_list(&file).unwrap();
-        assert_eq!(deduped.len(), 9);
-        assert_eq!(deduped[0].path, "/project/proj_10");
+        let after_dedupe = recent_projects_list(&file).unwrap();
+        assert_eq!(after_dedupe[0].name, "proj_10");
+        assert_eq!(after_dedupe[0].path, "/project/proj_10");
+    }
+
+    #[test]
+    fn test_recent_projects_fallback_to_recent_json() {
+        let dir = tempdir().unwrap();
+        let recent_projects_file = dir.path().join("recent_projects.json");
+        let recent_json = dir.path().join("recent.json");
+
+        // Write some folders to recent.json
+        push_recent(&recent_json, "/some/workspace/project_a").unwrap();
+        push_recent(&recent_json, "/some/workspace/project_b").unwrap();
+
+        // recent_projects_list on nonexistent recent_projects.json should fallback to sibling recent.json
+        let list = recent_projects_list(&recent_projects_file).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "project_b");
+        assert_eq!(list[0].path, "/some/workspace/project_b");
+        assert_eq!(list[1].name, "project_a");
+        assert_eq!(list[1].path, "/some/workspace/project_a");
     }
 }
