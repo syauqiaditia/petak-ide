@@ -147,6 +147,12 @@ pub fn select_ios_capture_device<'a>(
     if let Some(target) = target_name {
         let trimmed = target.trim();
         if !trimmed.is_empty() {
+            if let Some(matched) = ios_devices.iter().find(|d| d.unique_id.eq_ignore_ascii_case(trimmed)) {
+                return Some(*matched);
+            }
+            if let Some(matched) = ios_devices.iter().find(|d| d.model_id.eq_ignore_ascii_case(trimmed)) {
+                return Some(*matched);
+            }
             if let Some(matched) = ios_devices.iter().find(|d| d.name.eq_ignore_ascii_case(trimmed)) {
                 return Some(*matched);
             }
@@ -194,6 +200,9 @@ mod tests {
         assert!(dev.has_muxed);
         assert!(!dev.has_video);
         assert_eq!(dev.unique_id, "856FF74F-9D70-41AF-A430-6C7853DACD31");
+
+        let chosen_by_udid = select_ios_capture_device(&devices, Some("856FF74F-9D70-41AF-A430-6C7853DACD31"));
+        assert_eq!(chosen_by_udid.unwrap().unique_id, "856FF74F-9D70-41AF-A430-6C7853DACD31");
 
         let chosen_anon = select_ios_capture_device(&devices, None);
         assert_eq!(chosen_anon.unwrap().name, "UQi");

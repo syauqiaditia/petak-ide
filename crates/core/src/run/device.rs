@@ -738,6 +738,61 @@ pub fn get_running_avd_name(exec: &dyn Exec, adb: &str, device_id: &str) -> Opti
     None
 }
 
+/// Resolve an AVD name to its running emulator adb serial (e.g. "emulator-5554").
+/// Returns Some(serial) if matched, or None if already an adb/iOS serial or cannot be resolved.
+pub fn resolve_running_avd_serial(exec: &dyn Exec, avd_or_serial: &str) -> Option<String> {
+    let trimmed = avd_or_serial.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with("emulator-")
+        || trimmed.starts_with("usb:")
+        || trimmed.contains(':')
+        || crate::mirror::ios::is_ios_device(trimmed)
+    {
+        return None;
+    }
+
+    let adb = resolve_adb_binary();
+    let output = exec.run(Path::new("."), &adb, &["devices"], &[], None).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let mut running_emulators = Vec::new();
+    let mut exact_device_exists = false;
+    for line in stdout.lines() {
+        let line = line.trim();
+        if let Some(device_id) = line.split_whitespace().next() {
+            if device_id == trimmed {
+                exact_device_exists = true;
+            }
+            if device_id.starts_with("emulator-") && line.contains("device") {
+                running_emulators.push(device_id.to_string());
+            }
+        }
+    }
+
+    if exact_device_exists {
+        return None;
+    }
+
+    // 1. Match specific emulator by querying AVD name
+    for emu_id in &running_emulators {
+        if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
+            if name.eq_ignore_ascii_case(trimmed) {
+                return Some(emu_id.clone());
+            }
+        }
+    }
+
+    // 2. Fallback: if only 1 emulator is online and running
+    if running_emulators.len() == 1 {
+        return Some(running_emulators[0].clone());
+    }
+
+    None
+}
+
 /// Stop a running AVD by finding its emulator device and killing it.
 pub fn avd_stop(exec: &dyn Exec, avd: &str) -> io::Result<()> {
     if !is_valid_avd_name(avd) {
@@ -1978,6 +2033,108 @@ emulator-5558          unauthorized transport_id:5
         assert!(killed_5556.load(Ordering::SeqCst));
         // emulator-5554 was running Pixel_7, so it must NOT be killed!
         assert!(!killed_5554.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_resolve_running_avd_serial() {
+        struct MockResolveExec;
+        impl Exec for MockResolveExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+
+                if args == &["devices"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"List of devices attached\nemulator-5554 device\nemulator-5556 device\nR58M1234567 device\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5554", "emu", "avd", "name"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"Pixel_7\r\nOK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                if args == &["-s", "emulator-5556", "emu", "avd", "name"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"Z_Fold\r\nOK\r\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let exec = MockResolveExec;
+        // Resolves Z_Fold to emulator-5556
+        assert_eq!(
+            resolve_running_avd_serial(&exec, "Z_Fold"),
+            Some("emulator-5556".to_string())
+        );
+        // Resolves Pixel_7 to emulator-5554
+        assert_eq!(
+            resolve_running_avd_serial(&exec, "Pixel_7"),
+            Some("emulator-5554".to_string())
+        );
+        // Already emulator serial -> None
+        assert_eq!(resolve_running_avd_serial(&exec, "emulator-5554"), None);
+        // Existing physical device serial -> None
+        assert_eq!(resolve_running_avd_serial(&exec, "R58M1234567"), None);
+        // iOS device -> None
+        assert_eq!(
+            resolve_running_avd_serial(&exec, "BC639450-E28F-50F8-90A1-581C383E0230"),
+            None
+        );
+
+        // Fallback for single running emulator
+        struct MockSingleExec;
+        impl Exec for MockSingleExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+
+                if args == &["devices"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"List of devices attached\nemulator-5554 device\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                // emu avd name fails or unauthenticated
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(1),
+                    stdout: b"KO: Authentication required\r\n".to_vec(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let single_exec = MockSingleExec;
+        assert_eq!(
+            resolve_running_avd_serial(&single_exec, "Any_AVD"),
+            Some("emulator-5554".to_string())
+        );
     }
 
     #[test]

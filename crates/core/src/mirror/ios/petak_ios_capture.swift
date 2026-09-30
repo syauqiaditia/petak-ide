@@ -85,7 +85,13 @@ func emitStatus(_ dict: [String: Any]) {
     if let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
        let str = String(data: data, encoding: .utf8) {
         FileHandle.standardError.write(Data((str + "\n").utf8))
+        fflush(stderr)
     }
+}
+
+func logStderr(_ msg: String) {
+    FileHandle.standardError.write(Data((msg + "\n").utf8))
+    fflush(stderr)
 }
 
 // MARK: - Binary Frame Packet Emitter
@@ -430,9 +436,11 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
         let updatedStatus = AVCaptureDevice.authorizationStatus(for: .video)
         if updatedStatus == .denied || updatedStatus == .restricted {
+            let msg = "Izin Kamera ditolak. Buka System Settings > Privacy & Security > Camera > nyalakan Petak, lalu restart Petak."
+            logStderr("[ios-capture] \(msg)")
             emitStatus([
                 "status": "error",
-                "message": "Izin Kamera ditolak. Buka System Settings > Privacy & Security > Camera > nyalakan Petak, lalu restart Petak."
+                "message": msg
             ])
             exit(1)
         }
@@ -461,8 +469,18 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
             return isLikelyIos
         }
 
+        logStderr("[ios-capture] Found \(devices.count) total devices, \(iosDevices.count) iOS candidate devices.")
+        for d in iosDevices {
+            logStderr("[ios-capture] Candidate: name='\(d.localizedName)', uniqueID='\(d.uniqueID)', modelID='\(d.modelID)'")
+        }
+
         let targetDevice: AVCaptureDevice?
-        if !self.config.deviceName.isEmpty {
+        if !self.config.udid.isEmpty {
+            targetDevice = iosDevices.first { $0.uniqueID == self.config.udid }
+                ?? iosDevices.first { $0.modelID == self.config.udid }
+                ?? (!self.config.deviceName.isEmpty ? iosDevices.first { $0.localizedName.caseInsensitiveCompare(self.config.deviceName) == .orderedSame } : nil)
+                ?? iosDevices.first
+        } else if !self.config.deviceName.isEmpty {
             targetDevice = iosDevices.first { $0.localizedName.caseInsensitiveCompare(self.config.deviceName) == .orderedSame }
                 ?? iosDevices.first { $0.localizedName.localizedCaseInsensitiveContains(self.config.deviceName) }
                 ?? iosDevices.first
@@ -471,17 +489,23 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         }
 
         guard let device = targetDevice else {
+            let msg = "Mirror iPhone butuh kabel USB. Colok iPhone, buka kunci layar, pilih Trust"
+            let availableList = devices.map { "\($0.localizedName) (id=\($0.uniqueID), model=\($0.modelID))" }.joined(separator: ", ")
+            logStderr("[ios-capture] Error: No suitable iOS device found for udid='\(self.config.udid)', name='\(self.config.deviceName)'. Available: \(availableList)")
             emitStatus([
                 "status": "needs_usb",
-                "message": "Mirror iPhone butuh kabel USB. Colok iPhone, buka kunci layar, pilih Trust"
+                "message": msg
             ])
             exit(1)
         }
 
         do {
+            logStderr("[ios-capture] Connecting to '\(device.localizedName)' (uniqueID=\(device.uniqueID))...")
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input) else {
-                emitStatus(["status": "error", "message": "Cannot add iOS device as input to AVCaptureSession"])
+                let msg = "Cannot add iOS device '\(device.localizedName)' (\(device.uniqueID)) as input to AVCaptureSession"
+                logStderr("[ios-capture] \(msg)")
+                emitStatus(["status": "error", "message": msg])
                 exit(1)
             }
             session.addInput(input)
@@ -494,7 +518,9 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
             output.setSampleBufferDelegate(self, queue: queue)
 
             guard session.canAddOutput(output) else {
-                emitStatus(["status": "error", "message": "Cannot add output to AVCaptureSession"])
+                let msg = "Cannot add video output to AVCaptureSession for '\(device.localizedName)'"
+                logStderr("[ios-capture] \(msg)")
+                emitStatus(["status": "error", "message": msg])
                 exit(1)
             }
             session.addOutput(output)
@@ -507,6 +533,7 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
             self.session = session
 
             session.startRunning()
+            logStderr("[ios-capture] AVCaptureSession started running successfully: \(width)x\(height) @ \(self.config.fps)fps")
 
             emitStatus([
                 "status": "live",
@@ -520,7 +547,9 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
                 "message": "Physical iPhone connected in View-Only mode"
             ])
         } catch {
-            emitStatus(["status": "error", "message": "AVCaptureSession setup failed: \(error.localizedDescription)"])
+            let msg = "AVCaptureSession setup failed for device '\(device.localizedName)' (\(device.uniqueID)): \(error.localizedDescription) (Error: \(error))"
+            logStderr("[ios-capture] \(msg)")
+            emitStatus(["status": "error", "message": msg])
             exit(1)
         }
     }
@@ -667,7 +696,9 @@ func main() {
         activePhysicalCapture = phys
         phys.start()
         #else
-        emitStatus(["status": "error", "message": "AVFoundation / CoreMediaIO not available on this platform"])
+        let msg = "AVFoundation / CoreMediaIO not available on this platform"
+        logStderr("[ios-capture] \(msg)")
+        emitStatus(["status": "error", "message": msg])
         exit(1)
         #endif
 
