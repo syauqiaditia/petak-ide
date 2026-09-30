@@ -949,6 +949,62 @@ pub fn resolve_flutter_root(project_root: Option<&Path>) -> Option<String> {
     std::env::var("FLUTTER_ROOT").ok()
 }
 
+/// Path to Kotlin Language Server log file: <AppSupport>/Petak/logs/kotlin-ls.log
+pub fn kotlin_ls_log_path() -> PathBuf {
+    if let Some(dir) = dirs::data_dir() {
+        dir.join("Petak").join("logs").join("kotlin-ls.log")
+    } else {
+        PathBuf::from("/tmp/petak-kotlin-ls.log")
+    }
+}
+
+/// Resolves JDK home directory with preference ladder:
+/// 1. JAVA_HOME environment variable (if valid directory)
+/// 2. /usr/libexec/java_home -v 17 -> -v 11 -> default (macOS)
+/// 3. Standard Linux /usr/lib/jvm/ paths (17 -> 11 -> default -> 21)
+pub fn resolve_jdk_home() -> Option<PathBuf> {
+    // 1. JAVA_HOME env var
+    if let Ok(val) = std::env::var("JAVA_HOME") {
+        let p = PathBuf::from(val);
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+
+    // 2. macOS /usr/libexec/java_home
+    let java_home_tool = Path::new("/usr/libexec/java_home");
+    if java_home_tool.exists() {
+        for args in &[&["-v", "17"][..], &["-v", "11"][..], &[][..]] {
+            if let Ok(out) = std::process::Command::new(java_home_tool).args(*args).output() {
+                if out.status.success() {
+                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !stdout.is_empty() {
+                        let p = PathBuf::from(stdout);
+                        if p.is_dir() {
+                            return Some(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Linux / generic candidates
+    for cand in &[
+        "/usr/lib/jvm/java-17-openjdk-amd64",
+        "/usr/lib/jvm/java-11-openjdk-amd64",
+        "/usr/lib/jvm/default-java",
+        "/usr/lib/jvm/java-21-openjdk-amd64",
+    ] {
+        let p = Path::new(cand);
+        if p.is_dir() {
+            return Some(p.to_path_buf());
+        }
+    }
+
+    None
+}
+
 /// Kotlin LS status info
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

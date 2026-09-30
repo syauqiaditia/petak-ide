@@ -1117,24 +1117,37 @@ pub async fn lsp_restart(
 }
 
 #[tauri::command]
+pub async fn lsp_kotlin_log_path() -> Result<String, String> {
+    let path = petak_core::toolchain::kotlin_ls_log_path();
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub async fn lsp_did_open(
     state: tauri::State<'_, AppRegistry>,
     path: String,
     text: String,
 ) -> Result<(), String> {
     let registry = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let p = std::path::Path::new(&path);
-        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
-            registry
-                .did_open(p, lang, &text, None)
-                .map_err(|e| format!("{:?}", e))?;
+    let p_buf = std::path::PathBuf::from(&path);
+    let ext = p_buf.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+    if let Some(lang) = petak_core::lsp::Lang::from_extension(&ext) {
+        if lang == petak_core::lsp::Lang::Kotlin {
+            // Non-blocking initialization for Kotlin: run in background task so UI does not freeze during Gradle indexing
+            tauri::async_runtime::spawn_blocking(move || {
+                let _ = registry.did_open(&p_buf, lang, &text, None);
+            });
+            return Ok(());
         }
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+        tauri::async_runtime::spawn_blocking(move || {
+            registry
+                .did_open(&p_buf, lang, &text, None)
+                .map_err(|e| format!("{:?}", e))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+    }
+    Ok(())
 }
 
 #[tauri::command]

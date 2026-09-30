@@ -31,6 +31,22 @@ pub struct ServerConfig {
     pub command: String,
     pub args: Vec<String>,
     pub root_uri: String,
+    pub env: Vec<(String, String)>,
+    pub init_timeout: Option<Duration>,
+    pub stderr_log_path: Option<std::path::PathBuf>,
+}
+
+impl ServerConfig {
+    pub fn new(command: impl Into<String>, args: Vec<String>, root_uri: impl Into<String>) -> Self {
+        Self {
+            command: command.into(),
+            args,
+            root_uri: root_uri.into(),
+            env: Vec::new(),
+            init_timeout: None,
+            stderr_log_path: None,
+        }
+    }
 }
 
 /// A running LSP server connection.
@@ -80,6 +96,14 @@ impl Server {
         let mut cmd = Command::new(&config.command);
         cmd.args(&config.args);
         crate::toolchain::apply_env(&mut cmd);
+        for (k, v) in &config.env {
+            cmd.env(k, v);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -89,11 +113,29 @@ impl Server {
         let stdout = child.stdout.take().unwrap();
         let stdin = child.stdin.take().unwrap();
         if let Some(stderr) = child.stderr.take() {
+            let log_path_opt = config.stderr_log_path.clone();
             thread::spawn(move || {
                 use std::io::BufRead;
+                use std::io::Write;
+                let mut file_opt = if let Some(ref path) = log_path_opt {
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                        .ok()
+                } else {
+                    None
+                };
+
                 let reader = std::io::BufReader::new(stderr);
                 for line in reader.lines().flatten() {
                     eprintln!("[lsp stderr] {}", line);
+                    if let Some(ref mut f) = file_opt {
+                        let _ = writeln!(f, "{}", line);
+                    }
                 }
             });
         }
@@ -204,11 +246,18 @@ impl Server {
         };
 
         // Initialize handshake
-        let init_result = server.request_with_timeout(
+        let init_timeout = config.init_timeout.unwrap_or(Duration::from_secs(60));
+        let init_result = match server.request_with_timeout(
             "initialize",
             &client_capabilities(&config.root_uri),
-            Duration::from_secs(60),
-        )?;
+            init_timeout,
+        ) {
+            Ok(res) => res,
+            Err(e) => {
+                server.kill();
+                return Err(e);
+            }
+        };
 
         *server.capabilities.lock().unwrap() = Some(init_result.clone());
 
@@ -299,21 +348,41 @@ impl Server {
             let _ = self.request_with_timeout("shutdown", &Value::Null, Duration::from_secs(5));
             let _ = self.notify("exit", &Value::Null);
         }
-        // Kill the process if still running
+        // Kill the process group if still running
         if let Some(mut child) = self.child.lock().unwrap().take() {
+            #[cfg(unix)]
+            {
+                let pid = child.id() as i32;
+                unsafe {
+                    libc::killpg(pid, libc::SIGKILL);
+                }
+            }
             let _ = child.kill();
             let _ = child.wait();
         }
     }
 
-    /// Kill the server process immediately.
+    /// Kill the server process and its process group immediately.
     pub fn kill(&self) {
         self.stopping.store(true, Ordering::SeqCst);
         self.alive.store(false, Ordering::SeqCst);
         if let Some(mut child) = self.child.lock().unwrap().take() {
+            #[cfg(unix)]
+            {
+                let pid = child.id() as i32;
+                unsafe {
+                    libc::killpg(pid, libc::SIGKILL);
+                }
+            }
             let _ = child.kill();
             let _ = child.wait();
         }
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.kill();
     }
 }
 

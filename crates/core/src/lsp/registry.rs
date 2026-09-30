@@ -596,22 +596,36 @@ impl Registry {
 
     fn start_server(&self, lang: Lang, root: &Path) -> Result<ManagedServer, ServerError> {
         let root_buf = root.to_path_buf();
+        let (initial_state, initial_reason) = if lang == Lang::Kotlin {
+            ("indexing".to_string(), Some("Indexing project (Gradle import, bisa beberapa menit)…".to_string()))
+        } else {
+            ("starting".to_string(), None)
+        };
+
         (self.event_callback)(
             lang,
             root_buf.clone(),
             ServerEvent::Status {
-                state: "starting".into(),
-                reason: None,
+                state: initial_state,
+                reason: initial_reason,
             },
         );
 
         let (cmd, args) = lang.command_for_root(Some(root));
         let root_uri = path_to_uri(root);
-        let config = ServerConfig {
-            command: cmd,
-            args,
-            root_uri,
-        };
+        let mut config = ServerConfig::new(cmd, args, root_uri);
+
+        if lang == Lang::Kotlin {
+            config.init_timeout = Some(std::time::Duration::from_secs(180));
+            config.stderr_log_path = Some(crate::toolchain::kotlin_ls_log_path());
+            if let Some(jdk_dir) = crate::toolchain::resolve_jdk_home() {
+                config.env.push(("JAVA_HOME".to_string(), jdk_dir.to_string_lossy().to_string()));
+                let jdk_bin = jdk_dir.join("bin");
+                let current_path = std::env::var("PATH").unwrap_or_default();
+                let new_path = format!("{}:{}", jdk_bin.display(), current_path);
+                config.env.push(("PATH".to_string(), new_path));
+            }
+        }
 
         let cb = Arc::clone(&self.event_callback);
         let root_clone = root_buf.clone();

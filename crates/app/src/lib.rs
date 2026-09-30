@@ -293,6 +293,7 @@ pub fn run() {
             commands::sim_shutdown,
             commands::kotlin_ls_status,
             commands::kotlin_ls_install,
+            commands::lsp_kotlin_log_path,
             commands::git_branches_tree,
             commands::git_checkout,
             commands::git_log_path,
