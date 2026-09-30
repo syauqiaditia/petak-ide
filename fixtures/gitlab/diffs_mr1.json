@@ -1,0 +1,22 @@
+[
+  {
+    "old_path": "src/cache.rs",
+    "new_path": "src/cache.rs",
+    "a_mode": "100644",
+    "b_mode": "100644",
+    "new_file": true,
+    "renamed_file": false,
+    "deleted_file": false,
+    "diff": "@@ -0,0 +1,15 @@\n+pub struct Cache {\n+    capacity: usize,\n+}\n+\n+impl Cache {\n+    pub fn new(capacity: usize) -> Self {\n+        Self { capacity }\n+    }\n+}"
+  },
+  {
+    "old_path": "src/lib.rs",
+    "new_path": "src/lib.rs",
+    "a_mode": "100644",
+    "b_mode": "100644",
+    "new_file": false,
+    "renamed_file": false,
+    "deleted_file": false,
+    "diff": "@@ -1,3 +1,4 @@\n+pub mod cache;\n pub mod config;\n pub mod engine;"
+  }
+]

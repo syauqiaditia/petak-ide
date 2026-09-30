@@ -1,0 +1,20 @@
+{
+  "id": 501,
+  "iid": 1,
+  "project_id": 1234,
+  "title": "Add modern offline caching mechanism",
+  "approvals_required": 1,
+  "approvals_left": 0,
+  "approved_by": [
+    {
+      "user": {
+        "id": 88,
+        "username": "reviewer1",
+        "name": "Code Reviewer"
+      }
+    }
+  ],
+  "approved": true,
+  "user_has_approved": false,
+  "user_can_approve": true
+}

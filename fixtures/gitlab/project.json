@@ -1,0 +1,12 @@
+{
+  "id": 1234,
+  "description": "Petak sample test repo",
+  "name": "sample-project",
+  "name_with_namespace": "Open Source / sample-project",
+  "path": "sample-project",
+  "path_with_namespace": "opensource/sample-project",
+  "default_branch": "main",
+  "web_url": "https://gitlab.example.local/opensource/sample-project",
+  "ssh_url_to_repo": "git@gitlab.example.local:opensource/sample-project.git",
+  "http_url_to_repo": "https://gitlab.example.local/opensource/sample-project.git"
+}

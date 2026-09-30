@@ -1,0 +1,20 @@
+[
+  {
+    "id": 45001,
+    "name": "cargo-test",
+    "stage": "test",
+    "status": "success",
+    "duration": 42.5,
+    "created_at": "2026-09-29T10:00:00.000Z",
+    "finished_at": "2026-09-29T10:01:00.000Z"
+  },
+  {
+    "id": 45002,
+    "name": "cargo-clippy",
+    "stage": "lint",
+    "status": "success",
+    "duration": 18.2,
+    "created_at": "2026-09-29T10:00:00.000Z",
+    "finished_at": "2026-09-29T10:00:30.000Z"
+  }
+]
