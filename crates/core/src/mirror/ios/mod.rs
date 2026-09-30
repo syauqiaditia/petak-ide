@@ -36,10 +36,10 @@ pub fn is_ios_device(id: &str) -> bool {
     id.starts_with("ios:")
 }
 
-/// Check if an iOS device identifier is an iOS Simulator (standard 36-char UUID format).
+/// Check if an iOS device identifier is an iOS Simulator.
 pub fn is_ios_simulator(id: &str) -> bool {
     let clean_id = id.strip_prefix("ios:").unwrap_or(id);
-    clean_id.len() == 36 && clean_id.matches('-').count() == 4 && is_valid_udid(clean_id)
+    crate::run::device::classify_device_kind(clean_id, None, None) == "ios-simulator"
 }
 
 /// Unified session handle for iOS mirror sessions (Simulator or Physical).
@@ -87,14 +87,23 @@ pub fn start_ios_mirror(
             status_rx,
         ))
     } else {
-        let (info, phys_session, frame_rx, status_rx) =
-            IosPhysicalSession::start(exec, clean_id, max_size)?;
-        Ok((
-            info,
-            IosSessionHandle::Physical(phys_session),
-            frame_rx,
-            status_rx,
-        ))
+        // Physical iPhone: NEVER call simctl boot.
+        match IosPhysicalSession::start(exec, clean_id, max_size) {
+            Ok((info, phys_session, frame_rx, status_rx)) => Ok((
+                info,
+                IosSessionHandle::Physical(phys_session),
+                frame_rx,
+                status_rx,
+            )),
+            Err(_e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "ios-physical",
+                    "code": "physical_capture_failed",
+                    "message": "Mirror iPhone fisik membutuhkan kabel USB tertancap, iPhone dalam keadaan tidak terkunci (unlocked) & Trust komputer ini, serta izin Screen Recording di macOS."
+                });
+                Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()))
+            }
+        }
     }
 }
 
@@ -111,9 +120,16 @@ mod tests {
 
     #[test]
     fn test_is_ios_device_detection() {
+        // Register simulator UDID
+        crate::run::device::register_simulator_udid("E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90");
+
         // iOS Simulator UUID
         assert!(is_ios_device("E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90"));
         assert!(is_ios_simulator("E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90"));
+
+        // Physical CoreDevice UUID (Bug 3 UQi's iPhone) is NOT a simulator!
+        assert!(is_ios_device("BC639450-E28F-50F8-90A1-581C383E0230"));
+        assert!(!is_ios_simulator("BC639450-E28F-50F8-90A1-581C383E0230"));
 
         // iOS Physical iPhone UDID with hyphen
         assert!(is_ios_device("00008101-001234567890"));

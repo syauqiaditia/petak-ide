@@ -347,6 +347,7 @@ mod tests {
             std::fs::write(&fake_bin, "#!/bin/sh\necho '// formatted swift'\n").unwrap();
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&fake_bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(50));
 
             let res = format_text_with_path(
                 "swift",

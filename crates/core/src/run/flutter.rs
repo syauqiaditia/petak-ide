@@ -1042,6 +1042,111 @@ mod tests {
     }
 
     #[test]
+    fn test_flutter_run_mock_lifecycle_start_stop_restart_cycle() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+
+        let cfg = RunConfig {
+            name: "restart_test".to_string(),
+            kind: crate::run::config::RunKind::Flutter,
+            target: None,
+            flavor: None,
+            dart_defines: vec![],
+            module: None,
+            variant: None,
+            application_id: None,
+            activity: None,
+        };
+
+        // 1. Initial start
+        let lines1 = vec![
+            ProcLine::Stdout(r#"[{"event":"app.start","params":{"appId":"app_cycle_1","deviceId":"emulator-5554"}}]"#.to_string()),
+            ProcLine::Stdout(r#"[{"event":"app.started","params":{"appId":"app_cycle_1"}}]"#.to_string()),
+        ];
+        let stdin1 = Arc::new(Mutex::new(Vec::new()));
+        let killed1 = Arc::new(AtomicBool::new(false));
+        let tx1 = Arc::new(Mutex::new(None));
+        let mock1 = MockSpawn {
+            lines_to_emit: lines1,
+            stdin_received: Arc::clone(&stdin1),
+            killed: Arc::clone(&killed1),
+            tx_bridge: Arc::clone(&tx1),
+        };
+
+        let (event_tx1, event_rx1) = std::sync::mpsc::channel();
+        let mut runner1 = FlutterRun::start(&mock1, dir.path(), &cfg, "emulator-5554", event_tx1).unwrap();
+        assert!(runner1.is_running());
+
+        // Wait for started event
+        let mut started1 = false;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if let Ok(RunEvent::AppStarted { app_id, .. }) = event_rx1.recv_timeout(Duration::from_millis(50)) {
+                if app_id == Some("app_cycle_1".to_string()) {
+                    started1 = true;
+                    break;
+                }
+            }
+        }
+        assert!(started1);
+
+        // 2. Stop runner 1
+        let tx1_clone = Arc::clone(&tx1);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(20));
+            if let Some(ref tx) = *tx1_clone.lock().unwrap() {
+                let _ = tx.send(ProcLine::Stdout(r#"[{"id":1,"result":true}]"#.to_string()));
+                let _ = tx.send(ProcLine::Exit(Some(0)));
+            }
+        });
+        runner1.stop().unwrap();
+        assert!(!runner1.is_running());
+
+        // 3. Restart: Start fresh runner 2 (resetting run state machine)
+        let lines2 = vec![
+            ProcLine::Stdout(r#"[{"event":"app.start","params":{"appId":"app_cycle_2","deviceId":"emulator-5554"}}]"#.to_string()),
+            ProcLine::Stdout(r#"[{"event":"app.started","params":{"appId":"app_cycle_2"}}]"#.to_string()),
+        ];
+        let stdin2 = Arc::new(Mutex::new(Vec::new()));
+        let killed2 = Arc::new(AtomicBool::new(false));
+        let tx2 = Arc::new(Mutex::new(None));
+        let mock2 = MockSpawn {
+            lines_to_emit: lines2,
+            stdin_received: Arc::clone(&stdin2),
+            killed: Arc::clone(&killed2),
+            tx_bridge: Arc::clone(&tx2),
+        };
+
+        let (event_tx2, event_rx2) = std::sync::mpsc::channel();
+        let mut runner2 = FlutterRun::start(&mock2, dir.path(), &cfg, "emulator-5554", event_tx2).unwrap();
+        assert!(runner2.is_running());
+
+        let mut started2 = false;
+        let deadline2 = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline2 {
+            if let Ok(RunEvent::AppStarted { app_id, .. }) = event_rx2.recv_timeout(Duration::from_millis(50)) {
+                if app_id == Some("app_cycle_2".to_string()) {
+                    started2 = true;
+                    break;
+                }
+            }
+        }
+        assert!(started2);
+
+        // Clean stop runner 2
+        let tx2_clone = Arc::clone(&tx2);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(20));
+            if let Some(ref tx) = *tx2_clone.lock().unwrap() {
+                let _ = tx.send(ProcLine::Stdout(r#"[{"id":1,"result":true}]"#.to_string()));
+                let _ = tx.send(ProcLine::Exit(Some(0)));
+            }
+        });
+        runner2.stop().unwrap();
+        assert!(!runner2.is_running());
+    }
+
+    #[test]
     fn test_parse_real_daemon_fixture() {
         let fixture_content = include_str!("../../tests/fixtures/flutter_machine.txt");
         let mut event_count = 0;
