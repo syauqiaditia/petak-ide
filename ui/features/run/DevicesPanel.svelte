@@ -1,5 +1,9 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { runStore } from './runStore.svelte';
+  import { mirrorStore } from '../mirror/mirrorStore.svelte';
+  import { toolchainStore } from '../toolchain/toolchainStore.svelte';
+  import { api, type EmulatorStatusEvent } from '../../lib/api';
   import { groupDevices, type SnapshotEmulator, type SnapshotPhysical } from './deviceLogic';
 
   let grouped = $derived(
@@ -10,6 +14,61 @@
   let iosSimulators = $derived(grouped.iosSimulators);
   let physicalDevices = $derived(grouped.physicalDevices);
 
+  let isRefreshing = $state(false);
+  let liveStatus = $state<Record<string, { state: 'stopped' | 'booting' | 'running' | 'failed'; error?: string }>>({});
+
+  let { onClose } = $props<{
+    onClose?: () => void;
+  }>();
+
+  onMount(() => {
+    let unlisten: any = null;
+    api.onEmulatorStatus((event: EmulatorStatusEvent) => {
+      liveStatus[event.id] = { state: event.state, error: event.error };
+      if (event.state === 'running') {
+        runStore.refreshDevices().then(() => {
+          runStore.selectDevice(event.id);
+          mirrorStore.open(event.id);
+        });
+      } else if (event.state === 'failed' && event.error) {
+        toolchainStore.showToast(`Emulator "${event.id}" failed: ${event.error.slice(0, 120)}`);
+      }
+    }).then((u) => { unlisten = u; }).catch(() => {});
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  });
+
+  async function handleRefresh() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    try {
+      await runStore.refreshDevices();
+    } finally {
+      isRefreshing = false;
+    }
+  }
+
+  function getEmuState(emu: SnapshotEmulator): 'stopped' | 'booting' | 'running' | 'failed' {
+    if (liveStatus[emu.name]) return liveStatus[emu.name].state;
+    if (emu.deviceId && liveStatus[emu.deviceId]) return liveStatus[emu.deviceId].state;
+    return emu.state;
+  }
+
+  function getEmuError(emu: SnapshotEmulator): string | undefined {
+    return liveStatus[emu.name]?.error || (emu.deviceId ? liveStatus[emu.deviceId]?.error : undefined);
+  }
+
+  function getSimState(sim: SnapshotEmulator): 'stopped' | 'booting' | 'running' | 'failed' {
+    if (liveStatus[sim.id]) return liveStatus[sim.id].state;
+    return sim.state;
+  }
+
+  function getSimError(sim: SnapshotEmulator): string | undefined {
+    return liveStatus[sim.id]?.error;
+  }
+
   function isEmuSelected(emu: SnapshotEmulator): boolean {
     return (
       runStore.selectedDeviceId === emu.id ||
@@ -17,12 +76,41 @@
     );
   }
 
-  let { onClose } = $props<{
-    onClose?: () => void;
-  }>();
-
   function isPhysSelected(phys: SnapshotPhysical): boolean {
     return runStore.selectedDeviceId === phys.id;
+  }
+
+  async function handleAvdWipe(name: string) {
+    const ok = window.confirm(`Wipe data for Android AVD "${name}"? All userdata will be erased.`);
+    if (ok) {
+      try {
+        await api.avdWipe(name);
+        toolchainStore.showToast(`AVD "${name}" data wiped.`);
+      } catch (e: any) {
+        toolchainStore.showToast(`Failed to wipe AVD "${name}": ${e?.message || e}`);
+      }
+    }
+  }
+
+  async function handleAvdDelete(name: string) {
+    const ok = window.confirm(`Delete Android AVD "${name}"? This action cannot be undone.`);
+    if (ok) {
+      try {
+        await api.avdDelete(name);
+        await runStore.refreshDevices();
+        toolchainStore.showToast(`AVD "${name}" deleted.`);
+      } catch (e: any) {
+        toolchainStore.showToast(`Failed to delete AVD "${name}": ${e?.message || e}`);
+      }
+    }
+  }
+
+  async function handleOpenSimApp() {
+    try {
+      await api.simOpenApp();
+    } catch (e: any) {
+      toolchainStore.showToast(`Failed to open Simulator app: ${e?.message || e}`);
+    }
   }
 </script>
 
@@ -30,7 +118,14 @@
   <div class="header">
     <span class="header-title">DEVICES & EMULATORS</span>
     <div class="header-actions">
-      <button class="refresh-btn" onclick={() => runStore.refreshDevices()} title="Refresh devices and emulators">
+      <button
+        class="refresh-btn"
+        class:spinning={isRefreshing}
+        disabled={isRefreshing}
+        onclick={handleRefresh}
+        title="Refresh devices and emulators"
+        aria-label="Refresh devices and emulators"
+      >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
         </svg>
@@ -60,12 +155,16 @@
     {:else}
       <div class="device-group">
         {#each androidEmulators as emu}
-          {@const isRunning = emu.state === 'running'}
-          {@const isBooting = emu.state === 'booting'}
+          {@const emuState = getEmuState(emu)}
+          {@const isRunning = emuState === 'running'}
+          {@const isBooting = emuState === 'booting'}
+          {@const isFailed = emuState === 'failed'}
           {@const isSelected = isEmuSelected(emu)}
+          {@const emuErr = getEmuError(emu)}
           <div
             class="device-card"
             class:selected={isSelected}
+            class:failed={isFailed}
             onclick={() => {
               if (isRunning && emu.deviceId) {
                 runStore.selectDevice(emu.deviceId);
@@ -80,7 +179,7 @@
             }}
           >
             <div class="device-header">
-              <span class="status-dot" class:online={isRunning} class:booting={isBooting}></span>
+              <span class="status-dot" class:online={isRunning} class:booting={isBooting} class:failed={isFailed}></span>
               <span class="device-name" title={emu.name}>{emu.name}</span>
               {#if isSelected && isRunning}
                 <span class="active-badge">Active</span>
@@ -88,12 +187,18 @@
             </div>
 
             <div class="device-meta">
-              <span class="state-label" class:online={isRunning}>{emu.state}</span>
+              <span class="state-label" class:online={isRunning} class:failed={isFailed}>{emuState}</span>
               {#if emu.deviceId}
                 <span>•</span>
                 <span class="mono-id">{emu.deviceId}</span>
               {/if}
             </div>
+
+            {#if emuErr}
+              <div class="card-err-box" title={emuErr}>
+                <code>{emuErr}</code>
+              </div>
+            {/if}
 
             <div class="action-btn-row">
               {#if isRunning}
@@ -133,6 +238,30 @@
                 >
                   Cold Boot
                 </button>
+
+                <button
+                  class="action-btn wipe"
+                  disabled={isBooting}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    handleAvdWipe(emu.name);
+                  }}
+                  title="Wipe emulator user data"
+                >
+                  Wipe
+                </button>
+
+                <button
+                  class="action-btn del"
+                  disabled={isBooting}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    handleAvdDelete(emu.name);
+                  }}
+                  title="Delete this AVD"
+                >
+                  ✕
+                </button>
               {/if}
             </div>
           </div>
@@ -141,8 +270,11 @@
     {/if}
 
     <!-- IOS SIMULATORS -->
-    <div class="section-title mt">
-      IOS SIMULATORS ({iosSimulators.length})
+    <div class="section-title mt section-split">
+      <span>IOS SIMULATORS ({iosSimulators.length})</span>
+      <button class="open-sim-app-btn" onclick={handleOpenSimApp} title="Open Simulator application">
+        Open Simulator app
+      </button>
     </div>
 
     {#if iosSimulators.length === 0}
@@ -153,12 +285,16 @@
     {:else}
       <div class="device-group">
         {#each iosSimulators as sim}
-          {@const isRunning = sim.state === 'running'}
-          {@const isBooting = sim.state === 'booting'}
+          {@const simState = getSimState(sim)}
+          {@const isRunning = simState === 'running'}
+          {@const isBooting = simState === 'booting'}
+          {@const isFailed = simState === 'failed'}
           {@const isSelected = isEmuSelected(sim)}
+          {@const simErr = getSimError(sim)}
           <div
             class="device-card"
             class:selected={isSelected}
+            class:failed={isFailed}
             onclick={() => {
               if (isRunning) runStore.selectDevice(sim.deviceId || sim.id);
             }}
@@ -169,7 +305,7 @@
             }}
           >
             <div class="device-header">
-              <span class="status-dot" class:online={isRunning} class:booting={isBooting}></span>
+              <span class="status-dot" class:online={isRunning} class:booting={isBooting} class:failed={isFailed}></span>
               <span class="device-name" title={sim.name}>{sim.name}</span>
               {#if isSelected && isRunning}
                 <span class="active-badge">Active</span>
@@ -177,10 +313,16 @@
             </div>
 
             <div class="device-meta">
-              <span class="state-label" class:online={isRunning}>{sim.state}</span>
+              <span class="state-label" class:online={isRunning} class:failed={isFailed}>{simState}</span>
               <span>•</span>
               <span class="mono-id" title={sim.id}>{sim.id.slice(0, 8)}…</span>
             </div>
+
+            {#if simErr}
+              <div class="card-err-box" title={simErr}>
+                <code>{simErr}</code>
+              </div>
+            {/if}
 
             <div class="action-btn-row">
               {#if isRunning}
@@ -229,27 +371,35 @@
       <div class="device-group">
         {#each physicalDevices as phys}
           {@const isSelected = isPhysSelected(phys)}
-          {@const isOnline = phys.state !== 'offline'}
+          {@const isConnected = phys.connection === 'connected'}
+          {@const isPaired = phys.connection === 'paired'}
+          {@const isOffline = !isConnected && !isPaired}
           <div
             class="device-card"
             class:selected={isSelected}
-            onclick={() => isOnline && runStore.selectDevice(phys.id)}
+            class:paired={isPaired}
+            class:offline={isOffline}
+            onclick={() => isConnected && runStore.selectDevice(phys.id)}
             role="button"
             tabindex="0"
-            onkeydown={(e) => { if (e.key === 'Enter' && isOnline) runStore.selectDevice(phys.id); }}
+            onkeydown={(e) => { if (e.key === 'Enter' && isConnected) runStore.selectDevice(phys.id); }}
           >
             <div class="device-header">
-              <span class="status-dot" class:online={isOnline}></span>
+              <span class="status-dot" class:online={isConnected} class:booting={isPaired}></span>
               <span class="device-name" title={phys.name}>{phys.name}</span>
-              {#if isSelected}
+              {#if isSelected && isConnected}
                 <span class="active-badge">Active</span>
+              {:else if isPaired}
+                <span class="paired-chip">Paired</span>
+              {:else if isOffline}
+                <span class="offline-chip">Offline</span>
               {/if}
             </div>
 
             <div class="device-meta">
               <span>{phys.platform === 'ios' ? 'iOS' : 'Android'}</span>
               <span>•</span>
-              <span>{phys.transport.toUpperCase()}</span>
+              <span>{phys.transport ? phys.transport.toUpperCase() : 'USB'}</span>
               <span>•</span>
               <span class="mono-id">{phys.id}</span>
             </div>
@@ -277,7 +427,7 @@
 
 <style>
   .devices-panel {
-    width: 260px;
+    width: 270px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -337,9 +487,16 @@
     border-radius: 4px;
     transition: background 0.15s, color 0.15s;
   }
-  .refresh-btn:hover {
+  .refresh-btn:hover:not(:disabled) {
     background: #23252b;
     color: #e6e7ea;
+  }
+  .refresh-btn.spinning svg {
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   .content-scroll {
     flex: 1;
@@ -349,27 +506,48 @@
   .section-title {
     font-size: 10px;
     font-weight: 600;
-    color: #6e727a;
+    color: #727680;
     letter-spacing: 0.5px;
-    margin: 6px 4px 6px;
+    margin-bottom: 8px;
+    padding: 0 2px;
   }
   .section-title.mt {
     margin-top: 14px;
   }
+  .section-split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .open-sim-app-btn {
+    background: transparent;
+    border: 1px solid #34363d;
+    color: #9aa0a6;
+    font-size: 9.5px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .open-sim-app-btn:hover {
+    color: #e6e7ea;
+    background: #23252b;
+    border-color: #4a4d56;
+  }
   .empty-state {
+    padding: 12px;
+    background: #18191d;
+    border: 1px dashed #282a30;
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding: 10px 10px;
-    background: #191a1f;
-    border: 1px dashed #2c2e35;
-    border-radius: 6px;
     font-size: 11.5px;
     color: #8b8f98;
   }
   .empty-state .subtext {
-    font-size: 10.5px;
-    color: #656972;
+    font-size: 10px;
+    color: #636773;
   }
   .device-group {
     display: flex;
@@ -377,8 +555,8 @@
     gap: 6px;
   }
   .device-card {
-    background: #1a1c21;
-    border: 1px solid #272a31;
+    background: #18191d;
+    border: 1px solid #282a30;
     border-radius: 6px;
     padding: 8px 10px;
     display: flex;
@@ -388,12 +566,22 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .device-card:hover {
-    background: #202228;
-    border-color: #343842;
+    background: #1c1d22;
+    border-color: #383a42;
   }
   .device-card.selected {
-    border-color: #3b5a82;
-    background: #1e2533;
+    border-color: #3b5998;
+    background: #181d28;
+  }
+  .device-card.failed {
+    border-color: #55272a;
+    background: #201516;
+  }
+  .device-card.paired {
+    opacity: 0.8;
+  }
+  .device-card.offline {
+    opacity: 0.6;
   }
   .device-header {
     display: flex;
@@ -422,6 +610,9 @@
   .status-dot.booting {
     background: #e8b45a;
   }
+  .status-dot.failed {
+    background: #f07a74;
+  }
   .active-badge {
     font-size: 9.5px;
     font-weight: 600;
@@ -429,6 +620,22 @@
     border-radius: 3px;
     background: #294366;
     color: #8ec3ff;
+    flex-shrink: 0;
+  }
+  .paired-chip {
+    font-size: 9.5px;
+    color: #8b8f98;
+    background: #26282f;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .offline-chip {
+    font-size: 9.5px;
+    color: #656972;
+    background: #1e2025;
+    padding: 1px 5px;
+    border-radius: 3px;
     flex-shrink: 0;
   }
   .device-meta {
@@ -444,26 +651,42 @@
   .state-label.online {
     color: #7fc98f;
   }
+  .state-label.failed {
+    color: #f07a74;
+  }
   .mono-id {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
   }
+  .card-err-box {
+    background: #2a1517;
+    border: 1px solid #4a2225;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 10px;
+    color: #fca5a5;
+    line-height: 1.35;
+    max-height: 48px;
+    overflow: hidden;
+    word-break: break-all;
+  }
   .action-btn-row {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 4px;
     margin-top: 3px;
   }
   .action-btn {
-    height: 24px;
-    padding: 0 8px;
+    height: 23px;
+    padding: 0 7px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 500;
     border: none;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     transition: opacity 0.12s, background 0.12s;
   }
   .action-btn.start {
@@ -482,6 +705,23 @@
   .action-btn.cold:hover:not(:disabled) {
     background: #2e323d;
     color: #e6e7ea;
+  }
+  .action-btn.wipe {
+    background: #33281d;
+    color: #e8b45a;
+    border: 1px solid #4d3a24;
+  }
+  .action-btn.wipe:hover:not(:disabled) {
+    background: #443425;
+  }
+  .action-btn.del {
+    background: #331f21;
+    color: #f07a74;
+    border: 1px solid #4d2629;
+    padding: 0 6px;
+  }
+  .action-btn.del:hover:not(:disabled) {
+    background: #442629;
   }
   .action-btn.stop {
     background: #3d2325;

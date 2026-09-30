@@ -59,6 +59,7 @@
   let rootEntries = $state<Entry[]>([]);
   let recentFolders = $state<string[]>([]);
   let statusText = $state('Ready');
+  let statusKind = $state<'normal' | 'error' | 'warning'>('normal');
   let branchName = $state<string | null>(null);
   let isBench = $state(false);
   let cursorInfo = $state('Ln 1, Col 1');
@@ -272,6 +273,17 @@
       run: () => editorComponent?.handleSave(),
     },
     {
+      id: 'format-document',
+      label: 'Format Document',
+      shortcut: '⌥⌘L',
+      run: () => editorComponent?.handleFormat(),
+    },
+    {
+      id: 'format-selection',
+      label: 'Format Selection',
+      run: () => editorComponent?.handleFormat(),
+    },
+    {
       id: 'close-tab',
       label: 'Close Tab',
       shortcut: '⌘W',
@@ -404,9 +416,13 @@
         initBackgroundServices(folderPath);
       }
       statusText = `Opened ${folderPath.split('/').filter(Boolean).pop()}`;
-    } catch (e) {
+      statusKind = 'normal';
+    } catch (e: any) {
       console.error('Failed to open folder:', folderPath, e);
-      statusText = 'Failed to open folder';
+      const errMsg = e?.message || (typeof e === 'string' ? e : '');
+      const folderName = folderPath.split('/').filter(Boolean).pop() || folderPath;
+      statusText = errMsg ? `Failed to open folder ${folderName}: ${errMsg}` : `Failed to open folder: ${folderName}`;
+      statusKind = 'error';
       throw e;
     }
   }
@@ -1274,7 +1290,7 @@
 
       // 2. Measure log page 1
       const t0Log = performance.now();
-      const logRes = await api.gitLog(targetRepo, undefined, undefined, 500);
+      const logRes = await api.gitLog(targetRepo, { branches: [] }, undefined, 500);
       const logDuration = performance.now() - t0Log;
       await api.benchLog(`P3_LOG_LATENCY: ${logDuration.toFixed(2)}ms`);
       await api.benchLog(`P3_LOG_COMMITS_COUNT: ${logRes?.commits?.length || 0}`);
@@ -1534,7 +1550,6 @@
   <div class="main-body">
     <Rail
       bind:activeTab={activeRailTab}
-      onToggleDevices={() => panelStore.toggleRightPanel('devices')}
       onToggleAgents={toggleAgentsPanel}
       isAgentsOpen={isAgentPanelOpen}
     />
@@ -1635,6 +1650,7 @@
   <StatusBar
     {branchName}
     {statusText}
+    {statusKind}
     {isBench}
     {fileType}
     {cursorInfo}

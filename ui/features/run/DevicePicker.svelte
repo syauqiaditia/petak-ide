@@ -1,10 +1,16 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { runStore } from './runStore.svelte';
   import { groupDevices, type PickerDeviceItem } from './deviceLogic';
+  import { popupStore } from '../../shell/popupStore.svelte';
 
-  let open = $state(
-    typeof window !== 'undefined' && window.location.search.includes('picker-open')
-  );
+  let open = $derived(popupStore.isOpen('device'));
+
+  onMount(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('picker-open')) {
+      popupStore.open('device');
+    }
+  });
 
   let { onOpenDevicesPanel } = $props<{
     onOpenDevicesPanel?: () => void;
@@ -12,16 +18,16 @@
 
   function toggleOpen(e: MouseEvent) {
     e.stopPropagation();
-    open = !open;
+    popupStore.toggle('device');
   }
 
   function handleSelect(id: string) {
     runStore.selectDevice(id);
-    open = false;
+    popupStore.close('device');
   }
 
   function handleWindowClick() {
-    if (open) open = false;
+    if (open) popupStore.close('device');
   }
 
   let grouped = $derived(
@@ -32,11 +38,13 @@
   let emulatorItems = $derived(pickerItems.filter((i) => i.group === 'Emulator'));
   let simulatorItems = $derived(pickerItems.filter((i) => i.group === 'Simulator'));
   let physicalItems = $derived(pickerItems.filter((i) => i.group === 'Physical'));
+  let connectedPhysical = $derived(physicalItems.filter((i) => i.connection === 'connected'));
+  let pairedPhysical = $derived(physicalItems.filter((i) => i.connection === 'paired'));
   let desktopAndWebItems = $derived(pickerItems.filter((i) => i.group === 'Desktop' || i.group === 'Web'));
 
   let activeItem = $derived(
     runStore.selectedDeviceId
-      ? pickerItems.find((p) => p.id === runStore.selectedDeviceId && p.state === 'online') || null
+      ? pickerItems.find((p) => p.id === runStore.selectedDeviceId && p.state === 'online' && p.connection === 'connected') || null
       : null
   );
 
@@ -132,10 +140,10 @@
           {/each}
         {/if}
 
-        <!-- Physical Devices Group -->
-        {#if physicalItems.length > 0}
+        <!-- Physical Devices (Connected) -->
+        {#if connectedPhysical.length > 0}
           <div class="menu-header" class:mt={emulatorItems.length > 0 || simulatorItems.length > 0}>PHYSICAL DEVICES</div>
-          {#each physicalItems as item}
+          {#each connectedPhysical as item}
             {@const isSelected = activeItem?.id === item.id}
             <button
               class="menu-item"
@@ -146,7 +154,7 @@
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
                 <span class="item-desc">
-                  {item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {item.transport ? item.transport.toUpperCase() : 'USB'} · {item.id}
+                  {item.platform === 'ios' ? 'iPhone' : 'Android'} Physical · {item.transport === 'wifi' ? 'Wi-Fi' : 'USB'} · {item.id}
                 </span>
               </div>
               {#if isSelected}
@@ -160,7 +168,7 @@
 
         <!-- Desktop & Web Group -->
         {#if desktopAndWebItems.length > 0}
-          <div class="menu-header" class:mt={emulatorItems.length > 0 || simulatorItems.length > 0 || physicalItems.length > 0}>DESKTOP & WEB</div>
+          <div class="menu-header" class:mt={emulatorItems.length > 0 || simulatorItems.length > 0 || connectedPhysical.length > 0}>DESKTOP & WEB</div>
           {#each desktopAndWebItems as item}
             {@const isSelected = activeItem?.id === item.id}
             <button
@@ -181,6 +189,28 @@
             </button>
           {/each}
         {/if}
+
+        <!-- Paired but Not Connected Devices -->
+        {#if pairedPhysical.length > 0}
+          <div class="menu-header mt not-connected">NOT CONNECTED</div>
+          {#each pairedPhysical as item}
+            <div
+              class="menu-item paired"
+              title="Device belum terhubung (status: Paired). Hubungkan via kabel USB atau aktifkan koneksi jaringan."
+              role="button"
+              tabindex="-1"
+            >
+              <span class="status-dot paired"></span>
+              <div class="item-text">
+                <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
+                <span class="item-desc">
+                  {item.platform === 'ios' ? 'iPhone' : 'Android'} · {item.transport === 'wifi' ? 'Wi-Fi' : 'USB'} · Paired • tidak terhubung
+                </span>
+              </div>
+              <span class="paired-tag">Paired</span>
+            </div>
+          {/each}
+        {/if}
       {/if}
 
       {#if onOpenDevicesPanel}
@@ -188,11 +218,11 @@
         <button
           class="menu-action-btn"
           onclick={() => {
-            open = false;
-            onOpenDevicesPanel?.();
+            popupStore.close('device');
+            onOpenDevicesPanel();
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <rect x="7" y="3" width="10" height="18" rx="2"></rect>
             <path d="M11 18h2"></path>
           </svg>
@@ -251,6 +281,9 @@
   .status-dot.online {
     background: #7fc98f;
   }
+  .status-dot.paired {
+    background: #8b8f98;
+  }
   .dropdown-menu {
     position: absolute;
     top: calc(100% + 4px);
@@ -277,6 +310,9 @@
     border-top: 1px solid #282a30;
     padding-top: 8px;
   }
+  .menu-header.not-connected {
+    color: #8b8f98;
+  }
   .menu-empty {
     padding: 12px 16px;
     font-size: 12.5px;
@@ -300,6 +336,21 @@
   }
   .menu-item.selected {
     background: #253347;
+  }
+  .menu-item.paired {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+  .menu-item.paired:hover {
+    background: transparent;
+  }
+  .paired-tag {
+    font-size: 10px;
+    color: #8b8f98;
+    background: #282a30;
+    padding: 1px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
   }
   .item-text {
     flex: 1;

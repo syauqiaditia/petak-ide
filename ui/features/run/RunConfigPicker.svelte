@@ -1,20 +1,21 @@
 <script lang="ts">
   import { runStore } from './runStore.svelte';
+  import { popupStore } from '../../shell/popupStore.svelte';
 
-  let open = $state(false);
+  let open = $derived(popupStore.isOpen('runner'));
 
   function toggleOpen(e: MouseEvent) {
     e.stopPropagation();
-    open = !open;
+    popupStore.toggle('runner');
   }
 
   function handleSelect(name: string) {
     runStore.selectConfig(name);
-    open = false;
+    popupStore.close('runner');
   }
 
   function handleWindowClick() {
-    if (open) open = false;
+    if (open) popupStore.close('runner');
   }
 </script>
 
