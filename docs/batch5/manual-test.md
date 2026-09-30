@@ -1,0 +1,11 @@
+# Manual Test Checklist Petak Batch 5 (Mac)
+- [ ] Buka project: status bar bersih tanpa error `api.lspRestart is not a function`
+- [ ] Toolchains: install Kotlin LSP -> berhasil deteksi nested bin, status Ready & diagnostic muncul
+- [ ] Mirror iPhone fisik: terdeteksi ios-physical USB, view-only tanpa error simctl/scrcpy
+- [ ] Device dropdown: label 'Terhubung (USB/Wi-Fi)' atau 'Terkunci', tooltip tunnel/pairing, tombol Refresh jalan
+- [ ] Start AVD emulator: start AVD langsung booting -> running, adb connect, auto-open mirror
+- [ ] Run toolbar: aksi Restart Flutter Daemon, Restart connection, Hot Restart, dan Stop mereset state
+- [ ] Bottom panel resize: drag border atas (min 120px, max 80%), double-click maximize/restore, simpan tinggi
+- [ ] Commit panel: SATU daftar Changes, checkbox per file/grup, state konsisten, commit hanya yang tercentang
+- [ ] File tree: tombol 'Open' di samping judul PROJECT hilang; 'Open Folder' tetap ada di recent/menu
+- [ ] Settings > Accounts: form GitLab URL + PAT (password), tombol Test, Simpan (token dikosongkan), Hapus

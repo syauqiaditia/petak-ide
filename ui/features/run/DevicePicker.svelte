@@ -267,6 +267,7 @@
           </button>
         {/if}
       </div>
+    </div>
   {/if}
 </div>
 
