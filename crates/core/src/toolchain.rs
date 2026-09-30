@@ -750,6 +750,13 @@ pub fn resolve_emulator() -> String {
         }
     }
 
+    if let Some(ref sdk_home) = resolve_android_home() {
+        let emu = Path::new(sdk_home).join("emulator").join("emulator");
+        if emu.is_file() {
+            return emu.to_string_lossy().to_string();
+        }
+    }
+
     for dir in std::env::split_paths(&path) {
         let emu = dir.join("emulator");
         if emu.is_file() {
@@ -777,6 +784,23 @@ pub fn resolve_kotlin_ls() -> Option<PathBuf> {
         let bin2 = p.join("kotlin-language-server");
         if bin2.is_file() {
             return Some(bin2);
+        }
+    }
+
+    // Check application data dir: <data_dir>/Petak/lsp
+    if let Some(data) = dirs::data_dir() {
+        let lsp_dir = data.join("Petak").join("lsp");
+        let p1 = lsp_dir.join("bin").join("kotlin-language-server");
+        if p1.is_file() {
+            return Some(p1);
+        }
+        let p2 = lsp_dir.join("server").join("bin").join("kotlin-language-server");
+        if p2.is_file() {
+            return Some(p2);
+        }
+        let p3 = lsp_dir.join("kotlin-language-server");
+        if p3.is_file() {
+            return Some(p3);
         }
     }
 
@@ -914,26 +938,102 @@ pub fn kotlin_ls_status() -> KotlinLsStatus {
     }
 }
 
+/// Parse major Java version from java -version output or header line.
+/// E.g. "openjdk version \"21.0.3\"" -> Some(21)
+/// E.g. "java version \"1.8.0_292\"" -> Some(8)
+/// E.g. "java version \"19\"" -> Some(19)
+/// E.g. "openjdk version \"11.0.12\"" -> Some(11)
+pub fn parse_java_version(version_str: &str) -> Option<u32> {
+    let ver_str = if let Some(start) = version_str.find('"') {
+        let rest = &version_str[start + 1..];
+        let end = rest.find('"').unwrap_or(rest.len());
+        &rest[..end]
+    } else {
+        version_str
+    };
+
+    let trimmed = ver_str.trim();
+    if let Some(stripped) = trimmed.strip_prefix("1.") {
+        let parts: Vec<&str> = stripped.split('.').collect();
+        if !parts.is_empty() {
+            return parts[0].parse::<u32>().ok();
+        }
+    } else {
+        let major = trimmed.split(&['.', '-', '_'][..]).next()?;
+        return major.parse::<u32>().ok();
+    }
+    None
+}
+
 /// Check if Java is available and its version.
-fn check_java() -> (bool, Option<String>) {
+pub fn check_java() -> (bool, Option<String>) {
     let path = effective_path();
     for dir in std::env::split_paths(&path) {
         let java = dir.join("java");
         if java.is_file() {
             if let Ok(out) = std::process::Command::new(&java).arg("-version").output() {
                 let stderr = String::from_utf8_lossy(&out.stderr);
-                // java -version outputs to stderr, e.g. "openjdk version \"21.0.3\""
-                let ver = stderr
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                let combined = format!("{}{}", stderr, stdout);
+                let ver_line = combined
                     .lines()
                     .next()
                     .unwrap_or("")
                     .trim()
                     .to_string();
-                return (true, Some(ver));
+                if let Some(major) = parse_java_version(&ver_line) {
+                    let java_ok = major >= 11;
+                    return (java_ok, Some(ver_line));
+                }
+                return (!ver_line.is_empty(), Some(ver_line));
             }
         }
     }
     (false, None)
+}
+
+/// Extract and install Kotlin Language Server from zip archive into install_dir.
+pub fn extract_and_install_kls_zip(zip_path: &Path, install_dir: &Path) -> Result<PathBuf, String> {
+    if install_dir.exists() {
+        let _ = std::fs::remove_dir_all(install_dir);
+    }
+    std::fs::create_dir_all(install_dir).map_err(|e| format!("Mkdir gagal: {}", e))?;
+
+    let unzip = std::process::Command::new("unzip")
+        .args(["-q", "-o"])
+        .arg(zip_path)
+        .arg("-d")
+        .arg(install_dir)
+        .status()
+        .map_err(|e| format!("Unzip gagal: {}", e))?;
+
+    if !unzip.success() {
+        return Err("Unzip server.zip gagal".to_string());
+    }
+
+    let bin_path = install_dir.join("bin").join("kotlin-language-server");
+    let bin_alt = install_dir
+        .join("server")
+        .join("bin")
+        .join("kotlin-language-server");
+    let actual_bin = if bin_path.is_file() {
+        bin_path
+    } else if bin_alt.is_file() {
+        bin_alt
+    } else {
+        return Err(format!(
+            "kotlin-language-server binary tidak ditemukan setelah extract di {}",
+            install_dir.display()
+        ));
+    };
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&actual_bin, std::fs::Permissions::from_mode(0o755));
+    }
+
+    Ok(actual_bin)
 }
 
 /// Install Kotlin Language Server from GitHub releases.
@@ -943,10 +1043,22 @@ pub fn kotlin_ls_install<F>(progress: F) -> Result<(), String>
 where
     F: Fn(&str, Option<f32>, &str),
 {
+    progress("checking", Some(0.0), "Memeriksa Java JDK...");
+    let (java_ok, java_version) = check_java();
+    if !java_ok {
+        let msg = if let Some(ref v) = java_version {
+            format!("Java tidak memenuhi syarat (dibutuhkan JDK 11+). Terdeteksi: {}", v)
+        } else {
+            "Java (JDK 11+) tidak ditemukan. Pastikan JDK sudah terpasang.".to_string()
+        };
+        progress("error", None, &msg);
+        return Err(msg);
+    }
+
     let data = dirs::data_dir().ok_or("Tidak bisa menentukan data directory")?;
     let install_dir = data.join("Petak").join("lsp").join("server");
 
-    progress("downloading", Some(0.0), "Mengunduh Kotlin Language Server...");
+    progress("downloading", Some(10.0), "Mengunduh Kotlin Language Server...");
 
     // Use curl to download latest release
     // ponytail: use shell curl, no HTTP lib dependency
@@ -982,7 +1094,7 @@ where
 
     progress(
         "downloading",
-        Some(10.0),
+        Some(30.0),
         &format!("Mengunduh {} versi {}...", zip_url.split('/').next_back().unwrap_or("server.zip"), tag),
     );
 
@@ -997,54 +1109,16 @@ where
         .map_err(|e| format!("Download gagal: {}", e))?;
 
     if !dl.success() {
-        return Err("Download server.zip gagal".to_string());
+        let msg = "Download server.zip gagal. Periksa koneksi internet.".to_string();
+        progress("error", None, &msg);
+        return Err(msg);
     }
 
-    progress("extracting", Some(50.0), "Mengekstrak server.zip...");
+    progress("extracting", Some(60.0), "Mengekstrak server.zip...");
 
-    // Remove old install if exists
-    if install_dir.exists() {
-        let _ = std::fs::remove_dir_all(&install_dir);
-    }
-    std::fs::create_dir_all(&install_dir).map_err(|e| format!("Mkdir gagal: {}", e))?;
-
-    let unzip = std::process::Command::new("unzip")
-        .args(["-q", "-o"])
-        .arg(&zip_path)
-        .arg("-d")
-        .arg(&install_dir)
-        .status()
-        .map_err(|e| format!("Unzip gagal: {}", e))?;
-
-    if !unzip.success() {
-        return Err("Unzip server.zip gagal".to_string());
-    }
+    let actual_bin = extract_and_install_kls_zip(&zip_path, &install_dir)?;
 
     progress("verifying", Some(80.0), "Memverifikasi instalasi...");
-
-    // The zip extracts to server/ subdir. Find the bin.
-    let bin_path = install_dir.join("bin").join("kotlin-language-server");
-    let bin_alt = install_dir
-        .join("server")
-        .join("bin")
-        .join("kotlin-language-server");
-    let actual_bin = if bin_path.is_file() {
-        bin_path
-    } else if bin_alt.is_file() {
-        bin_alt
-    } else {
-        return Err(format!(
-            "kotlin-language-server binary tidak ditemukan setelah extract di {}",
-            install_dir.display()
-        ));
-    };
-
-    // chmod +x
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&actual_bin, std::fs::Permissions::from_mode(0o755));
-    }
 
     // Verify it runs
     let verify = std::process::Command::new(&actual_bin)
@@ -1056,13 +1130,14 @@ where
         }
         Ok(out) => {
             let msg = String::from_utf8_lossy(&out.stderr);
-            return Err(format!(
-                "kotlin-language-server --version gagal: {}",
-                msg.trim()
-            ));
+            let err_msg = format!("kotlin-language-server --version gagal: {}", msg.trim());
+            progress("error", None, &err_msg);
+            return Err(err_msg);
         }
         Err(e) => {
-            return Err(format!("Gagal menjalankan kotlin-language-server: {}", e));
+            let err_msg = format!("Gagal menjalankan kotlin-language-server: {}", e);
+            progress("error", None, &err_msg);
+            return Err(err_msg);
         }
     }
 
@@ -1188,5 +1263,44 @@ mod tests {
         // Shell probe with short timeout returns quickly
         let _ = probe_shell_path(Duration::from_millis(200));
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_parse_java_version() {
+        assert_eq!(parse_java_version("openjdk version \"21.0.3\" 2024-04-16"), Some(21));
+        assert_eq!(parse_java_version("openjdk version \"17.0.2\" 2022-01-18"), Some(17));
+        assert_eq!(parse_java_version("java version \"19.0.2\" 2023-01-17"), Some(19));
+        assert_eq!(parse_java_version("openjdk version \"11.0.12\" 2021-07-20"), Some(11));
+        assert_eq!(parse_java_version("java version \"1.8.0_292\""), Some(8));
+        assert_eq!(parse_java_version("java version \"1.7.0_80\""), Some(7));
+        assert_eq!(parse_java_version("invalid version string"), None);
+    }
+
+    #[test]
+    fn test_extract_and_install_kls_zip_local_fixture() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src_dir = tmp.path().join("source");
+        let bin_dir = src_dir.join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let fake_bin = bin_dir.join("kotlin-language-server");
+        std::fs::write(&fake_bin, "#!/bin/sh\necho '1.3.11'\n").unwrap();
+
+        let zip_path = tmp.path().join("fixture.zip");
+        // Create zip using system zip command
+        let zip_status = std::process::Command::new("zip")
+            .args(["-r", "-q"])
+            .arg(&zip_path)
+            .arg("bin")
+            .current_dir(&src_dir)
+            .status();
+
+        if let Ok(st) = zip_status {
+            if st.success() {
+                let install_dir = tmp.path().join("installed");
+                let installed_bin = extract_and_install_kls_zip(&zip_path, &install_dir).unwrap();
+                assert!(installed_bin.is_file());
+                assert!(installed_bin.to_string_lossy().contains("kotlin-language-server"));
+            }
+        }
     }
 }

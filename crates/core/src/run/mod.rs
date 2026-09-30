@@ -16,18 +16,22 @@ pub use config::{
     RunConfig, RunConfigError, RunConfigFile, RunKind,
 };
 pub use device::{
-    avd_start, avd_stop, build_emulator_args, check_device_runnable, devices_snapshot,
-    is_valid_avd_name, is_valid_device_id, list_avds, merge_devices, parse_adb_devices,
-    parse_emulator_avds, parse_flutter_devices, parse_track_devices_frame,
-    parse_track_devices_payload, resolve_adb_binary, resolve_emulator_binary,
-    start_emulator, watch_devices, Avd, Device, DeviceKind, DevicePlatform, DeviceState,
-    DevicesSnapshot, EmulatorInfo, PhysicalDevice, SnapshotDevice,
+    avd_delete, avd_start, avd_stop, avd_wipe, build_emulator_args, check_device_runnable,
+    devices_snapshot, is_valid_avd_name, is_valid_device_id, list_avds, merge_devices,
+    parse_adb_devices, parse_emulator_avds, parse_flutter_devices, parse_track_devices_frame,
+    parse_track_devices_payload, resolve_adb_binary, resolve_android_avd_home,
+    resolve_emulator_binary, spawn_emulator_detached, start_emulator, watch_devices, Avd, Device,
+    DeviceKind, DevicePlatform, DeviceState, DevicesSnapshot, EmulatorInfo, PhysicalDevice,
+    SnapshotDevice,
 };
 pub use flutter::{
     extract_devtools_url, parse_build_error, parse_flutter_daemon_line, AppState, BuildError,
     FlutterDaemonMessage, FlutterRun, FlutterRunError, OutputStream, ReloadResult, RunEvent,
 };
-pub use ios::{parse_devicectl_devices, parse_simctl_devices, simctl_boot, simctl_shutdown};
+pub use ios::{
+    open_simulator_app, parse_devicectl_devices, parse_simctl_devices, simctl_boot,
+    simctl_shutdown,
+};
 pub use logs::{
     filter, parse_ios_log_line, parse_logcat_line, stack_links, LogLine, LogLevel, Logcat,
     StackLink,

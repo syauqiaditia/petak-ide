@@ -2588,10 +2588,15 @@ pub async fn avd_start(
     app: tauri::AppHandle,
     state: tauri::State<'_, RunState>,
     name: String,
-    cold: bool,
+    cold: Option<bool>,
+    wipe_data: Option<bool>,
 ) -> Result<(), String> {
-    let state_inner = state.inner.clone();
+    let _state_inner = state.inner.clone();
     let app_clone = app.clone();
+    let avd_name = name.clone();
+    let is_cold = cold.unwrap_or(false);
+    let is_wipe = wipe_data.unwrap_or(false);
+
     tauri::async_runtime::spawn_blocking(move || {
         let is_headless = {
             #[cfg(unix)]
@@ -2603,20 +2608,120 @@ pub async fn avd_start(
                 false
             }
         };
-        let spawn = petak_core::exec::SystemSpawn;
-        let proc = petak_core::run::avd_start(&spawn, &name, cold, is_headless)
-            .map_err(|e| e.to_string())?;
 
-        if let Ok(mut emus) = state_inner.spawned_emulators.lock() {
-            emus.push(proc);
-        }
+        // 1. Emit booting status
+        let _ = app_clone.emit(
+            "emulator-status",
+            serde_json::json!({
+                "id": avd_name,
+                "state": "booting"
+            }),
+        );
 
-        // Wait briefly then emit device-ready
-        std::thread::sleep(std::time::Duration::from_secs(2));
-        let _ = app_clone.emit("device-ready", serde_json::json!({
-            "id": name,
-            "kind": "android-avd"
-        }));
+        // 2. Spawn detached process
+        let mut child = match petak_core::run::spawn_emulator_detached(
+            &avd_name,
+            is_cold,
+            is_wipe,
+            is_headless,
+        ) {
+            Ok(c) => c,
+            Err(e) => {
+                let err_msg = format!("Gagal menjalankan emulator: {}", e);
+                let _ = app_clone.emit(
+                    "emulator-status",
+                    serde_json::json!({
+                        "id": avd_name,
+                        "state": "failed",
+                        "error": err_msg
+                    }),
+                );
+                return Err(err_msg);
+            }
+        };
+
+        // 3. Monitor child stderr and boot status in background thread
+        let app_mon = app_clone.clone();
+        let mon_avd = avd_name.clone();
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let mut stderr_lines: std::collections::VecDeque<String> =
+                std::collections::VecDeque::with_capacity(20);
+            let mut booted = false;
+            let start_time = std::time::Instant::now();
+
+            if let Some(stderr) = child.stderr.take() {
+                let reader = std::io::BufReader::new(stderr);
+                let (tx_line, rx_line) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    for line in reader.lines().flatten() {
+                        if tx_line.send(line).is_err() {
+                            break;
+                        }
+                    }
+                });
+
+                while start_time.elapsed() < std::time::Duration::from_secs(120) {
+                    while let Ok(line) = rx_line.try_recv() {
+                        if stderr_lines.len() >= 20 {
+                            stderr_lines.pop_front();
+                        }
+                        stderr_lines.push_back(line);
+                    }
+
+                    // Check if child exited prematurely
+                    if let Ok(Some(status)) = child.try_wait() {
+                        if !status.success()
+                            || start_time.elapsed() < std::time::Duration::from_secs(10)
+                        {
+                            let collected: Vec<String> = stderr_lines.into_iter().collect();
+                            let err_text = collected.join("\n");
+                            let _ = app_mon.emit(
+                                "emulator-status",
+                                serde_json::json!({
+                                    "id": mon_avd,
+                                    "state": "failed",
+                                    "error": if err_text.is_empty() { format!("Emulator exited with {}", status) } else { err_text }
+                                }),
+                            );
+                            return;
+                        }
+                    }
+
+                    // Poll adb getprop sys.boot_completed
+                    let adb = petak_core::run::resolve_adb_binary();
+                    if let Ok(out) = std::process::Command::new(&adb)
+                        .args(["shell", "getprop", "sys.boot_completed"])
+                        .output()
+                    {
+                        let val = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                        if val == "1" {
+                            booted = true;
+                            break;
+                        }
+                    }
+
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                }
+            }
+
+            if booted || start_time.elapsed() >= std::time::Duration::from_secs(10) {
+                let _ = app_mon.emit(
+                    "emulator-status",
+                    serde_json::json!({
+                        "id": mon_avd,
+                        "state": "running"
+                    }),
+                );
+                let _ = app_mon.emit(
+                    "device-ready",
+                    serde_json::json!({
+                        "id": mon_avd,
+                        "kind": "android-avd"
+                    }),
+                );
+            }
+        });
 
         Ok(())
     })
@@ -2635,16 +2740,51 @@ pub async fn avd_stop(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn avd_wipe(name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::run::avd_wipe(&name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn avd_delete(name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::run::avd_delete(&name).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn sim_boot(app: tauri::AppHandle, udid: String) -> Result<(), String> {
     let app_clone = app.clone();
     let udid_clone = udid.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let _ = app_clone.emit(
+            "emulator-status",
+            serde_json::json!({
+                "id": udid_clone,
+                "state": "booting"
+            }),
+        );
         let exec = petak_core::exec::SystemExec;
         petak_core::run::simctl_boot(&exec, &udid_clone).map_err(|e| e.to_string())?;
-        let _ = app_clone.emit("device-ready", serde_json::json!({
-            "id": udid_clone,
-            "kind": "ios-sim"
-        }));
+        let _ = app_clone.emit(
+            "emulator-status",
+            serde_json::json!({
+                "id": udid_clone,
+                "state": "running"
+            }),
+        );
+        let _ = app_clone.emit(
+            "device-ready",
+            serde_json::json!({
+                "id": udid_clone,
+                "kind": "ios-sim"
+            }),
+        );
         Ok(())
     })
     .await
@@ -2652,10 +2792,29 @@ pub async fn sim_boot(app: tauri::AppHandle, udid: String) -> Result<(), String>
 }
 
 #[tauri::command]
-pub async fn sim_shutdown(udid: String) -> Result<(), String> {
+pub async fn sim_shutdown(app: tauri::AppHandle, udid: String) -> Result<(), String> {
+    let app_clone = app.clone();
+    let udid_clone = udid.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
-        petak_core::run::simctl_shutdown(&exec, &udid).map_err(|e| e.to_string())
+        let res = petak_core::run::simctl_shutdown(&exec, &udid_clone).map_err(|e| e.to_string());
+        let _ = app_clone.emit(
+            "emulator-status",
+            serde_json::json!({
+                "id": udid_clone,
+                "state": "stopped"
+            }),
+        );
+        res
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn sim_open_app() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::run::open_simulator_app().map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2674,12 +2833,75 @@ pub async fn kotlin_ls_status() -> Result<petak_core::toolchain::KotlinLsStatus,
 pub async fn kotlin_ls_install(app: tauri::AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         petak_core::toolchain::kotlin_ls_install(|stage, percent, message| {
-            let _ = app.emit("kotlin-ls-progress", serde_json::json!({
-                "stage": stage,
-                "percent": percent,
-                "message": message,
-            }));
+            let _ = app.emit(
+                "kotlin-ls-progress",
+                serde_json::json!({
+                    "stage": stage,
+                    "percent": percent,
+                    "message": message,
+                }),
+            );
+            let _ = app.emit(
+                "kls-install-progress",
+                serde_json::json!({
+                    "stage": stage,
+                    "pct": percent,
+                    "message": message,
+                    "error": if stage == "error" { Some(message) } else { None },
+                }),
+            );
         })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn kls_install(app: tauri::AppHandle) -> Result<(), String> {
+    kotlin_ls_install(app).await
+}
+
+#[tauri::command]
+pub async fn format_document(
+    path: Option<String>,
+    lang: String,
+    text: String,
+    range: Option<petak_core::format::FormatRange>,
+) -> Result<petak_core::format::FormatResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let eff_lang = if lang.is_empty() {
+            path.as_deref()
+                .and_then(|p| std::path::Path::new(p).extension())
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_string()
+        } else {
+            lang
+        };
+
+        petak_core::format::format_text(&eff_lang, &text, range).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mirror_permission_status(
+    device_id: Option<String>,
+) -> Result<petak_core::mirror::MirrorPermissionStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::mirror::check_screen_capture_permission(
+            device_id.as_deref(),
+        ))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn open_screen_recording_settings() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::mirror::open_screen_recording_settings().map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
