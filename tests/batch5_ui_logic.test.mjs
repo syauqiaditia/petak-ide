@@ -254,3 +254,72 @@ test('file tree header: open button removed next to PROJECT title', () => {
   assert.doesNotMatch(content, /class="open-btn"/);
   assert.doesNotMatch(content, /<span>Open<\/span>/);
 });
+
+// =============================================================================
+// Suite 8: Settings > Accounts Logic & Token Security
+// =============================================================================
+import {
+  validateAccountInputs,
+  AccountsManager,
+} from '../ui/features/accounts/accountsLogic.ts';
+
+test('accounts validation: enforces valid URL and non-empty token', () => {
+  assert.equal(validateAccountInputs('', 'token').valid, false);
+  assert.equal(validateAccountInputs('not-url', 'token').valid, false);
+  assert.equal(validateAccountInputs('https://gitlab.example.com', '').valid, false);
+  assert.equal(validateAccountInputs('https://gitlab.example.com', 'glpat-xxx').valid, true);
+});
+
+test('accounts manager: saves, clears token from memory, tests connection, and deletes', async () => {
+  const mockApi = {
+    storedUrl: '',
+    storedToken: '',
+    async accountsGet() {
+      return { url: this.storedUrl, hasToken: !!this.storedToken };
+    },
+    async accountsSave(url, token) {
+      this.storedUrl = url;
+      this.storedToken = token;
+    },
+    async accountsTest(url, token) {
+      const effToken = token || this.storedToken;
+      if (effToken === 'glpat-valid') {
+        return { ok: true, user: 'uqi' };
+      }
+      return { ok: false, error: '401 Unauthorized' };
+    },
+    async accountsClear() {
+      this.storedUrl = '';
+      this.storedToken = '';
+    },
+  };
+
+  const manager = new AccountsManager();
+
+  // 1. Initial state
+  await manager.load(mockApi);
+  assert.equal(manager.url, '');
+  assert.equal(manager.hasToken, false);
+
+  // 2. Save account -> token MUST be cleared from manager instance immediately
+  manager.url = 'https://gitlab.com';
+  manager.inputToken = 'glpat-valid';
+  const saveSuccess = await manager.save(mockApi);
+  assert.equal(saveSuccess, true);
+  assert.equal(manager.hasToken, true);
+  assert.equal(manager.inputToken, '', 'Security requirement: inputToken must be cleared after save');
+  assert.equal(mockApi.storedToken, 'glpat-valid');
+
+  // 3. Test connection with saved token
+  const testRes = await manager.test(mockApi);
+  assert.equal(testRes.ok, true);
+  assert.equal(testRes.user, 'uqi');
+  assert.match(manager.statusMessage, /@uqi/);
+
+  // 4. Clear account
+  await manager.clear(mockApi);
+  assert.equal(manager.url, '');
+  assert.equal(manager.hasToken, false);
+  assert.equal(mockApi.storedUrl, '');
+  assert.equal(mockApi.storedToken, '');
+});
