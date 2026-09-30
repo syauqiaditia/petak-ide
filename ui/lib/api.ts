@@ -1474,9 +1474,9 @@ export const api = {
     }
   },
 
-  async gitDiffBranch(root: string, path: string, branch: string): Promise<GitDiffFile[]> {
+  async gitDiffBranch(root: string, path: string, branch: string, base?: string): Promise<GitDiffFile[]> {
     try {
-      return await invoke<GitDiffFile[]>('git_diff_branch', { root, path, branch });
+      return await invoke<GitDiffFile[]>('git_diff_branch', { root, path, branch, base: base ?? null });
     } catch {
       return await invoke<GitDiffFile[]>('git_diff_path', { root, rel: path, mode: branch });
     }
