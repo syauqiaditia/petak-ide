@@ -1,7 +1,18 @@
 <script lang="ts">
   import { mirrorStore } from '../mirrorStore.svelte';
 
-  let reason = $derived(mirrorStore.disconnectReason || 'USB connection was lost or emulator exited.');
+  let isIosPhysical = $derived(
+    (mirrorStore.selectedDevice?.platform === 'ios' && mirrorStore.selectedDevice?.kind === 'physical') ||
+    (mirrorStore.isViewOnly && mirrorStore.selectedDevice?.platform === 'ios')
+  );
+
+  let defaultReason = $derived(
+    isIosPhysical
+      ? 'Physical iOS screen capture helper stopped (helper exit). Pastikan kabel USB terhubung ke Mac dan perangkat tidak terkunci.'
+      : 'USB connection was lost or emulator exited.'
+  );
+
+  let reason = $derived(mirrorStore.disconnectReason || defaultReason);
 </script>
 
 <div class="disconnected-banner" role="alert">
@@ -14,11 +25,11 @@
     <span class="disconnected-title">Device Disconnected</span>
   </div>
   <div class="disconnected-desc">
-    {reason} Re-plug device to resume stream.
+    {reason} {isIosPhysical ? 'Klik Retry untuk menghubungkan ulang screen capture.' : 'Re-plug device to resume stream.'}
   </div>
   <div class="disconnected-actions">
-    <button class="btn-warning" onclick={() => mirrorStore.reconnect()} aria-label="Reconnect">
-      Reconnect
+    <button class="btn-warning" onclick={() => mirrorStore.reconnect()} aria-label="Retry">
+      {isIosPhysical ? 'Retry' : 'Reconnect'}
     </button>
     <button class="btn-subtle" onclick={() => mirrorStore.close()} aria-label="Dismiss">
       Dismiss

@@ -63,6 +63,7 @@ export interface EmulatorStatusEvent {
   id: string;
   state: 'stopped' | 'booting' | 'running' | 'failed';
   error?: string;
+  serial?: string;
 }
 
 export interface KlsInstallProgressEvent {
@@ -1023,11 +1024,11 @@ export const api = {
     });
   },
 
-  async avdStart(name: string, cold: boolean = false, wipeData: boolean = false): Promise<void> {
+  async avdStart(name: string, cold: boolean = false, wipeData: boolean = false, headless: boolean = true): Promise<void> {
     try {
-      await invoke('avd_start', { name, cold, wipeData });
+      await invoke('avd_start', { name, cold, wipeData, headless });
     } catch {
-      await invoke('emulator_start', { avd: name, headless: null });
+      await invoke('emulator_start', { avd: name, headless });
     }
   },
 

@@ -27,8 +27,28 @@
       liveStatus[event.id] = { state: event.state, error: event.error };
       if (event.state === 'running') {
         runStore.refreshDevices().then(() => {
-          runStore.selectDevice(event.id);
-          mirrorStore.open(event.id);
+          let serial = event.serial;
+          if (!serial) {
+            const lowerAvd = event.id.toLowerCase();
+            const matched = runStore.devices.find(
+              (d) =>
+                d.online &&
+                (d.name?.toLowerCase().includes(lowerAvd) ||
+                  lowerAvd.includes(d.name?.toLowerCase()) ||
+                  d.id === event.id)
+            ) || (runStore.snapshot?.emulators?.find(
+              (e) => (e.name === event.id || e.id === event.id) && e.deviceId
+            ) as any);
+            if (matched) {
+              serial = matched.deviceId || matched.id;
+            } else {
+              const anyEmu = runStore.devices.find((d) => d.online && d.id.startsWith('emulator-'));
+              if (anyEmu) serial = anyEmu.id;
+            }
+          }
+          const target = serial || event.id;
+          runStore.selectDevice(target);
+          mirrorStore.open(target);
         });
       } else if (event.state === 'failed' && event.error) {
         toolchainStore.showToast(`Emulator "${event.id}" failed: ${event.error.slice(0, 120)}`);

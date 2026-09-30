@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { api, type RecentProject, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
-  import { runStore } from '../run/runStore.svelte';
   import { settingsStore } from '../settings/settingsStore.svelte';
 
   let {
@@ -17,33 +16,55 @@
 
   let recentList = $state<RecentProject[]>([]);
   let searchQuery = $state('');
-  let pinnedPaths = $state<Set<string>>(new Set());
+  let selectedIndex = $state<number>(0);
+  let searchInputEl = $state<HTMLInputElement | null>(null);
+
+  // Modals state
+  let newProjectModalOpen = $state(false);
+  let cloneRepoModalOpen = $state(false);
+  let doctorModalOpen = $state(false);
+  let quickSettingsModalOpen = $state(false);
+  let scrcpyModalOpen = $state(false);
+
+  // Modal form states
+  let newProjectName = $state('my_flutter_app');
+  let newProjectOrg = $state('id.co.bankjatim');
+  let cloneRepoUrl = $state('https://code.istar.id/bankjatim/jatim-ist-mb-flutter.git');
+  let cloneTargetDir = $state('/mnt/storage/projects');
 
   // Doctor state
   let isInstallingKotlin = $state(false);
   let kotlinProgress = $state<KotlinLsProgress | null>(null);
   let kotlinInstalled = $state(false);
-  let scrcpyModalOpen = $state(false);
   let copiedSnippet = $state<string | null>(null);
 
   const i18n = {
     id: {
+      version: 'v0.7.0 (Beta)',
       heroSub: 'Native Flutter & Mobile Engineering IDE Ringan & Cepat',
-      actOpen: 'Buka Folder',
-      actOpenDesc: 'Buka workspace Flutter, Android, atau multiplatform yang ada di disk',
-      actNew: 'Project Baru',
-      actNewDesc: 'Buat boilerplate Flutter app, Dart package, atau modul native baru',
-      actClone: 'Clone Git',
-      actCloneDesc: 'Clone repository dari GitLab Bank Jatim atau GitHub via URL / SSH',
-      recentsTitle: 'PROYEK TERAKHIR',
+      actOpen: 'Buka Folder…',
+      actOpenDesc: 'Buka workspace Flutter atau native dari disk',
+      actNew: 'Buat Project Baru…',
+      actNewDesc: 'Panduan membuat Flutter app atau modul baru',
+      actClone: 'Clone Repositori Git…',
+      actCloneDesc: 'Clone repository dari GitLab Bank Jatim atau GitHub',
+      actDoctor: 'Petak Doctor',
+      actDoctorDesc: 'Pemeriksaan toolchain: Flutter, Dart, SDK, JDK, scrcpy, KLS',
+      actSettings: 'Pengaturan',
+      actSettingsDesc: 'Tema Gelap/Terang, Bahasa ID/EN & Preferensi',
+      recentsTitle: 'Recent Projects',
+      searchPlaceholder: 'Filter proyek terakhir… (↑↓ Enter)',
+      emptyRecents: 'Belum ada riwayat proyek. Pilih Buka Folder untuk memulai!',
+      noMatch: 'Tidak ada proyek yang cocok dengan filter',
+      removeTooltip: 'Hapus dari daftar riwayat',
       docTitle: 'Toolchain Doctor',
       docSub: 'Deteksi otomatis compiler, SDK & tools emulator',
-      btnRecheck: 'Pindai',
+      btnRecheck: 'Pindai Ulang',
       btnInstallKls: 'Install 1-Click',
       btnInstalling: 'Memasang…',
       btnScrcpyGuide: 'Panduan Install',
-      docFooterLink: 'Buka Pengaturan Toolchain (⌘,)',
-      prefTitle: 'Personalisasi Cepat',
+      docFooterLink: 'Buka Pengaturan Toolchain Lengkap (⌘,)',
+      prefTitle: 'Pengaturan Cepat',
       prefTheme: 'Tema Warna',
       prefThemeDesc: 'Gelap (OLED JetBrains) atau Terang',
       prefLang: 'Bahasa Tampilan',
@@ -57,24 +78,38 @@
       toolsConfigured: 'tools terkonfigurasi',
       notConfigured: 'Belum terpasang',
       optional: 'Opsional',
+      newModalTitle: 'Buat Project Baru (Flutter Create)',
+      newModalDesc: 'Jalankan perintah ini di terminal untuk membuat project baru, lalu buka foldernya di Petak:',
+      cloneModalTitle: 'Clone Repositori Git',
+      cloneModalDesc: 'Jalankan perintah clone berikut di terminal atau disk:',
+      close: 'Tutup',
     },
     en: {
+      version: 'v0.7.0 (Beta)',
       heroSub: 'Fast, lightweight native Flutter & mobile engineering IDE',
-      actOpen: 'Open Folder',
-      actOpenDesc: 'Open an existing Flutter, Android, or multiplatform workspace from disk',
-      actNew: 'New Project',
-      actNewDesc: 'Generate a clean Flutter app, Dart package, or native module boilerplate',
-      actClone: 'Clone Git',
-      actCloneDesc: 'Clone repository from Bank Jatim GitLab or GitHub via URL or SSH',
-      recentsTitle: 'RECENT PROJECTS',
+      actOpen: 'Open Folder…',
+      actOpenDesc: 'Open an existing Flutter, Android, or mobile workspace from disk',
+      actNew: 'Create New Project…',
+      actNewDesc: 'Generate a clean Flutter app, Dart package, or native module',
+      actClone: 'Clone Git Repository…',
+      actCloneDesc: 'Clone repository from Bank Jatim GitLab or GitHub',
+      actDoctor: 'Petak Doctor',
+      actDoctorDesc: 'Toolchain health check: Flutter, Dart, SDK, JDK, scrcpy, KLS',
+      actSettings: 'Settings',
+      actSettingsDesc: 'Dark/Light theme, ID/EN language & preferences',
+      recentsTitle: 'Recent Projects',
+      searchPlaceholder: 'Filter recent projects… (↑↓ Enter)',
+      emptyRecents: 'No recent workspaces found. Click Open Folder to begin!',
+      noMatch: 'No projects match query',
+      removeTooltip: 'Remove from recents',
       docTitle: 'Toolchain Doctor',
       docSub: 'Automated health-check for compilers, SDKs, and emulators',
-      btnRecheck: 'Scan',
+      btnRecheck: 'Scan Again',
       btnInstallKls: 'Install 1-Click',
       btnInstalling: 'Installing…',
       btnScrcpyGuide: 'Setup Guide',
-      docFooterLink: 'Open Toolchain Settings (⌘,)',
-      prefTitle: 'Quick Personalization',
+      docFooterLink: 'Open Full Toolchain Settings (⌘,)',
+      prefTitle: 'Quick Settings',
       prefTheme: 'Color Theme',
       prefThemeDesc: 'Dark (OLED JetBrains) or Light mode',
       prefLang: 'Interface Language',
@@ -88,6 +123,11 @@
       toolsConfigured: 'toolchains ready',
       notConfigured: 'Not Installed',
       optional: 'Optional',
+      newModalTitle: 'Create New Project (Flutter Create)',
+      newModalDesc: 'Run this command in terminal to create a project, then open its folder in Petak:',
+      cloneModalTitle: 'Clone Git Repository',
+      cloneModalDesc: 'Run this clone command in terminal or disk:',
+      close: 'Close',
     },
   };
 
@@ -100,16 +140,6 @@
       recentList = [];
     }
 
-    if (typeof localStorage !== 'undefined') {
-      const saved = localStorage.getItem('petak.dashboard.pinned');
-      if (saved) {
-        try {
-          pinnedPaths = new Set(JSON.parse(saved));
-        } catch {}
-      }
-    }
-
-    // Refresh toolchain detection
     try {
       await toolchainStore.refresh('');
     } catch {}
@@ -119,25 +149,14 @@
     } catch {}
   });
 
-  function togglePin(e: MouseEvent, path: string) {
-    e.stopPropagation();
-    const next = new Set(pinnedPaths);
-    if (next.has(path)) {
-      next.delete(path);
-    } else {
-      next.add(path);
-    }
-    pinnedPaths = next;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('petak.dashboard.pinned', JSON.stringify(Array.from(next)));
-    }
-  }
-
   async function handleRemoveProject(e: MouseEvent, path: string) {
     e.stopPropagation();
     try {
       await api.recentProjectsRemove(path);
       recentList = recentList.filter((p) => p.path !== path);
+      if (selectedIndex >= filteredProjects.length) {
+        selectedIndex = Math.max(0, filteredProjects.length - 1);
+      }
     } catch {}
   }
 
@@ -169,14 +188,46 @@
       const q = searchQuery.toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q));
     }
-    return [...list].sort((a, b) => {
-      const aPinned = pinnedPaths.has(a.path);
-      const bPinned = pinnedPaths.has(b.path);
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
-      return b.lastOpened - a.lastOpened;
-    });
+    return [...list].sort((a, b) => b.lastOpened - a.lastOpened);
   });
+
+  $effect(() => {
+    if (selectedIndex >= filteredProjects.length && filteredProjects.length > 0) {
+      selectedIndex = filteredProjects.length - 1;
+    }
+  });
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (newProjectModalOpen || cloneRepoModalOpen || doctorModalOpen || quickSettingsModalOpen || scrcpyModalOpen) {
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (filteredProjects.length > 0) {
+        selectedIndex = (selectedIndex + 1) % filteredProjects.length;
+        scrollSelectedIntoView();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (filteredProjects.length > 0) {
+        selectedIndex = (selectedIndex - 1 + filteredProjects.length) % filteredProjects.length;
+        scrollSelectedIntoView();
+      }
+    } else if (e.key === 'Enter') {
+      if (filteredProjects.length > 0 && selectedIndex >= 0 && selectedIndex < filteredProjects.length) {
+        e.preventDefault();
+        onSelectProject(filteredProjects[selectedIndex].path);
+      }
+    }
+  }
+
+  function scrollSelectedIntoView() {
+    setTimeout(() => {
+      const el = document.querySelector('.project-card.selected');
+      el?.scrollIntoView({ block: 'nearest' });
+    }, 0);
+  }
 
   let toolchainSummary = $derived.by(() => {
     const tc = toolchainStore.toolchain;
@@ -185,12 +236,12 @@
     const androidOk = !!(tc?.adb || tc?.androidHome);
     const javaOk = !!tc?.java;
     const kotlinOk = !!tc?.kotlinLs || kotlinInstalled;
-    const scrcpyOk = false; // Missing in PATH on Linux by default, guide provided
+    const scrcpyOk = false;
     const xcodeOk = !!(tc?.xcrun || tc?.sourcekit);
 
     const essentialTools = [flutterOk, dartOk, androidOk, javaOk, kotlinOk];
     const readyCount = [flutterOk, dartOk, androidOk, javaOk, kotlinOk, scrcpyOk, xcodeOk].filter(Boolean).length;
-    const actionsNeeded = essentialTools.filter((ok) => !ok).length + 1; // +1 for scrcpy
+    const actionsNeeded = essentialTools.filter((ok) => !ok).length + 1;
 
     return {
       tc,
@@ -239,11 +290,14 @@
   }
 </script>
 
+<svelte:window onkeydown={handleKeydown} />
+
 <div class="dashboard-container">
-  <div class="dashboard-card-wrap">
-    <!-- Header with Animated Petak Logo -->
-    <div class="dashboard-header">
-      <div class="logo-row">
+  <div class="xcode-window">
+    <!-- Kolom Kiri (Brand & Actions ala Xcode) -->
+    <div class="column-left">
+      <!-- Brand & Version -->
+      <div class="brand-section">
         <div class="logo-container" aria-label="Logo Petak">
           <div class="logo-glow"></div>
           <div class="petak-logo">
@@ -254,424 +308,553 @@
           </div>
         </div>
 
-        <div class="header-titles">
-          <div class="title-badge-row">
-            <h1 class="welcome-title">Petak</h1>
-            <span class="version-tag">v0.7.0</span>
-            <span class="badge-mem">● RAM &lt; 150MB</span>
-            <span class="badge-tag">⚡ Svelte 5</span>
+        <h1 class="welcome-title">Petak</h1>
+        <span class="version-tag">{dict.version}</span>
+        <p class="brand-tagline">{dict.heroSub}</p>
+      </div>
+
+      <!-- 5 Aksi Utama -->
+      <div class="actions-menu">
+        <!-- 1. Buka Folder... -->
+        <button class="action-item primary" onclick={onOpenFolder}>
+          <div class="action-icon-box">📂</div>
+          <div class="action-details">
+            <div class="action-title-row">
+              <span class="action-title">{dict.actOpen}</span>
+              <span class="action-kbd">⌘O</span>
+            </div>
+            <span class="action-desc">{dict.actOpenDesc}</span>
           </div>
-          <p class="welcome-sub">{dict.heroSub}</p>
-        </div>
+        </button>
+
+        <!-- 2. Buat Project Baru... -->
+        <button class="action-item" onclick={() => (newProjectModalOpen = true)}>
+          <div class="action-icon-box">✨</div>
+          <div class="action-details">
+            <div class="action-title-row">
+              <span class="action-title">{dict.actNew}</span>
+              <span class="action-kbd">⌘N</span>
+            </div>
+            <span class="action-desc">{dict.actNewDesc}</span>
+          </div>
+        </button>
+
+        <!-- 3. Clone Repositori Git... -->
+        <button class="action-item" onclick={() => (cloneRepoModalOpen = true)}>
+          <div class="action-icon-box">📥</div>
+          <div class="action-details">
+            <div class="action-title-row">
+              <span class="action-title">{dict.actClone}</span>
+              <span class="action-kbd">⌘⇧O</span>
+            </div>
+            <span class="action-desc">{dict.actCloneDesc}</span>
+          </div>
+        </button>
+
+        <!-- 4. Petak Doctor -->
+        <button class="action-item" onclick={() => (doctorModalOpen = true)}>
+          <div class="action-icon-box">🩺</div>
+          <div class="action-details">
+            <div class="action-title-row">
+              <span class="action-title">{dict.actDoctor}</span>
+              <span class="doctor-badge" class:ready={toolchainSummary.actionsNeeded === 0} class:warn={toolchainSummary.actionsNeeded > 0}>
+                {toolchainSummary.actionsNeeded === 0 ? '✓ Ready' : `! ${toolchainSummary.actionsNeeded}`}
+              </span>
+            </div>
+            <span class="action-desc">{dict.actDoctorDesc}</span>
+          </div>
+        </button>
+
+        <!-- 5. Pengaturan -->
+        <button class="action-item" onclick={() => (quickSettingsModalOpen = true)}>
+          <div class="action-icon-box">⚙️</div>
+          <div class="action-details">
+            <div class="action-title-row">
+              <span class="action-title">{dict.actSettings}</span>
+              <span class="theme-lang-pill">{settingsStore.theme.toUpperCase()} • {settingsStore.language.toUpperCase()}</span>
+            </div>
+            <span class="action-desc">{dict.actSettingsDesc}</span>
+          </div>
+        </button>
+      </div>
+
+      <!-- Bottom System Specs -->
+      <div class="left-footer">
+        <span class="spec-pill">● RAM &lt; 150MB</span>
+        <span class="spec-pill">⚡ Svelte 5</span>
       </div>
     </div>
 
-    <!-- Quick Action Row -->
-    <div class="action-tiles">
-      <button class="tile primary" onclick={onOpenFolder}>
-        <div class="tile-icon">📂</div>
-        <div class="tile-text">
-          <div class="tile-title-row">
-            <span class="tile-title">{dict.actOpen}</span>
-            <span class="kbd-pill">⌘O</span>
-          </div>
-          <span class="tile-desc">{dict.actOpenDesc}</span>
+    <!-- Kolom Kanan (Recent Projects ala Xcode) -->
+    <div class="column-right">
+      <div class="recents-header">
+        <div class="recents-title-row">
+          <span class="recents-title">{dict.recentsTitle}</span>
+          <span class="recents-count">{filteredProjects.length}</span>
         </div>
-      </button>
-
-      <button
-        class="tile"
-        onclick={() => alert(settingsStore.language === 'id' ? 'Project baru: Buka terminal dan jalankan `flutter create <nama>` lalu pilih Buka Folder.' : 'New project: Run `flutter create <name>` in terminal then choose Open Folder.')}
-      >
-        <div class="tile-icon">✨</div>
-        <div class="tile-text">
-          <div class="tile-title-row">
-            <span class="tile-title">{dict.actNew}</span>
-            <span class="kbd-pill">⌘N</span>
-          </div>
-          <span class="tile-desc">{dict.actNewDesc}</span>
+        <div class="search-input-wrap">
+          <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            bind:this={searchInputEl}
+            type="text"
+            class="project-search-input"
+            placeholder={dict.searchPlaceholder}
+            bind:value={searchQuery}
+          />
+          {#if searchQuery}
+            <button class="clear-search-btn" onclick={() => (searchQuery = '')} aria-label="Clear filter">✕</button>
+          {/if}
         </div>
-      </button>
+      </div>
 
-      <button
-        class="tile"
-        onclick={() => alert(settingsStore.language === 'id' ? 'Clone Git: Jalankan `git clone <repo>` pada disk lalu buka foldernya di Petak.' : 'Clone Git: Run `git clone <repo>` on disk and open folder in Petak.')}
-      >
-        <div class="tile-icon">📥</div>
-        <div class="tile-text">
-          <div class="tile-title-row">
-            <span class="tile-title">{dict.actClone}</span>
-            <span class="kbd-pill">⌘⇧O</span>
+      <!-- Projects List -->
+      <div class="projects-scroll-area">
+        {#if filteredProjects.length === 0}
+          <div class="empty-projects-state">
+            {#if searchQuery}
+              <span class="empty-icon">🔍</span>
+              <span class="empty-text">{dict.noMatch} "{searchQuery}"</span>
+            {:else}
+              <span class="empty-icon">📂</span>
+              <span class="empty-text">{dict.emptyRecents}</span>
+            {/if}
           </div>
-          <span class="tile-desc">{dict.actCloneDesc}</span>
-        </div>
-      </button>
-    </div>
-
-    <!-- Main Dual Column Layout -->
-    <div class="dashboard-grid">
-      <!-- Left Column: Recent Projects -->
-      <div class="recents-section">
-        <div class="section-bar">
-          <div class="section-title-wrap">
-            <span class="section-title">{dict.recentsTitle}</span>
-            <span class="count-badge">{recentList.length}</span>
-          </div>
-          <div class="search-wrap">
-            <input
-              type="text"
-              class="project-search-input"
-              placeholder={settingsStore.language === 'id' ? 'Filter proyek terakhir…' : 'Filter recent projects…'}
-              bind:value={searchQuery}
-            />
-          </div>
-        </div>
-
-        <div class="projects-list">
-          {#if filteredProjects.length === 0}
-            <div class="empty-projects">
-              {#if searchQuery}
-                <span>No projects match "{searchQuery}"</span>
-              {:else}
-                <span>{settingsStore.language === 'id' ? 'Belum ada riwayat proyek. Klik Buka Folder untuk memulai!' : 'No recent workspaces found. Click Open Folder to begin!'}</span>
-              {/if}
-            </div>
-          {:else}
-            {#each filteredProjects as proj (proj.path)}
-              {@const isPinned = pinnedPaths.has(proj.path)}
+        {:else}
+          <div class="projects-list-wrap" role="list">
+            {#each filteredProjects as proj, idx (proj.path)}
+              {@const isSelected = selectedIndex === idx}
               {@const icon = getProjectIcon(proj.name, proj.path)}
               <div
                 class="project-card"
+                class:selected={isSelected}
                 class:missing={!proj.exists}
                 onclick={() => onSelectProject(proj.path)}
+                onmouseenter={() => (selectedIndex = idx)}
                 role="button"
                 tabindex="0"
-                onkeydown={(e) => { if (e.key === 'Enter') onSelectProject(proj.path); }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') onSelectProject(proj.path);
+                }}
               >
-                <div class="card-icon">{icon}</div>
-                <div class="card-body">
-                  <div class="card-top-row">
+                <div class="project-icon-box">{icon}</div>
+
+                <div class="project-text-box">
+                  <div class="project-title-row">
                     <span class="project-name">{proj.name}</span>
-                    {#if isPinned}
-                      <span class="pinned-tag">📌</span>
-                    {/if}
                     {#if !proj.exists}
-                      <span class="missing-tag">not found</span>
+                      <span class="missing-badge">not found</span>
                     {/if}
                   </div>
                   <div class="project-path" title={proj.path}>{proj.path}</div>
-                  <div class="card-meta-row">
+                  <div class="project-meta-row">
                     {#if proj.lastBranch}
-                      <span class="branch-pill">🌿 {proj.lastBranch}</span>
+                      <span class="branch-tag">🌿 {proj.lastBranch}</span>
                     {/if}
-                    <span class="time-pill">{formatRelativeTime(proj.lastOpened)}</span>
+                    <span class="time-tag">{formatRelativeTime(proj.lastOpened)}</span>
                   </div>
                 </div>
 
-                <div class="card-actions" onclick={(e) => e.stopPropagation()} role="presentation">
+                <div class="project-actions-box" onclick={(e) => e.stopPropagation()} role="presentation">
                   <button
-                    class="action-icon-btn pin"
-                    class:pinned={isPinned}
-                    onclick={(e) => togglePin(e, proj.path)}
-                    title={isPinned ? 'Unpin project' : 'Pin to top'}
-                  >
-                    📌
-                  </button>
-                  <button
-                    class="action-icon-btn del"
+                    class="btn-remove-project"
                     onclick={(e) => handleRemoveProject(e, proj.path)}
-                    title="Remove from recents"
+                    title={dict.removeTooltip}
+                    aria-label="Remove project"
                   >
                     ✕
                   </button>
                 </div>
               </div>
             {/each}
-          {/if}
-        </div>
-      </div>
-
-      <!-- Right Column: Toolchain Doctor & Quick Personalization -->
-      <div class="side-section">
-        <!-- Toolchain Doctor Card -->
-        <div class="doctor-card">
-          <div class="doctor-header">
-            <div class="doctor-title-group">
-              <div class="doctor-title-row">
-                <span class="doctor-main-title">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                  </svg>
-                  {dict.docTitle}
-                </span>
-                <span class="status-summary-pill" class:ready={toolchainSummary.actionsNeeded === 0} class:warning={toolchainSummary.actionsNeeded > 0}>
-                  ● {toolchainSummary.actionsNeeded === 0 ? dict.allReady : `${toolchainSummary.actionsNeeded} ${dict.needAction}`}
-                </span>
-              </div>
-              <span class="doctor-sub">{dict.docSub}</span>
-            </div>
-            <button class="btn-recheck" onclick={() => toolchainStore.refresh('')} title="Re-scan toolchains">
-              <span>🔄</span> {dict.btnRecheck}
-            </button>
           </div>
-
-          <div class="doctor-items">
-            <!-- 1. Flutter SDK -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot" class:ok={toolchainSummary.flutterOk} class:err={!toolchainSummary.flutterOk}></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">Flutter SDK</span>
-                    <span class="tool-version">{toolchainSummary.tc?.flutter?.version || (toolchainSummary.flutterOk ? 'Available' : 'Missing')}</span>
-                  </div>
-                  <span class="tool-detail">{toolchainSummary.tc?.flutter?.path || 'Flutter CLI compiler'}</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                {#if toolchainSummary.flutterOk}
-                  <span class="badge-ready">✓ Ready</span>
-                {:else}
-                  <button class="btn-doctor-action guide" onclick={onOpenSettings}>Configure SDK</button>
-                {/if}
-              </div>
-            </div>
-
-            <!-- 2. Dart SDK -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot" class:ok={toolchainSummary.dartOk} class:err={!toolchainSummary.dartOk}></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">Dart SDK</span>
-                    <span class="tool-version">{toolchainSummary.tc?.dart?.version || (toolchainSummary.dartOk ? 'Ready' : dict.notConfigured)}</span>
-                  </div>
-                  <span class="tool-detail">{toolchainSummary.tc?.dart?.path || 'Bundled with Flutter SDK'}</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                {#if toolchainSummary.dartOk}
-                  <span class="badge-ready">✓ Ready</span>
-                {:else}
-                  <button class="btn-doctor-action guide" onclick={onOpenSettings}>Configure SDK</button>
-                {/if}
-              </div>
-            </div>
-
-            <!-- 3. Android SDK & ADB -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot" class:ok={toolchainSummary.androidOk} class:err={!toolchainSummary.androidOk}></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">Android SDK & ADB</span>
-                    <span class="tool-version">{toolchainSummary.tc?.adb?.version || (toolchainSummary.androidOk ? 'API 34' : 'Missing')}</span>
-                  </div>
-                  <span class="tool-detail">{toolchainSummary.tc?.androidHome || toolchainSummary.tc?.adb?.path || 'Android SDK Platform-Tools'}</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                {#if toolchainSummary.androidOk}
-                  <span class="badge-ready">✓ Ready</span>
-                {:else}
-                  <button class="btn-doctor-action guide" onclick={onOpenSettings}>Configure SDK</button>
-                {/if}
-              </div>
-            </div>
-
-            <!-- 4. Java JDK -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot" class:ok={toolchainSummary.javaOk} class:err={!toolchainSummary.javaOk}></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">Java JDK</span>
-                    <span class="tool-version">{toolchainSummary.tc?.java?.version || (toolchainSummary.javaOk ? 'Detected' : 'Missing')}</span>
-                  </div>
-                  <span class="tool-detail">{toolchainSummary.tc?.java?.path || 'JAVA_HOME configured'}</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                {#if toolchainSummary.javaOk}
-                  <span class="badge-ready">✓ Ready</span>
-                {:else}
-                  <button class="btn-doctor-action guide" onclick={onOpenSettings}>Configure SDK</button>
-                {/if}
-              </div>
-            </div>
-
-            <!-- 5. Kotlin Language Server -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot" class:ok={toolchainSummary.kotlinOk} class:warn={!toolchainSummary.kotlinOk}></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">Kotlin LS</span>
-                    <span class="tool-version">{toolchainSummary.kotlinOk ? 'v1.3.13' : dict.notConfigured}</span>
-                  </div>
-                  <span class="tool-detail">LSP autocomplete & diagnostics kode Kotlin</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                {#if toolchainSummary.kotlinOk}
-                  <span class="badge-ready">✓ Ready</span>
-                {:else}
-                  <button class="btn-doctor-action install" onclick={handleInstallKotlinLs} disabled={isInstallingKotlin}>
-                    <span>⚡</span> {isInstallingKotlin ? dict.btnInstalling : dict.btnInstallKls}
-                  </button>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Kotlin Install Progress Box -->
-            {#if isInstallingKotlin && kotlinProgress}
-              <div class="install-progress-box">
-                <div class="progress-status-text">
-                  <span>{kotlinProgress.message}</span>
-                  <span>{kotlinProgress.percent ?? 50}%</span>
-                </div>
-                <div class="progress-bar-track">
-                  <div class="progress-bar-fill" style:width="{kotlinProgress.percent ?? 50}%"></div>
-                </div>
-              </div>
-            {/if}
-
-            <!-- 6. scrcpy Device Mirroring -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot warn"></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">scrcpy Mirroring</span>
-                    <span class="tool-version">Missing in PATH</span>
-                  </div>
-                  <span class="tool-detail">Dibutuhkan untuk mirror layar device Android USB</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                <button class="btn-doctor-action guide" onclick={() => (scrcpyModalOpen = true)}>
-                  <span>📖</span> {dict.btnScrcpyGuide}
-                </button>
-              </div>
-            </div>
-
-            <!-- 7. Xcode & Swift -->
-            <div class="tool-item">
-              <div class="tool-left">
-                <span class="status-badge-dot neutral"></span>
-                <div class="tool-labels">
-                  <div class="tool-name-row">
-                    <span class="tool-name">Xcode & Swift</span>
-                    <span class="tool-version">macOS Only</span>
-                  </div>
-                  <span class="tool-detail">Simulasi via host bridge / remote build</span>
-                </div>
-              </div>
-              <div class="tool-action">
-                <span class="badge-ready" style="color: var(--text-dim); font-weight: 500;">{dict.optional}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="doctor-footer">
-            <span class="doctor-footer-text">
-              {toolchainSummary.readyCount} {settingsStore.language === 'id' ? 'dari 7' : 'of 7'} {dict.toolsConfigured}
-            </span>
-            <button class="doctor-footer-link" onclick={onOpenSettings}>
-              {dict.docFooterLink} →
-            </button>
-          </div>
-        </div>
-
-        <!-- Quick Controls & Personalization Card -->
-        <div class="preferences-card">
-          <span class="pref-title">{dict.prefTitle}</span>
-
-          <!-- Theme -->
-          <div class="pref-row">
-            <div class="pref-label-group">
-              <span class="pref-label">{dict.prefTheme}</span>
-              <span class="pref-desc">{dict.prefThemeDesc}</span>
-            </div>
-            <div class="segmented-control">
-              <button
-                class="segmented-btn"
-                class:active={settingsStore.theme === 'dark'}
-                onclick={() => settingsStore.setTheme('dark')}
-              >
-                🌙 Dark
-              </button>
-              <button
-                class="segmented-btn"
-                class:active={settingsStore.theme === 'light'}
-                onclick={() => settingsStore.setTheme('light')}
-              >
-                ☀️ Light
-              </button>
-            </div>
-          </div>
-
-          <!-- Language -->
-          <div class="pref-row">
-            <div class="pref-label-group">
-              <span class="pref-label">{dict.prefLang}</span>
-              <span class="pref-desc">{dict.prefLangDesc}</span>
-            </div>
-            <div class="segmented-control">
-              <button
-                class="segmented-btn"
-                class:active={settingsStore.language === 'id'}
-                onclick={() => settingsStore.setLanguage('id')}
-              >
-                ID
-              </button>
-              <button
-                class="segmented-btn"
-                class:active={settingsStore.language === 'en'}
-                onclick={() => settingsStore.setLanguage('en')}
-              >
-                EN
-              </button>
-            </div>
-          </div>
-
-          <!-- Reopen Last Project Toggle -->
-          <div class="pref-row">
-            <div class="pref-label-group">
-              <span class="pref-label">{dict.prefReopen}</span>
-              <span class="pref-desc">{dict.prefReopenDesc}</span>
-            </div>
-            <label class="switch">
-              <input
-                type="checkbox"
-                checked={settingsStore.reopenLastProjectOnLaunch}
-                onchange={(e) => settingsStore.setReopenLastProjectOnLaunch((e.target as HTMLInputElement).checked)}
-              />
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
+        {/if}
       </div>
     </div>
   </div>
 </div>
 
-<!-- Modal Panduan Instalasi scrcpy -->
+<!-- Modal 1: Buat Project Baru -->
+{#if newProjectModalOpen}
+  <div class="modal-backdrop" onclick={() => (newProjectModalOpen = false)} role="presentation">
+    <div class="modal-window" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-header">
+        <h3>{dict.newModalTitle}</h3>
+        <button class="modal-close-btn" onclick={() => (newProjectModalOpen = false)}>✕</button>
+      </div>
+      <div class="modal-content">
+        <p class="modal-desc">{dict.newModalDesc}</p>
+        <div class="form-row">
+          <label class="form-label" for="proj-name">Nama Project:</label>
+          <input id="proj-name" type="text" class="modal-input" bind:value={newProjectName} placeholder="my_app" />
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="proj-org">Organization (--org):</label>
+          <input id="proj-org" type="text" class="modal-input" bind:value={newProjectOrg} placeholder="id.co.bankjatim" />
+        </div>
+
+        <div class="code-preview-box">
+          <span class="code-snippet">flutter create --org {newProjectOrg} {newProjectName}</span>
+          <button class="btn-copy-code" onclick={() => copySnippet(`flutter create --org ${newProjectOrg} ${newProjectName}`)}>
+            {copiedSnippet === `flutter create --org ${newProjectOrg} ${newProjectName}` ? dict.copied : dict.copy}
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-subtle" onclick={() => (newProjectModalOpen = false)}>{dict.close}</button>
+        <button
+          class="btn-accent"
+          onclick={() => {
+            newProjectModalOpen = false;
+            onOpenFolder();
+          }}
+        >
+          {dict.actOpen}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal 2: Clone Repositori Git -->
+{#if cloneRepoModalOpen}
+  <div class="modal-backdrop" onclick={() => (cloneRepoModalOpen = false)} role="presentation">
+    <div class="modal-window" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-header">
+        <h3>{dict.cloneModalTitle}</h3>
+        <button class="modal-close-btn" onclick={() => (cloneRepoModalOpen = false)}>✕</button>
+      </div>
+      <div class="modal-content">
+        <p class="modal-desc">{dict.cloneModalDesc}</p>
+        <div class="form-row">
+          <label class="form-label" for="clone-url">Repository URL:</label>
+          <input id="clone-url" type="text" class="modal-input" bind:value={cloneRepoUrl} placeholder="https://code.istar.id/..." />
+        </div>
+        <div class="form-row">
+          <label class="form-label" for="clone-dir">Target Directory:</label>
+          <input id="clone-dir" type="text" class="modal-input" bind:value={cloneTargetDir} placeholder="/mnt/storage/projects" />
+        </div>
+
+        <div class="code-preview-box">
+          <span class="code-snippet">git clone {cloneRepoUrl}</span>
+          <button class="btn-copy-code" onclick={() => copySnippet(`git clone ${cloneRepoUrl}`)}>
+            {copiedSnippet === `git clone ${cloneRepoUrl}` ? dict.copied : dict.copy}
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-subtle" onclick={() => (cloneRepoModalOpen = false)}>{dict.close}</button>
+        <button
+          class="btn-accent"
+          onclick={() => {
+            cloneRepoModalOpen = false;
+            onOpenFolder();
+          }}
+        >
+          {dict.actOpen}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal 3: Petak Doctor -->
+{#if doctorModalOpen}
+  <div class="modal-backdrop" onclick={() => (doctorModalOpen = false)} role="presentation">
+    <div class="modal-window doctor-modal-window" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-header">
+        <div class="doctor-modal-title">
+          <h3>🩺 {dict.docTitle}</h3>
+          <span class="status-summary-pill" class:ready={toolchainSummary.actionsNeeded === 0} class:warning={toolchainSummary.actionsNeeded > 0}>
+            ● {toolchainSummary.actionsNeeded === 0 ? dict.allReady : `${toolchainSummary.actionsNeeded} ${dict.needAction}`}
+          </span>
+        </div>
+        <button class="modal-close-btn" onclick={() => (doctorModalOpen = false)}>✕</button>
+      </div>
+
+      <div class="modal-content doctor-content">
+        <div class="doctor-items-list">
+          <!-- 1. Flutter SDK -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot" class:ok={toolchainSummary.flutterOk} class:err={!toolchainSummary.flutterOk}></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">Flutter SDK</span>
+                  <span class="tool-version">{toolchainSummary.tc?.flutter?.version || (toolchainSummary.flutterOk ? 'Available' : 'Missing')}</span>
+                </div>
+                <span class="tool-detail">{toolchainSummary.tc?.flutter?.path || 'Flutter CLI compiler'}</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              {#if toolchainSummary.flutterOk}
+                <span class="badge-ready">✓ Ready</span>
+              {:else}
+                <button class="btn-doctor-action guide" onclick={() => { doctorModalOpen = false; onOpenSettings(); }}>Configure SDK</button>
+              {/if}
+            </div>
+          </div>
+
+          <!-- 2. Dart SDK -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot" class:ok={toolchainSummary.dartOk} class:err={!toolchainSummary.dartOk}></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">Dart SDK</span>
+                  <span class="tool-version">{toolchainSummary.tc?.dart?.version || (toolchainSummary.dartOk ? 'Ready' : dict.notConfigured)}</span>
+                </div>
+                <span class="tool-detail">{toolchainSummary.tc?.dart?.path || 'Bundled with Flutter SDK'}</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              {#if toolchainSummary.dartOk}
+                <span class="badge-ready">✓ Ready</span>
+              {:else}
+                <button class="btn-doctor-action guide" onclick={() => { doctorModalOpen = false; onOpenSettings(); }}>Configure SDK</button>
+              {/if}
+            </div>
+          </div>
+
+          <!-- 3. Android SDK & ADB -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot" class:ok={toolchainSummary.androidOk} class:err={!toolchainSummary.androidOk}></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">Android SDK & ADB</span>
+                  <span class="tool-version">{toolchainSummary.tc?.adb?.version || (toolchainSummary.androidOk ? 'API 34' : 'Missing')}</span>
+                </div>
+                <span class="tool-detail">{toolchainSummary.tc?.androidHome || toolchainSummary.tc?.adb?.path || 'Android SDK Platform-Tools'}</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              {#if toolchainSummary.androidOk}
+                <span class="badge-ready">✓ Ready</span>
+              {:else}
+                <button class="btn-doctor-action guide" onclick={() => { doctorModalOpen = false; onOpenSettings(); }}>Configure SDK</button>
+              {/if}
+            </div>
+          </div>
+
+          <!-- 4. Java JDK -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot" class:ok={toolchainSummary.javaOk} class:err={!toolchainSummary.javaOk}></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">Java JDK</span>
+                  <span class="tool-version">{toolchainSummary.tc?.java?.version || (toolchainSummary.javaOk ? 'Detected' : 'Missing')}</span>
+                </div>
+                <span class="tool-detail">{toolchainSummary.tc?.java?.path || 'JAVA_HOME configured'}</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              {#if toolchainSummary.javaOk}
+                <span class="badge-ready">✓ Ready</span>
+              {:else}
+                <button class="btn-doctor-action guide" onclick={() => { doctorModalOpen = false; onOpenSettings(); }}>Configure SDK</button>
+              {/if}
+            </div>
+          </div>
+
+          <!-- 5. Kotlin Language Server -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot" class:ok={toolchainSummary.kotlinOk} class:warn={!toolchainSummary.kotlinOk}></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">Kotlin LS</span>
+                  <span class="tool-version">{toolchainSummary.kotlinOk ? 'v1.3.13' : dict.notConfigured}</span>
+                </div>
+                <span class="tool-detail">LSP autocomplete & diagnostics kode Kotlin</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              {#if toolchainSummary.kotlinOk}
+                <span class="badge-ready">✓ Ready</span>
+              {:else}
+                <button class="btn-doctor-action install" onclick={handleInstallKotlinLs} disabled={isInstallingKotlin}>
+                  <span>⚡</span> {isInstallingKotlin ? dict.btnInstalling : dict.btnInstallKls}
+                </button>
+              {/if}
+            </div>
+          </div>
+
+          {#if isInstallingKotlin && kotlinProgress}
+            <div class="install-progress-box">
+              <div class="progress-status-text">
+                <span>{kotlinProgress.message}</span>
+                <span>{kotlinProgress.percent ?? 50}%</span>
+              </div>
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" style:width="{kotlinProgress.percent ?? 50}%"></div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- 6. scrcpy Device Mirroring -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot warn"></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">scrcpy Mirroring</span>
+                  <span class="tool-version">Missing in PATH</span>
+                </div>
+                <span class="tool-detail">Dibutuhkan untuk mirror layar device Android USB</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              <button class="btn-doctor-action guide" onclick={() => (scrcpyModalOpen = true)}>
+                <span>📖</span> {dict.btnScrcpyGuide}
+              </button>
+            </div>
+          </div>
+
+          <!-- 7. Xcode & Swift -->
+          <div class="tool-item">
+            <div class="tool-left">
+              <span class="status-badge-dot neutral"></span>
+              <div class="tool-labels">
+                <div class="tool-name-row">
+                  <span class="tool-name">Xcode & Swift</span>
+                  <span class="tool-version">macOS Only</span>
+                </div>
+                <span class="tool-detail">Simulasi via host bridge / remote build</span>
+              </div>
+            </div>
+            <div class="tool-action">
+              <span class="badge-ready" style="color: var(--text-dim); font-weight: 500;">{dict.optional}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer doctor-footer-row">
+        <button class="btn-recheck" onclick={() => toolchainStore.refresh('')}>
+          <span>🔄</span> {dict.btnRecheck}
+        </button>
+        <div class="doctor-footer-right">
+          <button class="doctor-footer-link" onclick={() => { doctorModalOpen = false; onOpenSettings(); }}>
+            {dict.docFooterLink} →
+          </button>
+          <button class="btn-subtle" onclick={() => (doctorModalOpen = false)}>{dict.close}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal 4: Pengaturan Cepat -->
+{#if quickSettingsModalOpen}
+  <div class="modal-backdrop" onclick={() => (quickSettingsModalOpen = false)} role="presentation">
+    <div class="modal-window" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-header">
+        <h3>⚙️ {dict.prefTitle}</h3>
+        <button class="modal-close-btn" onclick={() => (quickSettingsModalOpen = false)}>✕</button>
+      </div>
+
+      <div class="modal-content">
+        <!-- Theme -->
+        <div class="pref-row">
+          <div class="pref-label-group">
+            <span class="pref-label">{dict.prefTheme}</span>
+            <span class="pref-desc">{dict.prefThemeDesc}</span>
+          </div>
+          <div class="segmented-control">
+            <button
+              class="segmented-btn"
+              class:active={settingsStore.theme === 'dark'}
+              onclick={() => settingsStore.setTheme('dark')}
+            >
+              🌙 Dark
+            </button>
+            <button
+              class="segmented-btn"
+              class:active={settingsStore.theme === 'light'}
+              onclick={() => settingsStore.setTheme('light')}
+            >
+              ☀️ Light
+            </button>
+          </div>
+        </div>
+
+        <!-- Language -->
+        <div class="pref-row">
+          <div class="pref-label-group">
+            <span class="pref-label">{dict.prefLang}</span>
+            <span class="pref-desc">{dict.prefLangDesc}</span>
+          </div>
+          <div class="segmented-control">
+            <button
+              class="segmented-btn"
+              class:active={settingsStore.language === 'id'}
+              onclick={() => settingsStore.setLanguage('id')}
+            >
+              ID
+            </button>
+            <button
+              class="segmented-btn"
+              class:active={settingsStore.language === 'en'}
+              onclick={() => settingsStore.setLanguage('en')}
+            >
+              EN
+            </button>
+          </div>
+        </div>
+
+        <!-- Reopen Last Project Toggle -->
+        <div class="pref-row">
+          <div class="pref-label-group">
+            <span class="pref-label">{dict.prefReopen}</span>
+            <span class="pref-desc">{dict.prefReopenDesc}</span>
+          </div>
+          <label class="switch">
+            <input
+              type="checkbox"
+              checked={settingsStore.reopenLastProjectOnLaunch}
+              onchange={(e) => settingsStore.setReopenLastProjectOnLaunch((e.target as HTMLInputElement).checked)}
+            />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button
+          class="btn-subtle"
+          onclick={() => {
+            quickSettingsModalOpen = false;
+            onOpenSettings();
+          }}
+        >
+          {dict.docFooterLink}
+        </button>
+        <button class="btn-accent" onclick={() => (quickSettingsModalOpen = false)}>{dict.close}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal 5: Panduan Instalasi scrcpy -->
 {#if scrcpyModalOpen}
   <div class="modal-backdrop show" onclick={() => (scrcpyModalOpen = false)} role="presentation">
     <div class="guide-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
       <div class="modal-header">
         <h3>Panduan Instalasi scrcpy (Device Mirroring)</h3>
-        <button class="icon-btn" onclick={() => (scrcpyModalOpen = false)} aria-label="Close">✕</button>
+        <button class="modal-close-btn" onclick={() => (scrcpyModalOpen = false)} aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
         <p>Petak membutuhkan tool <code>scrcpy</code> di PATH untuk menampilkan mirroring layar perangkat Android tanpa lag.</p>
 
         <div>
           <strong style="color: var(--text-main); font-size: 12px;">Untuk macOS (Homebrew):</strong>
-          <div class="code-box" style="margin-top: 6px;">
-            <span>brew install scrcpy</span>
-            <button class="btn-copy" onclick={() => copySnippet('brew install scrcpy')}>
+          <div class="code-preview-box" style="margin-top: 6px;">
+            <span class="code-snippet">brew install scrcpy</span>
+            <button class="btn-copy-code" onclick={() => copySnippet('brew install scrcpy')}>
               {copiedSnippet === 'brew install scrcpy' ? dict.copied : dict.copy}
             </button>
           </div>
@@ -679,20 +862,20 @@
 
         <div>
           <strong style="color: var(--text-main); font-size: 12px;">Untuk Ubuntu / Debian Linux:</strong>
-          <div class="code-box" style="margin-top: 6px;">
-            <span>sudo apt update && sudo apt install scrcpy</span>
-            <button class="btn-copy" onclick={() => copySnippet('sudo apt update && sudo apt install scrcpy')}>
+          <div class="code-preview-box" style="margin-top: 6px;">
+            <span class="code-snippet">sudo apt update && sudo apt install scrcpy</span>
+            <button class="btn-copy-code" onclick={() => copySnippet('sudo apt update && sudo apt install scrcpy')}>
               {copiedSnippet === 'sudo apt update && sudo apt install scrcpy' ? dict.copied : dict.copy}
             </button>
           </div>
         </div>
 
-        <p style="font-size: 11px; color: var(--text-dim);">
-          Setelah instalasi selesai, klik tombol <strong>Pindai Ulang</strong> pada kartu Doctor di atas.
+        <p style="font-size: 11px; color: var(--text-dim); margin-top: 8px;">
+          Setelah instalasi selesai, buka Petak Doctor dan klik <strong>Pindai Ulang</strong>.
         </p>
       </div>
       <div class="modal-footer">
-        <button class="btn-close-modal" onclick={() => (scrcpyModalOpen = false)}>Tutup</button>
+        <button class="btn-subtle" onclick={() => (scrcpyModalOpen = false)}>{dict.close}</button>
       </div>
     </div>
   </div>
@@ -722,13 +905,8 @@
     --warning-border: rgba(232, 180, 90, 0.28);
     --danger: #f07a74;
     --danger-bg: rgba(240, 122, 116, 0.12);
-    --radius-sm: 4px;
-    --radius-md: 6px;
-    --radius-lg: 10px;
     --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
-    --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.45);
   }
 
   :global(.light-theme) {
@@ -759,389 +937,381 @@
   .dashboard-container {
     width: 100%;
     height: 100%;
+    min-height: calc(100vh - 36px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: var(--bg-app);
-    color: var(--text-main);
-    overflow-y: auto;
-    display: flex;
-    justify-content: center;
-    padding: 32px 20px;
     font-family: var(--font-sans);
+    padding: 24px;
+    box-sizing: border-box;
   }
 
-  .dashboard-card-wrap {
-    width: 100%;
-    max-width: 1060px;
+  /* Xcode-Style Dual Column Floating Window */
+  .xcode-window {
     display: flex;
-    flex-direction: column;
-    gap: 22px;
-  }
-
-  /* Header & Animated Logo */
-  .dashboard-header {
-    padding-bottom: 4px;
-  }
-
-  .logo-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .logo-container {
-    position: relative;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .logo-glow {
-    position: absolute;
-    inset: -4px;
-    border-radius: 14px;
-    background: radial-gradient(circle, rgba(110, 168, 255, 0.45) 0%, rgba(110, 168, 255, 0) 70%);
-    opacity: 0.35;
-    animation: petak-glow 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .petak-logo {
-    position: relative;
-    z-index: 2;
-    width: 46px;
-    height: 46px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 4px;
+    width: 880px;
+    max-width: 95vw;
+    height: 560px;
+    max-height: 88vh;
     background: var(--bg-card);
-    padding: 6px;
-    border-radius: 10px;
     border: 1px solid var(--border);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-    animation: petak-logo-breathe 2.8s ease-in-out infinite;
+    border-radius: 12px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
   }
 
-  .petak-cell {
-    border-radius: 2px;
-    transition: background 0.25s ease;
-  }
-
-  .petak-cell.c1 {
-    background: var(--accent);
-    animation: petak-cell-pulse-1 2.8s ease-in-out infinite;
-  }
-
-  .petak-cell.c4 {
-    background: var(--accent);
-    animation: petak-cell-pulse-4 2.8s ease-in-out infinite;
-  }
-
-  .petak-cell.c2 {
-    background: #2a3754;
-    animation: petak-cell-stagger-2 2.8s ease-in-out infinite;
-  }
-
-  .petak-cell.c3 {
-    background: #2a3754;
-    animation: petak-cell-stagger-3 2.8s ease-in-out infinite;
-  }
-
-  @keyframes petak-glow {
-    0%, 100% { opacity: 0.25; transform: scale(0.96); }
-    50% { opacity: 0.7; transform: scale(1.08); }
-  }
-
-  @keyframes petak-logo-breathe {
-    0%, 100% { transform: translateY(0); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25); }
-    50% { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(110, 168, 255, 0.22); }
-  }
-
-  @keyframes petak-cell-pulse-1 {
-    0%, 100% { transform: scale(1); filter: brightness(1); }
-    50% { transform: scale(1.04); filter: brightness(1.2); }
-  }
-
-  @keyframes petak-cell-stagger-2 {
-    0%, 100% { background: #2a3754; }
-    50% { background: #3c527e; }
-  }
-
-  @keyframes petak-cell-stagger-3 {
-    0%, 100% { background: #2a3754; }
-    50% { background: #354a72; }
-  }
-
-  @keyframes petak-cell-pulse-4 {
-    0%, 100% { transform: scale(1); filter: brightness(1); }
-    50% { transform: scale(1.04); filter: brightness(1.15); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .logo-glow, .petak-logo, .petak-cell {
-      animation: none !important;
-      transform: none !important;
-    }
-  }
-
-  .header-titles {
+  /* Left Column: Brand & Actions */
+  .column-left {
+    width: 370px;
+    flex-shrink: 0;
+    background: #131418;
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    padding: 28px 24px;
+    box-sizing: border-box;
+    justify-content: space-between;
   }
 
-  .title-badge-row {
+  :global(.light-theme) .column-left {
+    background: #f7f8fa;
+  }
+
+  .brand-section {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 8px;
+    text-align: center;
   }
 
   .welcome-title {
-    font-size: 20px;
+    font-size: 28px;
     font-weight: 700;
+    letter-spacing: -0.5px;
     color: var(--text-main);
-    margin: 0;
+    margin: 8px 0 0 0;
   }
 
   .version-tag {
     font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
     font-family: var(--font-code);
-    color: var(--text-muted);
   }
 
-  .badge-mem, .badge-tag {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-  }
-
-  .welcome-sub {
-    font-size: 12px;
+  .brand-tagline {
+    font-size: 11.5px;
     color: var(--text-muted);
     margin: 0;
+    line-height: 1.35;
+    max-width: 260px;
   }
 
-  /* Action Tiles */
-  .action-tiles {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+  /* 5 Action Items Menu */
+  .actions-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 16px 0;
   }
 
-  .tile {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 12px 14px;
+  .action-item {
     display: flex;
     align-items: center;
     gap: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid transparent;
     cursor: pointer;
     text-align: left;
     transition: all 0.15s ease;
-    box-shadow: var(--shadow-sm);
   }
 
-  .tile:hover {
+  .action-item:hover {
     background: var(--bg-card-hover);
-    border-color: var(--border-strong);
+    border-color: var(--border-subtle);
     transform: translateY(-1px);
   }
 
-  .tile.primary {
-    border-color: var(--accent-border);
-    background: linear-gradient(135deg, var(--bg-card) 0%, var(--accent-bg) 100%);
+  .action-item.primary {
+    background: rgba(110, 168, 255, 0.08);
+    border-color: rgba(110, 168, 255, 0.2);
   }
 
-  .tile-icon {
+  .action-item.primary:hover {
+    background: rgba(110, 168, 255, 0.14);
+    border-color: rgba(110, 168, 255, 0.35);
+  }
+
+  .action-icon-box {
     font-size: 20px;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
     flex-shrink: 0;
   }
 
-  .tile.primary .tile-icon {
-    background: var(--accent);
-    color: #ffffff;
-    border-color: transparent;
-  }
-
-  .tile-text {
+  .action-details {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    flex: 1;
     min-width: 0;
   }
 
-  .tile-title-row {
+  .action-title-row {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
   }
 
-  .tile-title {
+  .action-title {
     font-size: 12.5px;
     font-weight: 600;
     color: var(--text-main);
   }
 
-  .kbd-pill {
-    font-family: var(--font-code);
+  .action-kbd {
     font-size: 10px;
-    font-weight: 600;
-    background: var(--bg-elevated);
-    color: var(--text-muted);
-    padding: 1px 4px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
+    font-family: var(--font-code);
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 5px;
+    border-radius: 3px;
   }
 
-  .tile-desc {
+  .action-desc {
     font-size: 11px;
     color: var(--text-muted);
     line-height: 1.3;
-  }
-
-  /* Dual Column Grid */
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: 1.25fr 1fr;
-    gap: 16px;
-    align-items: start;
-  }
-
-  /* Left Column: Recent Projects */
-  .recents-section {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .doctor-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  .doctor-badge.ready {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+  }
+
+  .doctor-badge.warn {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+  }
+
+  .theme-lang-pill {
+    font-size: 10px;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .left-footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .spec-pill {
+    font-size: 10px;
+    font-family: var(--font-code);
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* Right Column: Recent Projects */
+  .column-right {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-sm);
+    background: var(--bg-card);
+    padding: 20px 24px;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
-  .section-bar {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border-subtle);
+  .recents-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
   }
 
-  .section-title-wrap {
+  .recents-title-row {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .section-title {
-    font-size: 11px;
+  .recents-title {
+    font-size: 13px;
     font-weight: 700;
-    color: var(--text-muted);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    color: var(--text-main);
   }
 
-  .count-badge {
-    background: var(--bg-elevated);
-    color: var(--text-main);
-    font-size: 10px;
-    font-weight: 600;
+  .recents-count {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.06);
     padding: 1px 6px;
     border-radius: 10px;
-    border: 1px solid var(--border);
+    font-weight: 600;
   }
 
-  .search-wrap {
+  .search-input-wrap {
     position: relative;
-    max-width: 200px;
-    flex: 1;
+    display: flex;
+    align-items: center;
+    width: 220px;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 8px;
+    color: var(--text-dim);
+    pointer-events: none;
   }
 
   .project-search-input {
     width: 100%;
-    background: var(--bg-app);
+    height: 28px;
+    background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 4px 8px;
-    font-size: 11px;
+    border-radius: 6px;
+    padding: 0 24px 0 26px;
+    font-size: 11.5px;
     color: var(--text-main);
     outline: none;
-    transition: border-color 0.15s ease;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
   }
 
   .project-search-input:focus {
     border-color: var(--accent);
   }
 
-  .projects-list {
+  .clear-search-btn {
+    position: absolute;
+    right: 6px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px;
+  }
+
+  .projects-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin: 0 -8px;
+    padding: 0 8px;
+  }
+
+  .projects-scroll-area::-webkit-scrollbar {
+    width: 5px;
+  }
+  .projects-scroll-area::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
+
+  .empty-projects-state {
     display: flex;
     flex-direction: column;
-    max-height: 440px;
-    overflow-y: auto;
+    align-items: center;
+    justify-content: center;
+    height: 280px;
+    color: var(--text-dim);
+    gap: 8px;
   }
 
-  .empty-projects {
-    padding: 36px 16px;
-    text-align: center;
-    color: var(--text-muted);
+  .empty-icon {
+    font-size: 28px;
+    opacity: 0.7;
+  }
+
+  .empty-text {
     font-size: 12px;
+    text-align: center;
+    max-width: 280px;
   }
 
+  .projects-list-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* Recent Project Card */
   .project-card {
     display: flex;
     align-items: center;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border-subtle);
-    cursor: pointer;
     gap: 12px;
-    transition: background 0.12s ease;
-  }
-
-  .project-card:last-child {
-    border-bottom: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.12s ease;
   }
 
   .project-card:hover {
     background: var(--bg-card-hover);
+    border-color: var(--border-subtle);
   }
 
-  .card-icon {
+  .project-card.selected {
+    background: rgba(110, 168, 255, 0.08);
+    border-color: rgba(110, 168, 255, 0.28);
+  }
+
+  .project-card.missing {
+    opacity: 0.55;
+  }
+
+  .project-icon-box {
+    font-size: 20px;
     width: 32px;
     height: 32px;
-    border-radius: var(--radius-md);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 15px;
     flex-shrink: 0;
   }
 
-  .card-body {
+  .project-text-box {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
   }
 
-  .card-top-row {
+  .project-title-row {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1156,150 +1326,278 @@
     text-overflow: ellipsis;
   }
 
-  .pinned-tag {
-    font-size: 11px;
-    color: var(--warning);
-  }
-
-  .missing-tag {
-    font-size: 9px;
+  .missing-badge {
+    font-size: 10px;
     color: var(--danger);
     background: var(--danger-bg);
     padding: 1px 4px;
     border-radius: 3px;
+    font-family: var(--font-code);
   }
 
   .project-path {
-    font-family: var(--font-code);
     font-size: 11px;
-    color: var(--text-dim);
+    color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .card-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     margin-top: 2px;
   }
 
-  .branch-pill {
-    font-size: 10px;
-    font-family: var(--font-code);
-    color: var(--accent);
-    background: var(--accent-bg);
-    padding: 1px 6px;
-    border-radius: var(--radius-sm);
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .time-pill {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .card-actions {
+  .project-meta-row {
     display: flex;
     align-items: center;
-    gap: 4px;
-    opacity: 0.6;
-    transition: opacity 0.15s ease;
+    gap: 8px;
+    margin-top: 3px;
   }
 
-  .project-card:hover .card-actions {
+  .branch-tag {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: var(--font-code);
+  }
+
+  .time-tag {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .project-actions-box {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .project-card:hover .project-actions-box,
+  .project-card.selected .project-actions-box {
     opacity: 1;
   }
 
-  .action-icon-btn {
-    width: 24px;
-    height: 24px;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-muted);
+  .btn-remove-project {
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 4px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
     cursor: pointer;
-    font-size: 11px;
-    transition: all 0.12s ease;
+    font-size: 12px;
+    transition: all 0.12s;
   }
 
-  .action-icon-btn:hover {
-    background: var(--bg-elevated);
-    border-color: var(--border);
-    color: var(--text-main);
+  .btn-remove-project:hover {
+    background: rgba(240, 122, 116, 0.18);
+    color: var(--danger);
   }
 
-  .action-icon-btn.pin.pinned {
-    opacity: 1;
+  /* Modals */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
   }
 
-  /* Right Column: Doctor Card & Quick Controls */
-  .side-section {
+  .modal-window {
+    width: 480px;
+    max-width: 90vw;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .doctor-modal-window {
+    width: 620px;
+    max-height: 85vh;
+  }
+
+  .guide-modal {
+    width: 500px;
+    max-width: 90vw;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 16px 20px;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
 
-  .doctor-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .doctor-header {
-    padding: 10px 14px;
-    background: var(--bg-card);
-    border-bottom: 1px solid var(--border-subtle);
+  .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .doctor-title-group {
+  .modal-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .modal-close-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .modal-close-btn:hover {
+    color: var(--text-main);
+  }
+
+  .modal-content {
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 12px;
   }
 
-  .doctor-title-row {
+  .doctor-content {
+    overflow-y: auto;
+    max-height: 60vh;
+  }
+
+  .modal-desc {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .form-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-main);
+  }
+
+  .modal-input {
+    height: 32px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 12px;
+    color: var(--text-main);
+    outline: none;
+  }
+
+  .modal-input:focus {
+    border-color: var(--accent);
+  }
+
+  .code-preview-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #0f1013;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 4px;
+  }
+
+  .code-snippet {
+    font-family: var(--font-code);
+    font-size: 11.5px;
+    color: #7eb2ff;
+    word-break: break-all;
+  }
+
+  .btn-copy-code {
+    background: rgba(110, 168, 255, 0.12);
+    border: 1px solid rgba(110, 168, 255, 0.25);
+    color: #90beff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .btn-copy-code:hover {
+    background: rgba(110, 168, 255, 0.2);
+  }
+
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-subtle {
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+
+  .btn-subtle:hover {
+    color: var(--text-main);
+    border-color: var(--border-strong);
+  }
+
+  .btn-accent {
+    height: 28px;
+    padding: 0 14px;
+    border-radius: 6px;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-accent:hover {
+    background: var(--accent-hover);
+  }
+
+  /* Toolchain items inside Doctor Modal */
+  .doctor-modal-title {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .doctor-main-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-main);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .doctor-sub {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
   .status-summary-pill {
     font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
     font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 20px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
   }
 
   .status-summary-pill.ready {
@@ -1314,80 +1612,50 @@
     border: 1px solid var(--warning-border);
   }
 
-  .btn-recheck {
-    background: var(--bg-app);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: all 0.15s ease;
-  }
-
-  .btn-recheck:hover {
-    background: var(--bg-elevated);
-    color: var(--text-main);
-    border-color: var(--border-strong);
-  }
-
-  .doctor-items {
+  .doctor-items-list {
     display: flex;
     flex-direction: column;
-    padding: 6px 10px;
-    gap: 4px;
+    gap: 8px;
   }
 
   .tool-item {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    padding: 7px 10px;
-    border-radius: var(--radius-md);
-    background: var(--bg-app);
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border-subtle);
-    gap: 8px;
-    transition: all 0.15s ease;
-  }
-
-  .tool-item:hover {
-    border-color: var(--border);
-    background: var(--bg-card-hover);
+    border-radius: 6px;
   }
 
   .tool-left {
     display: flex;
-    align-items: flex-start;
-    gap: 9px;
-    min-width: 0;
-    flex: 1;
+    align-items: center;
+    gap: 10px;
   }
 
   .status-badge-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+    background: var(--text-dim);
     flex-shrink: 0;
-    margin-top: 4px;
   }
 
   .status-badge-dot.ok {
     background: var(--success);
-    box-shadow: 0 0 6px rgba(127, 201, 143, 0.4);
+    box-shadow: 0 0 6px var(--success);
   }
 
   .status-badge-dot.warn {
     background: var(--warning);
-    box-shadow: 0 0 6px rgba(232, 180, 90, 0.4);
+    box-shadow: 0 0 6px var(--warning);
   }
 
   .status-badge-dot.err {
     background: var(--danger);
-    box-shadow: 0 0 6px rgba(240, 122, 116, 0.4);
+    box-shadow: 0 0 6px var(--danger);
   }
 
   .status-badge-dot.neutral {
@@ -1397,9 +1665,6 @@
   .tool-labels {
     display: flex;
     flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-    flex: 1;
   }
 
   .tool-name-row {
@@ -1415,85 +1680,66 @@
   }
 
   .tool-version {
-    font-size: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
     font-family: var(--font-code);
-    color: var(--text-muted);
   }
 
   .tool-detail {
-    font-size: 11px;
-    color: var(--text-dim);
-    line-height: 1.3;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .tool-action {
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-
-  .btn-doctor-action {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    transition: all 0.15s ease;
-    white-space: nowrap;
-  }
-
-  .btn-doctor-action.install {
-    background: var(--accent);
-    color: #ffffff;
-    border-color: var(--accent-hover);
-  }
-
-  .btn-doctor-action.install:hover:not(:disabled) {
-    background: var(--accent-hover);
-    box-shadow: 0 2px 8px rgba(110, 168, 255, 0.35);
-  }
-
-  .btn-doctor-action.guide {
-    background: var(--warning-bg);
-    color: var(--warning);
-    border-color: var(--warning-border);
-  }
-
-  .btn-doctor-action.guide:hover {
-    background: rgba(232, 180, 90, 0.22);
+    font-size: 10.5px;
+    color: var(--text-muted);
   }
 
   .badge-ready {
     font-size: 11px;
     color: var(--success);
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
     font-weight: 600;
   }
 
+  .btn-doctor-action {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+  }
+
+  .btn-doctor-action.install {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn-doctor-action.guide {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .btn-doctor-action.guide:hover {
+    color: var(--text-main);
+  }
+
   .install-progress-box {
-    width: 100%;
-    padding: 6px 10px;
-    background: var(--accent-bg);
-    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    background: rgba(110, 168, 255, 0.05);
     border: 1px solid var(--accent-border);
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    margin-top: 3px;
+    gap: 6px;
+  }
+
+  .progress-status-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--accent);
   }
 
   .progress-bar-track {
-    width: 100%;
     height: 4px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.3);
     border-radius: 2px;
     overflow: hidden;
   }
@@ -1501,288 +1747,228 @@
   .progress-bar-fill {
     height: 100%;
     background: var(--accent);
-    border-radius: 2px;
-    transition: width 0.3s ease;
+    transition: width 0.3s;
   }
 
-  .progress-status-text {
-    font-size: 10px;
-    color: var(--accent);
-    font-weight: 500;
-    display: flex;
+  .doctor-footer-row {
     justify-content: space-between;
   }
 
-  .doctor-footer {
-    padding: 8px 12px;
-    background: var(--bg-card);
-    border-top: 1px solid var(--border-subtle);
+  .btn-recheck {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11.5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .btn-recheck:hover {
+    color: var(--text-main);
+  }
+
+  .doctor-footer-right {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-  }
-
-  .doctor-footer-text {
-    font-size: 11px;
-    color: var(--text-dim);
+    gap: 8px;
   }
 
   .doctor-footer-link {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--accent);
-    background: transparent;
+    background: none;
     border: none;
+    color: var(--accent);
+    font-size: 11.5px;
     cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0;
-  }
-
-  .doctor-footer-link:hover {
     text-decoration: underline;
   }
 
-  /* Quick Controls & Personalization Card */
-  .preferences-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 10px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .pref-title {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-muted);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-  }
-
+  /* Quick Settings rows */
   .pref-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .pref-row:last-child {
+    border-bottom: none;
   }
 
   .pref-label-group {
     display: flex;
     flex-direction: column;
-    gap: 1px;
   }
 
   .pref-label {
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-main);
   }
 
   .pref-desc {
     font-size: 11px;
-    color: var(--text-dim);
+    color: var(--text-muted);
   }
 
   .segmented-control {
     display: flex;
-    background: var(--bg-app);
+    background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: 6px;
     padding: 2px;
     gap: 2px;
   }
 
   .segmented-btn {
-    font-size: 11px;
-    font-weight: 500;
     padding: 3px 8px;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
+    background: none;
     border: none;
-    background: transparent;
-    color: var(--text-muted);
+    color: var(--text-dim);
+    font-size: 11px;
     cursor: pointer;
-    transition: all 0.12s ease;
-  }
-
-  .segmented-btn:hover {
-    color: var(--text-main);
+    font-weight: 500;
   }
 
   .segmented-btn.active {
-    background: var(--bg-card);
+    background: var(--bg-elevated);
     color: var(--text-main);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
     font-weight: 600;
   }
 
+  /* Switch */
   .switch {
     position: relative;
     display: inline-block;
-    width: 32px;
-    height: 18px;
-    flex-shrink: 0;
+    width: 36px;
+    height: 20px;
   }
-
   .switch input {
     opacity: 0;
     width: 0;
     height: 0;
   }
-
   .slider {
     position: absolute;
     cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: var(--bg-elevated);
-    border: 1px solid var(--border);
-    transition: .2s;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    transition: 0.2s;
     border-radius: 20px;
+    border: 1px solid var(--border);
   }
-
   .slider:before {
     position: absolute;
-    content: "";
-    height: 12px;
-    width: 12px;
+    content: '';
+    height: 14px;
+    width: 14px;
     left: 2px;
     bottom: 2px;
-    background-color: var(--text-dim);
-    transition: .2s;
+    background: #fff;
+    transition: 0.2s;
     border-radius: 50%;
   }
-
   input:checked + .slider {
-    background-color: var(--accent);
-    border-color: var(--accent);
+    background: var(--accent);
   }
-
   input:checked + .slider:before {
-    transform: translateX(14px);
-    background-color: #ffffff;
+    transform: translateX(16px);
   }
 
-  /* Modal scrcpy Guide */
-  .modal-backdrop {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.65);
-    backdrop-filter: blur(4px);
-    z-index: 999;
+  /* Logo Petak & Keyframe Animations */
+  .logo-container {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
   }
 
-  .modal-backdrop.show {
-    display: flex;
+  .logo-glow {
+    position: absolute;
+    inset: -6px;
+    border-radius: 12px;
+    background: radial-gradient(circle, rgba(110, 168, 255, 0.35) 0%, rgba(110, 168, 255, 0) 70%);
+    animation: petak-glow 4s ease-in-out infinite alternate;
+    pointer-events: none;
   }
 
-  .guide-modal {
-    background: var(--bg-card);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    width: 100%;
-    max-width: 480px;
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-    animation: modal-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  .petak-logo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 3px;
+    width: 34px;
+    height: 34px;
+    padding: 3px;
+    background: #1e2026;
+    border: 1px solid #363945;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    animation: petak-logo-breathe 4s ease-in-out infinite alternate;
   }
 
-  @keyframes modal-pop {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
-
-  .modal-header {
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border-subtle);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .modal-header h3 {
-    font-size: 13px;
-    font-weight: 700;
-    margin: 0;
-    color: var(--text-main);
-  }
-
-  .modal-body {
-    padding: 16px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    font-size: 12px;
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
-
-  .modal-body code {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    padding: 1px 4px;
+  .petak-cell {
     border-radius: 3px;
-    font-family: var(--font-code);
-    color: var(--accent);
+    transition: all 0.3s ease;
   }
 
-  .code-box {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--bg-app);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 6px 10px;
-    font-family: var(--font-code);
-    font-size: 11px;
-    color: var(--text-main);
+  .petak-cell.c1 {
+    background: #6ea8ff;
+    animation: petak-cell-pulse-1 4s ease-in-out infinite alternate;
+  }
+  .petak-cell.c2 {
+    background: #5092f6;
+    opacity: 0.85;
+  }
+  .petak-cell.c3 {
+    background: #3b7cd8;
+    opacity: 0.7;
+  }
+  .petak-cell.c4 {
+    background: #2863b5;
+    opacity: 0.55;
   }
 
-  .btn-copy {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
+  @keyframes petak-glow {
+    0% {
+      opacity: 0.3;
+      transform: scale(0.9);
+    }
+    100% {
+      opacity: 0.8;
+      transform: scale(1.1);
+    }
   }
 
-  .btn-copy:hover {
-    color: var(--text-main);
-    border-color: var(--accent);
+  @keyframes petak-logo-breathe {
+    0% {
+      transform: scale(1);
+    }
+    100% {
+      transform: scale(1.03);
+    }
   }
 
-  .modal-footer {
-    padding: 10px 18px;
-    border-top: 1px solid var(--border-subtle);
-    display: flex;
-    justify-content: flex-end;
+  @keyframes petak-cell-pulse-1 {
+    0% {
+      opacity: 0.8;
+      filter: drop-shadow(0 0 2px rgba(110, 168, 255, 0.4));
+    }
+    100% {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(110, 168, 255, 0.8));
+    }
   }
 
-  .btn-close-modal {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    color: var(--text-main);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 4px 12px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-close-modal:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--border-strong);
+  @media (prefers-reduced-motion: reduce) {
+    .logo-glow,
+    .petak-logo,
+    .petak-cell.c1 {
+      animation: none !important;
+    }
   }
 </style>
