@@ -5,10 +5,14 @@
     activeTab = $bindable('project'),
     onTabChange,
     onToggleDevices,
+    onToggleAgents,
+    isAgentsOpen = false,
   } = $props<{
     activeTab?: string;
     onTabChange?: (tab: string) => void;
     onToggleDevices?: () => void;
+    onToggleAgents?: () => void;
+    isAgentsOpen?: boolean;
   }>();
 
   function selectTab(tab: string) {
@@ -21,6 +25,14 @@
       onToggleDevices();
     } else {
       selectTab('devices');
+    }
+  }
+
+  function handleAgentsClick() {
+    if (onToggleAgents) {
+      onToggleAgents();
+    } else {
+      selectTab('agents');
     }
   }
 </script>
@@ -70,10 +82,10 @@
 
   <button
     class="rail-btn"
-    class:active={activeTab === 'agents'}
-    onclick={() => selectTab('agents')}
+    class:active={isAgentsOpen || activeTab === 'agents'}
+    onclick={handleAgentsClick}
     aria-label="Agents"
-    title="Agents"
+    title="AI Agents Panel (⌘6)"
   >
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
       <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
