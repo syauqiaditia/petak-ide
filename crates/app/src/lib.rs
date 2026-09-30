@@ -316,6 +316,14 @@ pub fn run() {
             commands::setting_set,
             commands::editor_ghost_text_get,
             commands::editor_ghost_text_set,
+            // Batch 4
+            commands::avd_wipe,
+            commands::avd_delete,
+            commands::sim_open_app,
+            commands::kls_install,
+            commands::format_document,
+            commands::mirror_permission_status,
+            commands::open_screen_recording_settings,
             // Phase 5 - Agents
             commands::agent_list_slots,
             commands::agent_start,

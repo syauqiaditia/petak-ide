@@ -264,9 +264,10 @@ pub fn parse_devicectl_devices(input: &str) -> Result<Vec<Device>, serde_json::E
                         || item.identifier.contains(':')
                     {
                         Some("wifi".to_string())
-                    } else if transport_type == "wired" || transport_type == "usb" {
-                        Some("usb".to_string())
-                    } else if connection == "connected" {
+                    } else if transport_type == "wired"
+                        || transport_type == "usb"
+                        || connection == "connected"
+                    {
                         Some("usb".to_string())
                     } else {
                         Some("unknown".to_string())
@@ -350,11 +351,15 @@ pub fn parse_devicectl_devices_table(table_str: &str) -> Vec<Device> {
         };
 
         let line_lower = line.to_lowercase();
-        let transport = if line_lower.contains("wireless") || line_lower.contains("wifi") || id.contains(':') {
+        let transport = if line_lower.contains("wireless")
+            || line_lower.contains("wifi")
+            || id.contains(':')
+        {
             Some("wifi".to_string())
-        } else if line_lower.contains("wired") || line_lower.contains("usb") {
-            Some("usb".to_string())
-        } else if connection == "connected" {
+        } else if line_lower.contains("wired")
+            || line_lower.contains("usb")
+            || connection == "connected"
+        {
             Some("usb".to_string())
         } else {
             Some("unknown".to_string())

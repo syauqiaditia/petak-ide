@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod exec;
+pub mod format;
 pub mod fs;
 pub mod fsops;
 pub mod git;
