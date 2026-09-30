@@ -162,3 +162,43 @@ test('hot restart & stop execution guards', () => {
   assert.equal(canPerformStop('stopped', 'starting'), true);
   assert.equal(canPerformStop('stopped', 'idle'), false);
 });
+
+// =============================================================================
+// Suite 5: Resizable Bottom Panel (Feature B)
+// =============================================================================
+import {
+  clampBottomPanelHeight,
+  toggleMaximizeBottomPanel,
+  MIN_BOTTOM_PANEL_HEIGHT,
+  DEFAULT_BOTTOM_PANEL_HEIGHT,
+} from '../ui/features/terminal/bottomPanelResize.ts';
+
+test('bottom panel resize clamp: enforces min 120px and max 80% window height', () => {
+  const winHeight = 1000;
+  // 1. Min clamp
+  assert.equal(clampBottomPanelHeight(50, winHeight), 120);
+  assert.equal(clampBottomPanelHeight(-10, winHeight), 120);
+
+  // 2. Normal range
+  assert.equal(clampBottomPanelHeight(300, winHeight), 300);
+
+  // 3. Max clamp (80% of 1000 = 800)
+  assert.equal(clampBottomPanelHeight(850, winHeight), 800);
+  assert.equal(clampBottomPanelHeight(1200, winHeight), 800);
+});
+
+test('bottom panel maximize/restore toggle on double-click', () => {
+  const winHeight = 1000;
+  const initialHeight = 250;
+
+  // 1. Toggle to maximize
+  const maxResult = toggleMaximizeBottomPanel(initialHeight, 232, winHeight);
+  assert.equal(maxResult.isMaximized, true);
+  assert.equal(maxResult.height, 800); // 80% of 1000
+  assert.equal(maxResult.nextRestoredHeight, 250);
+
+  // 2. Toggle to restore
+  const restoreResult = toggleMaximizeBottomPanel(maxResult.height, maxResult.nextRestoredHeight, winHeight);
+  assert.equal(restoreResult.isMaximized, false);
+  assert.equal(restoreResult.height, 250);
+});
