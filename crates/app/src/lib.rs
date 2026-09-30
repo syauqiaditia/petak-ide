@@ -1,4 +1,5 @@
 mod commands;
+mod agent_commands;
 
 use std::sync::Mutex;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
@@ -34,6 +35,9 @@ pub fn run() {
                     if let Ok(mut sessions) = mirror_state.sessions.lock() {
                         sessions.clear();
                     }
+                }
+                if let Some(agent_state) = window.try_state::<commands::AgentState>() {
+                    agent_state.manager.shutdown_all();
                 }
             }
         })
@@ -91,6 +95,22 @@ pub fn run() {
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(30));
                     reg_tick.tick();
+                }
+            });
+
+            let agent_state = commands::AgentState::default();
+            let agent_mgr = agent_state.manager.clone();
+            let app_handle_for_agent = app_handle.clone();
+            agent_mgr.add_listener(move |event| {
+                let _ = app_handle_for_agent.emit("agent-event", event);
+            });
+            app.manage(agent_state);
+
+            let agent_tick_mgr = agent_mgr.clone();
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                    agent_tick_mgr.tick_idle_reap();
                 }
             });
 
@@ -287,6 +307,12 @@ pub fn run() {
             commands::setting_set,
             commands::editor_ghost_text_get,
             commands::editor_ghost_text_set,
+            // Phase 5 - Agents
+            commands::agent_list_slots,
+            commands::agent_start,
+            commands::agent_prompt,
+            commands::agent_cancel,
+            commands::agent_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
