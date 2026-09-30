@@ -321,3 +321,174 @@ fn test_hermes_acp_real_session_new_only() {
     // Clean shutdown
     client.kill().expect("kill real hermes acp");
 }
+
+#[test]
+fn test_permission_modes_with_fake_agent() {
+    let temp = tempfile::tempdir().unwrap();
+    let manager = Arc::new(SlotManager::with_defaults(Some(temp.path().to_path_buf())));
+
+    // 1. Read mode: denied immediately
+    let mut read_cfg = make_fake_slot_config("slot-read", "Read Slot");
+    read_cfg.permission = "read".to_string();
+    manager.add_slot(read_cfg).unwrap();
+
+    let resp_read = manager.prompt_slot("slot-read", "perm:cargo test").unwrap();
+    let meta = resp_read.meta.unwrap();
+    let perm_res = meta
+        .get("permResult")
+        .and_then(|r| r.get("outcome"))
+        .and_then(|o| o.get("outcome"))
+        .and_then(|s| s.as_str());
+    let perm_err = meta.get("permError");
+    assert!(
+        perm_res == Some("denied") || perm_err.is_some(),
+        "Read mode must deny execution"
+    );
+
+    // 2. Full mode: approved immediately
+    let mut full_cfg = make_fake_slot_config("slot-full", "Full Slot");
+    full_cfg.permission = "full".to_string();
+    manager.add_slot(full_cfg).unwrap();
+
+    let resp_full = manager
+        .prompt_slot("slot-full", "perm:dangerous command")
+        .unwrap();
+    let meta_full = resp_full.meta.unwrap();
+    let perm_res_full = meta_full
+        .get("permResult")
+        .and_then(|r| r.get("outcome"))
+        .and_then(|o| o.get("outcome"))
+        .and_then(|s| s.as_str());
+    assert_eq!(perm_res_full, Some("approved"));
+
+    // 3. Auto mode: allowed command approved without asking
+    let mut auto_cfg = make_fake_slot_config("slot-auto", "Auto Slot");
+    auto_cfg.permission = "auto".to_string();
+    manager.add_slot(auto_cfg).unwrap();
+
+    let resp_auto = manager.prompt_slot("slot-auto", "perm:cargo test").unwrap();
+    let meta_auto = resp_auto.meta.unwrap();
+    let perm_res_auto = meta_auto
+        .get("permResult")
+        .and_then(|r| r.get("outcome"))
+        .and_then(|o| o.get("outcome"))
+        .and_then(|s| s.as_str());
+    assert_eq!(perm_res_auto, Some("approved"));
+
+    // 4. Ask mode: requires response from user
+    let mut ask_cfg = make_fake_slot_config("slot-ask", "Ask Slot");
+    ask_cfg.permission = "ask".to_string();
+    manager.add_slot(ask_cfg).unwrap();
+
+    let mgr_clone = Arc::clone(&manager);
+    let prompt_handle =
+        thread::spawn(move || mgr_clone.prompt_slot("slot-ask", "perm:custom action"));
+
+    // Wait for pending permission request
+    let mut req_id = String::new();
+    for _ in 0..50 {
+        let pending = manager.permission_manager().list_pending();
+        if let Some(r) = pending.first() {
+            req_id = r.request_id.clone();
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !req_id.is_empty(),
+        "Pending permission request should be present"
+    );
+
+    // Respond allow
+    manager.permission_manager().respond(&req_id, true).unwrap();
+
+    let resp_ask = prompt_handle.join().unwrap().unwrap();
+    let meta_ask = resp_ask.meta.unwrap();
+    let perm_res_ask = meta_ask
+        .get("permResult")
+        .and_then(|r| r.get("outcome"))
+        .and_then(|o| o.get("outcome"))
+        .and_then(|s| s.as_str());
+    assert_eq!(perm_res_ask, Some("approved"));
+}
+
+#[test]
+fn test_proposal_workflow_with_fake_agent() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
+    let file_path = root.join("demo.txt");
+    std::fs::write(&file_path, "initial line 1\ninitial line 2\n").unwrap();
+
+    let manager = Arc::new(SlotManager::with_defaults(Some(root.clone())));
+
+    let mut cfg = make_fake_slot_config("slot-prop", "Proposal Slot");
+    cfg.permission = "ask".to_string();
+    manager.add_slot(cfg).unwrap();
+
+    // 1. Agent sends write proposal
+    let mgr_clone = Arc::clone(&manager);
+    let handle = thread::spawn(move || {
+        mgr_clone.prompt_slot(
+            "slot-prop",
+            "write:demo.txt:initial line 1\nmodified line 2\n",
+        )
+    });
+
+    // Wait for proposal to appear in buffer
+    let mut prop_id = String::new();
+    for _ in 0..50 {
+        let proposals = manager.proposal_buffer().list_proposals(Some("slot-prop"));
+        if let Some(p) = proposals.first() {
+            prop_id = p.id.clone();
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!prop_id.is_empty(), "Proposal should be created");
+
+    // Accept proposal
+    manager
+        .proposal_buffer()
+        .accept_proposal(&prop_id, None)
+        .unwrap();
+
+    let prompt_res = handle.join().unwrap().unwrap();
+    let meta = prompt_res.meta.unwrap();
+    assert!(meta.get("writeResult").is_some());
+
+    // Verify file written to disk
+    let disk_content = std::fs::read_to_string(&file_path).unwrap();
+    assert_eq!(disk_content, "initial line 1\nmodified line 2\n");
+}
+
+#[test]
+fn test_team_json_apply_and_roundtrip() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
+
+    let manager = SlotManager::with_defaults(Some(root.clone()));
+
+    let s1 = make_fake_slot_config("slot-1", "Slot One");
+    let s2 = make_fake_slot_config("slot-2", "Slot Two");
+
+    let team = petak_core::agent::TeamConfig {
+        version: 1,
+        slots: vec![s1.clone(), s2.clone()],
+    };
+
+    // Apply team
+    manager.apply_team(&team).unwrap();
+    let slots = manager.list_slots();
+    assert_eq!(slots.len(), 2);
+    assert_eq!(slots[0].id, "slot-1");
+    assert_eq!(slots[1].id, "slot-2");
+
+    // Save and load
+    let saved_path = manager.save_team(&team).unwrap();
+    assert!(saved_path.is_file());
+
+    let (loaded, _) = manager.load_team();
+    assert_eq!(loaded.version, 1);
+    assert_eq!(loaded.slots.len(), 2);
+    assert_eq!(loaded.slots[0].id, "slot-1");
+}

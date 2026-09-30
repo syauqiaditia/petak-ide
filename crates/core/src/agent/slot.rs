@@ -1,4 +1,8 @@
 use super::acp::{AcpClient, AcpError, ModelOption, PromptResponse};
+use super::perm::{PermissionManager, PermissionMode};
+use super::proposal::ProposalBuffer;
+use super::team::TeamConfig;
+use super::usage::{parse_usage, UsageReport};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
@@ -161,6 +165,16 @@ pub enum SlotEvent {
     Reaped {
         slot_id: String,
     },
+    PermissionRequested {
+        slot_id: String,
+        request_id: String,
+        tool_call: Value,
+    },
+    ProposalCreated {
+        slot_id: String,
+        proposal_id: String,
+        path: String,
+    },
 }
 
 pub type SlotEventCallback = Arc<dyn Fn(SlotEvent) + Send + Sync + 'static>;
@@ -172,6 +186,8 @@ pub struct SlotManager {
     max_active_slots: usize,
     idle_timeout: Duration,
     listeners: Mutex<Vec<SlotEventCallback>>,
+    perm_manager: Arc<PermissionManager>,
+    proposal_buffer: Arc<ProposalBuffer>,
 }
 
 impl SlotManager {
@@ -180,6 +196,9 @@ impl SlotManager {
         max_active_slots: usize,
         idle_timeout: Duration,
     ) -> Self {
+        let perm_manager = Arc::new(PermissionManager::default());
+        let proposal_buffer = Arc::new(ProposalBuffer::new(project_root.clone()));
+
         Self {
             slots: RwLock::new(HashMap::new()),
             order: RwLock::new(Vec::new()),
@@ -191,6 +210,8 @@ impl SlotManager {
             },
             idle_timeout,
             listeners: Mutex::new(Vec::new()),
+            perm_manager,
+            proposal_buffer,
         }
     }
 
@@ -199,8 +220,11 @@ impl SlotManager {
     }
 
     pub fn set_project_root(&self, root: Option<PathBuf>) {
-        let mut pr = self.project_root.lock().unwrap();
-        *pr = root;
+        {
+            let mut pr = self.project_root.lock().unwrap();
+            *pr = root.clone();
+        }
+        self.proposal_buffer.set_project_root(root);
     }
 
     pub fn project_root(&self) -> Option<PathBuf> {
@@ -253,6 +277,96 @@ impl SlotManager {
         } else {
             Err(format!("Slot '{}' not found", slot_id))
         }
+    }
+
+    pub fn update_slot(&self, config: SlotConfig) -> Result<SlotSummary, String> {
+        let mut slots = self.slots.write().unwrap();
+        let slot = slots
+            .get_mut(&config.id)
+            .ok_or_else(|| format!("Slot '{}' tidak ditemukan", config.id))?;
+
+        let old_config = slot.config.clone();
+        slot.config = config.clone();
+
+        // If runtime command or profile changed and client is active, stop it
+        if (old_config.kind != config.kind
+            || old_config.command != config.command
+            || old_config.hermes_profile != config.hermes_profile)
+            && slot.client.is_some()
+        {
+            if let Some(client) = slot.client.take() {
+                let _ = client.kill();
+            }
+            slot.session_id = None;
+            slot.status = SlotStatus::Idle;
+            self.emit(SlotEvent::StatusChanged {
+                slot_id: config.id.clone(),
+                status: SlotStatus::Idle,
+            });
+        }
+
+        Ok(slot_to_summary(slot))
+    }
+
+    pub fn apply_team(&self, team: &TeamConfig) -> Result<(), String> {
+        let new_ids: Vec<String> = team.slots.iter().map(|s| s.id.clone()).collect();
+
+        // 1. Remove slots no longer in team
+        let current_ids: Vec<String> = {
+            let order = self.order.read().unwrap();
+            order.clone()
+        };
+        for id in current_ids {
+            if !new_ids.contains(&id) {
+                let _ = self.remove_slot(&id);
+            }
+        }
+
+        // 2. Add or update slots
+        for slot_cfg in &team.slots {
+            let exists = {
+                let slots = self.slots.read().unwrap();
+                slots.contains_key(&slot_cfg.id)
+            };
+            if exists {
+                self.update_slot(slot_cfg.clone())?;
+            } else {
+                self.add_slot(slot_cfg.clone())?;
+            }
+        }
+
+        // 3. Update order
+        let mut order = self.order.write().unwrap();
+        *order = new_ids;
+
+        Ok(())
+    }
+
+    pub fn load_team(&self) -> (TeamConfig, PathBuf) {
+        let root = self.project_root();
+        crate::agent::team::load_team(root.as_deref())
+    }
+
+    pub fn save_team(&self, team: &TeamConfig) -> Result<PathBuf, String> {
+        let root = self.project_root();
+        crate::agent::team::save_team(root.as_deref(), team)
+    }
+
+    pub fn permission_manager(&self) -> Arc<PermissionManager> {
+        Arc::clone(&self.perm_manager)
+    }
+
+    pub fn proposal_buffer(&self) -> Arc<ProposalBuffer> {
+        Arc::clone(&self.proposal_buffer)
+    }
+
+    pub fn get_slot_usage(&self, slot_id: &str) -> Result<UsageReport, String> {
+        let slots = self.slots.read().unwrap();
+        let slot = slots
+            .get(slot_id)
+            .ok_or_else(|| format!("Slot '{slot_id}' tidak ditemukan"))?;
+
+        Ok(parse_usage(slot.capabilities.last_usage.as_ref(), None))
     }
 
     pub fn list_slots(&self) -> Vec<SlotSummary> {
@@ -401,25 +515,153 @@ impl SlotManager {
             guard.clone()
         };
 
-        let client = AcpClient::spawn(&cmd_str, &args, &env, project_root, move |update_val| {
-            let session_id = update_val
-                .get("sessionId")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string();
-            let actual_update = update_val
-                .get("update")
-                .cloned()
-                .unwrap_or(update_val.clone());
+        let perm_mgr = Arc::clone(&self.perm_manager);
+        let prop_buf = Arc::clone(&self.proposal_buffer);
+        let proj_root_buf = project_root.map(|p| p.to_path_buf());
+        let slot_permission_str = config.permission.clone();
+        let slot_id_for_req = slot_id.clone();
+        let listeners_for_req = listeners.clone();
 
-            for listener in &listeners {
-                listener(SlotEvent::Update {
-                    slot_id: slot_id.clone(),
-                    session_id: session_id.clone(),
-                    update: actual_update.clone(),
-                });
-            }
-        })?;
+        let client = AcpClient::spawn_with_handler(
+            &cmd_str,
+            &args,
+            &env,
+            project_root,
+            move |update_val| {
+                let session_id = update_val
+                    .get("sessionId")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let actual_update = update_val
+                    .get("update")
+                    .cloned()
+                    .unwrap_or(update_val.clone());
+
+                for listener in &listeners {
+                    listener(SlotEvent::Update {
+                        slot_id: slot_id.clone(),
+                        session_id: session_id.clone(),
+                        update: actual_update.clone(),
+                    });
+                }
+            },
+            Some(
+                move |method: &str, params: Value| -> Option<Result<Value, (i64, String)>> {
+                    match method {
+                        "session/request_permission" => {
+                            let mode = PermissionMode::from_str_opt(&slot_permission_str);
+                            let tool_call = params
+                                .get("toolCall")
+                                .cloned()
+                                .unwrap_or_else(|| params.clone());
+                            let sess_id = params
+                                .get("sessionId")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+
+                            match perm_mgr.request_permission(
+                                &slot_id_for_req,
+                                &sess_id,
+                                mode,
+                                &tool_call,
+                                Duration::from_secs(120),
+                            ) {
+                                Ok(true) => Some(Ok(serde_json::json!({
+                                    "outcome": { "outcome": "approved" }
+                                }))),
+                                Ok(false) => Some(Ok(serde_json::json!({
+                                    "outcome": { "outcome": "denied" }
+                                }))),
+                                Err(e) => Some(Err((-32000, e))),
+                            }
+                        }
+                        "fs/read_text_file" => {
+                            let path = match params.get("path").and_then(|p| p.as_str()) {
+                                Some(p) => p,
+                                None => {
+                                    return Some(Err((
+                                        -32602,
+                                        "Missing 'path' parameter".to_string(),
+                                    )))
+                                }
+                            };
+                            let resolved = if let Some(ref root) = proj_root_buf {
+                                match crate::fsops::resolve_in_root(root, path) {
+                                    Ok(r) => r,
+                                    Err(e) => {
+                                        return Some(Err((
+                                            -32000,
+                                            format!("Path traversal error: {e}"),
+                                        )))
+                                    }
+                                }
+                            } else {
+                                PathBuf::from(path)
+                            };
+                            match crate::fs::read_file(&resolved) {
+                                Ok(content) => Some(Ok(serde_json::json!({ "content": content }))),
+                                Err(e) => Some(Err((-32000, format!("Gagal membaca file: {e}")))),
+                            }
+                        }
+                        "fs/write_text_file" => {
+                            let mode = PermissionMode::from_str_opt(&slot_permission_str);
+                            if mode == PermissionMode::Read {
+                                return Some(Err((
+                                    -32000,
+                                    "Mode read-only: penulisan file ditolak".to_string(),
+                                )));
+                            }
+                            let path = match params.get("path").and_then(|p| p.as_str()) {
+                                Some(p) => p,
+                                None => {
+                                    return Some(Err((
+                                        -32602,
+                                        "Missing 'path' parameter".to_string(),
+                                    )))
+                                }
+                            };
+                            let content = match params.get("content").and_then(|c| c.as_str()) {
+                                Some(c) => c,
+                                None => {
+                                    return Some(Err((
+                                        -32602,
+                                        "Missing 'content' parameter".to_string(),
+                                    )))
+                                }
+                            };
+                            let sess_id = params
+                                .get("sessionId")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("")
+                                .to_string();
+
+                            let (prop, rx) =
+                                prop_buf.create_proposal(&slot_id_for_req, &sess_id, path, content);
+
+                            for listener in &listeners_for_req {
+                                listener(SlotEvent::ProposalCreated {
+                                    slot_id: slot_id_for_req.clone(),
+                                    proposal_id: prop.id.clone(),
+                                    path: path.to_string(),
+                                });
+                            }
+
+                            match rx.recv_timeout(Duration::from_secs(180)) {
+                                Ok(Ok(())) => Some(Ok(serde_json::json!({}))),
+                                Ok(Err(e)) => Some(Err((-32000, e))),
+                                Err(_) => Some(Err((
+                                    -32000,
+                                    "Proposal dibatalkan atau waktu tunggu habis".to_string(),
+                                ))),
+                            }
+                        }
+                        _ => None,
+                    }
+                },
+            ),
+        )?;
 
         // 1. Initialize handshake (timeout 15s)
         let init_res = client.initialize(Duration::from_secs(15))?;
