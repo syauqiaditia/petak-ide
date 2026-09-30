@@ -1,0 +1,19 @@
+{
+  "id": 501,
+  "iid": 1,
+  "project_id": 1234,
+  "title": "Add modern offline caching mechanism",
+  "state": "opened",
+  "changes": [
+    {
+      "old_path": "src/cache.rs",
+      "new_path": "src/cache.rs",
+      "a_mode": "100644",
+      "b_mode": "100644",
+      "new_file": true,
+      "renamed_file": false,
+      "deleted_file": false,
+      "diff": "@@ -0,0 +1,15 @@\n+pub struct Cache {\n+    capacity: usize,\n+}\n+\n+impl Cache {\n+    pub fn new(capacity: usize) -> Self {\n+        Self { capacity }\n+    }\n+}"
+    }
+  ]
+}

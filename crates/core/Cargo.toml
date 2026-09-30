@@ -16,8 +16,10 @@ trash = "5"
 sha2 = "0.10"
 dirs = "5"
 tempfile = "3.8"
+ureq = { version = "2.10", default-features = false, features = ["native-tls", "json"] }
 
 [dev-dependencies]
+tiny_http = "0.12"
 
 [[example]]
 name = "fake_lsp"
