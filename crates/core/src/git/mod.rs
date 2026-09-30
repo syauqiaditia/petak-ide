@@ -9,6 +9,7 @@ pub mod path;
 pub mod rebase;
 pub mod remote;
 pub mod status;
+pub mod stash;
 
 pub use backup::{backup_create, backup_delete, backup_list, backup_restore};
 pub use conflict::{
@@ -45,6 +46,7 @@ pub use rebase::{
 };
 pub use remote::{fetch, pull, push, remotes};
 pub use status::{parse_status, status};
+pub use stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_push, StashEntry};
 
 use std::fs;
 use std::path::Path;

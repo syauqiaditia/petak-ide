@@ -309,6 +309,11 @@ pub fn run() {
             commands::git_unstage_paths,
             commands::git_commit_selected,
             commands::git_delete_untracked,
+            commands::git_stash_push,
+            commands::git_stash_list,
+            commands::git_stash_apply,
+            commands::git_stash_pop,
+            commands::git_stash_drop,
             // Batch 3 - Ghost-text & Settings
             commands::suggest_index_build,
             commands::suggest_index_update,

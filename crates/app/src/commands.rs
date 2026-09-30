@@ -3374,6 +3374,71 @@ pub async fn git_delete_untracked(
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn git_stash_push(
+    root: String,
+    message: Option<String>,
+    include_untracked: Option<bool>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_push(
+            &exec,
+            repo,
+            message.as_deref(),
+            include_untracked.unwrap_or(true),
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stash_list(root: String) -> Result<Vec<petak_core::git::StashEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_list(&exec, repo).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stash_apply(root: String, index: usize) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_apply(&exec, repo, index).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stash_pop(root: String, index: Option<usize>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_pop(&exec, repo, index).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stash_drop(root: String, index: usize) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_drop(&exec, repo, index).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ──────────── Batch 3 Ghost-text suggest & Settings ────────────
 
 pub fn suggest_app_data_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
