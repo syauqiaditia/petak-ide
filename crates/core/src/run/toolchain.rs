@@ -27,6 +27,8 @@ pub struct Toolchain {
     pub sourcekit: Option<Tool>,
     #[serde(default)]
     pub effective_path: Option<String>,
+    #[serde(default)]
+    pub scrcpy: Option<Tool>,
 }
 
 /// Detect installed developer tools and SDKs.
@@ -51,7 +53,10 @@ pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
     // 6. SourceKit-LSP
     let sourcekit = detect_sourcekit(root, exec);
 
-    // 7. Effective PATH
+    // 7. scrcpy (mirror service)
+    let scrcpy = detect_scrcpy(root, exec);
+
+    // 8. Effective PATH
     let effective_path = Some(crate::toolchain::effective_path_for_root(Some(root)));
 
     Toolchain {
@@ -66,6 +71,7 @@ pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
         kotlin_ls,
         sourcekit,
         effective_path,
+        scrcpy,
     }
 }
 
@@ -316,6 +322,42 @@ fn detect_sourcekit(root: &Path, exec: &dyn Exec) -> Option<Tool> {
     })
 }
 
+fn detect_scrcpy(root: &Path, exec: &dyn Exec) -> Option<Tool> {
+    detect_scrcpy_internal(root, exec, crate::mirror::server::resolve_server_jar().ok())
+}
+
+fn detect_scrcpy_internal(
+    root: &Path,
+    exec: &dyn Exec,
+    resolved_server_jar: Option<String>,
+) -> Option<Tool> {
+    // 1. Check if scrcpy-server jar is resolved
+    if let Some(jar_path) = resolved_server_jar {
+        return Some(Tool {
+            path: jar_path,
+            version: Some(crate::mirror::server::SCRCPY_VERSION.to_string()),
+        });
+    }
+
+    // 2. Check scrcpy executable in path
+    if let Some(scrcpy_bin) = crate::toolchain::resolve_scrcpy() {
+        let path_str = scrcpy_bin.to_string_lossy().to_string();
+        let version = match exec.run(root, &path_str, &["--version"], &[], None) {
+            Ok(out) if out.status.success() => {
+                let s = String::from_utf8_lossy(&out.stdout);
+                s.lines().next().map(|l| l.trim().to_string())
+            }
+            _ => None,
+        };
+        return Some(Tool {
+            path: path_str,
+            version,
+        });
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,5 +473,30 @@ mod tests {
         assert!(tc.emulator.is_some(), "emulator should be detected on server");
         #[cfg(not(target_os = "macos"))]
         assert!(tc.xcrun.is_none());
+    }
+
+    #[test]
+    fn test_detect_scrcpy_resolved_jar_and_missing() {
+        let fake = FakeToolchainExec {
+            responses: Mutex::new(HashMap::new()),
+        };
+
+        // When server jar is resolved
+        let tool = detect_scrcpy_internal(
+            Path::new("."),
+            &fake,
+            Some("/opt/homebrew/share/scrcpy/scrcpy-server".to_string()),
+        );
+        assert!(tool.is_some());
+        let scrcpy = tool.unwrap();
+        assert_eq!(scrcpy.path, "/opt/homebrew/share/scrcpy/scrcpy-server");
+        assert_eq!(
+            scrcpy.version,
+            Some(crate::mirror::server::SCRCPY_VERSION.to_string())
+        );
+
+        // When neither jar nor executable exists
+        let missing = detect_scrcpy_internal(Path::new("."), &fake, None);
+        assert!(missing.is_none());
     }
 }

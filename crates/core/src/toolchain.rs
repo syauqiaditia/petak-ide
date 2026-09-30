@@ -372,17 +372,27 @@ pub fn compute_effective_path_with(
         let sdk_dir = h.join("SDK");
         if sdk_dir.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&sdk_dir) {
+                let mut flutter_dirs: Vec<(PathBuf, String)> = Vec::new();
                 for entry in entries.flatten() {
                     let path = entry.path();
                     let name = entry.file_name().to_string_lossy().to_string();
                     if name.contains("flutter") {
-                        let bin = path.join("bin");
-                        if bin.exists() {
-                            candidate_dirs.push(bin.clone());
-                            let dart_bin = bin.join("cache").join("dart-sdk").join("bin");
-                            if dart_bin.exists() {
-                                candidate_dirs.push(dart_bin);
-                            }
+                        flutter_dirs.push((path, name));
+                    }
+                }
+                // Sort descending so newer Flutter versions (e.g. flutter_3.35.7) take priority over older (e.g. flutter_2.10.5)
+                flutter_dirs.sort_by(|a, b| {
+                    let key_a = parse_version_key(&a.1);
+                    let key_b = parse_version_key(&b.1);
+                    key_b.cmp(&key_a).then_with(|| b.1.cmp(&a.1))
+                });
+                for (path, _) in flutter_dirs {
+                    let bin = path.join("bin");
+                    if bin.exists() {
+                        candidate_dirs.push(bin.clone());
+                        let dart_bin = bin.join("cache").join("dart-sdk").join("bin");
+                        if dart_bin.exists() {
+                            candidate_dirs.push(dart_bin);
                         }
                     }
                 }
@@ -667,6 +677,23 @@ fn dedup_and_join_paths(paths: &[String]) -> String {
         .unwrap_or_else(|_| paths.join(":"))
 }
 
+/// Extract numeric version components from a directory or version name (e.g. "flutter_3.35.7" -> [3, 35, 7]).
+fn parse_version_key(name: &str) -> Vec<u64> {
+    let mut nums = Vec::new();
+    let mut current_num = None;
+    for ch in name.chars() {
+        if ch.is_ascii_digit() {
+            current_num = Some(current_num.unwrap_or(0) * 10 + ch.to_digit(10).unwrap() as u64);
+        } else if let Some(n) = current_num.take() {
+            nums.push(n);
+        }
+    }
+    if let Some(n) = current_num {
+        nums.push(n);
+    }
+    nums
+}
+
 /// Resolve the Dart binary. Prefers project Flutter / SDK dart over global.
 pub fn resolve_dart(project_root: Option<&Path>) -> Option<PathBuf> {
     let path = if let Some(r) = project_root {
@@ -887,6 +914,23 @@ pub fn resolve_sourcekit_lsp() -> Option<PathBuf> {
     }
 
     None
+}
+
+/// Resolve scrcpy binary from effective PATH.
+pub fn resolve_scrcpy() -> Option<PathBuf> {
+    let path = effective_path();
+    for dir in std::env::split_paths(&path) {
+        let scrcpy = dir.join("scrcpy");
+        if scrcpy.is_file() {
+            return Some(scrcpy);
+        }
+    }
+    None
+}
+
+/// Detect installed developer tools and SDKs (alias for `crate::run::detect`).
+pub fn detect_toolchain(root: &Path, exec: &dyn crate::exec::Exec) -> crate::run::Toolchain {
+    crate::run::detect(root, exec)
 }
 
 /// Resolve ANDROID_HOME directory.
@@ -1494,5 +1538,47 @@ mod tests {
         let json_camel = r#"{"bottomPanelHeight": 320}"#;
         let cfg_camel: ToolchainConfig = serde_json::from_str(json_camel).unwrap();
         assert_eq!(cfg_camel.bottom_panel_height, Some(320));
+    }
+
+    #[test]
+    fn test_sdk_flutter_versions_sort_descending_selects_highest_version() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Create older version: flutter_2.10.5
+        let flutter_2_bin = tmp.path().join("SDK").join("flutter_2.10.5").join("bin");
+        let flutter_2_dart = flutter_2_bin.join("cache").join("dart-sdk").join("bin");
+        std::fs::create_dir_all(&flutter_2_dart).unwrap();
+        std::fs::write(flutter_2_bin.join("flutter"), "#!/bin/sh\n").unwrap();
+        std::fs::write(flutter_2_dart.join("dart"), "#!/bin/sh\n").unwrap();
+
+        // Create newer version: flutter_3.35.7
+        let flutter_3_bin = tmp.path().join("SDK").join("flutter_3.35.7").join("bin");
+        let flutter_3_dart = flutter_3_bin.join("cache").join("dart-sdk").join("bin");
+        std::fs::create_dir_all(&flutter_3_dart).unwrap();
+        std::fs::write(flutter_3_bin.join("flutter"), "#!/bin/sh\n").unwrap();
+        std::fs::write(flutter_3_dart.join("dart"), "#!/bin/sh\n").unwrap();
+
+        let path = compute_effective_path_with(
+            Some(tmp.path()),
+            None,
+            Duration::from_millis(50),
+            None,
+        );
+
+        // Verify flutter_3.35.7 is placed before flutter_2.10.5 in PATH
+        let pos_3 = path
+            .find(&flutter_3_dart.to_string_lossy().to_string())
+            .expect("flutter_3 dart in PATH");
+        let pos_2 = path
+            .find(&flutter_2_dart.to_string_lossy().to_string())
+            .expect("flutter_2 dart in PATH");
+        assert!(
+            pos_3 < pos_2,
+            "flutter_3.35.7 must appear before flutter_2.10.5 in PATH"
+        );
+
+        // Verify resolve_dart_in_path selects flutter_3.35.7's dart
+        let resolved_dart = resolve_dart_in_path(&path, None, &ToolchainConfig::default());
+        assert_eq!(resolved_dart, Some(flutter_3_dart.join("dart")));
     }
 }
