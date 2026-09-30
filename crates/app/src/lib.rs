@@ -313,6 +313,15 @@ pub fn run() {
             commands::agent_prompt,
             commands::agent_cancel,
             commands::agent_stop,
+            // Phase 5 - GitLab MR
+            commands::mr_get_token_scope,
+            commands::mr_current_user,
+            commands::mr_list,
+            commands::mr_detail,
+            commands::mr_pipelines,
+            commands::mr_pipeline_jobs,
+            commands::mr_diffs,
+            commands::mr_discussions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

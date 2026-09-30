@@ -3073,3 +3073,4 @@ pub fn editor_ghost_text_set(app: tauri::AppHandle, enabled: bool) -> Result<(),
 }
 
 pub use crate::agent_commands::*;
+#[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;
