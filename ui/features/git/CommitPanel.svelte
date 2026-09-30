@@ -16,6 +16,7 @@
     getUnifiedStatusLetter,
     type FileContextAction,
   } from './commitSelectionLogic';
+  import StashModal from './StashModal.svelte';
 
   let commitMessage = $state('');
   let isAmend = $state(false);
@@ -28,6 +29,34 @@
   let contextMenuPos = $state<{ x: number; y: number }>({ x: 180, y: 160 });
   let contextTargetEntry = $state<GitStatusEntry | null>(null);
   let contextTargetStaged = $state(false);
+
+  let emptyContextMenuOpen = $state(false);
+  let emptyContextMenuPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+  let stashModalOpen = $state(false);
+  let stashModalMode = $state<'push' | 'list'>('push');
+
+  function handleEmptyAreaContextMenu(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest('.file-row')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    contextMenuOpen = false;
+    emptyContextMenuPos = { x: e.clientX, y: e.clientY };
+    emptyContextMenuOpen = true;
+  }
+
+  async function handlePopLatestStash() {
+    emptyContextMenuOpen = false;
+    if (!gitStore.root) return;
+    try {
+      const res = await api.gitStashPop(gitStore.root, 0);
+      gitStore.showToast(res || 'Popped latest stash', { type: 'success' });
+      await gitStore.refresh();
+    } catch (e: any) {
+      gitStore.showToast(`Failed to pop stash: ${e?.message || e}`, { type: 'error' });
+    }
+  }
 
   $effect(() => {
     if (contextMenuOpen && !contextTargetEntry && gitStore.status.entries.length > 0) {
@@ -202,7 +231,7 @@
   }
 </script>
 
-<svelte:window onclick={() => { if (contextMenuOpen) contextMenuOpen = false; }} />
+<svelte:window onclick={() => { contextMenuOpen = false; emptyContextMenuOpen = false; }} />
 
 <div class="commit-panel">
   <!-- Select All Bar (F3 / Feature C) -->
@@ -222,7 +251,7 @@
   {/if}
 
   <!-- Single Unified Changes List (Feature C) -->
-  <div class="files-container">
+  <div class="files-container" oncontextmenu={handleEmptyAreaContextMenu}>
     <div class="group-section">
       <div class="group-header">
         <label class="group-header-label">
@@ -359,6 +388,54 @@
         </button>
       {/each}
     </div>
+  {/if}
+
+  <!-- Empty Area Context Menu for Stash (Item 11) -->
+  {#if emptyContextMenuOpen}
+    <div
+      class="file-context-menu"
+      style:left="{emptyContextMenuPos.x}px"
+      style:top="{emptyContextMenuPos.y}px"
+      role="menu"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <button
+        class="context-menu-item"
+        onclick={() => {
+          emptyContextMenuOpen = false;
+          stashModalMode = 'push';
+          stashModalOpen = true;
+        }}
+      >
+        Stash Changes…
+      </button>
+      <button
+        class="context-menu-item"
+        onclick={handlePopLatestStash}
+      >
+        Pop Latest Stash
+      </button>
+      <button
+        class="context-menu-item"
+        onclick={() => {
+          emptyContextMenuOpen = false;
+          stashModalMode = 'list';
+          stashModalOpen = true;
+        }}
+      >
+        View Stashes…
+      </button>
+    </div>
+  {/if}
+
+  <!-- Stash Modal Dialog -->
+  {#if stashModalOpen && gitStore.root}
+    <StashModal
+      root={gitStore.root}
+      initialMode={stashModalMode}
+      onclose={() => (stashModalOpen = false)}
+    />
   {/if}
 </div>
 
