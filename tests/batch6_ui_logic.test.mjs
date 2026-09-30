@@ -186,3 +186,74 @@ test('commit checkbox lokal: instant in-memory toggle, per-repo memory, default 
   assert.equal(isPathChecked(repo1, 'lib/main.dart'), true);
   assert.equal(isPathChecked(repo1, 'pubspec.yaml'), true);
 });
+
+// =============================================================================
+// Suite 3: Double Shift Detector (Item 10)
+// =============================================================================
+import { createDoubleShiftDetector } from '../ui/features/search/keymap.ts';
+
+test('double shift detector: unit tests with fake timer', () => {
+  let virtualTime = 1000;
+  const now = () => virtualTime;
+  let triggerCount = 0;
+
+  const detector = createDoubleShiftDetector({
+    thresholdMs: 350,
+    onTrigger: () => {
+      triggerCount++;
+    },
+    now,
+  });
+
+  // Scenario 1: Quick double-shift (100ms apart) -> triggers once
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 50;
+  detector.handleKeyUp({ key: 'Shift' });
+  virtualTime += 100;
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 50;
+  detector.handleKeyUp({ key: 'Shift' });
+
+  assert.equal(triggerCount, 1, 'Quick double-shift must trigger once');
+
+  // Scenario 2: Slow shift presses (>350ms apart) -> does not trigger
+  virtualTime += 1000;
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 50;
+  detector.handleKeyUp({ key: 'Shift' });
+  virtualTime += 400; // 400ms > 350ms
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 50;
+  detector.handleKeyUp({ key: 'Shift' });
+
+  assert.equal(triggerCount, 1, 'Slow shift presses > 350ms must not trigger');
+
+  // Scenario 3: Shift + A (typing capital letter) -> interrupts, does not trigger
+  virtualTime += 1000;
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 30;
+  detector.handleKeyDown({ key: 'A' });
+  virtualTime += 20;
+  detector.handleKeyUp({ key: 'A' });
+  virtualTime += 20;
+  detector.handleKeyUp({ key: 'Shift' });
+
+  virtualTime += 100; // Follow-up quick shift
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 50;
+  detector.handleKeyUp({ key: 'Shift' });
+
+  assert.equal(triggerCount, 1, 'Shift+Letter sequence must not trigger double-shift');
+
+  // Scenario 4: Shift repeat event (holding down Shift) -> ignored
+  virtualTime += 1000;
+  detector.handleKeyDown({ key: 'Shift' });
+  virtualTime += 100;
+  detector.handleKeyDown({ key: 'Shift', repeat: true });
+  virtualTime += 100;
+  detector.handleKeyDown({ key: 'Shift', repeat: true });
+  virtualTime += 100;
+  detector.handleKeyUp({ key: 'Shift' });
+
+  assert.equal(triggerCount, 1, 'Holding shift with repeat events must not trigger');
+});

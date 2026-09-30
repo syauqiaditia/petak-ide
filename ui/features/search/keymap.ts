@@ -24,14 +24,70 @@ export function showIntentions() {
   console.debug('[Petak] Alt-Enter / showIntentions called (Phase 2 stub)');
 }
 
-export function registerKeymap(callbacks: KeymapCallbacks): () => void {
+export interface DoubleShiftOptions {
+  thresholdMs?: number;
+  onTrigger: () => void;
+  now?: () => number;
+}
+
+export function createDoubleShiftDetector(options: DoubleShiftOptions) {
+  const threshold = options.thresholdMs ?? 350;
+  const getNow = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
+
   let lastShiftKeyUp = 0;
-  let shiftInterrupted = false;
+  let shiftPressed = false;
+  let interrupted = false;
+
+  return {
+    handleKeyDown(e: { key: string; repeat?: boolean; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean }) {
+      if (e.repeat) return;
+      if (e.key === 'Shift') {
+        shiftPressed = true;
+        interrupted = false;
+      } else {
+        interrupted = true;
+        lastShiftKeyUp = 0;
+      }
+    },
+    handleKeyUp(e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean }) {
+      if (e.key === 'Shift') {
+        const wasPressed = shiftPressed;
+        shiftPressed = false;
+        if (!interrupted && wasPressed && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          const now = getNow();
+          if (lastShiftKeyUp > 0 && now - lastShiftKeyUp <= threshold) {
+            lastShiftKeyUp = 0;
+            options.onTrigger();
+          } else {
+            lastShiftKeyUp = now;
+          }
+        } else {
+          lastShiftKeyUp = 0;
+        }
+        interrupted = false;
+      } else {
+        interrupted = true;
+        lastShiftKeyUp = 0;
+      }
+    },
+    reset() {
+      lastShiftKeyUp = 0;
+      shiftPressed = false;
+      interrupted = false;
+    },
+  };
+}
+
+export function registerKeymap(callbacks: KeymapCallbacks): () => void {
+  const shiftDetector = createDoubleShiftDetector({
+    thresholdMs: 350,
+    onTrigger: () => {
+      callbacks.openPalette('everywhere');
+    },
+  });
 
   function onKeyDown(e: KeyboardEvent) {
-    if (e.key !== 'Shift') {
-      shiftInterrupted = true;
-    }
+    shiftDetector.handleKeyDown(e);
 
     // Alt-Enter (Option-Enter on macOS): Quick fix / intentions stub
     if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'Enter') {
@@ -158,23 +214,7 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
   }
 
   function onKeyUp(e: KeyboardEvent) {
-    if (e.key === 'Shift') {
-      if (!shiftInterrupted && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const now = performance.now();
-        if (lastShiftKeyUp > 0 && now - lastShiftKeyUp <= 300) {
-          lastShiftKeyUp = 0;
-          callbacks.openPalette('everywhere');
-          return;
-        } else {
-          lastShiftKeyUp = now;
-        }
-      } else {
-        lastShiftKeyUp = 0;
-      }
-      shiftInterrupted = false;
-    } else {
-      shiftInterrupted = true;
-    }
+    shiftDetector.handleKeyUp(e);
   }
 
   window.addEventListener('keydown', onKeyDown, { capture: true });
