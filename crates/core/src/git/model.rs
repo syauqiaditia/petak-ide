@@ -194,7 +194,7 @@ pub struct BranchList {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct LogFilter {
     pub branches: Vec<String>,
     pub author: Option<String>,
@@ -229,8 +229,8 @@ pub struct RebaseItem {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct RebasePlan {
     pub base: String,
     pub items: Vec<RebaseItem>,
@@ -368,4 +368,41 @@ pub struct BlameLine {
     pub author: String,
     pub time_unix: i64,
     pub summary: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_filter_deserialize_empty_object() {
+        let json = "{}";
+        let filter: LogFilter =
+            serde_json::from_str(json).expect("should deserialize empty object");
+        assert_eq!(filter.branches, Vec::<String>::new());
+        assert_eq!(filter.author, None);
+        assert_eq!(filter.since, None);
+        assert_eq!(filter.until, None);
+        assert_eq!(filter.path, None);
+        assert_eq!(filter.text, None);
+    }
+
+    #[test]
+    fn test_log_filter_deserialize_without_branches() {
+        let json = r#"{"text": "fix", "author": "UQi"}"#;
+        let filter: LogFilter =
+            serde_json::from_str(json).expect("should deserialize without branches");
+        assert_eq!(filter.branches, Vec::<String>::new());
+        assert_eq!(filter.text.as_deref(), Some("fix"));
+        assert_eq!(filter.author.as_deref(), Some("UQi"));
+    }
+
+    #[test]
+    fn test_rebase_plan_deserialize_default() {
+        let json = r#"{"base": "main", "items": []}"#;
+        let plan: RebasePlan =
+            serde_json::from_str(json).expect("should deserialize without backup");
+        assert_eq!(plan.base, "main");
+        assert!(!plan.backup);
+    }
 }
