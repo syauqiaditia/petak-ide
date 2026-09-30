@@ -1,5 +1,6 @@
 export type MirrorUiState =
   | 'empty'
+  | 'picker'
   | 'connecting'
   | 'live'
   | 'disconnected'

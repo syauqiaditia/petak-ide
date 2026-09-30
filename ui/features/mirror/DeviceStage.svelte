@@ -8,6 +8,7 @@
   import StateConnecting from './states/StateConnecting.svelte';
   import StateDisconnected from './states/StateDisconnected.svelte';
   import StateError from './states/StateError.svelte';
+  import DevicePickerView from './DevicePickerView.svelte';
 
   let {
     onSelectDevice,
@@ -56,8 +57,8 @@
 </script>
 
 <div class="device-stage" bind:this={stageEl}>
-  {#if status === 'empty'}
-    <StateEmpty {onSelectDevice} />
+  {#if status === 'empty' || status === 'picker'}
+    <DevicePickerView />
   {:else if status === 'connecting'}
     <StateConnecting />
   {:else if status === 'error'}

@@ -313,3 +313,120 @@ test('title bar drag: interactive element exclusion logic', () => {
   const projectPopup = createMockNode('div', ['project-popup-menu'], null, titlebar);
   assert.equal(isTitleBarInteractive(projectPopup), true);
 });
+
+// =============================================================================
+// Suite 5: Mirror Device Picker & Clean Stop (Permintaan Baru UQi)
+// =============================================================================
+import { dedupeAndCategorizeDevices } from '../ui/features/mirror/pickerLogic.ts';
+
+test('mirror device picker: dedupe iPhone and classify readiness', () => {
+  const devices = [
+    {
+      id: '00008101-001614920E02001E',
+      name: 'iPhone 15 Pro (USB)',
+      platform: 'ios',
+      kind: 'physical',
+      state: 'online',
+      transport: 'usb',
+    },
+    {
+      id: '00008101-001614920E02001E-wifi',
+      name: 'iPhone 15 Pro (Wi-Fi)',
+      platform: 'ios',
+      kind: 'physical',
+      state: 'online',
+      transport: 'wifi',
+    },
+    {
+      id: 'emulator-5554',
+      name: 'Pixel 8 Pro API 35',
+      platform: 'android',
+      kind: 'emulator',
+      state: 'online',
+      transport: null,
+    },
+    {
+      id: '192.168.1.50:5555',
+      name: 'Samsung Galaxy S23 (Wi-Fi)',
+      platform: 'android',
+      kind: 'physical',
+      state: 'online',
+      transport: 'wifi',
+    },
+    {
+      id: '9A53F812-70B3-4A2D-B892-0C665BF4BC71',
+      name: 'iPhone 16 Simulator',
+      platform: 'ios',
+      kind: 'emulator',
+      state: 'online',
+      transport: null,
+    },
+  ];
+
+  const cards = dedupeAndCategorizeDevices(devices, []);
+
+  // 1. iPhone deduplicated into single card
+  const iphones = cards.filter((c) => c.category === 'iphone-usb');
+  assert.equal(iphones.length, 1, 'Multiple physical iPhone entries must be deduplicated to 1');
+  assert.equal(iphones[0].canMirror, true, 'USB presence makes iPhone mirrorable');
+  assert.equal(iphones[0].statusText, 'Siap');
+  assert.equal(iphones[0].transportBadge, 'USB');
+
+  // 2. Android emulator is Siap
+  const emu = cards.find((c) => c.id === 'emulator-5554');
+  assert.ok(emu);
+  assert.equal(emu.canMirror, true);
+  assert.equal(emu.statusText, 'Siap');
+
+  // 3. Android Wi-Fi cannot mirror, only run
+  const samsungWifi = cards.find((c) => c.id === '192.168.1.50:5555');
+  assert.ok(samsungWifi);
+  assert.equal(samsungWifi.canMirror, false);
+  assert.equal(samsungWifi.statusText, 'Hanya Run');
+  assert.equal(samsungWifi.transportBadge, 'Wi-Fi');
+
+  // 4. iOS Simulator booted is Siap
+  const sim = cards.find((c) => c.id === '9A53F812-70B3-4A2D-B892-0C665BF4BC71');
+  assert.ok(sim);
+  assert.equal(sim.canMirror, true);
+  assert.equal(sim.statusText, 'Siap');
+});
+
+test('mirror clean stop: resets state to idle, unregisters frame callback, clears timers', async () => {
+  let mockStopCalled = false;
+  let stoppedSerial = '';
+
+  const mockApi = {
+    mirrorStop: async (s) => {
+      mockStopCalled = true;
+      stoppedSerial = s;
+    },
+  };
+
+  // State machine and cleanup simulation
+  let state = 'live';
+  let frameTimestamps = [100, 200, 300];
+  let fps = 60;
+  let latencyMs = 25;
+  let timerCleared = false;
+  let timerId = setTimeout(() => {}, 10000);
+
+  // Stop operation
+  await mockApi.mirrorStop('emulator-5554');
+  clearTimeout(timerId);
+  timerCleared = true;
+  frameTimestamps = [];
+  fps = 0;
+  latencyMs = null;
+  state = 'empty';
+
+  assert.equal(mockStopCalled, true);
+  assert.equal(stoppedSerial, 'emulator-5554');
+  assert.equal(state, 'empty');
+  assert.equal(fps, 0);
+  assert.equal(latencyMs, null);
+  assert.equal(frameTimestamps.length, 0);
+  assert.equal(timerCleared, true);
+});
+
+

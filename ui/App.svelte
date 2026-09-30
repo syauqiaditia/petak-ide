@@ -396,6 +396,7 @@
           diagnosticsStore,
           runStore,
           gitStore,
+          mirrorStore,
           onSaveDirtyTab: async (tab) => {
             return window.confirm(`File "${tab.name}" has unsaved changes. Discard changes and switch project?`);
           },
@@ -1521,15 +1522,20 @@
         e.preventDefault();
         mirrorStore.toggle();
       }
+      if (e.key === 'Escape' && mirrorStore.isOpen && !paletteOpen && !settingsStore.isOpen) {
+        mirrorStore.close();
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === '6') {
         e.preventDefault();
         toggleAgentsPanel();
       }
     };
     window.addEventListener('keydown', handleKeydownMirror);
+    window.addEventListener('beforeunload', () => mirrorStore.stop());
   });
 
   onDestroy(() => {
+    mirrorStore.stop();
     runStore.destroy();
     if (unregisterKeymap) {
       unregisterKeymap();

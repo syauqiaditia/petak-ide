@@ -66,8 +66,18 @@ class MirrorStore {
     }
     // If opened on load, initialize device target
     if (this.isOpen) {
-      this.syncDevice();
+      this.status = 'picker';
     }
+
+    // Listen to mirror-status events (e.g. needs_usb, failed, etc.)
+    api.onMirrorStatus?.((payload) => {
+      if (payload.status?.state === 'needs_usb') {
+        this.status = 'error';
+        this.errorMessage =
+          payload.status.message ||
+          'needs_usb: iPhone Fisik membutuhkan kabel USB langsung ke Mac (tidak mendukung Wi-Fi / ncm).';
+      }
+    });
   }
 
   setWidth(newWidth: number) {
@@ -139,6 +149,10 @@ class MirrorStore {
     }
   }
 
+  showDevicePicker() {
+    this.status = 'picker';
+  }
+
   async toggle() {
     if (this.isOpen) {
       await this.close();
@@ -156,14 +170,19 @@ class MirrorStore {
     if (targetSerial) {
       this.serial = targetSerial;
       this.deviceName = targetSerial;
-    } else {
-      this.syncDevice();
+      await this.start(targetSerial);
+      return;
     }
 
-    if (this.serial) {
-      await this.start(this.serial);
+    // Requirement: When Mirror button is pressed, show device picker first
+    const autoSingle =
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('petak.mirror.auto_single') === 'true';
+    const runnableDevices = runStore.devices.filter((d) => d.state === 'online');
+    if (autoSingle && runnableDevices.length === 1) {
+      await this.start(runnableDevices[0].id);
     } else {
-      this.status = 'empty';
+      this.status = 'picker';
     }
   }
 
@@ -179,7 +198,7 @@ class MirrorStore {
   async start(serialToStart?: string) {
     const targetSerial = serialToStart || this.serial;
     if (!targetSerial) {
-      this.status = 'empty';
+      this.status = 'picker';
       return;
     }
 
@@ -238,11 +257,16 @@ class MirrorStore {
   }
 
   async stop() {
-    const s = this.activeRunSerial || this.serial;
+    const s = this.activeRunSerial || this.serial || 'all';
     this.activeRunSerial = null;
     this.frameTimestamps = [];
     this.fps = 0;
     this.latencyMs = null;
+    this.unregisterFrameCallback();
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = null;
+    }
 
     if (s) {
       try {
@@ -252,7 +276,7 @@ class MirrorStore {
         console.warn('[mirrorStore] mirrorStop error:', err);
       }
     }
-    this.status = mirrorStateMachine(this.status, { type: 'STOP' });
+    this.status = 'empty';
   }
 
   async reconnect() {

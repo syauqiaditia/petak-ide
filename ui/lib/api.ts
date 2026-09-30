@@ -207,7 +207,7 @@ export interface LspApplyEditPayload {
 export interface LspStatusPayload {
   lang: string;
   root: string;
-  state: 'starting' | 'ready' | 'stopped' | 'crashed' | 'failed';
+  state: 'starting' | 'ready' | 'stopped' | 'crashed' | 'failed' | 'indexing';
   reason?: string | null;
 }
 
@@ -1559,6 +1559,10 @@ export const api = {
       return;
     }
     return invoke('mirror_stop', { serial });
+  },
+
+  onMirrorStatus(cb: (payload: { serial: string; status: { state: string; message?: string } }) => void): Promise<UnlistenFn> {
+    return listen<{ serial: string; status: { state: string; message?: string } }>('mirror-status', (event) => cb(event.payload));
   },
 
   async mirrorInput(serial: string, ev: InputEvent): Promise<void> {

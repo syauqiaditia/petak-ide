@@ -119,6 +119,9 @@ export function mirrorStateMachine(
   event: { type: string; payload?: any }
 ): MirrorUiState {
   switch (event.type) {
+    case 'SHOW_PICKER':
+      return 'picker';
+
     case 'START':
     case 'RECONNECT':
     case 'RETRY':
