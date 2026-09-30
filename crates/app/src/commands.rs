@@ -2563,18 +2563,27 @@ pub async fn git_gitignore_add(
 #[tauri::command]
 pub async fn git_commit_paths(
     root: String,
-    rels: Vec<String>,
+    paths: Option<Vec<String>>,
+    rels: Option<Vec<String>>,
     message: String,
+    amend: Option<bool>,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
         let repo = std::path::Path::new(&root);
-        for rel in &rels {
+        let target_paths = paths.or(rels).unwrap_or_default();
+        for rel in &target_paths {
             let _ = petak_core::fsops::resolve_in_root(repo, rel).map_err(|e| e.to_string())?;
         }
-        let rel_slices: Vec<&str> = rels.iter().map(|s| s.as_str()).collect();
-        petak_core::git::commit_paths(&exec, repo, &message, &rel_slices)
-            .map_err(|e| e.to_string())
+        let rel_slices: Vec<&str> = target_paths.iter().map(|s| s.as_str()).collect();
+        petak_core::git::commit_paths(
+            &exec,
+            repo,
+            &message,
+            &rel_slices,
+            amend.unwrap_or(false),
+        )
+        .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
