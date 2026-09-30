@@ -11,12 +11,18 @@
   );
 
   let permStatus = $state<MirrorPermissionStatus | null>(null);
+  let cameraPerm = $state<{ status: string; granted: boolean } | null>(null);
 
   onMount(async () => {
     try {
       permStatus = await api.mirrorPermissionStatus(mirrorStore.deviceId);
     } catch {
       permStatus = null;
+    }
+    try {
+      cameraPerm = await api.mirrorCameraPermission();
+    } catch {
+      cameraPerm = null;
     }
   });
 
@@ -28,6 +34,9 @@
     sanitizeMirrorErrorMessage(rawMessage, classification)
   );
   let message = $derived(sanitized.message);
+  let isNeedsUsb = $derived(
+    /needs_usb|kabel usb|perlu kabel/i.test(message)
+  );
 
   let isScreenRecordingError = $derived(
     /screen\s*recording|screen\s*capture|kTCCServiceScreenCapture|tcc|permission|denied|authorized/i.test(message) ||
@@ -116,7 +125,11 @@
   {/if}
 
   <div class="error-actions">
-    {#if isScreenRecordingError || isIos}
+    {#if cameraPerm && !cameraPerm.granted}
+      <button class="btn-primary" onclick={() => api.openPrivacyCamera()} aria-label="Buka Pengaturan Kamera">
+        Buka Pengaturan Kamera (macOS)
+      </button>
+    {:else if isScreenRecordingError || isIos}
       <button class="btn-primary" onclick={() => api.openScreenRecordingSettings()} aria-label="Open System Settings">
         Open System Settings
       </button>
@@ -126,8 +139,11 @@
         </button>
       {/if}
     {/if}
-    <button class="btn-danger" onclick={() => mirrorStore.reconnect()} aria-label="Retry Handshake">
-      Retry Handshake
+    <button class="btn-danger" onclick={() => mirrorStore.reconnect()} aria-label="Coba lagi">
+      {isNeedsUsb ? 'Coba lagi' : 'Retry Handshake'}
+    </button>
+    <button class="btn-secondary" onclick={() => mirrorStore.showDevicePicker()} aria-label="Ganti device">
+      Ganti Device
     </button>
     {#if onOpenLogcat && !isIos}
       <button class="btn-secondary" onclick={onOpenLogcat} aria-label="View Logcat">

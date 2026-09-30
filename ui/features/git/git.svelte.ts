@@ -31,6 +31,49 @@ class GitStore {
   diffMode = $state<'sbs' | 'unified'>('sbs');
   ignoreWs = $state<boolean>(false);
 
+  // In-memory checked commit paths per repo root (Bug 4)
+  checkedPathsByRepo = $state<Record<string, Record<string, boolean>>>({});
+
+  isPathChecked(filePath: string): boolean {
+    if (!this.root) return true;
+    const repoMap = this.checkedPathsByRepo[this.root];
+    if (!repoMap || repoMap[filePath] === undefined) {
+      return true; // default checked
+    }
+    return repoMap[filePath];
+  }
+
+  togglePathChecked(filePath: string) {
+    if (!this.root) return;
+    if (!this.checkedPathsByRepo[this.root]) {
+      this.checkedPathsByRepo[this.root] = {};
+    }
+    const current = this.isPathChecked(filePath);
+    this.checkedPathsByRepo[this.root][filePath] = !current;
+  }
+
+  setPathChecked(filePath: string, checked: boolean) {
+    if (!this.root) return;
+    if (!this.checkedPathsByRepo[this.root]) {
+      this.checkedPathsByRepo[this.root] = {};
+    }
+    this.checkedPathsByRepo[this.root][filePath] = checked;
+  }
+
+  setAllPathsChecked(paths: string[], checked: boolean) {
+    if (!this.root) return;
+    if (!this.checkedPathsByRepo[this.root]) {
+      this.checkedPathsByRepo[this.root] = {};
+    }
+    for (const p of paths) {
+      this.checkedPathsByRepo[this.root][p] = checked;
+    }
+  }
+
+  getCheckedPathsList(allPaths: string[]): string[] {
+    return allPaths.filter((p) => this.isPathChecked(p));
+  }
+
   // Log & branches state
   branches = $state<GitBranchList | null>(null);
   branchesLoading = $state<boolean>(false);
@@ -300,6 +343,12 @@ class GitStore {
       await api.gitUnstageFiles(this.root, paths);
       await this.refresh();
     }
+  }
+
+  async rollback(paths: string[]) {
+    if (!this.root || paths.length === 0) return;
+    await api.gitRollback(this.root, paths);
+    await this.refresh();
   }
 
   async stageHunk(path: string, hunkIndex: number) {

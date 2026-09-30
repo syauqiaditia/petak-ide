@@ -1,112 +1,52 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { toolchainStore, type LspState } from './toolchainStore.svelte';
-  import { api, type KotlinLsStatus, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
-  import { editorSettings } from '../editor/editorSettings.svelte';
-  import { getFormatOnSaveConfig, setFormatOnSave } from '../editor/formatLogic';
-  import AccountsSettings from '../accounts/AccountsSettings.svelte';
-
-  let formatOnSaveState = $state<Record<string, boolean>>({});
-
-  function handleToggleFormatOnSave(lang: string, enabled: boolean) {
-    setFormatOnSave(lang, enabled);
-    formatOnSaveState = { ...formatOnSaveState, [lang]: enabled };
-  }
+  import { api, type KotlinLsStatus } from '../../lib/api';
+  import { settingsStore } from '../settings/settingsStore.svelte';
 
   let {
     root = '',
-    onOpenSettings = () => {},
-  } = $props<{
+    onOpenSettings = () => settingsStore.open('toolchains'),
+  }: {
     root?: string;
     onOpenSettings?: () => void;
-  }>();
+  } = $props();
 
-  let showConfigEditor = $state(
-    typeof window !== 'undefined' &&
-    (window.location.search.includes('settings') || window.location.search.includes('b3-ghost-settings'))
-  );
-  let flutterSdkInput = $state('');
-  let androidSdkInput = $state('');
-  let kotlinLsInput = $state('');
-  let saveFeedback = $state<string | null>(null);
-
-  // Kotlin LS Installer state
   let kotlinStatus = $state<KotlinLsStatus | null>(null);
-  let isInstallingKotlin = $state(false);
-  let kotlinProgress = $state<KotlinLsProgress | null>(null);
-  let kotlinInstallError = $state<string | null>(null);
-  let unlistenProgress: UnlistenFn | null = null;
+  let klsLogPath = $state<string | null>(null);
 
-  let isJavaMissing = $derived(
-    !toolchainStore.toolchain?.java && kotlinStatus !== null && !kotlinStatus.javaOk
+  let dartState = $derived(toolchainStore.lspStates['dart']);
+  let kotlinState = $derived(toolchainStore.lspStates['kotlin']);
+  let isIndexing = $derived(
+    (kotlinState as any)?.state === 'indexing' ||
+      Boolean(kotlinState?.reason && kotlinState.reason.toLowerCase().includes('indexing'))
   );
+  let swiftState = $derived(toolchainStore.lspStates['swift']);
 
-  async function loadKotlinStatus() {
+  onMount(async () => {
     try {
       kotlinStatus = await api.kotlinLsStatus();
     } catch {
       kotlinStatus = null;
     }
-  }
+  });
 
-  async function handleInstallKotlinLs() {
-    if (isInstallingKotlin) return;
-    isInstallingKotlin = true;
-    kotlinInstallError = null;
-    kotlinProgress = { stage: 'downloading', percent: 10, message: 'Menghubungkan ke GitHub releases…' };
-
+  async function handleShowKlsLog() {
     try {
-      unlistenProgress = await api.onKotlinLsProgress((p) => {
-        kotlinProgress = p;
-      });
-      await api.kotlinLsInstall();
-      await toolchainStore.refresh(root);
-      await loadKotlinStatus();
-    } catch (err: any) {
-      kotlinInstallError = err?.message || String(err);
-    } finally {
-      isInstallingKotlin = false;
-      if (unlistenProgress) {
-        unlistenProgress();
-        unlistenProgress = null;
-      }
+      const p = await api.lspKotlinLogPath();
+      klsLogPath = p;
+      toolchainStore.showToast(`KLS log location: ${p}`);
+    } catch (e: any) {
+      toolchainStore.showToast(`Failed to resolve KLS log: ${e?.message || e}`);
     }
   }
 
-  onMount(() => {
-    loadKotlinStatus();
-    formatOnSaveState = getFormatOnSaveConfig();
-    return () => {
-      if (unlistenProgress) unlistenProgress();
-    };
-  });
-
-  $effect(() => {
-    flutterSdkInput = toolchainStore.config.flutterSdk || '';
-    androidSdkInput = toolchainStore.config.androidSdk || '';
-    kotlinLsInput = toolchainStore.config.kotlinLanguageServer || '';
-  });
-
-  async function handleSaveConfig() {
-    await toolchainStore.saveConfig(
-      {
-        flutterSdk: flutterSdkInput.trim() || null,
-        androidSdk: androidSdkInput.trim() || null,
-        kotlinLanguageServer: kotlinLsInput.trim() || null,
-      },
-      root
-    );
-    saveFeedback = 'Saved settings successfully';
-    setTimeout(() => {
-      saveFeedback = null;
-    }, 3000);
-  }
-
-  function getLspDotColor(state: string): string {
+  function getLspBadgeColor(state: LspState | 'indexing'): string {
     switch (state) {
       case 'ready':
         return '#7fc98f';
       case 'starting':
+      case 'indexing':
         return '#e8b45a';
       case 'failed':
       case 'crashed':
@@ -116,769 +56,409 @@
     }
   }
 
-  let effectivePathParts = $derived.by(() => {
-    const raw = toolchainStore.toolchain?.effectivePath || '';
-    return raw.split(':').filter(Boolean);
-  });
+  function getLspBadgeLabel(state: LspState | 'indexing'): string {
+    switch (state) {
+      case 'ready':
+        return 'Ready';
+      case 'starting':
+        return 'Starting…';
+      case 'indexing':
+        return 'Indexing…';
+      case 'failed':
+        return 'Failed';
+      case 'crashed':
+        return 'Crashed';
+      case 'stopping':
+        return 'Stopping';
+      case 'stopped':
+        return 'Stopped';
+      default:
+        return 'Inactive';
+    }
+  }
 </script>
 
 <div class="toolchains-panel">
+  <!-- Top Bar with Status and Open Settings Action -->
   <div class="panel-header">
-    <div class="title-group">
-      <span class="panel-title">TOOLCHAINS & SDKS</span>
-      {#if toolchainStore.loading}
-        <span class="loading-tag">Detecting…</span>
-      {/if}
+    <div class="header-left">
+      <span class="header-title">TOOLCHAINS & LANGUAGE SERVERS</span>
+      <span class="header-sub">Runtime status of mobile dev tools</span>
     </div>
     <div class="header-actions">
-      <button
-        class="action-btn"
-        onclick={() => (showConfigEditor = !showConfigEditor)}
-        title="Settings & Overrides"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"></path>
-        </svg>
-        {showConfigEditor ? 'Hide Settings' : 'Settings'}
-      </button>
-      <button
-        class="refresh-btn"
-        onclick={() => toolchainStore.refresh(root)}
-        title="Refresh toolchain detection"
-        disabled={toolchainStore.loading}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
-        </svg>
+      <button class="btn-open-settings" onclick={onOpenSettings} title="Open full Settings dialog (Cmd-,)">
+        <span class="gear-icon">⚙</span>
+        Open Settings
       </button>
     </div>
   </div>
 
   <div class="panel-content">
-    <!-- Config Overrides Editor -->
-    {#if showConfigEditor}
-      <div class="settings-card">
-        <div class="card-title">SDK PATH OVERRIDES (~/Library/Application Support/Petak/config.json)</div>
-        <div class="field-group">
-          <label for="tc-flutter">Flutter SDK Path</label>
-          <input
-            id="tc-flutter"
-            type="text"
-            placeholder="/Users/uqi/SDK/flutter_3.35.7"
-            bind:value={flutterSdkInput}
-          />
-        </div>
-        <div class="field-group">
-          <label for="tc-android">Android SDK Path</label>
-          <input
-            id="tc-android"
-            type="text"
-            placeholder="/Users/uqi/Library/Android/sdk"
-            bind:value={androidSdkInput}
-          />
-        </div>
-        <div class="field-group">
-          <label for="tc-kotlin">Kotlin Language Server Binary</label>
-          <input
-            id="tc-kotlin"
-            type="text"
-            placeholder="/opt/homebrew/bin/kotlin-language-server"
-            bind:value={kotlinLsInput}
-          />
-        </div>
-
-        <div class="card-title" style="margin-top: 16px;">EDITOR SETTINGS</div>
-        <div class="setting-row">
-          <label class="toggle-setting" for="toggle-ghost-text">
-            <input
-              id="toggle-ghost-text"
-              type="checkbox"
-              checked={editorSettings.ghostText}
-              onchange={(e) => editorSettings.setGhostText((e.currentTarget as HTMLInputElement).checked)}
-            />
-            <div class="setting-text">
-              <span class="setting-label">Enable Inline Ghost-Text Suggestions (editor.ghostText)</span>
-              <span class="setting-subtext">Shows gray inline completions from local frequency index. Press Tab to accept, Esc to dismiss.</span>
-            </div>
-          </label>
-        </div>
-
-        <div class="settings-footer">
-          {#if saveFeedback}
-            <span class="feedback-text">{saveFeedback}</span>
-          {/if}
-          <button class="save-btn" onclick={handleSaveConfig}>Save & Re-detect</button>
-        </div>
-
-        <AccountsSettings />
-      </div>
-    {/if}
-
-    <!-- Language Server Status Section -->
-    <div class="section-title">LANGUAGE SERVERS (LSP)</div>
+    <!-- LSP Services Status Grid -->
+    <div class="section-title">ACTIVE LANGUAGE SERVERS</div>
     <div class="lsp-grid">
-      {#each ['dart', 'kotlin', 'swift'] as lang}
-        {@const stateInfo = toolchainStore.lspStates[lang]}
-        {@const state = stateInfo?.state || 'stopped'}
-        <div class="lsp-card" class:is-failed={state === 'failed' || state === 'crashed'}>
-          <div class="lsp-header">
-            <span class="status-dot" style:background={getLspDotColor(state)}></span>
-            <span class="lang-name">{lang.toUpperCase()}</span>
-            <span class="state-badge" class:failed={state === 'failed' || state === 'crashed'}>
-              {state}
-            </span>
-          </div>
-          {#if stateInfo?.reason}
-            <div class="lsp-reason">{stateInfo.reason}</div>
-          {/if}
-          {#if state === 'failed' || state === 'crashed'}
-            <div class="card-action">
-              <button class="small-btn" onclick={() => (showConfigEditor = true)}>
-                Open Settings
-              </button>
-            </div>
-          {/if}
+      <!-- Dart LSP -->
+      <div class="lsp-card">
+        <div class="card-header">
+          <span class="card-title">Dart Analysis Server</span>
+          <span
+            class="status-badge"
+            style:background="{getLspBadgeColor(dartState?.state || 'stopped')}22"
+            style:color={getLspBadgeColor(dartState?.state || 'stopped')}
+          >
+            {getLspBadgeLabel(dartState?.state || 'stopped')}
+          </span>
         </div>
-      {/each}
-    </div>
-
-    <!-- Format on Save Section (Fitur A) -->
-    <div class="section-title">FORMAT ON SAVE (CODE BEAUTIFIER)</div>
-    <div class="format-card">
-      <div class="format-desc">Format berkas secara otomatis saat disimpan (⌘S). Default: nonaktif (OFF).</div>
-      <div class="format-grid">
-        {#each [
-          { id: 'dart', label: 'Dart (dart format)' },
-          { id: 'kotlin', label: 'Kotlin (fwcd / ktlint)' },
-          { id: 'swift', label: 'Swift (swift-format)' },
-          { id: 'json', label: 'JSON (pretty-print)' },
-          { id: 'yaml', label: 'YAML (prettier)' },
-          { id: 'javascript', label: 'JS / TS (prettier)' },
-          { id: 'html', label: 'HTML / CSS (prettier)' },
-          { id: 'markdown', label: 'Markdown (prettier)' },
-        ] as fmt}
-          <label class="format-toggle-row">
-            <input
-              type="checkbox"
-              checked={formatOnSaveState[fmt.id] ?? false}
-              onchange={(e) => handleToggleFormatOnSave(fmt.id, (e.target as HTMLInputElement).checked)}
-            />
-            <span>{fmt.label}</span>
-          </label>
-        {/each}
-      </div>
-    </div>
-
-    <!-- Detected Tools Section -->
-    <div class="section-title">DETECTED DEVELOPER TOOLS</div>
-    <div class="tools-list">
-      <!-- Flutter -->
-      <div class="tool-row">
-        <div class="tool-name">Flutter</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.flutter}
-            <span class="tool-path">{toolchainStore.toolchain.flutter.path}</span>
-            {#if toolchainStore.toolchain.flutter.version}
-              <span class="version-tag">v{toolchainStore.toolchain.flutter.version}</span>
-            {/if}
-          {:else}
-            <span class="not-found">Not detected</span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Dart -->
-      <div class="tool-row">
-        <div class="tool-name">Dart</div>
-        <div class="tool-value">
+        <div class="card-detail">
           {#if toolchainStore.toolchain?.dart}
-            <span class="tool-path">{toolchainStore.toolchain.dart.path}</span>
-            {#if toolchainStore.toolchain.dart.version}
-              <span class="version-tag">v{toolchainStore.toolchain.dart.version}</span>
+            <span class="detail-path">{toolchainStore.toolchain.dart.path}</span>
+          {:else}
+            <span class="detail-muted">Using bundled Dart analysis engine</span>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Kotlin LSP -->
+      <div class="lsp-card">
+        <div class="card-header">
+          <div class="card-title-wrap">
+            <span class="card-title">Kotlin Language Server</span>
+            {#if isIndexing}
+              <span class="indexing-spinner"></span>
             {/if}
-          {:else}
-            <span class="not-found">Not detected</span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Android SDK -->
-      <div class="tool-row">
-        <div class="tool-name">Android SDK</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.androidHome}
-            <span class="tool-path">{toolchainStore.toolchain.androidHome}</span>
-          {:else}
-            <span class="not-found">Not detected</span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- ADB -->
-      <div class="tool-row">
-        <div class="tool-name">ADB</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.adb}
-            <span class="tool-path">{toolchainStore.toolchain.adb.path}</span>
-            {#if toolchainStore.toolchain.adb.version}
-              <span class="version-tag">{toolchainStore.toolchain.adb.version}</span>
-            {/if}
-          {:else}
-            <span class="not-found">Not detected</span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Emulator -->
-      <div class="tool-row">
-        <div class="tool-name">Emulator</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.emulator}
-            <span class="tool-path">{toolchainStore.toolchain.emulator.path}</span>
-            {#if toolchainStore.toolchain.emulator.version}
-              <span class="version-tag">{toolchainStore.toolchain.emulator.version}</span>
-            {/if}
-          {:else}
-            <span class="not-found">Not detected</span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Kotlin Language Server -->
-      <div class="tool-row" class:has-actions={true}>
-        <div class="tool-name">Kotlin LS</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.kotlinLs}
-            <span class="tool-path">{toolchainStore.toolchain.kotlinLs.path}</span>
-            {#if toolchainStore.toolchain.kotlinLs.version}
-              <span class="version-tag">{toolchainStore.toolchain.kotlinLs.version}</span>
-            {/if}
-          {:else}
-            <span class="not-found">Not detected</span>
-            <button
-              class="install-ls-btn"
-              disabled={isInstallingKotlin || isJavaMissing}
-              onclick={handleInstallKotlinLs}
-              title={isJavaMissing ? 'JDK diperlukan sebelum memasang Kotlin LS' : 'Unduh & pasang kotlin-language-server'}
-            >
-              {#if isInstallingKotlin}
-                Memasang…
-              {:else}
-                Install Kotlin Language Server
-              {/if}
-            </button>
-          {/if}
-        </div>
-      </div>
-
-      {#if isInstallingKotlin && kotlinProgress}
-        <div class="install-progress-card">
-          <div class="progress-bar-wrap">
-            <div class="progress-bar-fill" style:width="{kotlinProgress.percent ?? 50}%"></div>
           </div>
-          <span class="progress-msg">{kotlinProgress.message}</span>
+          <span
+            class="status-badge"
+            style:background="{getLspBadgeColor(isIndexing ? 'indexing' : (kotlinState?.state || 'stopped'))}22"
+            style:color={getLspBadgeColor(isIndexing ? 'indexing' : (kotlinState?.state || 'stopped'))}
+          >
+            {isIndexing ? 'Indexing…' : getLspBadgeLabel(kotlinState?.state || 'stopped')}
+          </span>
         </div>
-      {/if}
-
-      {#if kotlinInstallError}
-        <div class="install-error-card">
-          <span>Gagal memasang Kotlin LS: {kotlinInstallError}</span>
-        </div>
-      {/if}
-
-      {#if isJavaMissing && !toolchainStore.toolchain?.kotlinLs}
-        <div class="jdk-missing-warning">
-          <span class="warn-icon">⚠</span>
-          <div class="warn-body">
-            <strong>JDK (Java) tidak terdeteksi di PATH</strong>
-            <p>Kotlin Language Server membutuhkan JDK (Java 17+). Silakan pasang OpenJDK atau JDK Android Studio terlebih dahulu.</p>
-          </div>
-        </div>
-      {/if}
-
-      <!-- SourceKit-LSP -->
-      <div class="tool-row">
-        <div class="tool-name">SourceKit (Swift)</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.sourcekit}
-            <span class="tool-path">{toolchainStore.toolchain.sourcekit.path}</span>
-            {#if toolchainStore.toolchain.sourcekit.version}
-              <span class="version-tag">{toolchainStore.toolchain.sourcekit.version}</span>
-            {/if}
+        <div class="card-detail">
+          {#if isIndexing}
+            <span class="detail-indexing">Indexing project (Gradle import, bisa beberapa menit)…</span>
+          {:else if kotlinState?.reason}
+            <span class="detail-reason">{kotlinState.reason}</span>
+          {:else if toolchainStore.toolchain?.kotlinLs}
+            <span class="detail-path">{toolchainStore.toolchain.kotlinLs.path}</span>
           {:else}
-            <span class="not-found">Not detected</span>
+            <span class="detail-muted">KLS binary not configured</span>
           {/if}
+        </div>
+        <div class="card-footer">
+          <button class="btn-sub" onclick={handleShowKlsLog} title="Show path to kotlin-ls.log">
+            Show KLS log
+          </button>
+          <button class="btn-sub" onclick={onOpenSettings} title="Configure JDK & KLS path">
+            Configure
+          </button>
         </div>
       </div>
 
-      <!-- Java -->
-      <div class="tool-row">
-        <div class="tool-name">Java</div>
-        <div class="tool-value">
-          {#if toolchainStore.toolchain?.java}
-            <span class="tool-path">{toolchainStore.toolchain.java.path}</span>
-            {#if toolchainStore.toolchain.java.version}
-              <span class="version-tag">{toolchainStore.toolchain.java.version}</span>
-            {/if}
+      <!-- Swift LSP -->
+      <div class="lsp-card">
+        <div class="card-header">
+          <span class="card-title">SourceKit-LSP (Swift)</span>
+          <span
+            class="status-badge"
+            style:background="{getLspBadgeColor(swiftState?.state || 'stopped')}22"
+            style:color={getLspBadgeColor(swiftState?.state || 'stopped')}
+          >
+            {getLspBadgeLabel(swiftState?.state || 'stopped')}
+          </span>
+        </div>
+        <div class="card-detail">
+          {#if toolchainStore.toolchain?.swift}
+            <span class="detail-path">{toolchainStore.toolchain.swift.path}</span>
           {:else}
-            <span class="not-found">Not detected</span>
+            <span class="detail-muted">Available on macOS with Xcode Command Line Tools</span>
           {/if}
         </div>
       </div>
     </div>
 
-    <!-- Effective PATH Section -->
-    <div class="section-title">EFFECTIVE RESOLVED PATH ({effectivePathParts.length} directories)</div>
-    <div class="path-container">
-      {#each effectivePathParts as entry, idx}
-        <div class="path-entry">
-          <span class="path-idx">{idx + 1}</span>
-          <span class="path-str">{entry}</span>
-        </div>
-      {/each}
+    <!-- Detected Developer Tools -->
+    <div class="section-title mt">DETECTED DEVELOPER TOOLS</div>
+    <div class="tools-table">
+      <div class="tool-row">
+        <span class="tool-name">Flutter</span>
+        <span class="tool-info">
+          {#if toolchainStore.toolchain?.flutter}
+            <span class="path">{toolchainStore.toolchain.flutter.path}</span>
+            <span class="tag">v{toolchainStore.toolchain.flutter.version}</span>
+          {:else}
+            <span class="missing">Not detected (Click Open Settings to specify)</span>
+          {/if}
+        </span>
+      </div>
+
+      <div class="tool-row">
+        <span class="tool-name">Dart</span>
+        <span class="tool-info">
+          {#if toolchainStore.toolchain?.dart}
+            <span class="path">{toolchainStore.toolchain.dart.path}</span>
+            <span class="tag">v{toolchainStore.toolchain.dart.version}</span>
+          {:else}
+            <span class="missing">Not detected</span>
+          {/if}
+        </span>
+      </div>
+
+      <div class="tool-row">
+        <span class="tool-name">Android SDK / ADB</span>
+        <span class="tool-info">
+          {#if toolchainStore.toolchain?.adb}
+            <span class="path">{toolchainStore.toolchain.adb.path}</span>
+            <span class="tag">ADB ready</span>
+          {:else}
+            <span class="missing">Not detected</span>
+          {/if}
+        </span>
+      </div>
+
+      <div class="tool-row">
+        <span class="tool-name">Java JDK</span>
+        <span class="tool-info">
+          {#if toolchainStore.toolchain?.java}
+            <span class="path">{toolchainStore.toolchain.java.path}</span>
+            <span class="tag">v{toolchainStore.toolchain.java.version}</span>
+          {:else}
+            <span class="missing">Not detected</span>
+          {/if}
+        </span>
+      </div>
+    </div>
+
+    <!-- Quick Link Banner to Settings -->
+    <div class="settings-banner">
+      <div class="banner-text">
+        <span>Need to configure paths, accounts, format on save, or AI agents?</span>
+      </div>
+      <button class="btn-primary" onclick={onOpenSettings}>
+        Open Settings Dialog (⌘,)
+      </button>
     </div>
   </div>
 </div>
 
 <style>
   .toolchains-panel {
-    width: 100%;
-    height: 100%;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    color: #d8d9dc;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    overflow: hidden;
+    height: 100%;
+    background: #121316;
+    color: #e6e7ea;
+    overflow-y: auto;
   }
   .panel-header {
-    height: 38px;
-    flex-shrink: 0;
+    height: 44px;
+    padding: 0 16px;
+    border-bottom: 1px solid #22242a;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
-    background: #111215;
-    border-bottom: 1px solid #23252b;
+    background: #17181c;
+    flex-shrink: 0;
   }
-  .title-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .panel-title {
+  .header-title {
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.6px;
+    font-weight: 700;
     color: #8b8f98;
+    letter-spacing: 0.05em;
   }
-  .loading-tag {
+  .header-sub {
     font-size: 11px;
-    color: #e8b45a;
+    color: #555861;
+    margin-left: 8px;
   }
-  .header-actions {
+  .btn-open-settings {
     display: flex;
     align-items: center;
-    gap: 8px;
-  }
-  .action-btn {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    gap: 6px;
+    background: #23252c;
+    border: 1px solid #2e313b;
+    border-radius: 6px;
     padding: 4px 10px;
-    border-radius: 4px;
-    background: #1e2025;
-    border: 1px solid #2e313a;
-    color: #b9bcc3;
-    font-size: 11px;
+    color: #d0d2d8;
+    font-size: 12px;
     cursor: pointer;
     transition: all 0.15s;
   }
-  .action-btn:hover {
-    background: #282a32;
+  .btn-open-settings:hover {
+    background: #2d313b;
     color: #ffffff;
-  }
-  .refresh-btn {
-    display: grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 4px;
-    background: transparent;
-    border: none;
-    color: #8b8f98;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .refresh-btn:hover {
-    color: #d8d9dc;
-    background: #23252b;
+    border-color: #434857;
   }
   .panel-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 18px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 16px;
   }
   .section-title {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: #666a73;
-  }
-  .settings-card {
-    background: #1a1b20;
-    border: 1px solid #2b2e37;
-    border-radius: 6px;
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .card-title {
     font-size: 11px;
-    font-weight: 600;
-    color: #6ea8ff;
+    font-weight: 700;
+    color: #727680;
+    letter-spacing: 0.04em;
   }
-  .format-card {
-    background: #18191d;
-    border: 1px solid #282a30;
-    border-radius: 6px;
-    padding: 10px 12px;
-    margin-bottom: 16px;
-  }
-  .format-desc {
-    font-size: 11px;
-    color: #8b8f98;
-    margin-bottom: 8px;
-  }
-  .format-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-  .format-toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 11.5px;
-    color: #d8d9dc;
-    cursor: pointer;
-  }
-  .format-toggle-row input {
-    cursor: pointer;
-    accent-color: #3b5998;
-  }
-  .field-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .field-group label {
-    font-size: 11px;
-    color: #8b8f98;
-  }
-  .field-group input {
-    background: #121316;
-    border: 1px solid #2a2c35;
-    border-radius: 4px;
-    padding: 5px 8px;
-    color: #e6e7ea;
-    font-family: inherit;
-    font-size: 12px;
-  }
-  .field-group input:focus {
-    outline: none;
-    border-color: #6ea8ff;
-  }
-  .settings-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 12px;
-    padding-top: 4px;
-  }
-  .feedback-text {
-    color: #7fc98f;
-    font-size: 11px;
-  }
-  .save-btn {
-    padding: 4px 12px;
-    background: #2e4468;
-    color: #bcd4ff;
-    border: 1px solid #436195;
-    border-radius: 4px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .save-btn:hover {
-    background: #395582;
-  }
-  .setting-row {
-    margin-bottom: 12px;
-  }
-  .toggle-setting {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .toggle-setting input[type="checkbox"] {
-    margin-top: 3px;
-    accent-color: #56a8f5;
-    cursor: pointer;
-    width: 15px;
-    height: 15px;
-  }
-  .setting-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .setting-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: #e6e7ea;
-  }
-  .setting-subtext {
-    font-size: 11px;
-    color: #8b8f98;
-    line-height: 1.4;
+  .section-title.mt {
+    margin-top: 8px;
   }
   .lsp-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
   }
   .lsp-card {
-    background: #18191e;
-    border: 1px solid #262830;
-    border-radius: 6px;
-    padding: 10px 12px;
+    background: #18191d;
+    border: 1px solid #25272e;
+    border-radius: 8px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
-  .lsp-card.is-failed {
-    border-color: #5c2c2a;
-    background: #1e1516;
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
-  .lsp-header {
+  .card-title-wrap {
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-  }
-  .lang-name {
+  .card-title {
+    font-size: 12px;
     font-weight: 600;
+    color: #e0e2e8;
+  }
+  .status-badge {
     font-size: 11px;
-    color: #d8d9dc;
-  }
-  .state-badge {
-    margin-left: auto;
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: #23252d;
-    color: #8b8f98;
-    text-transform: capitalize;
-  }
-  .state-badge.failed {
-    background: #441e20;
-    color: #f07a74;
-  }
-  .lsp-reason {
-    font-size: 11px;
-    color: #f07a74;
-    line-height: 1.3;
-  }
-  .card-action {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 4px;
-  }
-  .small-btn {
-    font-size: 10px;
     padding: 2px 8px;
-    background: #2a2c35;
-    border: 1px solid #3d404c;
-    border-radius: 3px;
-    color: #d8d9dc;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .indexing-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #333640;
+    border-top-color: #e8b45a;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .card-detail {
+    font-size: 11px;
+    color: #8b8f98;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .detail-path {
+    font-family: monospace;
+    color: #9ab3d6;
+  }
+  .detail-indexing {
+    color: #e8b45a;
+    font-style: italic;
+  }
+  .detail-reason {
+    color: #f07a74;
+  }
+  .detail-muted {
+    color: #5d616c;
+  }
+  .card-footer {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .btn-sub {
+    background: #202228;
+    border: 1px solid #2d3039;
+    color: #a8abb5;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
     cursor: pointer;
   }
-  .small-btn:hover {
-    background: #363944;
+  .btn-sub:hover {
+    background: #282b33;
+    color: #ffffff;
   }
-  .tools-list {
+  .tools-table {
+    background: #18191d;
+    border: 1px solid #25272e;
+    border-radius: 8px;
     display: flex;
     flex-direction: column;
-    background: #18191e;
-    border: 1px solid #262830;
-    border-radius: 6px;
-    overflow: hidden;
   }
   .tool-row {
     display: flex;
     align-items: center;
     padding: 8px 12px;
-    border-bottom: 1px solid #202228;
-    gap: 14px;
+    border-bottom: 1px solid #202227;
+    font-size: 12px;
   }
   .tool-row:last-child {
     border-bottom: none;
   }
   .tool-name {
-    width: 140px;
-    flex-shrink: 0;
-    font-weight: 500;
-    color: #9da1ab;
+    width: 160px;
+    font-weight: 600;
+    color: #d0d2d8;
   }
-  .tool-value {
-    flex: 1;
+  .tool-info {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 1;
     overflow: hidden;
   }
-  .tool-path {
-    color: #d8d9dc;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .version-tag {
+  .tool-info .path {
+    font-family: monospace;
     font-size: 11px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: #222631;
-    color: #6ea8ff;
-    flex-shrink: 0;
+    color: #888d99;
   }
-  .not-found {
-    color: #666a73;
+  .tool-info .tag {
+    background: #22252c;
+    color: #7fc98f;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+  .tool-info .missing {
+    color: #727682;
     font-style: italic;
   }
-  .install-ls-btn {
-    height: 24px;
-    padding: 0 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 500;
-    background: #1f3650;
-    color: #8bbdff;
-    border: 1px solid #2d4c72;
-    cursor: pointer;
-    transition: background 0.15s;
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-  .install-ls-btn:hover:not(:disabled) {
-    background: #274567;
-  }
-  .install-ls-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .install-progress-card {
-    margin: 4px 0 8px;
-    padding: 8px 12px;
-    background: #151821;
-    border: 1px solid #273043;
-    border-radius: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .progress-bar-wrap {
-    height: 4px;
-    background: #20242f;
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  .progress-bar-fill {
-    height: 100%;
-    background: #569aff;
-    transition: width 0.3s ease;
-  }
-  .progress-msg {
-    font-size: 11px;
-    color: #9cb1d1;
-  }
-  .install-error-card {
-    margin: 4px 0 8px;
-    padding: 8px 12px;
-    background: #2a1617;
-    border: 1px solid #482326;
-    border-radius: 6px;
-    font-size: 11.5px;
-    color: #f0837f;
-  }
-  .jdk-missing-warning {
-    margin: 4px 0 8px;
-    padding: 8px 12px;
-    background: #282012;
-    border: 1px solid #4a381b;
-    border-radius: 6px;
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-  }
-  .warn-icon {
-    color: #f2ad49;
-    font-size: 14px;
-    line-height: 1;
-  }
-  .warn-body {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: 11.5px;
-    color: #e5cfac;
-  }
-  .warn-body strong {
-    color: #ffda99;
-  }
-  .warn-body p {
-    margin: 0;
-    font-size: 11px;
-    color: #c9b493;
-    line-height: 1.4;
-  }
-  .path-container {
-    display: flex;
-    flex-direction: column;
-    background: #101114;
-    border: 1px solid #202228;
-    border-radius: 6px;
-    padding: 8px 12px;
-    max-height: 200px;
-    overflow-y: auto;
-    gap: 4px;
-  }
-  .path-entry {
+  .settings-banner {
+    background: #1c2230;
+    border: 1px solid #2c3850;
+    border-radius: 8px;
+    padding: 12px 16px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 11px;
+    justify-content: space-between;
+    margin-top: 8px;
   }
-  .path-idx {
-    width: 24px;
-    color: #555963;
-    text-align: right;
-    user-select: none;
+  .banner-text {
+    font-size: 12px;
+    color: #9cb2d8;
   }
-  .path-str {
-    color: #a8abb4;
-    word-break: break-all;
+  .btn-primary {
+    background: #2b5597;
+    border: 1px solid #4175c5;
+    color: #ffffff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .btn-primary:hover {
+    background: #3464b0;
   }
 </style>

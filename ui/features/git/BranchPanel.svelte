@@ -8,6 +8,7 @@
     type FlatDisplayItem,
   } from './branchTreeLogic';
   import { computeWindowing } from './windowingLogic';
+  import CompareBranchModal from './CompareBranchModal.svelte';
 
   let { onSelectTab } = $props<{
     onSelectTab?: (tab: 'commit' | 'log' | 'conflict') => void;
@@ -112,6 +113,14 @@
 
   let restoreBackupModalOpen = $state(false);
   let targetBackup = $state<GitBackupRef | null>(null);
+
+  let compareModalOpen = $state(false);
+  let targetCompareBranch = $state('');
+
+  function openCompareWithBranch(branchName: string) {
+    targetCompareBranch = branchName;
+    compareModalOpen = true;
+  }
 
   function filterByBranch(name: string) {
     if (activeBranchFilter === name) {
@@ -527,6 +536,16 @@
       >
         <span>Rename…</span>
       </button>
+      <button
+        class="b-menu-item"
+        onclick={() => {
+          const b = selectedBranch!.name;
+          contextMenuOpen = false;
+          openCompareWithBranch(b);
+        }}
+      >
+        <span>Compare with Current…</span>
+      </button>
       <div class="b-menu-sep"></div>
       <button
         class="b-menu-item danger"
@@ -676,6 +695,15 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if compareModalOpen && gitStore.root}
+    <CompareBranchModal
+      root={gitStore.root}
+      baseBranch={gitStore.headBranch || 'HEAD'}
+      targetBranch={targetCompareBranch}
+      onclose={() => (compareModalOpen = false)}
+    />
   {/if}
 </div>
 

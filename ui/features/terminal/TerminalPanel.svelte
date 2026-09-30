@@ -62,6 +62,51 @@
   let resizeObserver: ResizeObserver | null = null;
   let tabCounter = 1;
 
+  let terminalSearchOpen = $state(false);
+  let termSearchQuery = $state('');
+  let termCaseSensitive = $state(false);
+  let termIsRegex = $state(false);
+  let termMatchCount = $state(0);
+  let termCurrentMatch = $state(0);
+
+  function findInTerminal(dir: 'next' | 'prev') {
+    const activeTab = tabs.find((t) => t.id === activeTabId);
+    if (!activeTab || !termSearchQuery) return;
+    const term = activeTab.term;
+    const buffer = term.buffer.active;
+    const q = termSearchQuery;
+    let re: RegExp;
+    try {
+      re = new RegExp(termIsRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), termCaseSensitive ? 'g' : 'gi');
+    } catch {
+      return;
+    }
+
+    const totalLines = buffer.length;
+    const matches: { line: number; col: number; len: number }[] = [];
+    for (let i = 0; i < totalLines; i++) {
+      const lineText = buffer.getLine(i)?.translateToString(true) || '';
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(lineText)) !== null) {
+        matches.push({ line: i, col: m.index, len: m[0].length });
+        if (m[0].length === 0) re.lastIndex++;
+      }
+    }
+    termMatchCount = matches.length;
+    if (matches.length === 0) return;
+
+    if (dir === 'next') {
+      termCurrentMatch = (termCurrentMatch + 1) % matches.length;
+    } else {
+      termCurrentMatch = (termCurrentMatch - 1 + matches.length) % matches.length;
+    }
+    const match = matches[termCurrentMatch];
+    if (match) {
+      term.select(match.col, match.line, match.len);
+      term.scrollToLine(match.line);
+    }
+  }
+
   export async function createNewTab(customName?: string, cwd?: string): Promise<number> {
     if (!bodyElement) return -1;
 
@@ -533,6 +578,17 @@
     </div>
 
     <div class="header-actions">
+      {#if activeSection === 'terminal'}
+        <button
+          class="term-search-toggle"
+          class:active={terminalSearchOpen}
+          onclick={() => (terminalSearchOpen = !terminalSearchOpen)}
+          title="Find in Terminal"
+        >
+          🔍
+        </button>
+      {/if}
+
       <button
         class="close-panel-btn"
         onclick={onClose}
@@ -545,6 +601,47 @@
       </button>
     </div>
   </div>
+
+  {#if activeSection === 'terminal' && terminalSearchOpen}
+    <div class="term-search-overlay">
+      <input
+        type="text"
+        class="term-search-input"
+        placeholder="Find in terminal…"
+        bind:value={termSearchQuery}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            findInTerminal(e.shiftKey ? 'prev' : 'next');
+          } else if (e.key === 'Escape') {
+            terminalSearchOpen = false;
+          }
+        }}
+      />
+      <button
+        class="term-opt-btn"
+        class:active={termCaseSensitive}
+        onclick={() => (termCaseSensitive = !termCaseSensitive)}
+        title="Match Case"
+      >
+        Aa
+      </button>
+      <button
+        class="term-opt-btn"
+        class:active={termIsRegex}
+        onclick={() => (termIsRegex = !termIsRegex)}
+        title="Regular Expression"
+      >
+        .*
+      </button>
+      {#if termMatchCount > 0}
+        <span class="term-match-badge">{termCurrentMatch + 1}/{termMatchCount}</span>
+      {/if}
+      <button class="term-nav-btn" onclick={() => findInTerminal('prev')} title="Previous match">▲</button>
+      <button class="term-nav-btn" onclick={() => findInTerminal('next')} title="Next match">▼</button>
+      <button class="term-close-btn" onclick={() => (terminalSearchOpen = false)} title="Close search">✕</button>
+    </div>
+  {/if}
 
   {#if activeSection === 'run'}
     <div class="panel-body run-body">
@@ -636,6 +733,94 @@
     z-index: 100;
     background: transparent;
     transition: background 0.15s;
+  }
+
+  .term-search-toggle {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: all 0.15s;
+  }
+  .term-search-toggle:hover, .term-search-toggle.active {
+    opacity: 1;
+    background: #23252d;
+  }
+  .term-search-overlay {
+    position: absolute;
+    top: 38px;
+    right: 16px;
+    z-index: 50;
+    background: #18191e;
+    border: 1px solid #2d303a;
+    border-radius: 6px;
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+  .term-search-input {
+    background: #101114;
+    border: 1px solid #252830;
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11px;
+    color: #e0e2e8;
+    outline: none;
+    width: 160px;
+  }
+  .term-search-input:focus {
+    border-color: #569aff;
+  }
+  .term-opt-btn {
+    background: transparent;
+    border: none;
+    color: #656976;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .term-opt-btn:hover {
+    color: #c0c3ce;
+  }
+  .term-opt-btn.active {
+    background: #2b4573;
+    color: #ffffff;
+  }
+  .term-match-badge {
+    font-size: 10px;
+    color: #8b8f98;
+    font-family: monospace;
+  }
+  .term-nav-btn {
+    background: transparent;
+    border: 1px solid #2a2d36;
+    color: #9da0ab;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 8px;
+    cursor: pointer;
+  }
+  .term-nav-btn:hover {
+    background: #252830;
+    color: #ffffff;
+  }
+  .term-close-btn {
+    background: transparent;
+    border: none;
+    color: #656976;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .term-close-btn:hover {
+    color: #ffffff;
   }
 
   .panel-resize-handle:hover,

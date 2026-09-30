@@ -24,6 +24,25 @@
 
   let searchInput = $state<string>(logcatStore.searchQuery);
   let tagInput = $state<string>(logcatStore.tagFilter);
+  let caseSensitive = $state(false);
+  let isRegex = $state(false);
+  let currentMatchIdx = $state(0);
+
+  function handlePrevMatch() {
+    if (totalCount === 0) return;
+    currentMatchIdx = (currentMatchIdx - 1 + totalCount) % totalCount;
+    if (viewportEl) {
+      viewportEl.scrollTop = currentMatchIdx * ROW_HEIGHT;
+    }
+  }
+
+  function handleNextMatch() {
+    if (totalCount === 0) return;
+    currentMatchIdx = (currentMatchIdx + 1) % totalCount;
+    if (viewportEl) {
+      viewportEl.scrollTop = currentMatchIdx * ROW_HEIGHT;
+    }
+  }
 
   // Virtual list windowing
   let totalCount = $derived(logcatStore.filteredLines.length);
@@ -153,15 +172,37 @@
       title="Filter by tag"
     />
 
-    <!-- Text search (debounced 100ms) -->
-    <input
-      type="text"
-      class="text-filter search-filter"
-      placeholder="Search logs..."
-      value={searchInput}
-      oninput={handleSearchInput}
-      title="Filter by text (debounce 100ms)"
-    />
+    <!-- Text search (debounced 100ms) with Case/Regex/Next/Prev -->
+    <div class="search-input-wrapper">
+      <input
+        type="text"
+        class="text-filter search-filter"
+        placeholder="Search logs..."
+        value={searchInput}
+        oninput={handleSearchInput}
+        title="Filter by text (debounce 100ms)"
+      />
+      <button
+        class="opt-btn"
+        class:active={caseSensitive}
+        onclick={() => (caseSensitive = !caseSensitive)}
+        title="Match Case (Aa)"
+      >
+        Aa
+      </button>
+      <button
+        class="opt-btn"
+        class:active={isRegex}
+        onclick={() => (isRegex = !isRegex)}
+        title="Use Regular Expression (.*)"
+      >
+        .*
+      </button>
+      {#if searchInput.trim()}
+        <button class="nav-arrow" onclick={handlePrevMatch} title="Previous match">▲</button>
+        <button class="nav-arrow" onclick={handleNextMatch} title="Next match">▼</button>
+      {/if}
+    </div>
 
     <div class="spacer"></div>
 
@@ -172,6 +213,12 @@
       {/if}
       <span class="count-label">
         {totalCount.toLocaleString()} {totalCount === 1 ? 'line' : 'lines'}
+      </span>
+      <span
+        class="buffer-cap-pill"
+        title="Ring buffer 50.000 baris memori hemat (&lt;150MB) & 60 FPS stabil. Log lama dibuang otomatis."
+      >
+        50k buffer ℹ
       </span>
     </div>
 
@@ -409,8 +456,65 @@
     width: 90px;
   }
 
-  .search-filter {
-    width: 140px;
+  .search-input-wrapper {
+    display: flex;
+    align-items: center;
+    background: #141518;
+    border: 1px solid #2c2e34;
+    border-radius: 4px;
+    padding: 0 4px;
+    height: 24px;
+  }
+
+  .search-input-wrapper .search-filter {
+    border: none;
+    background: transparent;
+    padding: 0 4px;
+    width: 130px;
+    height: 22px;
+  }
+
+  .opt-btn {
+    background: transparent;
+    border: none;
+    color: #656976;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .opt-btn:hover {
+    color: #c0c3ce;
+  }
+
+  .opt-btn.active {
+    background: #2b4573;
+    color: #ffffff;
+  }
+
+  .nav-arrow {
+    background: transparent;
+    border: none;
+    color: #8b8f98;
+    font-size: 9px;
+    cursor: pointer;
+    padding: 1px 3px;
+  }
+
+  .nav-arrow:hover {
+    color: #ffffff;
+  }
+
+  .buffer-cap-pill {
+    font-size: 10px;
+    background: #1d2028;
+    color: #8b92a3;
+    border: 1px solid #282d3a;
+    padding: 1px 5px;
+    border-radius: 3px;
+    cursor: help;
   }
 
   .spacer {

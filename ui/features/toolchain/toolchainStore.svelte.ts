@@ -3,7 +3,7 @@ import { api, type Toolchain, type ToolchainConfig, type LspStatusPayload } from
 export interface LspState {
   lang: string;
   root: string;
-  state: 'starting' | 'ready' | 'stopped' | 'crashed' | 'failed';
+  state: 'starting' | 'ready' | 'stopped' | 'crashed' | 'failed' | 'indexing';
   reason?: string | null;
 }
 

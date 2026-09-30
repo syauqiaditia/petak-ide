@@ -33,6 +33,10 @@ export interface ProjectSwitchResetContext {
     resetState: () => void;
     clearFilter?: () => void;
   };
+  mirrorStore?: {
+    close: () => Promise<void> | void;
+    stop?: () => Promise<void> | void;
+  };
   onSaveDirtyTab?: (tab: { path: string; name?: string }) => Promise<boolean> | boolean;
 }
 
@@ -102,6 +106,13 @@ export async function executeProjectSwitchReset(
 
   // 5. Reset Git view, selection, and log filter
   gitStore.resetState();
+
+  // 6. Terminate active mirror session cleanly
+  if (context.mirrorStore?.close) {
+    try {
+      await context.mirrorStore.close();
+    } catch (_) {}
+  }
   if (gitStore.clearFilter) {
     gitStore.clearFilter();
   }

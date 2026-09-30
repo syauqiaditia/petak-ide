@@ -10,6 +10,7 @@
   import ComparePickerModal from './ComparePickerModal.svelte';
   import LocalHistoryModal from './LocalHistoryModal.svelte';
   import DiffModal from './DiffModal.svelte';
+  import CompareBranchModal from '../features/git/CompareBranchModal.svelte';
   import {
     formatCopyPath,
     canCopyPackageImport,
@@ -86,7 +87,9 @@
 
   let comparePickerOpen = $state(false);
   let compareInitialTab = $state<'branches' | 'revisions'>('branches');
-  let compareTargetFile = $state<{ name: string; rel: string } | null>(null);
+  let compareTargetFile = $state<{ name: string; rel: string; isDir?: boolean } | null>(null);
+  let compareBranchModalOpen = $state(false);
+  let compareBranchTarget = $state('');
 
   let localHistoryOpen = $state(false);
   let localHistoryTarget = $state<{ rel: string; abs: string; isDir: boolean } | null>(null);
@@ -788,16 +791,17 @@
         action: () => onOpenSearch?.('text', '', getRelPath(firstEntry.path)),
       });
 
+      items.push({ separator: true });
+      items.push({
+        label: 'Compare with Branch…',
+        icon: 'diff',
+        action: () => {
+          compareTargetFile = { name: firstEntry.name, rel: getRelPath(firstEntry.path), isDir: firstEntry.is_dir };
+          comparePickerOpen = true;
+        },
+      });
+
       if (!firstEntry.is_dir) {
-        items.push({ separator: true });
-        items.push({
-          label: 'Compare With…',
-          icon: 'diff',
-          action: () => {
-            compareTargetFile = { name: firstEntry.name, rel: getRelPath(firstEntry.path) };
-            comparePickerOpen = true;
-          },
-        });
         items.push({
           label: 'Compare with Clipboard',
           icon: 'diff',
@@ -1383,6 +1387,12 @@
     initialTab={compareInitialTab}
     onclose={() => (comparePickerOpen = false)}
     onselect={async (ref) => {
+      comparePickerOpen = false;
+      if (compareTargetFile?.isDir || compareInitialTab === 'branches' || !/^[0-9a-f]{40}$/i.test(ref)) {
+        compareBranchTarget = ref;
+        compareBranchModalOpen = true;
+        return;
+      }
       try {
         const diffs = await api.gitDiffPath(folderPath, compareTargetFile!.rel, ref);
         if (diffs && diffs.length > 0) {
@@ -1403,6 +1413,16 @@
         alert('Failed to compare: ' + (err?.message || String(err)));
       }
     }}
+  />
+{/if}
+
+{#if compareBranchModalOpen && folderPath}
+  <CompareBranchModal
+    root={folderPath}
+    baseBranch={gitStore.headBranch || 'HEAD'}
+    targetBranch={compareBranchTarget}
+    scopePath={compareTargetFile?.rel || ''}
+    onclose={() => (compareBranchModalOpen = false)}
   />
 {/if}
 

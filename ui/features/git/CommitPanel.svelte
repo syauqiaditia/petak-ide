@@ -16,6 +16,7 @@
     getUnifiedStatusLetter,
     type FileContextAction,
   } from './commitSelectionLogic';
+  import StashModal from './StashModal.svelte';
 
   let commitMessage = $state('');
   let isAmend = $state(false);
@@ -29,6 +30,34 @@
   let contextTargetEntry = $state<GitStatusEntry | null>(null);
   let contextTargetStaged = $state(false);
 
+  let emptyContextMenuOpen = $state(false);
+  let emptyContextMenuPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+  let stashModalOpen = $state(false);
+  let stashModalMode = $state<'push' | 'list'>('push');
+
+  function handleEmptyAreaContextMenu(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest('.file-row')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    contextMenuOpen = false;
+    emptyContextMenuPos = { x: e.clientX, y: e.clientY };
+    emptyContextMenuOpen = true;
+  }
+
+  async function handlePopLatestStash() {
+    emptyContextMenuOpen = false;
+    if (!gitStore.root) return;
+    try {
+      const res = await api.gitStashPop(gitStore.root, 0);
+      gitStore.showToast(res || 'Popped latest stash', { type: 'success' });
+      await gitStore.refresh();
+    } catch (e: any) {
+      gitStore.showToast(`Failed to pop stash: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
   $effect(() => {
     if (contextMenuOpen && !contextTargetEntry && gitStore.status.entries.length > 0) {
       contextTargetEntry = gitStore.status.entries[0];
@@ -37,12 +66,13 @@
 
   let allChanges = $derived(filterUnifiedChanges(gitStore.status?.entries || []));
   let totalFiles = $derived(allChanges.length);
-  let checkedCount = $derived(countCheckedEntries(allChanges));
   let allFilePaths = $derived(allChanges.map((e) => e.path));
-  let stagedPaths = $derived(allChanges.filter(isEntryStaged).map((e) => e.path));
+  let checkedCount = $derived(allChanges.filter((e) => gitStore.isPathChecked(e.path)).length);
+  let checkedPaths = $derived(allChanges.filter((e) => gitStore.isPathChecked(e.path)).map((e) => e.path));
+  let stagedPaths = $derived(checkedPaths);
 
-  let allSelected = $derived(isAllSelected(checkedCount, totalFiles));
-  let partiallySelected = $derived(isPartiallySelected(checkedCount, totalFiles));
+  let allSelected = $derived(totalFiles > 0 && checkedCount === totalFiles);
+  let partiallySelected = $derived(checkedCount > 0 && checkedCount < totalFiles);
 
   let canCommit = $derived(
     canExecuteCommit(checkedCount, commitMessage, isAmend, isCommitting)
@@ -51,22 +81,14 @@
     getCommitButtonLabel(checkedCount, isAmend, isCommitting)
   );
 
-  async function handleToggleSelectAll() {
-    const plan = planSelectAllToggle(stagedPaths, allFilePaths);
-    if (plan.action === 'stage') {
-      await gitStore.stageFiles(plan.paths);
-    } else {
-      await gitStore.unstageFiles(plan.paths);
-    }
+  function handleToggleSelectAll() {
+    const shouldCheckAll = checkedCount !== totalFiles;
+    gitStore.setAllPathsChecked(allFilePaths, shouldCheckAll);
   }
 
-  async function handleToggleFile(entry: GitStatusEntry, e: MouseEvent) {
+  function handleToggleFile(entry: GitStatusEntry, e: MouseEvent) {
     e.stopPropagation();
-    if (isEntryStaged(entry)) {
-      await gitStore.unstageFiles([entry.path]);
-    } else {
-      await gitStore.stageFiles([entry.path]);
-    }
+    gitStore.togglePathChecked(entry.path);
   }
 
   function handleRowContextMenu(e: MouseEvent, entry: GitStatusEntry, inStaged: boolean) {
@@ -103,11 +125,7 @@
         gitStore.selectFile(path, contextTargetStaged ? 'staged' : 'worktree');
         break;
       case 'toggle_stage':
-        if (contextTargetStaged) {
-          await gitStore.unstageFiles([path]);
-        } else {
-          await gitStore.stageFiles([path]);
-        }
+        gitStore.togglePathChecked(path);
         break;
       case 'gitignore_add':
         if (gitStore.root) {
@@ -167,16 +185,11 @@
     isCommitting = true;
     commitError = null;
     try {
-      if (isAmend) {
-        await gitStore.commit(commitMessage.trim(), true);
+      if (gitStore.root) {
+        await api.gitCommitPaths(gitStore.root, checkedPaths, commitMessage.trim(), isAmend);
+        await gitStore.refresh();
       } else {
-        const paths = stagedPaths;
-        if (gitStore.root) {
-          await api.gitCommitSelected(gitStore.root, commitMessage.trim(), paths);
-          await gitStore.refresh();
-        } else {
-          await gitStore.commit(commitMessage.trim(), false);
-        }
+        await gitStore.commit(commitMessage.trim(), isAmend);
       }
       commitMessage = '';
       isAmend = false;
@@ -218,7 +231,7 @@
   }
 </script>
 
-<svelte:window onclick={() => { if (contextMenuOpen) contextMenuOpen = false; }} />
+<svelte:window onclick={() => { contextMenuOpen = false; emptyContextMenuOpen = false; }} />
 
 <div class="commit-panel">
   <!-- Select All Bar (F3 / Feature C) -->
@@ -238,7 +251,7 @@
   {/if}
 
   <!-- Single Unified Changes List (Feature C) -->
-  <div class="files-container">
+  <div class="files-container" oncontextmenu={handleEmptyAreaContextMenu}>
     <div class="group-section">
       <div class="group-header">
         <label class="group-header-label">
@@ -260,7 +273,7 @@
           <div class="empty-hint">No changes</div>
         {:else}
           {#each allChanges as entry (entry.path)}
-            {@const isChecked = isEntryStaged(entry)}
+            {@const isChecked = gitStore.isPathChecked(entry.path)}
             {@const { char, color } = getUnifiedStatusLetter(entry)}
             {@const { name, dir } = formatPath(entry.path)}
             {@const isSelected = gitStore.selectedFile?.path === entry.path}
@@ -375,6 +388,54 @@
         </button>
       {/each}
     </div>
+  {/if}
+
+  <!-- Empty Area Context Menu for Stash (Item 11) -->
+  {#if emptyContextMenuOpen}
+    <div
+      class="file-context-menu"
+      style:left="{emptyContextMenuPos.x}px"
+      style:top="{emptyContextMenuPos.y}px"
+      role="menu"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <button
+        class="context-menu-item"
+        onclick={() => {
+          emptyContextMenuOpen = false;
+          stashModalMode = 'push';
+          stashModalOpen = true;
+        }}
+      >
+        Stash Changes…
+      </button>
+      <button
+        class="context-menu-item"
+        onclick={handlePopLatestStash}
+      >
+        Pop Latest Stash
+      </button>
+      <button
+        class="context-menu-item"
+        onclick={() => {
+          emptyContextMenuOpen = false;
+          stashModalMode = 'list';
+          stashModalOpen = true;
+        }}
+      >
+        View Stashes…
+      </button>
+    </div>
+  {/if}
+
+  <!-- Stash Modal Dialog -->
+  {#if stashModalOpen && gitStore.root}
+    <StashModal
+      root={gitStore.root}
+      initialMode={stashModalMode}
+      onclose={() => (stashModalOpen = false)}
+    />
   {/if}
 </div>
 

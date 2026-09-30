@@ -36,6 +36,7 @@ class RunStore {
   snapshot = $state<DevicesSnapshot | null>(null);
   avds = $state<Avd[]>([]);
   avdsLoading = $state<boolean>(false);
+  emulatorStatuses = $state<Record<string, { state: 'stopped' | 'booting' | 'running' | 'failed'; error?: string }>>({});
 
   get selectedDevice(): Device | null {
     return this.devices.find((d) => d.id === this.selectedDeviceId) || (this.devices.length > 0 ? this.devices[0] : null);
@@ -166,6 +167,14 @@ class RunStore {
           });
         } catch (e) {
           console.warn('[runStore] Failed to listen to gradle-daemon:', e);
+        }
+
+        try {
+          await api.onEmulatorStatus((event) => {
+            this.handleEmulatorStatus(event);
+          });
+        } catch (e) {
+          console.warn('[runStore] Failed to listen to emulator-status:', e);
         }
       }
     })();
@@ -456,16 +465,93 @@ class RunStore {
     this.pid = null;
   }
 
-  async startEmulator(avdName: string) {
-    try {
-      await api.emulatorStart(avdName, false);
-      // Wait a moment then refresh devices
-      setTimeout(() => {
-        api.devicesList().then((list) => this.updateDevices(list)).catch(() => {});
-      }, 1500);
-    } catch (e: any) {
-      console.error('[runStore] Failed to start emulator:', e);
+  handleEmulatorStatus(event: any) {
+    if (!event || !event.id) return;
+    this.emulatorStatuses = {
+      ...this.emulatorStatuses,
+      [event.id]: { state: event.state, error: event.error },
+    };
+    if (event.state === 'running') {
+      this.refreshDevices().then(() => {
+        this.selectDevice(event.id);
+      }).catch(() => {});
+    } else if (event.state === 'failed' && event.error) {
+      import('../toolchain/toolchainStore.svelte').then((m) => {
+        m.toolchainStore.showToast(`Emulator "${event.id}" failed: ${event.error?.slice(0, 120)}`);
+      }).catch(() => {});
     }
+  }
+
+  async avdStart(name: string, cold: boolean = false, wipeData: boolean = false) {
+    this.emulatorStatuses = {
+      ...this.emulatorStatuses,
+      [name]: { state: 'booting' },
+    };
+    try {
+      await api.avdStart(name, cold, wipeData);
+    } catch (e: any) {
+      const errMsg = e?.message || (typeof e === 'string' ? e : 'Failed to start AVD');
+      this.emulatorStatuses = {
+        ...this.emulatorStatuses,
+        [name]: { state: 'failed', error: errMsg },
+      };
+      import('../toolchain/toolchainStore.svelte').then((m) => {
+        m.toolchainStore.showToast(`AVD "${name}" failed: ${errMsg}`);
+      }).catch(() => {});
+      throw e;
+    }
+  }
+
+  async avdStop(name: string) {
+    try {
+      await api.avdStop(name);
+      this.emulatorStatuses = {
+        ...this.emulatorStatuses,
+        [name]: { state: 'stopped' },
+      };
+      await this.refreshDevices();
+    } catch (e: any) {
+      console.error('[runStore] Failed to stop AVD:', e);
+      throw e;
+    }
+  }
+
+  async simBoot(udid: string) {
+    this.emulatorStatuses = {
+      ...this.emulatorStatuses,
+      [udid]: { state: 'booting' },
+    };
+    try {
+      await api.simBoot(udid);
+    } catch (e: any) {
+      const errMsg = e?.message || (typeof e === 'string' ? e : 'Failed to boot simulator');
+      this.emulatorStatuses = {
+        ...this.emulatorStatuses,
+        [udid]: { state: 'failed', error: errMsg },
+      };
+      import('../toolchain/toolchainStore.svelte').then((m) => {
+        m.toolchainStore.showToast(`Simulator "${udid}" failed: ${errMsg}`);
+      }).catch(() => {});
+      throw e;
+    }
+  }
+
+  async simShutdown(udid: string) {
+    try {
+      await api.simShutdown(udid);
+      this.emulatorStatuses = {
+        ...this.emulatorStatuses,
+        [udid]: { state: 'stopped' },
+      };
+      await this.refreshDevices();
+    } catch (e: any) {
+      console.error('[runStore] Failed to shutdown simulator:', e);
+      throw e;
+    }
+  }
+
+  async startEmulator(avdName: string) {
+    return this.avdStart(avdName, false);
   }
 
   async syncGradle() {

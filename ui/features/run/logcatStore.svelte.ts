@@ -99,10 +99,16 @@ class LogcatStore {
   setSearchQuery(q: string) {
     // Debounce search text 100 ms as specified
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.searchQuery = q;
     this.debounceTimer = setTimeout(() => {
-      this.searchQuery = q;
-      this.scheduleRafUpdate();
+      this.applyFilter();
     }, 100);
+  }
+
+  clearLogs() {
+    this.ringBuffer.clear();
+    this.filteredLines = [];
+    this.totalBufferedCount = 0;
   }
 
   setSearchQueryImmediate(q: string) {

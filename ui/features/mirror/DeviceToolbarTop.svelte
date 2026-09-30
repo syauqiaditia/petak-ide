@@ -39,6 +39,19 @@
   </div>
 
   <div class="toolbar-actions">
+    {#if status !== 'picker' && status !== 'empty'}
+      <button
+        class="switch-device-btn"
+        title="Ganti device yang dimirror"
+        onclick={() => mirrorStore.showDevicePicker()}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+        </svg>
+        <span>Ganti device</span>
+      </button>
+    {/if}
+
     <button
       class="tool-btn"
       title="Rotate Screen (0° ➔ 90°)"
@@ -202,6 +215,24 @@
     align-items: center;
     gap: 4px;
     margin-left: auto;
+  }
+  .switch-device-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #1e222a;
+    border: 1px solid #2e3442;
+    color: #a8b8db;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-right: 4px;
+  }
+  .switch-device-btn:hover {
+    background: #272d38;
+    color: #ffffff;
   }
   .tool-btn {
     width: 28px;

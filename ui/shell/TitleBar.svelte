@@ -6,6 +6,7 @@
   import { popupStore } from './popupStore.svelte';
   import { getRunVisualAttrs } from '../features/run/runStateMachine';
   import { api, type RecentProject } from '../lib/api';
+  import { isTitleBarInteractive } from './titleBarLogic';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
 
@@ -93,6 +94,7 @@
     onSelectProject,
     onOpenDevicesPanel,
     onStartRun,
+    onOpenDashboard,
   } = $props<{
     projectName?: string;
     branchName?: string | null;
@@ -100,6 +102,7 @@
     onSelectProject?: (path: string) => void;
     onOpenDevicesPanel?: () => void;
     onStartRun?: () => void;
+    onOpenDashboard?: () => void;
   }>();
 
   let isRunning = $derived(
@@ -177,12 +180,32 @@
   }}
 />
 
-<div class="titlebar" data-tauri-drag-region>
+<div
+  class="titlebar"
+  data-tauri-drag-region
+  ondblclick={(e) => {
+    if (!isTitleBarInteractive(e.target as HTMLElement)) {
+      api.windowToggleMaximize();
+    }
+  }}
+  onmousedown={(e) => {
+    if (e.button === 0 && !isTitleBarInteractive(e.target as HTMLElement)) {
+      api.windowStartDragging();
+    }
+  }}
+>
   <!-- macOS window control spacer -->
   <div class="traffic-lights-spacer" data-tauri-drag-region></div>
 
   <!-- Brand logo & name -->
-  <div class="brand">
+  <div
+    class="brand"
+    onclick={() => onOpenDashboard?.()}
+    role="button"
+    tabindex="0"
+    title="Dashboard (File > Dashboard)"
+    onkeydown={(e) => { if (e.key === 'Enter') onOpenDashboard?.(); }}
+  >
     <div class="brand-icon">
       <div class="grid-cell"></div>
       <div class="grid-cell dim"></div>

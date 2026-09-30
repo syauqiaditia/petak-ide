@@ -6,7 +6,37 @@
   let outputContainer: HTMLDivElement;
   let userScrolledUp = false;
 
+  let searchQuery = $state('');
+  let caseSensitive = $state(false);
+  let isRegex = $state(false);
+  let isPaused = $state(false);
+  let selectedMatchIdx = $state(0);
+
   let stateInfo = $derived(formatAppState(runStore.state));
+
+  let filteredLines = $derived.by(() => {
+    const q = searchQuery.trim();
+    if (!q) return runStore.outputLines;
+    try {
+      const pattern = isRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(pattern, caseSensitive ? '' : 'i');
+      return runStore.outputLines.filter((l) => re.test(l.line));
+    } catch {
+      return runStore.outputLines.filter((l) =>
+        caseSensitive ? l.line.includes(q) : l.line.toLowerCase().includes(q.toLowerCase())
+      );
+    }
+  });
+
+  function handlePrevMatch() {
+    if (filteredLines.length === 0) return;
+    selectedMatchIdx = (selectedMatchIdx - 1 + filteredLines.length) % filteredLines.length;
+  }
+
+  function handleNextMatch() {
+    if (filteredLines.length === 0) return;
+    selectedMatchIdx = (selectedMatchIdx + 1) % filteredLines.length;
+  }
 
   function handleScroll() {
     if (!outputContainer) return;
@@ -16,10 +46,10 @@
   }
 
   $effect(() => {
-    // Whenever outputLines changes, auto-scroll if user hasn't scrolled up
-    if (runStore.outputLines.length && !userScrolledUp && outputContainer) {
+    // Whenever outputLines changes, auto-scroll if user hasn't scrolled up and not paused
+    if (runStore.outputLines.length && !userScrolledUp && !isPaused && outputContainer) {
       tick().then(() => {
-        if (outputContainer && !userScrolledUp) {
+        if (outputContainer && !userScrolledUp && !isPaused) {
           outputContainer.scrollTop = outputContainer.scrollHeight;
         }
       });
@@ -128,6 +158,15 @@
     {/if}
 
     <button
+      class="action-btn"
+      class:is-paused={isPaused}
+      onclick={() => (isPaused = !isPaused)}
+      title={isPaused ? "Resume auto-scroll" : "Pause auto-scroll"}
+    >
+      {isPaused ? "▶ Resume" : "⏸ Pause"}
+    </button>
+
+    <button
       class="clear-btn"
       onclick={() => runStore.clearOutput()}
       title="Clear console output"
@@ -136,22 +175,60 @@
     </button>
   </div>
 
+  <!-- Search Filter Bar (Item 14) -->
+  <div class="search-bar">
+    <div class="search-input-group">
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Filter run logs…"
+        bind:value={searchQuery}
+      />
+      <button
+        class="opt-btn"
+        class:active={caseSensitive}
+        onclick={() => (caseSensitive = !caseSensitive)}
+        title="Match Case (Aa)"
+      >
+        Aa
+      </button>
+      <button
+        class="opt-btn"
+        class:active={isRegex}
+        onclick={() => (isRegex = !isRegex)}
+        title="Use Regular Expression (.*)"
+      >
+        .*
+      </button>
+    </div>
+
+    {#if searchQuery.trim()}
+      <div class="match-info">
+        <span>{filteredLines.length} {filteredLines.length === 1 ? 'match' : 'matches'}</span>
+        <button class="arrow-btn" onclick={handlePrevMatch} title="Previous match">▲</button>
+        <button class="arrow-btn" onclick={handleNextMatch} title="Next match">▼</button>
+      </div>
+    {/if}
+  </div>
+
   <!-- Output console -->
   <div
     class="console-output"
     bind:this={outputContainer}
     onscroll={handleScroll}
   >
-    {#if runStore.outputLines.length === 0}
+    {#if filteredLines.length === 0}
       <div class="empty-output">
-        {#if runStore.state === 'stopped'}
+        {#if searchQuery.trim()}
+          No lines matching "{searchQuery}"
+        {:else if runStore.state === 'stopped'}
           Console output is empty. Press Run to start the application.
         {:else}
           Waiting for application output...
         {/if}
       </div>
     {:else}
-      {#each runStore.outputLines as line (line.id)}
+      {#each filteredLines as line (line.id)}
         <div class="log-line" class:stderr={line.stream === 'stderr'}>
           <span class="line-content">{line.line}</span>
         </div>
@@ -289,6 +366,71 @@
   .clear-btn:hover {
     color: #d8d9dc;
     background: #1e2025;
+  }
+  .search-bar {
+    height: 30px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #111215;
+    border-bottom: 1px solid #1f2127;
+    flex-shrink: 0;
+  }
+  .search-input-group {
+    display: flex;
+    align-items: center;
+    background: #16181d;
+    border: 1px solid #282b35;
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+  .search-input {
+    background: transparent;
+    border: none;
+    color: #e0e2e8;
+    font-size: 11px;
+    padding: 2px 6px;
+    outline: none;
+    width: 200px;
+    font-family: inherit;
+  }
+  .opt-btn {
+    background: transparent;
+    border: none;
+    color: #656976;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .opt-btn:hover {
+    color: #c0c3ce;
+  }
+  .opt-btn.active {
+    background: #2b4573;
+    color: #ffffff;
+  }
+  .match-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #8b8f98;
+  }
+  .arrow-btn {
+    background: transparent;
+    border: 1px solid #2a2d36;
+    color: #9da0ab;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .arrow-btn:hover {
+    background: #252830;
+    color: #ffffff;
   }
   .console-output {
     flex: 1;
