@@ -242,3 +242,15 @@ test('commit single list: unified changes filter & checkbox state consistency', 
   assert.equal(getUnifiedStatusLetter(entries[1]).char, 'M');
   assert.equal(getUnifiedStatusLetter(entries[3]).char, '?');
 });
+
+// =============================================================================
+// Suite 7: Remove 'Open' Button in Project Tree Header (Feature D)
+// =============================================================================
+test('file tree header: open button removed next to PROJECT title', () => {
+  const fileTreePath = path.resolve(uiRoot, 'shell/FileTree.svelte');
+  const content = fs.readFileSync(fileTreePath, 'utf-8');
+
+  // Verify open-btn is completely removed from FileTree
+  assert.doesNotMatch(content, /class="open-btn"/);
+  assert.doesNotMatch(content, /<span>Open<\/span>/);
+});
