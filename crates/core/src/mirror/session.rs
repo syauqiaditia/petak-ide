@@ -36,6 +36,10 @@ pub enum MirrorStatus {
     Rotated { width: u32, height: u32 },
     Disconnected { reason: String },
     Error { message: String },
+    #[serde(rename = "needs_usb", alias = "NeedsUsb")]
+    NeedsUsb { message: String },
+    #[serde(rename = "failed", alias = "Failed")]
+    Failed { reason: String },
 }
 
 enum SessionBackend {

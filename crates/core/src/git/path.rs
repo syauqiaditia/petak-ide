@@ -8,7 +8,7 @@ use crate::git::diff::{diff_staged, parse_diff};
 use crate::git::log::{get_pushed_shas, get_refs_map, parse_log_output};
 use crate::git::model::{BlameLine, Commit, DiffFile};
 
-fn validate_ref_name(name: &str) -> Result<(), GitError> {
+pub(crate) fn validate_ref_name(name: &str) -> Result<(), GitError> {
     if name.is_empty() || name.starts_with('-') {
         return Err(GitError {
             exit_code: None,
@@ -329,19 +329,36 @@ pub fn add_to_gitignore(repo: &Path, rel: &str) -> std::io::Result<()> {
 }
 
 /// Stages `rels` and commits only those paths.
+/// Supports amend flag, and rolls back the index (unstages paths) if commit fails.
 pub fn commit_paths(
     exec: &dyn Exec,
     repo: &Path,
     message: &str,
     rels: &[&str],
+    amend: bool,
 ) -> Result<String, GitError> {
     if rels.is_empty() {
-        return crate::git::ops::commit(exec, repo, message, false);
+        return crate::git::ops::commit(exec, repo, message, amend);
     }
     crate::git::ops::stage_files(exec, repo, rels)?;
-    let mut args = vec!["commit", "-F", "-", "--"];
+    let mut args = vec!["commit", "-F", "-"];
+    if amend {
+        args.push("--amend");
+    }
+    args.push("--");
     args.extend_from_slice(rels);
-    git_with_stdin(exec, repo, &args, Some(message.as_bytes()))
+
+    match git_with_stdin(exec, repo, &args, Some(message.as_bytes())) {
+        Ok(_) => {
+            let sha = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+            Ok(sha)
+        }
+        Err(err) => {
+            // Rollback index: unstage the paths so index is restored
+            let _ = crate::git::ops::unstage_files(exec, repo, rels);
+            Err(err)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

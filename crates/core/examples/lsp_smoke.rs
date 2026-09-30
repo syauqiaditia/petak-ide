@@ -40,11 +40,7 @@ fn main() {
     println!("Server:  {} {}", cmd, cmd_args.join(" "));
 
     let root_uri = format!("file://{}", root.display());
-    let config = ServerConfig {
-        command: cmd,
-        args: cmd_args,
-        root_uri,
-    };
+    let config = ServerConfig::new(cmd, cmd_args, root_uri);
 
     let (tx, rx) = mpsc::channel();
     let start = Instant::now();

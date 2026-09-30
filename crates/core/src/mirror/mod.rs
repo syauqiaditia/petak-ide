@@ -7,7 +7,8 @@ pub mod session;
 
 pub use control::InputEvent;
 pub use permission::{
-    check_screen_capture_permission, open_screen_recording_settings, MirrorPermissionStatus,
+    check_camera_permission, check_screen_capture_permission, open_privacy_camera,
+    open_screen_recording_settings, CameraPermissionStatus, MirrorPermissionStatus,
 };
 pub use protocol::{FrameKind, VideoPacket};
 pub use server::ScrcpyServer;

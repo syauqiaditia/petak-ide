@@ -1053,7 +1053,7 @@ pub fn merge_devices(
         let kind = classify_device_kind(&dev.id, Some(&sim_udids), Some(&group_str)).to_string();
         let transport = match dev.transport.as_deref() {
             Some("wifi") | Some("wireless") => Some("wifi".to_string()),
-            Some("wired") | Some("usb") => Some("wired".to_string()),
+            Some("wired") | Some("usb") => Some("usb".to_string()),
             _ => {
                 if dev.id.contains(':')
                     || dev.name.to_lowercase().contains("wireless")
@@ -1061,7 +1061,7 @@ pub fn merge_devices(
                 {
                     Some("wifi".to_string())
                 } else if kind == "android" && !dev.id.starts_with("emulator-") {
-                    Some("wired".to_string())
+                    Some("usb".to_string())
                 } else {
                     None
                 }
@@ -1103,7 +1103,7 @@ pub fn merge_devices(
             if dev.transport.as_deref() == Some("wifi") || dev.id.contains(':') {
                 Some("wifi".to_string())
             } else {
-                Some("wired".to_string())
+                Some("usb".to_string())
             }
         } else {
             None
@@ -1295,7 +1295,7 @@ pub fn merge_devices(
             || dev.pairing_state.as_deref() == Some("locked");
         let trans = match dev.transport.as_deref() {
             Some("wifi") => Some("wifi".to_string()),
-            Some("wired") => Some("wired".to_string()),
+            Some("wired") | Some("usb") => Some("usb".to_string()),
             _ => None,
         };
         let conn_state = if is_locked {
@@ -1326,19 +1326,32 @@ pub fn merge_devices(
             None
         };
 
-        if let Some(existing) = unified.iter_mut().find(|d| d.id == dev.id) {
-            existing.connection = connection;
-            existing.state = state_str;
-            existing.kind = "ios-physical".to_string();
-            existing.conn_state = conn_state;
-            existing.flutter_id = flutter_id;
-            existing.transport = trans;
+        let existing_opt = unified.iter_mut().find(|d| {
+            d.id == dev.id
+                || (d.platform == "ios"
+                    && (d.name.eq_ignore_ascii_case(&dev.name)
+                        || d.id.replace('-', "").eq_ignore_ascii_case(&dev.id.replace('-', ""))))
+        });
+
+        if let Some(existing) = existing_opt {
+            if is_connected {
+                existing.connection = "connected".to_string();
+                existing.state = "online".to_string();
+                existing.conn_state = conn_state;
+            }
+            if existing.flutter_id.is_none() {
+                existing.flutter_id = flutter_id;
+            }
+            if existing.transport.is_none() {
+                existing.transport = trans;
+            }
             if existing.tunnel_state.is_none() {
                 existing.tunnel_state = dev.tunnel_state.clone();
             }
             if existing.pairing_state.is_none() {
                 existing.pairing_state = dev.pairing_state.clone();
             }
+            existing.kind = "ios-physical".to_string();
             existing.group = "physical".to_string();
             existing.platform = "ios".to_string();
         } else {
@@ -2273,6 +2286,48 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(uqi.conn_state, "connected_wifi");
         assert_eq!(uqi.kind, "ios-physical");
         assert_eq!(uqi.transport.as_deref(), Some("wifi"));
+    }
+
+    #[test]
+    fn test_ios_physical_device_deduplication_flutter_and_devicectl() {
+        let flutter_devs = vec![Device {
+            id: "00008110-00012CCE0C09401E".to_string(),
+            name: "UQi".to_string(),
+            platform: DevicePlatform::Ios,
+            kind: DeviceKind::Physical,
+            state: DeviceState::Online,
+            sdk: Some("iOS 17.0".to_string()),
+            flutter_id: Some("00008110-00012CCE0C09401E".to_string()),
+            group: Some("physical".to_string()),
+            transport: Some("usb".to_string()),
+            connection: "connected".to_string(),
+            conn_state: Some("connected_usb".to_string()),
+            tunnel_state: None,
+            pairing_state: None,
+        }];
+
+        let devicectl_devs = vec![Device {
+            id: "BC639450-9E15-4D5C-9A82-3A6B4E5F6A7B".to_string(),
+            name: "UQi".to_string(),
+            platform: DevicePlatform::Ios,
+            kind: DeviceKind::Physical,
+            state: DeviceState::Online,
+            sdk: Some("iOS 17.0".to_string()),
+            flutter_id: Some("BC639450-9E15-4D5C-9A82-3A6B4E5F6A7B".to_string()),
+            group: Some("physical".to_string()),
+            transport: Some("usb".to_string()),
+            connection: "connected".to_string(),
+            conn_state: Some("connected_usb".to_string()),
+            tunnel_state: Some("connected".to_string()),
+            pairing_state: Some("paired".to_string()),
+        }];
+
+        let snap = merge_devices(&flutter_devs, &[], &[], &[], &devicectl_devs, &std::collections::HashMap::new());
+        let uqi_devs: Vec<_> = snap.devices.iter().filter(|d| d.name == "UQi").collect();
+        assert_eq!(uqi_devs.len(), 1, "Expected exactly 1 merged device for UQi, got {}", uqi_devs.len());
+        assert_eq!(uqi_devs[0].connection, "connected");
+        assert_eq!(uqi_devs[0].transport.as_deref(), Some("usb"));
+        assert_eq!(uqi_devs[0].flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
     }
 
     #[test]

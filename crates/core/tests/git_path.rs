@@ -243,7 +243,7 @@ fn test_commit_paths_isolated() {
     repo.write_file("file_a.txt", "v2-a\n");
     repo.write_file("file_b.txt", "v2-b\n");
 
-    commit_paths(&exec, repo.path(), "commit only a", &["file_a.txt"])
+    commit_paths(&exec, repo.path(), "commit only a", &["file_a.txt"], false)
         .expect("commit_paths should succeed");
 
     // file_a should be clean at HEAD
@@ -253,6 +253,59 @@ fn test_commit_paths_isolated() {
     // file_b should still be modified in worktree
     let diff_b = diff_path_head(&exec, repo.path(), "file_b.txt").unwrap();
     assert_eq!(diff_b.len(), 1, "file_b should still have diff vs HEAD");
+}
+
+#[test]
+fn test_commit_paths_atomic_rename_delete_untracked_and_rollback() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    repo.write_file("file_orig.txt", "original\n");
+    repo.write_file("file_to_del.txt", "delete me\n");
+    repo.commit("initial commit");
+
+    // 1. Untracked file
+    repo.write_file("file_untracked.txt", "new untracked\n");
+    // 2. Delete file
+    std::fs::remove_file(repo.path().join("file_to_del.txt")).unwrap();
+    // 3. Rename file: remove old, write new
+    std::fs::remove_file(repo.path().join("file_orig.txt")).unwrap();
+    repo.write_file("file_renamed.txt", "original renamed\n");
+    // 4. Dirty file that should NOT be committed
+    repo.write_file("file_dirty.txt", "should stay dirty\n");
+
+    // Commit only the untracked and deleted files first
+    let sha1 = commit_paths(
+        &exec,
+        repo.path(),
+        "commit untracked and delete",
+        &["file_untracked.txt", "file_to_del.txt"],
+        false,
+    )
+    .expect("commit untracked and delete should succeed");
+    assert!(!sha1.is_empty());
+
+    // file_untracked and file_to_del should be clean vs HEAD
+    let diff_del = diff_path_head(&exec, repo.path(), "file_to_del.txt").unwrap();
+    assert!(diff_del.is_empty());
+
+    // Commit renamed file with amend=true
+    let sha2 = commit_paths(
+        &exec,
+        repo.path(),
+        "amended with renamed file",
+        &["file_orig.txt", "file_renamed.txt"],
+        true,
+    )
+    .expect("commit amend with rename should succeed");
+    assert!(!sha2.is_empty());
+
+    // file_dirty.txt should still be untracked / dirty
+    assert!(repo.path().join("file_dirty.txt").exists());
+
+    // 5. Test rollback: commit empty path should fail and rollback index
+    let fail_res = commit_paths(&exec, repo.path(), "empty", &[], false);
+    assert!(fail_res.is_err());
 }
 
 #[test]

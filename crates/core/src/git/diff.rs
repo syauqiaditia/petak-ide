@@ -1,4 +1,5 @@
 use std::path::Path;
+use serde::{Deserialize, Serialize};
 
 use crate::exec::{git, git_raw, Exec, GitError};
 use crate::git::model::{CommitFile, DiffFile, DiffLine, DiffLineKind, FileState, Hunk};
@@ -106,6 +107,174 @@ pub fn commit_files(
 ) -> Result<Vec<CommitFile>, GitError> {
     let stdout = git(exec, repo, &["show", "--name-status", "--format=", sha])?;
     Ok(parse_name_status(&stdout))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompareBranchResult {
+    pub files: Vec<CompareFileEntry>,
+    pub total_added: u32,
+    pub total_removed: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompareFileEntry {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    pub status: String,
+    pub added: u32,
+    pub removed: u32,
+    pub binary: bool,
+}
+
+/// Compares two branches using `git diff --name-status -M` and `git diff --numstat -M <base>...<target> [-- <path>]`.
+pub fn compare_branch(
+    exec: &dyn Exec,
+    repo: &Path,
+    base: &str,
+    target: &str,
+    path: Option<&str>,
+) -> Result<CompareBranchResult, GitError> {
+    crate::git::path::validate_ref_name(base)?;
+    crate::git::path::validate_ref_name(target)?;
+
+    let range = format!("{}...{}", base, target);
+
+    let mut name_status_args = vec!["diff", "--name-status", "-M", &range];
+    if let Some(p) = path {
+        let p_trimmed = p.trim();
+        if !p_trimmed.is_empty() && p_trimmed != "." {
+            name_status_args.push("--");
+            name_status_args.push(p_trimmed);
+        }
+    }
+    let name_status_out = git(exec, repo, &name_status_args)?;
+
+    let mut numstat_args = vec!["diff", "--numstat", "-M", &range];
+    if let Some(p) = path {
+        let p_trimmed = p.trim();
+        if !p_trimmed.is_empty() && p_trimmed != "." {
+            numstat_args.push("--");
+            numstat_args.push(p_trimmed);
+        }
+    }
+    let numstat_out = git(exec, repo, &numstat_args)?;
+
+    Ok(parse_compare_branch_output(&name_status_out, &numstat_out))
+}
+
+pub fn parse_compare_branch_output(name_status_raw: &str, numstat_raw: &str) -> CompareBranchResult {
+    struct NumstatEntry {
+        added: u32,
+        removed: u32,
+        binary: bool,
+    }
+    let mut numstats: Vec<NumstatEntry> = Vec::new();
+    for line in numstat_raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split('\t').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let (added, removed, binary) = if parts[0] == "-" || parts[1] == "-" {
+            (0, 0, true)
+        } else {
+            (
+                parts[0].parse::<u32>().unwrap_or(0),
+                parts[1].parse::<u32>().unwrap_or(0),
+                false,
+            )
+        };
+        numstats.push(NumstatEntry {
+            added,
+            removed,
+            binary,
+        });
+    }
+
+    let mut files = Vec::new();
+    let mut total_added: u32 = 0;
+    let mut total_removed: u32 = 0;
+
+    let mut idx = 0;
+    for line in name_status_raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split('\t').collect();
+        if parts.is_empty() {
+            continue;
+        }
+
+        let raw_status = parts[0];
+        let status_char = raw_status.chars().next().unwrap_or('M');
+        let status = match status_char {
+            'A' => "A".to_string(),
+            'D' => "D".to_string(),
+            'R' => "R".to_string(),
+            'C' => "A".to_string(),
+            _ => "M".to_string(),
+        };
+
+        let (path, old_path) = if status == "R" && parts.len() >= 3 {
+            (parts[2].to_string(), Some(parts[1].to_string()))
+        } else if parts.len() >= 2 {
+            (parts[1].to_string(), None)
+        } else {
+            (parts[0].to_string(), None)
+        };
+
+        let (added, removed, binary) = if let Some(ns) = numstats.get(idx) {
+            (ns.added, ns.removed, ns.binary)
+        } else {
+            (0, 0, false)
+        };
+
+        total_added += added;
+        total_removed += removed;
+
+        files.push(CompareFileEntry {
+            path,
+            old_path,
+            status,
+            added,
+            removed,
+            binary,
+        });
+        idx += 1;
+    }
+
+    CompareBranchResult {
+        files,
+        total_added,
+        total_removed,
+    }
+}
+
+/// Diffs a file between two refs using `git diff <base>...<target> -- <path>`.
+pub fn diff_between_refs(
+    exec: &dyn Exec,
+    repo: &Path,
+    base: &str,
+    target: &str,
+    path: &str,
+) -> Result<Vec<DiffFile>, GitError> {
+    crate::git::path::validate_ref_name(base)?;
+    crate::git::path::validate_ref_name(target)?;
+
+    let range = format!("{}...{}", base, target);
+    let mut args = vec!["diff", "--no-color", "--no-ext-diff", "-U3", &range];
+    if !path.is_empty() && path != "." {
+        args.extend_from_slice(&["--", path]);
+    }
+    let stdout = git(exec, repo, &args)?;
+    Ok(parse_diff(&stdout))
 }
 
 pub fn parse_name_status(raw: &str) -> Vec<CommitFile> {

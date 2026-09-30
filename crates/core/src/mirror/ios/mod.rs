@@ -114,9 +114,93 @@ pub fn take_screenshot(exec: &dyn Exec, device: &str, path: Option<&str>) -> io:
     take_ios_screenshot(exec, clean_id, path, is_sim)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AvfCaptureDeviceInfo {
+    pub name: String,
+    pub model_id: String,
+    pub has_muxed: bool,
+    pub has_video: bool,
+    pub unique_id: String,
+}
+
+/// Pure device selection function for matching an iOS physical device from AVFoundation capture devices.
+/// Matches based on modelID == "iOS Device" or has_muxed == true, and matches device name if specified.
+pub fn select_ios_capture_device<'a>(
+    devices: &'a [AvfCaptureDeviceInfo],
+    target_name: Option<&str>,
+) -> Option<&'a AvfCaptureDeviceInfo> {
+    let ios_devices: Vec<&'a AvfCaptureDeviceInfo> = devices
+        .iter()
+        .filter(|d| {
+            d.model_id == "iOS Device"
+                || d.model_id.starts_with("iOS")
+                || d.has_muxed
+                || d.name.to_lowercase().contains("iphone")
+                || d.name.to_lowercase().contains("ipad")
+        })
+        .collect();
+
+    if ios_devices.is_empty() {
+        return None;
+    }
+
+    if let Some(target) = target_name {
+        let trimmed = target.trim();
+        if !trimmed.is_empty() {
+            if let Some(matched) = ios_devices.iter().find(|d| d.name.eq_ignore_ascii_case(trimmed)) {
+                return Some(*matched);
+            }
+            if let Some(matched) = ios_devices.iter().find(|d| {
+                d.name.to_lowercase().contains(&trimmed.to_lowercase())
+                    || trimmed.to_lowercase().contains(&d.name.to_lowercase())
+            }) {
+                return Some(*matched);
+            }
+        }
+    }
+
+    // Default to the first matched iOS capture device
+    ios_devices.first().copied()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_select_ios_capture_device_real_world() {
+        let devices = vec![
+            AvfCaptureDeviceInfo {
+                name: "FaceTime HD Camera".to_string(),
+                model_id: "UVC Camera VendorID_0x05ac ProductID_0x8514".to_string(),
+                has_muxed: false,
+                has_video: true,
+                unique_id: "CC22143K...".to_string(),
+            },
+            AvfCaptureDeviceInfo {
+                name: "UQi".to_string(),
+                model_id: "iOS Device".to_string(),
+                has_muxed: true,
+                has_video: false,
+                unique_id: "856FF74F-9D70-41AF-A430-6C7853DACD31".to_string(),
+            },
+        ];
+
+        let chosen = select_ios_capture_device(&devices, Some("UQi"));
+        assert!(chosen.is_some());
+        let dev = chosen.unwrap();
+        assert_eq!(dev.name, "UQi");
+        assert_eq!(dev.model_id, "iOS Device");
+        assert!(dev.has_muxed);
+        assert!(!dev.has_video);
+        assert_eq!(dev.unique_id, "856FF74F-9D70-41AF-A430-6C7853DACD31");
+
+        let chosen_anon = select_ios_capture_device(&devices, None);
+        assert_eq!(chosen_anon.unwrap().name, "UQi");
+
+        let webcam_only = vec![devices[0].clone()];
+        assert!(select_ios_capture_device(&webcam_only, None).is_none());
+    }
 
     #[test]
     fn test_is_ios_device_detection() {
