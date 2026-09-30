@@ -85,6 +85,7 @@ pub struct MergeRequest {
     pub should_remove_source_branch: Option<bool>,
     pub force_remove_source_branch: Option<bool>,
     pub head_pipeline: Option<PipelineInfo>,
+    pub merge_commit_sha: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -348,4 +349,164 @@ pub fn convert_gitlab_diffs(raw_diffs: &[GitLabDiffRaw]) -> Vec<DiffFile> {
         .iter()
         .map(parse_gitlab_diff_to_diff_file)
         .collect()
+}
+
+fn default_position_type() -> String {
+    "text".to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
+pub struct InlinePositionParams {
+    pub base_sha: String,
+    pub start_sha: String,
+    pub head_sha: String,
+    pub old_path: String,
+    pub new_path: String,
+    #[serde(default = "default_position_type")]
+    pub position_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_line: Option<u32>,
+}
+
+impl InlinePositionParams {
+    pub fn from_diff_refs(
+        diff_refs: &DiffRefs,
+        path: &str,
+        old_line: Option<u32>,
+        new_line: Option<u32>,
+    ) -> Result<Self, String> {
+        Self::with_paths(diff_refs, path, path, old_line, new_line)
+    }
+
+    pub fn with_paths(
+        diff_refs: &DiffRefs,
+        old_path: &str,
+        new_path: &str,
+        old_line: Option<u32>,
+        new_line: Option<u32>,
+    ) -> Result<Self, String> {
+        let base_sha = diff_refs
+            .base_sha
+            .as_ref()
+            .or(diff_refs.start_sha.as_ref())
+            .ok_or_else(|| "Missing base_sha in diff_refs".to_string())?
+            .clone();
+        let start_sha = diff_refs
+            .start_sha
+            .as_ref()
+            .or(diff_refs.base_sha.as_ref())
+            .ok_or_else(|| "Missing start_sha in diff_refs".to_string())?
+            .clone();
+        let head_sha = diff_refs.head_sha.clone();
+
+        if old_line.is_none() && new_line.is_none() {
+            return Err(
+                "Inline discussion position requires either old_line or new_line".to_string(),
+            );
+        }
+
+        Ok(Self {
+            base_sha,
+            start_sha,
+            head_sha,
+            old_path: old_path.to_string(),
+            new_path: new_path.to_string(),
+            position_type: "text".to_string(),
+            old_line,
+            new_line,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
+pub struct MergeRequestParams {
+    pub sha: String,
+    pub squash: Option<bool>,
+    pub should_remove_source_branch: Option<bool>,
+    pub merge_when_pipeline_succeeds: Option<bool>,
+    pub squash_commit_message: Option<String>,
+    pub merge_commit_message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStatusEvaluation {
+    pub mergeable: bool,
+    pub can_mwps: bool,
+    pub reason: Option<String>,
+}
+
+pub fn evaluate_merge_status(detailed_status: Option<&str>) -> MergeStatusEvaluation {
+    let status = match detailed_status {
+        Some(s) if !s.trim().is_empty() => s.trim(),
+        _ => {
+            return MergeStatusEvaluation {
+                mergeable: false,
+                can_mwps: false,
+                reason: Some("Status merge request tidak diketahui".to_string()),
+            }
+        }
+    };
+
+    match status {
+        "mergeable" => MergeStatusEvaluation {
+            mergeable: true,
+            can_mwps: false,
+            reason: None,
+        },
+        "ci_still_running" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: true,
+            reason: Some(
+                "Pipeline CI masih berjalan (dapat menggunakan opsi Merge When Pipeline Succeeds)"
+                    .to_string(),
+            ),
+        },
+        "blocked_status" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some("Merge diblokir oleh status lain atau dependensi MR".to_string()),
+        },
+        "not_approved" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some("Belum mendapatkan persetujuan (approval) yang diperlukan".to_string()),
+        },
+        "discussions_not_resolved" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some(
+                "Masih ada diskusi atau komentar yang belum diselesaikan (unresolved)".to_string(),
+            ),
+        },
+        "draft_status" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some("Merge request masih dalam status draf (Draft/WIP)".to_string()),
+        },
+        "conflict" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some("Terdapat konflik perubahan file yang harus diselesaikan".to_string()),
+        },
+        "ci_must_pass" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some("Pipeline CI gagal atau wajib lulus sebelum merge".to_string()),
+        },
+        "not_open" => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some("Merge request tidak dalam status terbuka".to_string()),
+        },
+        other => MergeStatusEvaluation {
+            mergeable: false,
+            can_mwps: false,
+            reason: Some(format!("Tidak dapat merge: status {}", other)),
+        },
+    }
 }

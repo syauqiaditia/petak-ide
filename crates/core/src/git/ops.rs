@@ -587,3 +587,37 @@ pub fn checkout_with_stash(
         message,
     })
 }
+
+/// Checkout a GitLab Merge Request locally.
+/// Fetches `origin merge-requests/:iid/head:mr-:iid` and checks out the branch `mr-:iid`.
+/// Rejects if the working tree is dirty (without auto-stash).
+pub fn checkout_mr(
+    exec: &dyn Exec,
+    repo: &Path,
+    remote: Option<&str>,
+    iid: u64,
+) -> Result<String, GitError> {
+    // 1. Tolak bila working tree kotor (tanpa auto-stash)
+    let status_out = git(exec, repo, &["status", "--porcelain"])?;
+    if !status_out.trim().is_empty() {
+        return Err(GitError {
+            exit_code: None,
+            message: "Working tree kotor (ada perubahan belum dicommit). Silakan commit atau simpan perubahan terlebih dahulu sebelum checkout MR (tanpa auto-stash).".to_string(),
+        });
+    }
+
+    let remote_name = remote.unwrap_or("origin");
+    let branch_name = format!("mr-{}", iid);
+    let refspec = format!("merge-requests/{}/head:{}", iid, branch_name);
+
+    // 2. Fetch origin merge-requests/:iid/head:mr-:iid
+    if git(exec, repo, &["fetch", remote_name, &refspec]).is_err() {
+        let force_refspec = format!("+merge-requests/{}/head:{}", iid, branch_name);
+        git(exec, repo, &["fetch", remote_name, &force_refspec])?;
+    }
+
+    // 3. Switch lewat git/ops.rs
+    branch_checkout(exec, repo, &branch_name)?;
+
+    Ok(branch_name)
+}

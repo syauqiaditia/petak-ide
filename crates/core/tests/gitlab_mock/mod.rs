@@ -350,22 +350,43 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
 
     // Notes endpoint: POST
     if path.ends_with("/notes") {
-        let resp = Response::from_string("{\"id\": 302, \"body\": \"mock note created\"}")
-            .with_status_code(StatusCode(201))
-            .with_header(
-                Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
-            );
+        let resp = Response::from_string(
+            r#"{
+                "id": 302,
+                "body": "mock note created",
+                "author": {
+                    "id": 42,
+                    "username": "tester",
+                    "name": "Test User"
+                },
+                "created_at": "2026-09-30T00:00:00.000Z",
+                "updated_at": "2026-09-30T00:00:00.000Z",
+                "system": false,
+                "resolvable": false
+            }"#,
+        )
+        .with_status_code(StatusCode(201))
+        .with_header(
+            Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+        );
         let _ = request.respond(resp);
         return;
     }
 
     // Discussion thread resolve: PUT /discussions/:did
     if path.contains("/discussions/") && request.method() == &Method::Put {
-        let resp = Response::from_string("{\"id\": \"disc-001\", \"resolved\": true}")
-            .with_status_code(StatusCode(200))
-            .with_header(
-                Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
-            );
+        let resp = Response::from_string(
+            r#"{
+                "id": "disc-001",
+                "individual_note": false,
+                "resolved": true,
+                "notes": []
+            }"#,
+        )
+        .with_status_code(StatusCode(200))
+        .with_header(
+            Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+        );
         let _ = request.respond(resp);
         return;
     }
@@ -383,7 +404,7 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
     }
 
     if path.ends_with("/approve") {
-        let resp = Response::from_string("{\"approved\": true}")
+        let resp = Response::from_string(r#"{"approved": true}"#)
             .with_status_code(StatusCode(201))
             .with_header(
                 Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
@@ -393,7 +414,7 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
     }
 
     if path.ends_with("/unapprove") {
-        let resp = Response::from_string("{\"approved\": false}")
+        let resp = Response::from_string(r#"{"approved": false}"#)
             .with_status_code(StatusCode(201))
             .with_header(
                 Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
@@ -415,8 +436,16 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
 
         let simulate_406 = query.get("simulate_error").map(|v| v.as_str()) == Some("406")
             || body_str.contains("\"simulate_error\":\"406\"")
+            || body_str.contains("simulate_406")
             || header_value(&request, "X-Simulate-Error").as_deref() == Some("406")
-            || query.get("sha").map(|v| v.as_str()) == Some("mismatched_sha");
+            || query.get("sha").map(|v| v.as_str()) == Some("mismatched_sha")
+            || path.contains("/merge_requests/3/");
+
+        let simulate_409 = query.get("simulate_error").map(|v| v.as_str()) == Some("409")
+            || body_str.contains("\"simulate_error\":\"409\"")
+            || body_str.contains("simulate_409")
+            || header_value(&request, "X-Simulate-Error").as_deref() == Some("409")
+            || path.contains("/merge_requests/4/");
 
         if simulate_405 {
             let body = read_fixture(fixtures_dir, "error_405.json");
@@ -440,6 +469,17 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
             return;
         }
 
+        if simulate_409 {
+            let body = read_fixture(fixtures_dir, "error_409.json");
+            let resp = Response::from_string(body)
+                .with_status_code(StatusCode(409))
+                .with_header(
+                    Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+                );
+            let _ = request.respond(resp);
+            return;
+        }
+
         let body = read_fixture(fixtures_dir, "merge_result_success.json");
         let resp = Response::from_string(body)
             .with_status_code(StatusCode(200))
@@ -452,7 +492,8 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
 
     // Cancel MWPS: POST /cancel_merge_when_pipeline_succeeds
     if path.ends_with("/cancel_merge_when_pipeline_succeeds") {
-        let resp = Response::from_string("{\"message\": \"cancelled\"}")
+        let body = read_fixture(fixtures_dir, "merge_result_success.json");
+        let resp = Response::from_string(body)
             .with_status_code(StatusCode(200))
             .with_header(
                 Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),

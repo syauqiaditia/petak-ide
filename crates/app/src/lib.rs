@@ -322,6 +322,16 @@ pub fn run() {
             commands::mr_pipeline_jobs,
             commands::mr_diffs,
             commands::mr_discussions,
+            commands::mr_create_note,
+            commands::mr_create_inline_discussion,
+            commands::mr_reply_discussion,
+            commands::mr_resolve_discussion,
+            commands::mr_approve,
+            commands::mr_unapprove,
+            commands::mr_merge,
+            commands::mr_cancel_mwps,
+            commands::mr_checkout,
+            commands::mr_evaluate_merge_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
