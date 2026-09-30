@@ -405,6 +405,6 @@ mod tests {
         std::fs::write(&fake_exe, "").unwrap();
 
         let resolved = resolve_swift_helper_path_internal(Some(&fake_exe), None);
-        assert_eq!(resolved, helper_swift);
+        assert_eq!(resolved, helper_swift.canonicalize().unwrap_or(helper_swift));
     }
 }

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::exec::Exec;
@@ -323,13 +323,19 @@ fn detect_sourcekit(root: &Path, exec: &dyn Exec) -> Option<Tool> {
 }
 
 fn detect_scrcpy(root: &Path, exec: &dyn Exec) -> Option<Tool> {
-    detect_scrcpy_internal(root, exec, crate::mirror::server::resolve_server_jar().ok())
+    detect_scrcpy_internal(
+        root,
+        exec,
+        crate::mirror::server::resolve_server_jar().ok(),
+        crate::toolchain::resolve_scrcpy(),
+    )
 }
 
 fn detect_scrcpy_internal(
     root: &Path,
     exec: &dyn Exec,
     resolved_server_jar: Option<String>,
+    resolved_scrcpy_bin: Option<PathBuf>,
 ) -> Option<Tool> {
     // 1. Check if scrcpy-server jar is resolved
     if let Some(jar_path) = resolved_server_jar {
@@ -340,7 +346,7 @@ fn detect_scrcpy_internal(
     }
 
     // 2. Check scrcpy executable in path
-    if let Some(scrcpy_bin) = crate::toolchain::resolve_scrcpy() {
+    if let Some(scrcpy_bin) = resolved_scrcpy_bin {
         let path_str = scrcpy_bin.to_string_lossy().to_string();
         let version = match exec.run(root, &path_str, &["--version"], &[], None) {
             Ok(out) if out.status.success() => {
@@ -486,6 +492,7 @@ mod tests {
             Path::new("."),
             &fake,
             Some("/opt/homebrew/share/scrcpy/scrcpy-server".to_string()),
+            None,
         );
         assert!(tool.is_some());
         let scrcpy = tool.unwrap();
@@ -496,7 +503,7 @@ mod tests {
         );
 
         // When neither jar nor executable exists
-        let missing = detect_scrcpy_internal(Path::new("."), &fake, None);
+        let missing = detect_scrcpy_internal(Path::new("."), &fake, None, None);
         assert!(missing.is_none());
     }
 }
