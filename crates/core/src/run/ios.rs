@@ -136,6 +136,20 @@ pub fn simctl_shutdown(exec: &dyn Exec, udid: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Open macOS Simulator application (open -a Simulator).
+pub fn open_simulator_app() -> io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("open")
+            .args(["-a", "Simulator"])
+            .status()?;
+        if !status.success() {
+            return Err(io::Error::other("Gagal membuka aplikasi Simulator"));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 struct DevicectlOutput {
     #[serde(default)]

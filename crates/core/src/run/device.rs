@@ -512,6 +512,113 @@ pub fn avd_start(
     spawn.spawn(Path::new("."), &emu_cmd, &args_ref, &[], tx)
 }
 
+/// Resolve Android AVD directory (~/.android/avd or $ANDROID_AVD_HOME).
+pub fn resolve_android_avd_home() -> Option<std::path::PathBuf> {
+    if let Ok(h) = std::env::var("ANDROID_AVD_HOME") {
+        let p = std::path::PathBuf::from(h);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let p = home.join(".android").join("avd");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Wipe data of an Android AVD.
+pub fn avd_wipe(avd: &str) -> io::Result<()> {
+    if !is_valid_avd_name(avd) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid AVD name: {}", avd),
+        ));
+    }
+    if let Some(avd_home) = resolve_android_avd_home() {
+        let avd_dir = avd_home.join(format!("{}.avd", avd));
+        if avd_dir.is_dir() {
+            let _ = std::fs::remove_file(avd_dir.join("userdata-qemu.img"));
+            let _ = std::fs::remove_file(avd_dir.join("userdata.img.qcow2"));
+            let _ = std::fs::remove_dir_all(avd_dir.join("snapshots"));
+        }
+    }
+    Ok(())
+}
+
+/// Delete an Android AVD (removes <avd>.avd directory and <avd>.ini file).
+pub fn avd_delete(avd: &str) -> io::Result<()> {
+    if !is_valid_avd_name(avd) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid AVD name: {}", avd),
+        ));
+    }
+    if let Some(avd_home) = resolve_android_avd_home() {
+        let avd_dir = avd_home.join(format!("{}.avd", avd));
+        let ini_file = avd_home.join(format!("{}.ini", avd));
+        if avd_dir.exists() {
+            let _ = std::fs::remove_dir_all(&avd_dir);
+        }
+        if ini_file.exists() {
+            let _ = std::fs::remove_file(&ini_file);
+        }
+    }
+    Ok(())
+}
+
+/// Spawn emulator process detached with piped stderr to monitor boot errors.
+pub fn spawn_emulator_detached(
+    avd: &str,
+    cold: bool,
+    wipe_data: bool,
+    headless: bool,
+) -> io::Result<std::process::Child> {
+    if !is_valid_avd_name(avd) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid AVD name: {}", avd),
+        ));
+    }
+
+    let emu_cmd = resolve_emulator_binary();
+    let mut cmd = std::process::Command::new(&emu_cmd);
+    cmd.args(["-avd", avd]);
+
+    if cold {
+        cmd.arg("-no-snapshot-load");
+    }
+    if wipe_data {
+        cmd.arg("-wipe-data");
+    }
+    if headless {
+        cmd.args(["-no-window", "-no-audio", "-gpu", "swiftshader_indirect"]);
+    }
+
+    if let Some(sdk) = crate::toolchain::resolve_android_home() {
+        cmd.env("ANDROID_HOME", &sdk);
+        cmd.env("ANDROID_SDK_ROOT", &sdk);
+    }
+    if let Some(avd_home) = resolve_android_avd_home() {
+        cmd.env("ANDROID_AVD_HOME", &avd_home);
+    }
+    cmd.env("PATH", crate::toolchain::effective_path());
+
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::piped());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    cmd.spawn()
+}
+
 /// Query the running AVD name for an emulator device ID using `adb -s <id> emu avd name`.
 pub fn get_running_avd_name(exec: &dyn Exec, adb: &str, device_id: &str) -> Option<String> {
     let out = exec
@@ -1770,5 +1877,52 @@ R58M1234567            device usb:1-2 product:s23 model:SM_S911B device:dm1q tra
         assert_eq!(online.connection, "connected");
         assert_eq!(online.flutter_id.as_deref(), Some("R58M1234567"));
         assert_eq!(online.transport.as_deref(), Some("usb"));
+    }
+
+    #[test]
+    fn test_spawn_emulator_stderr_and_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let fake_emu = tmp.path().join("emulator");
+        #[cfg(unix)]
+        {
+            std::fs::write(
+                &fake_emu,
+                "#!/bin/sh\n>&2 echo 'PANIC: Missing GPU driver'\n>&2 echo 'PANIC: Emulator exited'\nexit 1\n",
+            )
+            .unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&fake_emu, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+            let mut cmd = std::process::Command::new(&fake_emu);
+            cmd.args(["-avd", "Pixel_7"]);
+            cmd.stderr(std::process::Stdio::piped());
+            let child = cmd.spawn().unwrap();
+            let out = child.wait_with_output().unwrap();
+            assert!(!out.status.success());
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert!(stderr.contains("PANIC: Missing GPU driver"));
+        }
+    }
+
+    #[test]
+    fn test_avd_wipe_and_delete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let avd_dir = tmp.path().join("Test_AVD.avd");
+        let ini_file = tmp.path().join("Test_AVD.ini");
+        std::fs::create_dir_all(&avd_dir).unwrap();
+        std::fs::write(&ini_file, "path=Test_AVD.avd\n").unwrap();
+        std::fs::write(avd_dir.join("userdata-qemu.img"), "dummy").unwrap();
+
+        std::env::set_var("ANDROID_AVD_HOME", tmp.path());
+
+        // Wipe should remove userdata
+        avd_wipe("Test_AVD").unwrap();
+        assert!(!avd_dir.join("userdata-qemu.img").exists());
+        assert!(avd_dir.exists());
+
+        // Delete should remove dir and ini
+        avd_delete("Test_AVD").unwrap();
+        assert!(!avd_dir.exists());
+        assert!(!ini_file.exists());
     }
 }
