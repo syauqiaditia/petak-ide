@@ -135,3 +135,30 @@ test('device tooltip: displays tunnelState and pairingState accurately', () => {
   const tooltip2 = getDeviceTooltip({ tunnelState: null, pairingState: null });
   assert.equal(tooltip2, 'tunnelState: None · pairingState: None');
 });
+
+// =============================================================================
+// Suite 4: Flutter Daemon & Connection Restart (Feature A)
+// =============================================================================
+import {
+  resetRunLifecycle,
+  canPerformHotRestart,
+  canPerformStop,
+} from '../ui/features/run/restartLogic.ts';
+
+test('run lifecycle reset: cleans state machine cleanly on daemon/connection restart', () => {
+  const reset = resetRunLifecycle();
+  assert.equal(reset.state, 'stopped');
+  assert.equal(reset.uiState, 'idle');
+  assert.equal(reset.runId, null);
+  assert.equal(reset.pid, null);
+});
+
+test('hot restart & stop execution guards', () => {
+  assert.equal(canPerformHotRestart('running', false), true);
+  assert.equal(canPerformHotRestart('running', true), false);
+  assert.equal(canPerformHotRestart('stopped', false), false);
+
+  assert.equal(canPerformStop('running', 'running'), true);
+  assert.equal(canPerformStop('stopped', 'starting'), true);
+  assert.equal(canPerformStop('stopped', 'idle'), false);
+});
