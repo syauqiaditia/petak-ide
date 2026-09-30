@@ -1321,6 +1321,14 @@
     // 0. Initialize toolchain store for real LSP status & configs
     toolchainStore.init(currentFolderPath).catch(() => {});
 
+    if (!currentFolderPath) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          api.markReady(Date.now()).catch(() => {});
+        });
+      });
+    }
+
     // 1. Listen for filesystem events
     try {
       unlistenFs = await api.onFsChanged((payload) => {

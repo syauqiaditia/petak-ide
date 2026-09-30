@@ -113,6 +113,10 @@
     try {
       await toolchainStore.refresh('');
     } catch {}
+
+    try {
+      await api.markReady(Date.now());
+    } catch {}
   });
 
   function togglePin(e: MouseEvent, path: string) {
