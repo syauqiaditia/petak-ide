@@ -3071,3 +3071,5 @@ pub fn editor_ghost_text_set(app: tauri::AppHandle, enabled: bool) -> Result<(),
     let app_data = suggest_app_data_dir(&app);
     petak_core::suggest::set_editor_ghost_text(app_data.as_deref(), enabled).map_err(|e| e.to_string())
 }
+
+#[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;

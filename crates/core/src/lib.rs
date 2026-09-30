@@ -2,6 +2,7 @@ pub mod exec;
 pub mod fs;
 pub mod fsops;
 pub mod git;
+pub mod gitlab;
 pub mod local_history;
 pub mod lsp;
 pub mod mirror;

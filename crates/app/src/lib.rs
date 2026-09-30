@@ -287,6 +287,15 @@ pub fn run() {
             commands::setting_set,
             commands::editor_ghost_text_get,
             commands::editor_ghost_text_set,
+            // Phase 5 - GitLab MR
+            commands::mr_get_token_scope,
+            commands::mr_current_user,
+            commands::mr_list,
+            commands::mr_detail,
+            commands::mr_pipelines,
+            commands::mr_pipeline_jobs,
+            commands::mr_diffs,
+            commands::mr_discussions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

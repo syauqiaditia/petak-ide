@@ -357,7 +357,7 @@ fn parse_diff_git_header(line: &str) -> (Option<String>, Option<String>) {
     (None, None)
 }
 
-fn parse_hunk_header_counts(line: &str) -> Option<(u32, u32, u32, u32)> {
+pub(crate) fn parse_hunk_header_counts(line: &str) -> Option<(u32, u32, u32, u32)> {
     let start_idx = line.find("@@ -")?;
     let rest = &line[start_idx + 4..];
     let end_idx = rest.find(" @@")?;
