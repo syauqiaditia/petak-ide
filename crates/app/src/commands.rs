@@ -2069,7 +2069,7 @@ pub async fn run_restart_daemon(
             "run-event",
             RunEventPayload {
                 run_id: id,
-                event: petak_core::run::RunEvent::ProcessTerminated { exit_code: Some(0) },
+                event: petak_core::run::RunEvent::Stopped { code: Some(0) },
             },
         );
     }
