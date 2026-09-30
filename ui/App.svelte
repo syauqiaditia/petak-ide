@@ -19,6 +19,9 @@
   import { executeProjectSwitchReset } from './shell/projectResetLogic';
   import { getSnippetCompletionsForLanguage } from './features/editor/snippets';
   import { toolchainStore } from './features/toolchain/toolchainStore.svelte';
+  import { settingsStore } from './features/settings/settingsStore.svelte';
+  import SettingsModal from './features/settings/SettingsModal.svelte';
+  import DashboardView from './features/dashboard/DashboardView.svelte';
 
   let GitViewComponent = $state<any>(null);
   let MrViewComponent = $state<any>(null);
@@ -56,6 +59,8 @@
   });
 
   let currentFolderPath = $state('');
+  let isDashboardOpen = $state(false);
+  let showDashboard = $derived(!currentFolderPath || isDashboardOpen);
   let rootEntries = $state<Entry[]>([]);
   let recentFolders = $state<string[]>([]);
   let statusText = $state('Ready');
@@ -1329,7 +1334,7 @@
       try {
         const recents = await api.recentFolders();
         recentFolders = recents;
-        if (recents && recents.length > 0) {
+        if (settingsStore.reopenLastProjectOnLaunch && recents && recents.length > 0) {
           try {
             await openFolder(recents[0]);
           } catch (e) {
@@ -1508,6 +1513,10 @@
 
     // Global keyboard shortcut for Mirror (Cmd-Shift-D / Ctrl-Shift-D) & Agents (Cmd-6)
     const handleKeydownMirror = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        settingsStore.open();
+      }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
         e.preventDefault();
         mirrorStore.toggle();
@@ -1543,6 +1552,7 @@
     {branchName}
     onPickFolder={handlePickFolder}
     onSelectProject={openFolder}
+    onOpenDashboard={() => (isDashboardOpen = !isDashboardOpen)}
     onOpenDevicesPanel={() => panelStore.openRightPanel('devices')}
     onStartRun={openRun}
   />
@@ -1554,53 +1564,64 @@
       isAgentsOpen={isAgentPanelOpen}
     />
     <div class="center-area">
-      <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
-        <FileTree
-          bind:this={fileTreeComponent}
-          {rootEntries}
-          folderPath={currentFolderPath}
-          {activeFilePath}
-          {recentFolders}
-          onPickFolder={handlePickFolder}
-          onSelectFile={handleSelectFile}
-          onOpenRecent={openFolder}
-          onOpenTerminal={handleOpenTerminal}
-          onOpenSearch={handleOpenSearch}
-          onOpenGitLog={handleOpenGitLog}
-          onOpenCommitPanel={handleOpenCommitPanel}
-          onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
+      {#if showDashboard}
+        <DashboardView
+          onOpenFolder={handlePickFolder}
+          onSelectProject={async (path) => {
+            isDashboardOpen = false;
+            await openFolder(path);
+          }}
+          onOpenSettings={() => settingsStore.open()}
         />
-        <Editor
-          bind:this={editorComponent}
-          folderPath={currentFolderPath}
-          onReady={onEditorReady}
-          onCursorChange={(c) => (cursorInfo = c)}
-          onStatusChange={(s) => (statusText = s)}
-          onOpenUsages={openUsages}
-          onTabSave={handleTabSave}
-          onSelectInTree={(p) => fileTreeComponent?.selectOpenedFile(p)}
-          onOpenTerminal={handleOpenTerminal}
-          onOpenSearch={handleOpenSearch}
-          onOpenGitLog={handleOpenGitLog}
-          onOpenCommitPanel={handleOpenCommitPanel}
-        />
-      </div>
+      {:else}
+        <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
+          <FileTree
+            bind:this={fileTreeComponent}
+            {rootEntries}
+            folderPath={currentFolderPath}
+            {activeFilePath}
+            {recentFolders}
+            onPickFolder={handlePickFolder}
+            onSelectFile={handleSelectFile}
+            onOpenRecent={openFolder}
+            onOpenTerminal={handleOpenTerminal}
+            onOpenSearch={handleOpenSearch}
+            onOpenGitLog={handleOpenGitLog}
+            onOpenCommitPanel={handleOpenCommitPanel}
+            onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
+          />
+          <Editor
+            bind:this={editorComponent}
+            folderPath={currentFolderPath}
+            onReady={onEditorReady}
+            onCursorChange={(c) => (cursorInfo = c)}
+            onStatusChange={(s) => (statusText = s)}
+            onOpenUsages={openUsages}
+            onTabSave={handleTabSave}
+            onSelectInTree={(p) => fileTreeComponent?.selectOpenedFile(p)}
+            onOpenTerminal={handleOpenTerminal}
+            onOpenSearch={handleOpenSearch}
+            onOpenGitLog={handleOpenGitLog}
+            onOpenCommitPanel={handleOpenCommitPanel}
+          />
+        </div>
 
-      {#if activeRailTab === 'git' && GitViewComponent}
-        <GitViewComponent folderPath={currentFolderPath} />
-      {/if}
+        {#if activeRailTab === 'git' && GitViewComponent}
+          <GitViewComponent folderPath={currentFolderPath} />
+        {/if}
 
-      {#if activeRailTab === 'mr' && MrViewComponent}
-        <MrViewComponent folderPath={currentFolderPath} />
-      {/if}
+        {#if activeRailTab === 'mr' && MrViewComponent}
+          <MrViewComponent folderPath={currentFolderPath} />
+        {/if}
 
-      {#if terminalOpen && TerminalPanelComponent}
-        <TerminalPanelComponent
-          bind:this={terminalComponent}
-          folderPath={currentFolderPath}
-          onClose={() => (terminalOpen = false)}
-          onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
-        />
+        {#if terminalOpen && TerminalPanelComponent}
+          <TerminalPanelComponent
+            bind:this={terminalComponent}
+            folderPath={currentFolderPath}
+            onClose={() => (terminalOpen = false)}
+            onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
+          />
+        {/if}
       {/if}
     </div>
 
@@ -1671,6 +1692,13 @@
       actions={staticActions}
       onClose={closePalette}
       onOpenFile={handleOpenFile}
+    />
+  {/if}
+
+  {#if settingsStore.isOpen}
+    <SettingsModal
+      root={currentFolderPath}
+      onclose={() => settingsStore.close()}
     />
   {/if}
 </div>

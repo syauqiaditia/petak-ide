@@ -36,6 +36,7 @@ const STORE_DEFS = {
   usagesStore: path.resolve(uiRoot, 'features/editor/lsp/nav.svelte.ts'),
   renameStore: path.resolve(uiRoot, 'features/editor/lsp/rename.svelte.ts'),
   tabsManager: path.resolve(uiRoot, 'features/editor/tabs.svelte.ts'),
+  settingsStore: path.resolve(uiRoot, 'features/settings/settingsStore.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {
