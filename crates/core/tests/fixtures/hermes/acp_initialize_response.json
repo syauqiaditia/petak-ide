@@ -1,0 +1,38 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "agentCapabilities": {
+      "loadSession": true,
+      "promptCapabilities": {
+        "image": true
+      },
+      "sessionCapabilities": {
+        "fork": {},
+        "list": {},
+        "resume": {}
+      }
+    },
+    "agentInfo": {
+      "name": "hermes-agent",
+      "version": "0.21.2"
+    },
+    "authMethods": [
+      {
+        "description": "Authenticate Hermes using the currently configured custom runtime credentials.",
+        "id": "custom",
+        "name": "custom runtime credentials"
+      },
+      {
+        "args": [
+          "--setup"
+        ],
+        "description": "Open Hermes' interactive model/provider setup in a terminal. Use this when Hermes has not been configured on this machine yet.",
+        "id": "hermes-setup",
+        "name": "Configure Hermes provider",
+        "type": "terminal"
+      }
+    ],
+    "protocolVersion": 1
+  }
+}

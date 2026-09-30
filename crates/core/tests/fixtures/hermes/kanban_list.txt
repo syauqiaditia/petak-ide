@@ -1,0 +1,4 @@
+✓ t_de24e4d8  done      reviewer              Tes kantor 3: tulis ~/office-test3.txt
+⊘ t_31e9c9fb  blocked   techlead              Petak b3 T1 (techlead): review+merge, build, install Mac, verifikasi nyata B1-B4 F1-F4
+● t_7a7388ca  running   senior                Petak F5 A0: verifikasi hermes acp per profil + doc deteksi
+◻ t_66c5190a  todo      senior                Petak F5 A1: ACP client + slot lifecycle + fake agent + tes
