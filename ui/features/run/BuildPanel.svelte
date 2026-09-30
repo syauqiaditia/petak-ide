@@ -6,6 +6,33 @@
     onSelectFile?: (file: string, line: number, col?: number) => void;
   }>();
 
+  let searchQuery = $state('');
+  let selectedErrorIdx = $state(0);
+
+  let filteredErrors = $derived.by(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return runStore.buildErrors;
+    return runStore.buildErrors.filter(
+      (err) =>
+        err.message.toLowerCase().includes(q) ||
+        (err.file || '').toLowerCase().includes(q)
+    );
+  });
+
+  function handlePrev() {
+    if (filteredErrors.length === 0) return;
+    selectedErrorIdx = (selectedErrorIdx - 1 + filteredErrors.length) % filteredErrors.length;
+    const err = filteredErrors[selectedErrorIdx];
+    if (err) handleOpen(err.file, err.line, err.col);
+  }
+
+  function handleNext() {
+    if (filteredErrors.length === 0) return;
+    selectedErrorIdx = (selectedErrorIdx + 1) % filteredErrors.length;
+    const err = filteredErrors[selectedErrorIdx];
+    if (err) handleOpen(err.file, err.line, err.col);
+  }
+
   function handleOpen(file: string, line: number, col?: number | null) {
     if (file && onSelectFile) {
       onSelectFile(file, line, col ?? 1);
@@ -38,6 +65,20 @@
 
     <div class="spacer"></div>
 
+    <input
+      type="text"
+      class="build-search"
+      placeholder="Filter errors…"
+      bind:value={searchQuery}
+    />
+
+    {#if filteredErrors.length > 0}
+      <div class="nav-arrows">
+        <button class="arrow-btn" onclick={handlePrev} title="Previous error">▲</button>
+        <button class="arrow-btn" onclick={handleNext} title="Next error">▼</button>
+      </div>
+    {/if}
+
     {#if runStore.buildErrors.length > 0}
       <button class="clear-btn" onclick={() => runStore.clearBuildErrors()}>
         Clear
@@ -47,16 +88,22 @@
 
   <!-- Errors List -->
   <div class="errors-list">
-    {#if runStore.buildErrors.length === 0}
+    {#if filteredErrors.length === 0}
       <div class="empty-state">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5b5f68" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
           <polyline points="22 4 12 14.01 9 11.01"></polyline>
         </svg>
-        <span>Build output is clean. No errors recorded.</span>
+        <span>
+          {#if searchQuery.trim()}
+            No build errors matching "{searchQuery}"
+          {:else}
+            Build output is clean. No errors recorded.
+          {/if}
+        </span>
       </div>
     {:else}
-      {#each runStore.buildErrors as err, i (i)}
+      {#each filteredErrors as err, i (i)}
         {@const link = mapBuildErrorToLink(err)}
         <div
           class="error-row"
@@ -113,6 +160,36 @@
   }
   .spacer {
     flex-grow: 1;
+  }
+  .build-search {
+    background: #101114;
+    border: 1px solid #252830;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: #e0e2e8;
+    outline: none;
+    width: 180px;
+  }
+  .build-search:focus {
+    border-color: #569aff;
+  }
+  .nav-arrows {
+    display: flex;
+    gap: 3px;
+  }
+  .arrow-btn {
+    background: transparent;
+    border: 1px solid #2a2d36;
+    color: #9da0ab;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .arrow-btn:hover {
+    background: #252830;
+    color: #ffffff;
   }
   .clear-btn {
     height: 22px;

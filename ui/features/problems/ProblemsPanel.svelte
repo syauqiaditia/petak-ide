@@ -8,27 +8,123 @@
     onSelectProblem?: (path: string, line: number, col: number) => void;
   }>();
 
+  let severityFilter = $state<'all' | 'error' | 'warning'>('all');
+  let searchQuery = $state('');
+
   // Toolchain / LSP failures
   let lspFailures = $derived.by(() => {
-    return Object.values(toolchainStore.lspStates).filter(
-      (s) => s.state === 'failed' || s.state === 'crashed'
-    );
+    if (severityFilter === 'warning') return [];
+    const q = searchQuery.toLowerCase().trim();
+    return Object.values(toolchainStore.lspStates)
+      .filter((s) => s.state === 'failed' || s.state === 'crashed')
+      .filter((s) => !q || s.lang.toLowerCase().includes(q) || (s.reason || '').toLowerCase().includes(q));
   });
 
   // Grouped by file
   let fileEntries = $derived.by(() => {
+    const q = searchQuery.toLowerCase().trim();
     const entries: { path: string; filename: string; diags: FileDiagnostic[] }[] = [];
     for (const [path, diags] of diagnosticsStore.byFile.entries()) {
-      if (diags.length > 0) {
+      let filtered = diags;
+      if (severityFilter === 'error') {
+        filtered = filtered.filter((d) => d.severity === 'error');
+      } else if (severityFilter === 'warning') {
+        filtered = filtered.filter((d) => d.severity === 'warning');
+      }
+      if (q) {
+        filtered = filtered.filter((d) =>
+          d.message.toLowerCase().includes(q) || path.toLowerCase().includes(q)
+        );
+      }
+      if (filtered.length > 0) {
         const filename = path.split('/').filter(Boolean).pop() || path;
-        entries.push({ path, filename, diags });
+        entries.push({ path, filename, diags: filtered });
       }
     }
     return entries;
   });
+
+  let totalProblems = $derived(
+    lspFailures.length + fileEntries.reduce((sum, f) => sum + f.diags.length, 0)
+  );
+
+  let flatDiags = $derived.by(() => {
+    const list: { path: string; line: number; col: number }[] = [];
+    for (const f of fileEntries) {
+      for (const d of f.diags) {
+        list.push({ path: d.path, line: d.line, col: d.col });
+      }
+    }
+    return list;
+  });
+
+  let currentDiagIdx = $state(0);
+
+  function handlePrevProblem() {
+    if (flatDiags.length === 0) return;
+    currentDiagIdx = (currentDiagIdx - 1 + flatDiags.length) % flatDiags.length;
+    const item = flatDiags[currentDiagIdx];
+    if (item) onSelectProblem(item.path, item.line, item.col);
+  }
+
+  function handleNextProblem() {
+    if (flatDiags.length === 0) return;
+    currentDiagIdx = (currentDiagIdx + 1) % flatDiags.length;
+    const item = flatDiags[currentDiagIdx];
+    if (item) onSelectProblem(item.path, item.line, item.col);
+  }
 </script>
 
 <div class="problems-panel">
+  <!-- Toolbar with Filters (Item 14) -->
+  <div class="problems-toolbar">
+    <div class="filter-pills">
+      <button
+        class="pill-btn"
+        class:active={severityFilter === 'all'}
+        onclick={() => (severityFilter = 'all')}
+      >
+        All ({totalProblems})
+      </button>
+      <button
+        class="pill-btn error"
+        class:active={severityFilter === 'error'}
+        onclick={() => (severityFilter = 'error')}
+      >
+        Errors
+      </button>
+      <button
+        class="pill-btn warning"
+        class:active={severityFilter === 'warning'}
+        onclick={() => (severityFilter = 'warning')}
+      >
+        Warnings
+      </button>
+    </div>
+
+    <input
+      type="text"
+      class="problems-search"
+      placeholder="Filter problems by message or file…"
+      bind:value={searchQuery}
+    />
+
+    <div class="spacer"></div>
+
+    <div class="nav-arrows">
+      <button class="arrow-btn" onclick={handlePrevProblem} disabled={flatDiags.length <= 1} title="Previous problem">▲</button>
+      <button class="arrow-btn" onclick={handleNextProblem} disabled={flatDiags.length <= 1} title="Next problem">▼</button>
+    </div>
+
+    <button
+      class="clear-btn"
+      onclick={() => diagnosticsStore.clear()}
+      title="Clear problems list"
+    >
+      Clear
+    </button>
+  </div>
+
   {#if lspFailures.length === 0 && fileEntries.length === 0}
     <div class="empty-state">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5b5f68" stroke-width="1.5" stroke-linecap="round">
@@ -138,11 +234,106 @@
   .problems-panel {
     width: 100%;
     height: 100%;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     background: #141518;
     color: #d8d9dc;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
+    overflow: hidden;
+  }
+  .problems-toolbar {
+    height: 32px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #111215;
+    border-bottom: 1px solid #1f2127;
+    flex-shrink: 0;
+  }
+  .filter-pills {
+    display: flex;
+    gap: 4px;
+  }
+  .pill-btn {
+    background: #18191e;
+    border: 1px solid #262932;
+    color: #8b8f98;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .pill-btn:hover {
+    color: #ffffff;
+    background: #20222a;
+  }
+  .pill-btn.active {
+    background: #242938;
+    border-color: #3b5078;
+    color: #8bb6ff;
+  }
+  .pill-btn.error.active {
+    background: #351a1d;
+    border-color: #5a262a;
+    color: #f07a74;
+  }
+  .pill-btn.warning.active {
+    background: #2e2617;
+    border-color: #4f3e20;
+    color: #e8b45a;
+  }
+  .problems-search {
+    background: #16181d;
+    border: 1px solid #282b35;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: #e0e2e8;
+    outline: none;
+    width: 220px;
+  }
+  .problems-search:focus {
+    border-color: #569aff;
+  }
+  .nav-arrows {
+    display: flex;
+    gap: 3px;
+  }
+  .arrow-btn {
+    background: transparent;
+    border: 1px solid #2a2d36;
+    color: #9da0ab;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 9px;
+    cursor: pointer;
+  }
+  .arrow-btn:hover:not(:disabled) {
+    background: #252830;
+    color: #ffffff;
+  }
+  .arrow-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .clear-btn {
+    background: transparent;
+    border: 1px solid #2c2e35;
+    border-radius: 4px;
+    color: #8b8f98;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .clear-btn:hover {
+    background: #23252b;
+    color: #ffffff;
+  }
+  .spacer {
+    flex-grow: 1;
   }
   .empty-state {
     display: flex;
@@ -156,6 +347,8 @@
   }
   .problems-list {
     padding: 6px 0;
+    overflow-y: auto;
+    flex: 1;
   }
   .file-group {
     margin-bottom: 8px;
