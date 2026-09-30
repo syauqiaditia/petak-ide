@@ -8,8 +8,8 @@ use crate::exec::Exec;
 use crate::git::model::DiffFile;
 use crate::gitlab::model::{
     convert_gitlab_diffs, Discussion, GitLabChangesRaw, GitLabDiffRaw, GitLabProject, GitLabUser,
-    JobInfo, MergeRequest, MrListQuery, PageInfo, PaginatedList, PersonalAccessToken, PipelineInfo,
-    TokenScopeMode,
+    InlinePositionParams, JobInfo, MergeRequest, MergeRequestParams, Note, MrListQuery, PageInfo,
+    PaginatedList, PersonalAccessToken, PipelineInfo, TokenScopeMode,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +24,8 @@ pub enum GitLabError {
     Git(String),
     AuthTokenNotFound(String),
     InvalidRemoteUrl(String),
+    InsufficientScope(String),
+    Validation(String),
 }
 
 impl fmt::Display for GitLabError {
@@ -48,6 +50,8 @@ impl fmt::Display for GitLabError {
             Self::Git(msg) => write!(f, "Git error: {}", msg),
             Self::AuthTokenNotFound(msg) => write!(f, "GitLab auth token not found: {}", msg),
             Self::InvalidRemoteUrl(msg) => write!(f, "Invalid remote URL: {}", msg),
+            Self::InsufficientScope(msg) => write!(f, "GitLab Insufficient Scope: {}", msg),
+            Self::Validation(msg) => write!(f, "GitLab Validation error: {}", msg),
         }
     }
 }
@@ -686,6 +690,353 @@ impl GitLabClient {
             }
             Err(err) => Err(err),
         }
+    }
+
+    pub fn ensure_api_scope(&self) -> Result<(), GitLabError> {
+        if !self.has_token() {
+            return Err(GitLabError::Unauthorized("No GitLab token provided".to_string()));
+        }
+        let scope_mode = self.get_token_scope()?;
+        match scope_mode {
+            TokenScopeMode::Full => Ok(()),
+            TokenScopeMode::ReadOnly => Err(GitLabError::InsufficientScope(
+                "Aksi tulis membutuhkan token dengan scope 'api'. Token saat ini hanya memiliki scope 'read_api' (mode baca-saja).".to_string(),
+            )),
+            TokenScopeMode::None => Err(GitLabError::InsufficientScope(
+                "Token tidak memiliki scope 'api' yang dibutuhkan untuk aksi tulis.".to_string(),
+            )),
+        }
+    }
+
+    fn execute_write(
+        &self,
+        method: &str,
+        url: &str,
+        json_body: Option<&serde_json::Value>,
+    ) -> Result<String, GitLabError> {
+        self.ensure_api_scope()?;
+
+        let mut req = match method {
+            "POST" => self.agent.post(url),
+            "PUT" => self.agent.put(url),
+            "DELETE" => self.agent.delete(url),
+            _ => {
+                return Err(GitLabError::Validation(format!(
+                    "Unsupported HTTP write method: {}",
+                    method
+                )))
+            }
+        };
+
+        if let Some(token) = &self.token {
+            req = req.set("PRIVATE-TOKEN", token);
+        }
+
+        let resp_result = match json_body {
+            Some(val) => req.send_json(val.clone()),
+            None => req.send_string(""),
+        };
+
+        let resp = match resp_result {
+            Ok(r) => r,
+            Err(ureq::Error::Status(401, resp)) => {
+                return Err(GitLabError::Unauthorized(
+                    resp.into_string().unwrap_or_default(),
+                ));
+            }
+            Err(ureq::Error::Status(403, resp)) => {
+                return Err(GitLabError::Forbidden(
+                    resp.into_string().unwrap_or_default(),
+                ));
+            }
+            Err(ureq::Error::Status(404, resp)) => {
+                return Err(GitLabError::NotFound(
+                    resp.into_string().unwrap_or_default(),
+                ));
+            }
+            Err(ureq::Error::Status(405, resp)) => {
+                let raw = resp.into_string().unwrap_or_default();
+                return Err(GitLabError::Http {
+                    status: 405,
+                    message: translate_gitlab_error(405, &raw),
+                });
+            }
+            Err(ureq::Error::Status(406, resp)) => {
+                let raw = resp.into_string().unwrap_or_default();
+                return Err(GitLabError::Http {
+                    status: 406,
+                    message: translate_gitlab_error(406, &raw),
+                });
+            }
+            Err(ureq::Error::Status(409, resp)) => {
+                let raw = resp.into_string().unwrap_or_default();
+                return Err(GitLabError::Http {
+                    status: 409,
+                    message: translate_gitlab_error(409, &raw),
+                });
+            }
+            Err(ureq::Error::Status(429, resp)) => {
+                let retry_after = resp
+                    .header("Retry-After")
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(5);
+                return Err(GitLabError::RateLimited {
+                    retry_after,
+                    message: resp.into_string().unwrap_or_default(),
+                });
+            }
+            Err(ureq::Error::Status(status, resp)) => {
+                return Err(GitLabError::Http {
+                    status,
+                    message: resp.into_string().unwrap_or_default(),
+                });
+            }
+            Err(ureq::Error::Transport(e)) => return Err(GitLabError::Network(e.to_string())),
+        };
+
+        let body = resp
+            .into_string()
+            .map_err(|e| GitLabError::Network(e.to_string()))?;
+
+        // Cache invalid after successful write
+        self.invalidate_cache();
+
+        Ok(body)
+    }
+
+    pub fn create_note(
+        &self,
+        project_id: &str,
+        iid: u64,
+        body: &str,
+    ) -> Result<Note, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/notes",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+        let payload = serde_json::json!({ "body": body });
+        let resp = self.execute_write("POST", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn create_inline_discussion(
+        &self,
+        project_id: &str,
+        iid: u64,
+        body: &str,
+        position: &InlinePositionParams,
+    ) -> Result<Discussion, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/discussions",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+
+        let mut pos_map = serde_json::Map::new();
+        pos_map.insert("position_type".into(), serde_json::json!(position.position_type));
+        pos_map.insert("base_sha".into(), serde_json::json!(position.base_sha));
+        pos_map.insert("start_sha".into(), serde_json::json!(position.start_sha));
+        pos_map.insert("head_sha".into(), serde_json::json!(position.head_sha));
+        pos_map.insert("old_path".into(), serde_json::json!(position.old_path));
+        pos_map.insert("new_path".into(), serde_json::json!(position.new_path));
+        if let Some(line) = position.old_line {
+            pos_map.insert("old_line".into(), serde_json::json!(line));
+        }
+        if let Some(line) = position.new_line {
+            pos_map.insert("new_line".into(), serde_json::json!(line));
+        }
+
+        let payload = serde_json::json!({
+            "body": body,
+            "position": serde_json::Value::Object(pos_map),
+        });
+
+        let resp = self.execute_write("POST", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn reply_discussion(
+        &self,
+        project_id: &str,
+        iid: u64,
+        discussion_id: &str,
+        body: &str,
+    ) -> Result<Note, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/discussions/{}/notes",
+            self.base_url,
+            url_encode_path(project_id),
+            iid,
+            discussion_id
+        );
+        let payload = serde_json::json!({ "body": body });
+        let resp = self.execute_write("POST", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn resolve_discussion(
+        &self,
+        project_id: &str,
+        iid: u64,
+        discussion_id: &str,
+        resolved: bool,
+    ) -> Result<Discussion, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/discussions/{}?resolved={}",
+            self.base_url,
+            url_encode_path(project_id),
+            iid,
+            discussion_id,
+            resolved
+        );
+        let payload = serde_json::json!({ "resolved": resolved });
+        let resp = self.execute_write("PUT", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn approve_merge_request(
+        &self,
+        project_id: &str,
+        iid: u64,
+        sha: Option<&str>,
+    ) -> Result<serde_json::Value, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/approve",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+        let payload = if let Some(s) = sha {
+            serde_json::json!({ "sha": s })
+        } else {
+            serde_json::json!({})
+        };
+        let resp = self.execute_write("POST", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn unapprove_merge_request(
+        &self,
+        project_id: &str,
+        iid: u64,
+    ) -> Result<serde_json::Value, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/unapprove",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+        let resp = self.execute_write("POST", &url, None)?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn merge_merge_request(
+        &self,
+        project_id: &str,
+        iid: u64,
+        params: &MergeRequestParams,
+    ) -> Result<MergeRequest, GitLabError> {
+        if params.sha.trim().is_empty() {
+            return Err(GitLabError::Validation(
+                "Merge request WAJIB menyertakan commit SHA untuk pengamanan".to_string(),
+            ));
+        }
+
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/merge",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+
+        let mut map = serde_json::Map::new();
+        map.insert("sha".into(), serde_json::json!(params.sha.trim()));
+        if let Some(sq) = params.squash {
+            map.insert("squash".into(), serde_json::json!(sq));
+        }
+        if let Some(rm) = params.should_remove_source_branch {
+            map.insert("should_remove_source_branch".into(), serde_json::json!(rm));
+        }
+        if let Some(mwps) = params.merge_when_pipeline_succeeds {
+            map.insert("merge_when_pipeline_succeeds".into(), serde_json::json!(mwps));
+        }
+        if let Some(ref msg) = params.squash_commit_message {
+            map.insert("squash_commit_message".into(), serde_json::json!(msg));
+        }
+        if let Some(ref msg) = params.merge_commit_message {
+            map.insert("merge_commit_message".into(), serde_json::json!(msg));
+        }
+
+        let payload = serde_json::Value::Object(map);
+        let resp = self.execute_write("PUT", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn cancel_merge_when_pipeline_succeeds(
+        &self,
+        project_id: &str,
+        iid: u64,
+    ) -> Result<MergeRequest, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/cancel_merge_when_pipeline_succeeds",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+        let resp = self.execute_write("POST", &url, None)?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+}
+
+pub fn translate_gitlab_error(status: u16, server_message: &str) -> String {
+    let msg_trimmed = server_message.trim();
+    let parsed_message = if let Ok(val) = serde_json::from_str::<serde_json::Value>(msg_trimmed) {
+        if let Some(msg) = val.get("message").and_then(|m| m.as_str()) {
+            msg.to_string()
+        } else if let Some(err) = val.get("error").and_then(|e| e.as_str()) {
+            err.to_string()
+        } else {
+            msg_trimmed.to_string()
+        }
+    } else {
+        msg_trimmed.to_string()
+    };
+
+    match status {
+        405 => {
+            if !parsed_message.is_empty() {
+                format!(
+                    "Merge request tidak dapat di-merge saat ini (405 Method Not Allowed): {}. Pastikan branch target tidak terkunci dan MR memenuhi syarat merge.",
+                    parsed_message
+                )
+            } else {
+                "Merge request tidak dapat di-merge saat ini (405 Method Not Allowed). Pastikan branch target tidak terkunci dan MR memenuhi syarat merge.".to_string()
+            }
+        }
+        406 => {
+            if !parsed_message.is_empty() {
+                format!(
+                    "Permintaan tidak dapat diterima (406 Not Acceptable): {}. MR belum siap di-merge atau perubahan belum lengkap.",
+                    parsed_message
+                )
+            } else {
+                "Permintaan tidak dapat diterima (406 Not Acceptable). Merge request belum siap di-merge atau perubahan belum lengkap.".to_string()
+            }
+        }
+        409 => {
+            if !parsed_message.is_empty() {
+                format!(
+                    "Konflik merge atau SHA commit telah berubah (409 Conflict): {}. Ada perubahan baru pada branch atau konflik file; silakan muat ulang.",
+                    parsed_message
+                )
+            } else {
+                "Konflik merge atau SHA commit telah berubah (409 Conflict). Ada perubahan baru pada branch atau konflik file; silakan muat ulang.".to_string()
+            }
+        }
+        _ => parsed_message,
     }
 }
 

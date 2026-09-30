@@ -1,8 +1,10 @@
 use petak_core::exec::SystemExec;
 use petak_core::git::model::DiffFile;
+use petak_core::git::ops::checkout_mr;
 use petak_core::gitlab::client::GitLabClient;
 use petak_core::gitlab::model::{
-    Discussion, GitLabUser, JobInfo, MergeRequest, MrListQuery, PaginatedList, PipelineInfo,
+    evaluate_merge_status, Discussion, GitLabUser, InlinePositionParams, JobInfo, MergeRequest,
+    MergeRequestParams, MergeStatusEvaluation, MrListQuery, Note, PaginatedList, PipelineInfo,
     TokenScopeMode,
 };
 use std::path::Path;
@@ -177,4 +179,195 @@ pub async fn mr_discussions(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_create_note(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    body: String,
+) -> Result<Note, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .create_note(&project_path, iid, &body)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_create_inline_discussion(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    body: String,
+    position: InlinePositionParams,
+) -> Result<Discussion, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .create_inline_discussion(&project_path, iid, &body, &position)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_reply_discussion(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    discussion_id: String,
+    body: String,
+) -> Result<Note, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .reply_discussion(&project_path, iid, &discussion_id, &body)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_resolve_discussion(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    discussion_id: String,
+    resolved: bool,
+) -> Result<Discussion, String> {
+    let app_resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&app_resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .resolve_discussion(&project_path, iid, &discussion_id, resolved)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_approve(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    sha: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .approve_merge_request(&project_path, iid, sha.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_unapprove(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+) -> Result<serde_json::Value, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .unapprove_merge_request(&project_path, iid)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_merge(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    params: MergeRequestParams,
+) -> Result<MergeRequest, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .merge_merge_request(&project_path, iid, &params)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_cancel_mwps(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+) -> Result<MergeRequest, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .cancel_merge_when_pipeline_succeeds(&project_path, iid)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_checkout(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+    remote: Option<String>,
+) -> Result<String, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        checkout_mr(&exec, repo_path, remote.as_deref(), iid).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn mr_evaluate_merge_status(status: Option<String>) -> MergeStatusEvaluation {
+    evaluate_merge_status(status.as_deref())
 }

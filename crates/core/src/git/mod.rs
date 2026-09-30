@@ -30,9 +30,9 @@ pub use model::{
     StopReason, TagRef,
 };
 pub use ops::{
-    branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, cherry_pick,
-    checkout_with_stash, commit, last_commit_message, merge, rebase_onto, reset, revert,
-    stage_files, stage_hunk, unstage_files, unstage_hunk, CheckoutResult,
+    branch_checkout, branch_create, branch_delete, branch_rename, build_hunk_patch, checkout_mr,
+    checkout_with_stash, cherry_pick, commit, last_commit_message, merge, rebase_onto, reset,
+    revert, stage_files, stage_hunk, unstage_files, unstage_hunk, CheckoutResult,
 };
 pub use path::{
     add_to_gitignore, blame, commit_paths, commit_selected, delete_untracked, diff_path_head,

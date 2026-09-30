@@ -3,12 +3,57 @@
   "iid": 1,
   "project_id": 1234,
   "title": "Add modern offline caching mechanism",
+  "description": "Implements LRU in-memory cache for API responses.\n\n### Changes\n- Add cache store\n- Add eviction policy\n- Test with mock",
   "state": "merged",
-  "merged_by": {
+  "created_at": "2026-09-28T10:00:00.000Z",
+  "updated_at": "2026-09-29T11:00:00.000Z",
+  "target_branch": "main",
+  "source_branch": "feat/cache",
+  "author": {
     "id": 42,
     "username": "tester",
-    "name": "Dev Tester"
+    "name": "Dev Tester",
+    "avatar_url": ""
   },
-  "merged_at": "2026-09-30T00:30:00.000Z",
-  "merge_commit_sha": "99887766554433221100aabbccddeeff00112233"
+  "assignees": [
+    {
+      "id": 42,
+      "username": "tester",
+      "name": "Dev Tester"
+    }
+  ],
+  "reviewers": [
+    {
+      "id": 88,
+      "username": "reviewer1",
+      "name": "Code Reviewer"
+    }
+  ],
+  "source_project_id": 1234,
+  "target_project_id": 1234,
+  "draft": false,
+  "work_in_progress": false,
+  "merge_status": "can_be_merged",
+  "detailed_merge_status": "mergeable",
+  "sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "merge_commit_sha": "99887766554433221100aabbccddeeff00112233",
+  "diff_refs": {
+    "base_sha": "0102030405060708090a0b0c0d0e0f1011121314",
+    "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "start_sha": "0102030405060708090a0b0c0d0e0f1011121314"
+  },
+  "has_conflicts": false,
+  "blocking_discussions_resolved": true,
+  "should_remove_source_branch": false,
+  "force_remove_source_branch": false,
+  "web_url": "https://gitlab.example.local/opensource/sample-project/-/merge_requests/1",
+  "head_pipeline": {
+    "id": 9001,
+    "iid": 120,
+    "project_id": 1234,
+    "sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    "ref": "feat/cache",
+    "status": "success",
+    "web_url": "https://gitlab.example.local/opensource/sample-project/-/pipelines/9001"
+  }
 }
