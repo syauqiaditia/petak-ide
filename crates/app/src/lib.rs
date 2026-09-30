@@ -298,6 +298,7 @@ pub fn run() {
             commands::git_checkout,
             commands::git_log_path,
             commands::git_diff_branch,
+            commands::git_compare_branch,
             commands::git_diff_revision,
             commands::git_stage,
             commands::git_unstage,

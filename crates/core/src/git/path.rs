@@ -8,7 +8,7 @@ use crate::git::diff::{diff_staged, parse_diff};
 use crate::git::log::{get_pushed_shas, get_refs_map, parse_log_output};
 use crate::git::model::{BlameLine, Commit, DiffFile};
 
-fn validate_ref_name(name: &str) -> Result<(), GitError> {
+pub(crate) fn validate_ref_name(name: &str) -> Result<(), GitError> {
     if name.is_empty() || name.starts_with('-') {
         return Err(GitError {
             exit_code: None,

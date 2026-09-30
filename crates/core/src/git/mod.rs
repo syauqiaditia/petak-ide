@@ -16,7 +16,10 @@ pub use conflict::{
     conflict_write, conflicts, op_abort, op_continue, op_state, parse_conflict_blocks,
     resolve_block,
 };
-pub use diff::{commit_files, diff_commit, diff_staged, diff_worktree, parse_diff, parse_name_status};
+pub use diff::{
+    commit_files, compare_branch, diff_between_refs, diff_commit, diff_staged, diff_worktree,
+    parse_diff, parse_name_status, CompareBranchResult, CompareFileEntry,
+};
 pub use graph::layout;
 pub use log::{
     branches, get_pushed_shas, get_refs_map, log, log_with_state, parse_branches_output,

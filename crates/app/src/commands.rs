@@ -3179,12 +3179,37 @@ pub async fn git_diff_branch(
     root: String,
     path: String,
     branch: String,
+    base: Option<String>,
 ) -> Result<Vec<petak_core::git::DiffFile>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
         let repo = std::path::Path::new(&root);
         let _ = petak_core::fsops::resolve_in_root(repo, &path).map_err(|e| e.to_string())?;
+        if let Some(ref base_ref) = base {
+            let trimmed = base_ref.trim();
+            if !trimmed.is_empty() {
+                return petak_core::git::diff_between_refs(&exec, repo, trimmed, &branch, &path)
+                    .map_err(|e| e.to_string());
+            }
+        }
         petak_core::git::diff_path_vs_ref(&exec, repo, &branch, &path)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_compare_branch(
+    root: String,
+    base: String,
+    target: String,
+    path: Option<String>,
+) -> Result<petak_core::git::CompareBranchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::compare_branch(&exec, repo, &base, &target, path.as_deref())
             .map_err(|e| e.to_string())
     })
     .await
