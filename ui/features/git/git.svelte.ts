@@ -302,6 +302,12 @@ class GitStore {
     }
   }
 
+  async rollback(paths: string[]) {
+    if (!this.root || paths.length === 0) return;
+    await api.gitRollback(this.root, paths);
+    await this.refresh();
+  }
+
   async stageHunk(path: string, hunkIndex: number) {
     if (!this.root) return;
     await api.gitStageHunk(this.root, path, hunkIndex);

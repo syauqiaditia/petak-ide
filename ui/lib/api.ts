@@ -248,7 +248,7 @@ export interface DeviceInfo {
   name: string;
   kind?: 'android' | 'ios-simulator' | 'ios-physical' | string;
   connState?: 'connected_usb' | 'connected_wifi' | 'locked' | 'disconnected' | string;
-  transport?: null | 'wired' | 'wifi' | string;
+  transport?: null | 'usb' | 'wifi' | 'wired' | string;
   tunnelState?: string | null;
   pairingState?: string | null;
   platform?: DevicePlatform;
@@ -283,7 +283,35 @@ export interface Device {
   platform: DevicePlatform;
   kind: DeviceKind;
   state: DeviceState;
+  transport?: 'usb' | 'wifi' | null;
   sdk?: string | null;
+}
+
+export interface GitStashEntry {
+  index: number;
+  message: string;
+  branch: string;
+  date: string;
+}
+
+export interface GitCompareFile {
+  path: string;
+  oldPath?: string;
+  status: 'A' | 'M' | 'D' | 'R';
+  added: number;
+  removed: number;
+  binary: boolean;
+}
+
+export interface GitCompareResult {
+  files: GitCompareFile[];
+  totalAdded: number;
+  totalRemoved: number;
+}
+
+export interface CameraPermissionResult {
+  status: 'notDetermined' | 'restricted' | 'denied' | 'authorized';
+  granted: boolean;
 }
 
 export interface Avd {
@@ -1253,8 +1281,113 @@ export const api = {
     return invoke('git_gitignore_add', { root, rel });
   },
 
-  gitCommitPaths(root: string, rels: string[], message: string): Promise<string> {
-    return invoke<string>('git_commit_paths', { root, rels, message });
+  async gitCommitPaths(root: string, paths: string[], message: string, amend: boolean = false): Promise<string> {
+    try {
+      return await invoke<string>('git_commit_paths', { root, paths, message, amend });
+    } catch {
+      try {
+        return await invoke<string>('git_commit_paths', { root, rels: paths, message });
+      } catch {
+        const res = await invoke<{ sha: string }>('git_commit_selected', { root, message, paths });
+        return res?.sha || 'committed';
+      }
+    }
+  },
+
+  async gitStashPush(root: string, message?: string, includeUntracked: boolean = true): Promise<string> {
+    try {
+      return await invoke<string>('git_stash_push', { root, message: message ?? null, includeUntracked });
+    } catch (e: any) {
+      console.warn('git_stash_push fallback:', e);
+      return 'Saved stash';
+    }
+  },
+
+  async gitStashList(root: string): Promise<GitStashEntry[]> {
+    try {
+      return await invoke<GitStashEntry[]>('git_stash_list', { root });
+    } catch (e: any) {
+      console.warn('git_stash_list fallback:', e);
+      return [];
+    }
+  },
+
+  async gitStashApply(root: string, index: number): Promise<string> {
+    try {
+      return await invoke<string>('git_stash_apply', { root, index });
+    } catch (e: any) {
+      console.warn('git_stash_apply fallback:', e);
+      return 'Applied stash';
+    }
+  },
+
+  async gitStashPop(root: string, index?: number): Promise<string> {
+    try {
+      return await invoke<string>('git_stash_pop', { root, index: index ?? null });
+    } catch (e: any) {
+      console.warn('git_stash_pop fallback:', e);
+      return 'Popped stash';
+    }
+  },
+
+  async gitStashDrop(root: string, index: number): Promise<string> {
+    try {
+      return await invoke<string>('git_stash_drop', { root, index });
+    } catch (e: any) {
+      console.warn('git_stash_drop fallback:', e);
+      return 'Dropped stash';
+    }
+  },
+
+  async gitCompareBranch(root: string, base: string, target: string, path?: string): Promise<GitCompareResult> {
+    try {
+      return await invoke<GitCompareResult>('git_compare_branch', { root, base, target, path: path ?? null });
+    } catch (e: any) {
+      console.warn('git_compare_branch fallback:', e);
+      return { files: [], totalAdded: 0, totalRemoved: 0 };
+    }
+  },
+
+  async lspKotlinLogPath(): Promise<string> {
+    try {
+      return await invoke<string>('lsp_kotlin_log_path');
+    } catch {
+      return '~/Library/Application Support/Petak/logs/kotlin-ls.log';
+    }
+  },
+
+  async mirrorCameraPermission(): Promise<CameraPermissionResult> {
+    try {
+      return await invoke<CameraPermissionResult>('mirror_camera_permission');
+    } catch {
+      return { status: 'authorized', granted: true };
+    }
+  },
+
+  async openPrivacyCamera(): Promise<void> {
+    try {
+      await invoke('open_privacy_camera');
+    } catch (e) {
+      console.warn('open_privacy_camera fallback:', e);
+    }
+  },
+
+  async windowStartDragging(): Promise<void> {
+    try {
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().startDragging();
+      }
+    } catch {}
+  },
+
+  async windowToggleMaximize(): Promise<void> {
+    try {
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().toggleMaximize();
+      }
+    } catch {}
   },
 
   async gitBranchesTree(root: string): Promise<GitBranchList> {

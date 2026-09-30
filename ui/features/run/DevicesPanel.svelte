@@ -51,22 +51,25 @@
   }
 
   function getEmuState(emu: SnapshotEmulator): 'stopped' | 'booting' | 'running' | 'failed' {
+    if (runStore.emulatorStatuses[emu.name]) return runStore.emulatorStatuses[emu.name].state;
+    if (emu.deviceId && runStore.emulatorStatuses[emu.deviceId]) return runStore.emulatorStatuses[emu.deviceId].state;
     if (liveStatus[emu.name]) return liveStatus[emu.name].state;
     if (emu.deviceId && liveStatus[emu.deviceId]) return liveStatus[emu.deviceId].state;
     return emu.state;
   }
 
   function getEmuError(emu: SnapshotEmulator): string | undefined {
-    return liveStatus[emu.name]?.error || (emu.deviceId ? liveStatus[emu.deviceId]?.error : undefined);
+    return runStore.emulatorStatuses[emu.name]?.error || (emu.deviceId ? runStore.emulatorStatuses[emu.deviceId]?.error : undefined) || liveStatus[emu.name]?.error || (emu.deviceId ? liveStatus[emu.deviceId]?.error : undefined);
   }
 
   function getSimState(sim: SnapshotEmulator): 'stopped' | 'booting' | 'running' | 'failed' {
+    if (runStore.emulatorStatuses[sim.id]) return runStore.emulatorStatuses[sim.id].state;
     if (liveStatus[sim.id]) return liveStatus[sim.id].state;
     return sim.state;
   }
 
   function getSimError(sim: SnapshotEmulator): string | undefined {
-    return liveStatus[sim.id]?.error;
+    return runStore.emulatorStatuses[sim.id]?.error || liveStatus[sim.id]?.error;
   }
 
   function isEmuSelected(emu: SnapshotEmulator): boolean {
