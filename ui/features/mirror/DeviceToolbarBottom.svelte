@@ -2,6 +2,12 @@
   import { mirrorStore } from './mirrorStore.svelte';
 
   let isViewOnly = $derived(mirrorStore.isViewOnly);
+  let isEmulator = $derived(
+    mirrorStore.serial?.startsWith('emulator-') ||
+    mirrorStore.serial?.toLowerCase().includes('emulator') ||
+    mirrorStore.serial?.toLowerCase().includes('avd') ||
+    false
+  );
 </script>
 
 <div class="device-toolbar-bottom">
@@ -68,16 +74,18 @@
       </svg>
     </button>
 
-    <button
-      class="nav-btn"
-      title="Power"
-      aria-label="Power button"
-      onclick={() => mirrorStore.sendNav('power')}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"></path>
-      </svg>
-    </button>
+    {#if !isEmulator}
+      <button
+        class="nav-btn"
+        title="Power (Physical Device)"
+        aria-label="Power button"
+        onclick={() => mirrorStore.sendNav('power')}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"></path>
+        </svg>
+      </button>
+    {/if}
   {/if}
 </div>
 
