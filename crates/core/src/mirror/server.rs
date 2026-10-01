@@ -262,13 +262,19 @@ pub fn start_server(
     let scid_hex = format!("{:08x}", scid);
     let max_size_str = max_size.to_string();
 
+    let bitrate = if device.starts_with("emulator-") {
+        "4000000"
+    } else {
+        "8000000"
+    };
+
     let shell_cmd = format!(
         "CLASSPATH={} app_process / com.genymobile.scrcpy.Server {} \
          tunnel_forward=false audio=false control=true cleanup=false \
          send_device_meta=false send_frame_meta=true \
-         send_dummy_byte=false max_fps=60 video_bit_rate=8000000 \
+         send_dummy_byte=false max_fps=60 video_bit_rate={} \
          max_size={} scid={}",
-        SERVER_REMOTE_PATH, SCRCPY_VERSION, max_size_str, scid_hex
+        SERVER_REMOTE_PATH, SCRCPY_VERSION, bitrate, max_size_str, scid_hex
     );
 
     spawn.spawn(

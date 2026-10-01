@@ -2655,7 +2655,13 @@ pub async fn mirror_start(
         })
     };
     let serial_for_start = resolved_serial.clone();
-    let max = max_size.unwrap_or(1920);
+    let max = max_size.unwrap_or_else(|| {
+        if resolved_serial.starts_with("emulator-") {
+            960
+        } else {
+            1280
+        }
+    });
 
     let (info, session, frame_rx, status_rx) =
         tauri::async_runtime::spawn_blocking(move || {
