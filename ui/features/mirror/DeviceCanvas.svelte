@@ -195,7 +195,7 @@
     const vWidth = canvasEl.width || deviceWidth || 800;
     const vHeight = canvasEl.height || deviceHeight || 800;
     const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
-    api.mirrorLog('UI-TOUCH', `Up client=(${e.clientX},${e.clientY}) coords=(${coords.x},${coords.y}) vSize=${vWidth}x${vHeight}`);
+    api.mirrorLog('UI-TOUCH', `Move client=(${e.clientX},${e.clientY}) coords=(${coords.x},${coords.y}) vSize=${vWidth}x${vHeight}`);
     mirrorStore.sendInput({
       t: 'touch',
       action: 'move',
@@ -351,12 +351,6 @@
   <canvas
     bind:this={canvasEl}
     class="device-screen-canvas"
-    onmousedown={handleMouseDown}
-    onmousemove={handleMouseMove}
-    onmouseup={handleMouseUp}
-    onmouseleave={handleMouseLeave}
-    onwheel={handleWheel}
-    oncontextmenu={(e) => e.preventDefault()}
   ></canvas>
 
   {#if reticleVisible}

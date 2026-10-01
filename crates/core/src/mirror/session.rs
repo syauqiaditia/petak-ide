@@ -46,6 +46,7 @@ enum SessionBackend {
         control_stream: Arc<Mutex<Option<TcpStream>>>,
         width: u16,
         height: u16,
+        is_touch_down: Arc<std::sync::atomic::AtomicBool>,
         // Handle to server resources — Drop kills server
         _server: server::ScrcpyServer,
         // Handle to video reader thread
@@ -290,6 +291,7 @@ impl MirrorSession {
                     control_stream: control_arc,
                     width: meta.width as u16,
                     height: meta.height as u16,
+                    is_touch_down: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                     _server: scrcpy_server,
                     _video_thread: Some(video_thread),
                 },
@@ -302,7 +304,7 @@ impl MirrorSession {
     /// Send an input event to the device.
     pub fn send_input(&self, ev: &InputEvent) -> io::Result<()> {
         match &self.backend {
-            SessionBackend::Android { control_stream, width, height, .. } => {
+            SessionBackend::Android { control_stream, width, height, is_touch_down, .. } => {
                 let mut guard = control_stream.lock().unwrap();
                 if let Some(stream) = guard.as_mut() {
                     // Normalize Touch/Scroll coordinates to stream's exact width/height
@@ -317,6 +319,24 @@ impl MirrorSession {
                             } else {
                                 (*x, *y)
                             };
+
+                            // Prevent double DOWN without UP (corrupts Android touch state machine)
+                            if *action == control::TouchAction::Down {
+                                if is_touch_down.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                                    let up = InputEvent::Touch {
+                                        action: control::TouchAction::Up,
+                                        x: target_x,
+                                        y: target_y,
+                                        w: *width,
+                                        h: *height,
+                                    };
+                                    let _ = control::serialize(&up, stream);
+                                    crate::mirror::trace::log("INPUT-DEDUP", "Synthesized UP before duplicate DOWN");
+                                }
+                            } else if *action == control::TouchAction::Up {
+                                is_touch_down.store(false, std::sync::atomic::Ordering::SeqCst);
+                            }
+
                             InputEvent::Touch {
                                 action: *action,
                                 x: target_x,
