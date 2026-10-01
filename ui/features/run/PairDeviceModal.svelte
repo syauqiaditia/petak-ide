@@ -658,6 +658,12 @@
     line-height: 0;
   }
 
+  .qr-svg-wrapper :global(svg) {
+    display: block;
+    width: 256px;
+    height: 256px;
+  }
+
   .qr-meta-card {
     width: 100%;
     background: #141518;
