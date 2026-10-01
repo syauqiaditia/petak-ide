@@ -2759,6 +2759,12 @@ pub async fn mirror_start(
 }
 
 #[tauri::command]
+pub fn mirror_log(tag: String, message: String) -> Result<(), String> {
+    petak_core::mirror::trace::log(&tag, &message);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn mirror_stop(
     state: tauri::State<'_, MirrorState>,
     serial: String,

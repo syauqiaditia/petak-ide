@@ -93,6 +93,7 @@ class MirrorStore {
           this.frameTimestamps.length > 0 &&
           now - this.frameTimestamps[this.frameTimestamps.length - 1] > 1200
         ) {
+          api.mirrorLog('UI-IDLE', `Idle detected (>1200ms no frame). Was ${this.fps} FPS.`);
           this.frameTimestamps = [];
           this.fps = 0;
           this.latencyMs = null;
@@ -466,7 +467,8 @@ class MirrorStore {
 
     try {
       await api.mirrorInput(this.serial, ev);
-    } catch (err) {
+    } catch (err: any) {
+      api.mirrorLog('UI-INPUT-ERR', `mirrorInput error: ${err}`);
       console.warn('[mirrorStore] mirrorInput error:', err);
     }
   }

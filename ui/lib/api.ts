@@ -1574,6 +1574,13 @@ export const api = {
     return listen<{ serial: string; data: number[] | Uint8Array }>('mirror-frame', (event) => cb(event.payload));
   },
 
+  async mirrorLog(tag: string, message: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return;
+    }
+    return invoke('mirror_log', { tag, message }).catch(() => {});
+  },
+
   async mirrorInput(serial: string, ev: InputEvent): Promise<void> {
     if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       return;

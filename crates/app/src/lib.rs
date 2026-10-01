@@ -283,6 +283,7 @@ pub fn run() {
             commands::git_commit_paths,
             commands::mirror_start,
             commands::mirror_stop,
+            commands::mirror_log,
             commands::mirror_input,
             commands::mirror_screenshot,
             // Batch 2

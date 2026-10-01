@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { mirrorStore } from './mirrorStore.svelte';
+  import { api } from '../../lib/api';
   import { parseFramePacket, translateCanvasToDevice, splitNals, parseH264Config, nalsToAvcc } from './logic';
   import { drawCanvasMockApp } from './canvasMock';
 
@@ -66,6 +67,7 @@
         },
         error: (err: Error) => {
           console.error('[DeviceCanvas] VideoDecoder error:', err);
+          api.mirrorLog('UI-DECODER-ERR', err.message);
           mirrorStore.errorMessage = `VideoDecoder error: ${err.message}`;
         },
       });
@@ -165,6 +167,7 @@
     const vWidth = canvasEl.width || deviceWidth || 800;
     const vHeight = canvasEl.height || deviceHeight || 800;
     const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
+    api.mirrorLog('UI-TOUCH', `Down client=(${e.clientX},${e.clientY}) coords=(${coords.x},${coords.y}) vSize=${vWidth}x${vHeight}`);
     mirrorStore.sendInput({
       t: 'touch',
       action: 'down',
@@ -191,6 +194,7 @@
     const vWidth = canvasEl.width || deviceWidth || 800;
     const vHeight = canvasEl.height || deviceHeight || 800;
     const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
+    api.mirrorLog('UI-TOUCH', `Up client=(${e.clientX},${e.clientY}) coords=(${coords.x},${coords.y}) vSize=${vWidth}x${vHeight}`);
     mirrorStore.sendInput({
       t: 'touch',
       action: 'move',

@@ -235,34 +235,39 @@ impl MirrorSession {
             width: meta.width,
             height: meta.height,
         });
+        crate::mirror::trace::log("SESSION-START", &format!("Device: {} resolution: {}x{}", serial, meta.width, meta.height));
 
         let control_arc = Arc::new(Mutex::new(Some(control_stream)));
         let control_arc2 = Arc::clone(&control_arc);
 
         // 7. Spawn video reader thread
         let video_thread = thread::spawn(move || {
+            let mut frame_count: u64 = 0;
             loop {
                 match protocol::read_video_packet(&mut video_reader) {
                     Ok(Some(pkt)) => {
-                        // Check for rotation: config packet may indicate new SPS with
-                        // different dimensions. We detect this by checking if we get a
-                        // new config packet — the actual w/h detection is done by the
-                        // UI decoder, but we signal Rotated status.
-                        // ponytail: skip SPS parsing, let UI detect dimensions from codec.
-                        // We just relay the packet.
+                        frame_count += 1;
+                        if pkt.kind == protocol::FrameKind::Config || pkt.kind == protocol::FrameKind::Key || frame_count % 120 == 0 {
+                            crate::mirror::trace::log(
+                                "VIDEO-FRAME",
+                                &format!("kind={:?} pts={} size={} total_frames={}", pkt.kind, pkt.pts_us, pkt.data.len(), frame_count),
+                            );
+                        }
                         let encoded = encode_frame_packet(&pkt);
                         if frame_tx.send(encoded).is_err() {
-                            break; // receiver dropped
+                            crate::mirror::trace::log("VIDEO-ERR", "frame_tx receiver dropped");
+                            break;
                         }
                     }
                     Ok(None) => {
-                        // EOF
+                        crate::mirror::trace::log("VIDEO-EOF", "Video stream reached EOF (scrcpy socket closed)");
                         let _ = status_tx.send(MirrorStatus::Disconnected {
                             reason: "video stream ended".to_string(),
                         });
                         break;
                     }
                     Err(e) => {
+                        crate::mirror::trace::log("VIDEO-ERR", &format!("Video stream socket error: {}", e));
                         let _ = status_tx.send(MirrorStatus::Disconnected {
                             reason: format!("video read error: {}", e),
                         });
@@ -272,6 +277,7 @@ impl MirrorSession {
             }
             // Clean up control socket when video ends
             if let Ok(mut guard) = control_arc2.lock() {
+                crate::mirror::trace::log("SOCKET-CLEANUP", "Closing control socket guard after video thread termination");
                 *guard = None;
             }
         });
@@ -339,8 +345,14 @@ impl MirrorSession {
                         }
                         other => other.clone(),
                     };
-                    control::serialize(&fixed_ev, stream)
+                    let res = control::serialize(&fixed_ev, stream);
+                    match &res {
+                        Ok(()) => crate::mirror::trace::log("INPUT-OK", &format!("{:?}", fixed_ev)),
+                        Err(e) => crate::mirror::trace::log("INPUT-FAIL", &format!("{:?} err={}", fixed_ev, e)),
+                    }
+                    res
                 } else {
+                    crate::mirror::trace::log("INPUT-REJECT", "Control socket closed / None guard");
                     Err(io::Error::new(
                         io::ErrorKind::NotConnected,
                         "control socket closed",

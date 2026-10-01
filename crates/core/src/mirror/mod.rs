@@ -1,3 +1,4 @@
+pub mod trace;
 pub mod control;
 pub mod ios;
 pub mod permission;
