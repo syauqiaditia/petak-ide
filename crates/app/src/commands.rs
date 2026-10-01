@@ -3796,6 +3796,14 @@ pub async fn adb_connect(host: String, port: u16) -> Result<String, String> {
     petak_core::run::adb_connect(&exec, &host, port).map_err(|e| e.to_string())
 }
 
+// ──────────── Batch 12 Wi-Fi QR Pairing mDNS Discovery ────────────
+
+#[tauri::command]
+pub async fn adb_find_pairing_service(service_name: String) -> Result<Option<(String, u16)>, String> {
+    let exec = petak_core::run::ProcessExec;
+    petak_core::run::adb_find_pairing_service(&exec, &service_name).map_err(|e| e.to_string())
+}
+
 pub use crate::agent_commands::*;
 #[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;
 
