@@ -46,7 +46,19 @@
       </div>
     {:else}
       {#each cards as card (card.id)}
-        <div class="device-card" class:disabled={!card.canMirror}>
+        <div
+          class="device-card"
+          class:disabled={!card.canMirror}
+          onclick={() => handleSelect(card)}
+          role="button"
+          tabindex={card.canMirror ? 0 : -1}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleSelect(card);
+            }
+          }}
+        >
           <div class="card-left">
             <div class="device-info-row">
               <span class="device-icon">
@@ -81,7 +93,10 @@
             <button
               class="btn-mirror"
               disabled={!card.canMirror}
-              onclick={() => handleSelect(card)}
+              onclick={(e) => {
+                e.stopPropagation();
+                handleSelect(card);
+              }}
               title={card.canMirror ? `Mulai mirror ${card.name}` : card.disabledReason}
             >
               Mirror

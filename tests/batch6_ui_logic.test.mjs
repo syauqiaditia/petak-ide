@@ -378,11 +378,11 @@ test('mirror device picker: dedupe iPhone and classify readiness', () => {
   assert.equal(emu.canMirror, true);
   assert.equal(emu.statusText, 'Siap');
 
-  // 3. Android Wi-Fi cannot mirror, only run
+  // 3. Android Wi-Fi can mirror if online
   const samsungWifi = cards.find((c) => c.id === '192.168.1.50:5555');
   assert.ok(samsungWifi);
-  assert.equal(samsungWifi.canMirror, false);
-  assert.equal(samsungWifi.statusText, 'Hanya Run');
+  assert.equal(samsungWifi.canMirror, true);
+  assert.equal(samsungWifi.statusText, 'Siap');
   assert.equal(samsungWifi.transportBadge, 'Wi-Fi');
 
   // 4. iOS Simulator booted is Siap
