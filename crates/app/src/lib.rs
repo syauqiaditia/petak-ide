@@ -388,6 +388,8 @@ pub fn run() {
             // Batch 11
             commands::adb_pair,
             commands::adb_connect,
+            // Batch 12
+            commands::adb_find_pairing_service,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

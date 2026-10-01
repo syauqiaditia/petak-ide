@@ -120,6 +120,91 @@ pub fn adb_connect(exec: &dyn Exec, host: &str, port: u16) -> io::Result<String>
     parse_connect_output(output.status.success(), &stdout, &stderr)
 }
 
+pub fn parse_mdns_services(stdout: &str, service_name: &str) -> Option<(String, u16)> {
+    let service_name = service_name.trim();
+    if service_name.is_empty() {
+        return None;
+    }
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if !line.contains("_adb-tls-pairing._tcp") {
+            continue;
+        }
+
+        if let Some((instance_part, remainder)) = line.split_once("_adb-tls-pairing._tcp") {
+            if !instance_part.contains(service_name) {
+                continue;
+            }
+
+            if let Some(addr_token) = remainder.split_whitespace().next() {
+                if let Some((host, port_str)) = addr_token.rsplit_once(':') {
+                    if let Ok(port) = port_str.parse::<u16>() {
+                        let clean_host = host.trim_start_matches('[').trim_end_matches(']');
+                        if !clean_host.is_empty() {
+                            return Some((clean_host.to_string(), port));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+pub fn parse_mdns_connect_service(stdout: &str, host: &str) -> Option<u16> {
+    let clean_target_host = host.trim().trim_start_matches('[').trim_end_matches(']');
+    if clean_target_host.is_empty() {
+        return None;
+    }
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if !line.contains("_adb-tls-connect._tcp") {
+            continue;
+        }
+
+        if let Some((_, remainder)) = line.split_once("_adb-tls-connect._tcp") {
+            if let Some(addr_token) = remainder.split_whitespace().next() {
+                if let Some((line_host, port_str)) = addr_token.rsplit_once(':') {
+                    let clean_line_host = line_host.trim_start_matches('[').trim_end_matches(']');
+                    if clean_line_host == clean_target_host {
+                        if let Ok(port) = port_str.parse::<u16>() {
+                            return Some(port);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+pub fn adb_find_pairing_service(
+    exec: &dyn Exec,
+    service_name: &str,
+) -> io::Result<Option<(String, u16)>> {
+    let adb = find_adb(exec);
+    let output = exec.run(Path::new("."), &adb, &["mdns", "services"], &[], None)?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_mdns_services(&stdout, service_name))
+}
+
+pub fn adb_find_connect_service(exec: &dyn Exec, host: &str) -> io::Result<Option<u16>> {
+    let adb = find_adb(exec);
+    let output = exec.run(Path::new("."), &adb, &["mdns", "services"], &[], None)?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_mdns_connect_service(&stdout, host))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,6 +277,7 @@ mod tests {
         assert!(err4.is_err());
     }
 
+    #[derive(Default)]
     struct MockAdbExec {
         pair_stdout: &'static str,
         pair_stderr: &'static str,
@@ -199,6 +285,9 @@ mod tests {
         connect_stdout: &'static str,
         connect_stderr: &'static str,
         connect_success: bool,
+        mdns_stdout: &'static str,
+        mdns_stderr: &'static str,
+        mdns_success: bool,
     }
 
     impl Exec for MockAdbExec {
@@ -231,6 +320,15 @@ mod tests {
                 });
             }
 
+            if args.len() >= 2 && args[0] == "mdns" && args[1] == "services" {
+                let status_code = if self.mdns_success { 0 } else { 1 };
+                return Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(status_code),
+                    stdout: self.mdns_stdout.as_bytes().to_vec(),
+                    stderr: self.mdns_stderr.as_bytes().to_vec(),
+                });
+            }
+
             panic!("unexpected args: {:?}", args);
         }
     }
@@ -244,6 +342,9 @@ mod tests {
             connect_stdout: "connected to 192.168.1.50:5555\n",
             connect_stderr: "",
             connect_success: true,
+            mdns_stdout: "",
+            mdns_stderr: "",
+            mdns_success: true,
         };
 
         let pair_res = adb_pair(&exec, "192.168.1.50", 37123, "654321").unwrap();
@@ -266,6 +367,9 @@ mod tests {
             connect_stdout: "failed to connect to 192.168.1.50:5555\n",
             connect_stderr: "",
             connect_success: true,
+            mdns_stdout: "",
+            mdns_stderr: "",
+            mdns_success: true,
         };
 
         let pair_res = adb_pair(&exec, "192.168.1.50", 37123, "654321").unwrap();
@@ -278,5 +382,107 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("failed to connect"));
+    }
+
+    #[test]
+    fn test_parse_mdns_services_standard() {
+        let stdout = "\
+List of discovered mdns services
+studio-g@<xeYnap/          _adb-tls-pairing._tcp  192.168.86.39:55861
+adb-14141FDF600081-TnSdi9  _adb-tls-connect._tcp  192.168.86.38:33015
+";
+        let res = parse_mdns_services(stdout, "studio-g");
+        assert_eq!(res, Some(("192.168.86.39".to_string(), 55861)));
+    }
+
+    #[test]
+    fn test_parse_mdns_services_tabs_multiple_devices() {
+        let stdout = "\
+List of discovered mdns services
+studio-dev-1\t_adb-tls-pairing._tcp\t192.168.1.100:40001
+adb-dev-1\t_adb-tls-connect._tcp\t192.168.1.100:30001
+studio-petak-a1b2c3d4@xyz    _adb-tls-pairing._tcp    10.0.0.42:52000
+adb-dev-2    _adb-tls-connect._tcp    10.0.0.42:35555
+";
+        let res1 = parse_mdns_services(stdout, "studio-petak-a1b2c3d4");
+        assert_eq!(res1, Some(("10.0.0.42".to_string(), 52000)));
+
+        let res2 = parse_mdns_services(stdout, "studio-dev-1");
+        assert_eq!(res2, Some(("192.168.1.100".to_string(), 40001)));
+    }
+
+    #[test]
+    fn test_parse_mdns_services_not_found_or_invalid() {
+        let stdout = "\
+List of discovered mdns services
+adb-14141FDF600081-TnSdi9  _adb-tls-connect._tcp  192.168.86.38:33015
+";
+        assert_eq!(parse_mdns_services(stdout, "studio-petak"), None);
+        assert_eq!(parse_mdns_services(stdout, ""), None);
+        assert_eq!(parse_mdns_services(stdout, "   "), None);
+        assert_eq!(parse_mdns_services("", "studio-g"), None);
+        assert_eq!(
+            parse_mdns_services("List of discovered mdns services\n", "studio-g"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_parse_mdns_connect_service() {
+        let stdout = "\
+List of discovered mdns services
+studio-g@<xeYnap/          _adb-tls-pairing._tcp  192.168.86.39:55861
+adb-14141FDF600081-TnSdi9  _adb-tls-connect._tcp  192.168.86.38:33015
+adb-another-dev            _adb-tls-connect._tcp  192.168.86.39:37000
+";
+        assert_eq!(
+            parse_mdns_connect_service(stdout, "192.168.86.38"),
+            Some(33015)
+        );
+        assert_eq!(
+            parse_mdns_connect_service(stdout, "192.168.86.39"),
+            Some(37000)
+        );
+        assert_eq!(parse_mdns_connect_service(stdout, "192.168.86.40"), None);
+        assert_eq!(parse_mdns_connect_service(stdout, ""), None);
+    }
+
+    #[test]
+    fn test_adb_find_pairing_service_mock() {
+        let stdout = "\
+List of discovered mdns services
+studio-petak-xyz@abc    _adb-tls-pairing._tcp  192.168.1.55:42000
+";
+        let exec = MockAdbExec {
+            pair_stdout: "",
+            pair_stderr: "",
+            pair_success: true,
+            connect_stdout: "",
+            connect_stderr: "",
+            connect_success: true,
+            mdns_stdout: stdout,
+            mdns_stderr: "",
+            mdns_success: true,
+        };
+
+        let found = adb_find_pairing_service(&exec, "studio-petak-xyz").unwrap();
+        assert_eq!(found, Some(("192.168.1.55".to_string(), 42000)));
+
+        let not_found = adb_find_pairing_service(&exec, "studio-unknown").unwrap();
+        assert_eq!(not_found, None);
+
+        let exec_fail = MockAdbExec {
+            pair_stdout: "",
+            pair_stderr: "",
+            pair_success: true,
+            connect_stdout: "",
+            connect_stderr: "",
+            connect_success: true,
+            mdns_stdout: "",
+            mdns_stderr: "error: cannot start daemon",
+            mdns_success: false,
+        };
+        let res_fail = adb_find_pairing_service(&exec_fail, "studio-petak-xyz").unwrap();
+        assert_eq!(res_fail, None);
     }
 }

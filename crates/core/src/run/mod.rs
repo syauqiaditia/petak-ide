@@ -41,6 +41,8 @@ pub use logs::{
 };
 pub use toolchain::{detect, Tool, Toolchain};
 pub use pairing::{
-    adb_connect, adb_pair, find_adb, parse_connect_output, parse_pair_output, PairResult,
+    adb_connect, adb_find_connect_service, adb_find_pairing_service, adb_pair, find_adb,
+    parse_connect_output, parse_mdns_connect_service, parse_mdns_services, parse_pair_output,
+    PairResult,
 };
 pub use crate::exec::{Exec, SystemExec, SystemExec as ProcessExec};
