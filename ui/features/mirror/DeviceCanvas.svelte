@@ -13,10 +13,7 @@
   let pendingFrame: VideoFrame | null = null;
   let rafId = 0;
 
-  // Touch reticle state
-  let reticleVisible = $state(false);
-  let reticleX = $state(0);
-  let reticleY = $state(0);
+  // Touch state
   let isPointerDown = false;
   let lastMoveTime = 0;
 
@@ -161,9 +158,6 @@
     isPointerDown = true;
 
     const rect = canvasEl.getBoundingClientRect();
-    reticleX = e.clientX - rect.left;
-    reticleY = e.clientY - rect.top;
-    reticleVisible = true;
 
     const vWidth = canvasEl.width || deviceWidth || 800;
     const vHeight = canvasEl.height || deviceHeight || 800;
@@ -183,8 +177,6 @@
     if (!isPointerDown || isViewOnly) return;
 
     const rect = canvasEl.getBoundingClientRect();
-    reticleX = e.clientX - rect.left;
-    reticleY = e.clientY - rect.top;
 
     const now = performance.now();
     if (now - lastMoveTime < 16) {
@@ -209,7 +201,6 @@
   function handleMouseUp(e: MouseEvent) {
     if (!isPointerDown || isViewOnly) return;
     isPointerDown = false;
-    reticleVisible = false;
 
     const rect = canvasEl.getBoundingClientRect();
     const vWidth = canvasEl.width || deviceWidth || 800;
@@ -353,19 +344,7 @@
     class="device-screen-canvas"
   ></canvas>
 
-  {#if reticleVisible}
-    <div
-      class="touch-reticle"
-      style:left="{reticleX}px"
-      style:top="{reticleY}px"
-    ></div>
-  {/if}
 
-  {#if isFocused}
-    <div class="focus-helper-banner">
-      Keys forwarded to device · ⇧Esc to release
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -396,45 +375,5 @@
     -webkit-user-select: none;
     touch-action: none;
   }
-  .touch-reticle {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid rgba(110, 168, 255, 0.9);
-    background: rgba(110, 168, 255, 0.25);
-    box-shadow: 0 0 12px rgba(110, 168, 255, 0.4);
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 25;
-    animation: pulseReticle 0.15s ease-out;
-  }
-  @keyframes pulseReticle {
-    from {
-      transform: translate(-50%, -50%) scale(0.6);
-      opacity: 0.5;
-    }
-    to {
-      transform: translate(-50%, -50%) scale(1);
-      opacity: 1;
-    }
-  }
-  .focus-helper-banner {
-    position: absolute;
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 3px 10px;
-    border-radius: 10px;
-    background: rgba(17, 18, 21, 0.9);
-    border: 1px solid #3a4f75;
-    font-size: 10px;
-    color: #9cc3ff;
-    white-space: nowrap;
-    user-select: none;
-    -webkit-user-select: none;
-    pointer-events: none;
-    z-index: 25;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  }
+
 </style>

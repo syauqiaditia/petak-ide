@@ -89,6 +89,12 @@
         <DeviceCanvas />
       </div>
     </div>
+
+    {#if isFocused}
+      <div class="focus-external-hint">
+        Input keyboard aktif · ⇧Esc untuk lepas
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -104,6 +110,18 @@
     padding: 16px;
     position: relative;
     overflow: hidden;
+  }
+  .focus-external-hint {
+    margin-top: 8px;
+    font-size: 10px;
+    color: #8b8f98;
+    background: #141518;
+    border: 1px solid #26282d;
+    padding: 3px 10px;
+    border-radius: 6px;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
   }
   .phone-bezel {
     background: #111215;
