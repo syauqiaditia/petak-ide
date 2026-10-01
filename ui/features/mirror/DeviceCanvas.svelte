@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { mirrorStore } from './mirrorStore.svelte';
-  import { parseFramePacket, translateCanvasToDevice } from './logic';
+  import { parseFramePacket, translateCanvasToDevice, splitNals, parseH264Config, nalsToAvcc } from './logic';
   import { drawCanvasMockApp } from './canvasMock';
 
   let canvasEl: HTMLCanvasElement;
@@ -33,9 +33,11 @@
             frame.close();
             return;
           }
-          if (canvasEl.width !== frame.displayWidth || canvasEl.height !== frame.displayHeight) {
-            canvasEl.width = frame.displayWidth;
-            canvasEl.height = frame.displayHeight;
+          const w = frame.displayWidth || frame.codedWidth || canvasEl.width;
+          const h = frame.displayHeight || frame.codedHeight || canvasEl.height;
+          if (canvasEl.width !== w || canvasEl.height !== h) {
+            canvasEl.width = w;
+            canvasEl.height = h;
           }
           ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
           frame.close();
@@ -62,11 +64,14 @@
             initDecoder();
           }
 
+          const nals = splitNals(payload);
+          const { codec, description } = parseH264Config(nals);
+
           const config: VideoDecoderConfig = {
-            codec: 'avc1.42001f', // Baseline H.264
+            codec,
             optimizeForLatency: true,
             hardwareAcceleration: 'prefer-hardware',
-            description: payload,
+            description: description.buffer,
           };
 
           try {
@@ -75,14 +80,14 @@
               const res = await VideoDecoder.isConfigSupported(config);
               if (!res.supported) {
                 configToUse = {
-                  codec: 'avc1.42001f',
+                  codec,
                   optimizeForLatency: true,
                   hardwareAcceleration: 'prefer-hardware',
                 };
               }
             } catch (_) {
               configToUse = {
-                codec: 'avc1.42001f',
+                codec,
                 optimizeForLatency: true,
                 hardwareAcceleration: 'prefer-hardware',
               };
@@ -100,10 +105,11 @@
         // Frame packet (1 = Keyframe, 2 = Delta)
         if (decoder && decoder.state === 'configured' && isDecoderConfigured) {
           try {
+            const avccData = nalsToAvcc(payload);
             const chunk = new EncodedVideoChunk({
               type: kind === 1 ? 'key' : 'delta',
               timestamp: Number(ptsUs),
-              data: payload,
+              data: avccData,
             });
             decoder.decode(chunk);
           } catch (decodeErr) {

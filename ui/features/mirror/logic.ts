@@ -147,3 +147,109 @@ export function mirrorStateMachine(
       return currentState;
   }
 }
+
+
+/**
+ * Splits Annex-B stream into individual NAL units by 0x000001 or 0x00000001 start codes.
+ */
+export function splitNals(data: Uint8Array): Uint8Array[] {
+  const nals: Uint8Array[] = [];
+  const len = data.length;
+  let i = 0;
+  const scPositions: Array<{ pos: number; scLen: number }> = [];
+
+  while (i + 2 < len) {
+    if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1) {
+      if (i > 0 && data[i - 1] === 0) {
+        scPositions.push({ pos: i - 1, scLen: 4 });
+      } else {
+        scPositions.push({ pos: i, scLen: 3 });
+      }
+      i += 3;
+    } else {
+      i++;
+    }
+  }
+
+  for (let idx = 0; idx < scPositions.length; idx++) {
+    const nalStart = scPositions[idx].pos + scPositions[idx].scLen;
+    const nalEnd = idx + 1 < scPositions.length ? scPositions[idx + 1].pos : len;
+    if (nalStart < nalEnd) {
+      nals.push(data.subarray(nalStart, nalEnd));
+    }
+  }
+
+  return nals;
+}
+
+/**
+ * Parses H.264 SPS and PPS NALs to extract dynamic codec string (e.g. 'avc1.640020')
+ * and build AVCDecoderConfigurationRecord (avcC) format required by WebCodecs.
+ */
+export function parseH264Config(nals: Uint8Array[]): { codec: string; description: Uint8Array } {
+  const spsList: Uint8Array[] = [];
+  const ppsList: Uint8Array[] = [];
+  let codec = 'avc1.42001f';
+
+  for (const nal of nals) {
+    if (nal.length === 0) continue;
+    const nalType = nal[0] & 0x1f;
+    if (nalType === 7 && nal.length >= 4) {
+      codec = `avc1.${nal[1].toString(16).padStart(2, '0')}${nal[2].toString(16).padStart(2, '0')}${nal[3].toString(16).padStart(2, '0')}`;
+      spsList.push(nal);
+    } else if (nalType === 8) {
+      ppsList.push(nal);
+    }
+  }
+
+  if (spsList.length === 0) {
+    return { codec, description: new Uint8Array(0) };
+  }
+
+  const sps = spsList[0];
+  const out: number[] = [
+    1, // configurationVersion
+    sps[1], // AVCProfileIndication
+    sps[2], // profile_compatibility
+    sps[3], // AVCLevelIndication
+    0xff, // lengthSizeMinusOneWithReserved (6 bits 1s, 2 bits lengthSizeMinusOne=3 -> 4 bytes)
+    0xe0 | (spsList.length & 0x1f), // numOfSequenceParameterSetsWithReserved
+  ];
+
+  for (const s of spsList) {
+    out.push((s.length >> 8) & 0xff);
+    out.push(s.length & 0xff);
+    for (let j = 0; j < s.length; j++) out.push(s[j]);
+  }
+
+  out.push(ppsList.length & 0xff);
+  for (const p of ppsList) {
+    out.push((p.length >> 8) & 0xff);
+    out.push(p.length & 0xff);
+    for (let j = 0; j < p.length; j++) out.push(p[j]);
+  }
+
+  return { codec, description: new Uint8Array(out) };
+}
+
+/**
+ * Converts Annex-B NAL stream to AVCC format (4-byte big-endian length prefix).
+ */
+export function nalsToAvcc(data: Uint8Array): Uint8Array {
+  const nals = splitNals(data);
+  if (nals.length === 0) return data;
+  let totalLen = 0;
+  for (const nal of nals) totalLen += 4 + nal.length;
+  const out = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const nal of nals) {
+    const len = nal.length;
+    out[offset] = (len >> 24) & 0xff;
+    out[offset + 1] = (len >> 16) & 0xff;
+    out[offset + 2] = (len >> 8) & 0xff;
+    out[offset + 3] = len & 0xff;
+    out.set(nal, offset + 4);
+    offset += 4 + len;
+  }
+  return out;
+}
