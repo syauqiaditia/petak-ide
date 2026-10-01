@@ -822,6 +822,8 @@ pub fn resolve_running_avd_serial(exec: &dyn Exec, avd_or_serial: &str) -> Optio
     if trimmed.is_empty()
         || trimmed.starts_with("emulator-")
         || trimmed.starts_with("usb:")
+        || trimmed.starts_with("adb-")
+        || trimmed.contains("._adb-tls")
         || trimmed.contains(':')
         || crate::mirror::ios::is_ios_device(trimmed)
     {
@@ -839,11 +841,24 @@ pub fn resolve_running_avd_serial(exec: &dyn Exec, avd_or_serial: &str) -> Optio
     let mut exact_device_exists = false;
     for line in stdout.lines() {
         let line = line.trim();
+        if line.is_empty() || line.starts_with("List of devices attached") {
+            continue;
+        }
         if let Some(device_id) = line.split_whitespace().next() {
-            if device_id == trimmed {
+            let stripped_device_id = device_id.strip_prefix("adb-").unwrap_or(device_id);
+            let stripped_trimmed = trimmed.strip_prefix("adb-").unwrap_or(trimmed);
+            if device_id == trimmed
+                || trimmed.starts_with(device_id)
+                || device_id.starts_with(trimmed)
+                || stripped_device_id.starts_with(stripped_trimmed)
+                || stripped_trimmed.starts_with(stripped_device_id)
+            {
                 exact_device_exists = true;
             }
-            if device_id.starts_with("emulator-") && line.contains("device") {
+            if device_id.starts_with("emulator-")
+                && line.contains("device")
+                && !line.contains("offline")
+            {
                 running_emulators.push(device_id.to_string());
             }
         }
@@ -863,8 +878,25 @@ pub fn resolve_running_avd_serial(exec: &dyn Exec, avd_or_serial: &str) -> Optio
     }
 
     // 2. Fallback: if only 1 emulator is online and running
-    if running_emulators.len() == 1 {
-        return Some(running_emulators[0].clone());
+    if running_emulators.len() == 1
+        && is_valid_avd_name(trimmed)
+        && !trimmed.contains('.')
+        && !trimmed.starts_with("adb-")
+        && !trimmed.contains("._adb-tls")
+    {
+        let emu_id = &running_emulators[0];
+        if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
+            if !name.eq_ignore_ascii_case(trimmed) {
+                return None;
+            }
+        }
+
+        let known_avds = list_avds(exec);
+        if known_avds.is_empty()
+            || known_avds.iter().any(|a| a.name.eq_ignore_ascii_case(trimmed))
+        {
+            return Some(emu_id.clone());
+        }
     }
 
     None
@@ -2350,6 +2382,14 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(resolve_running_avd_serial(&exec, "emulator-5554"), None);
         // Existing physical device serial -> None
         assert_eq!(resolve_running_avd_serial(&exec, "R58M1234567"), None);
+        // Wi-Fi mDNS serial -> None
+        assert_eq!(
+            resolve_running_avd_serial(
+                &exec,
+                "adb-RR8X401YEEY-YHrbnv._adb-tls-connect._tcp"
+            ),
+            None
+        );
         // iOS device -> None
         assert_eq!(
             resolve_running_avd_serial(&exec, "BC639450-E28F-50F8-90A1-581C383E0230"),
@@ -2390,6 +2430,66 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(
             resolve_running_avd_serial(&single_exec, "Any_AVD"),
             Some("emulator-5554".to_string())
+        );
+        // Wi-Fi mDNS serial does not fallback to single running emulator
+        assert_eq!(
+            resolve_running_avd_serial(
+                &single_exec,
+                "adb-RR8X401YEEY-YHrbnv._adb-tls-connect._tcp"
+            ),
+            None
+        );
+        // Serial with dots does not fallback
+        assert_eq!(
+            resolve_running_avd_serial(&single_exec, "device.with.dots"),
+            None
+        );
+
+        // Offline emulator test: ensure device is NOT diverted to offline emulator
+        struct MockOfflineExec;
+        impl Exec for MockOfflineExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+
+                if args == &["devices"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"List of devices attached\nemulator-5554 offline\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let offline_exec = MockOfflineExec;
+        // Valid AVD name must NOT resolve to offline emulator
+        assert_eq!(resolve_running_avd_serial(&offline_exec, "Pixel_7"), None);
+        assert_eq!(resolve_running_avd_serial(&offline_exec, "Any_AVD"), None);
+        // Wi-Fi mDNS must NOT resolve to offline emulator
+        assert_eq!(
+            resolve_running_avd_serial(
+                &offline_exec,
+                "adb-RR8X401YEEY-YHrbnv._adb-tls-connect._tcp"
+            ),
+            None
+        );
+        // Emulator serial itself returns None
+        assert_eq!(
+            resolve_running_avd_serial(&offline_exec, "emulator-5554"),
+            None
         );
     }
 

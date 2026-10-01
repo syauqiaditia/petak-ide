@@ -2613,6 +2613,15 @@ pub struct MirrorFramePayload {
     pub data: Vec<u8>,
 }
 
+fn is_direct_adb_serial(s: &str) -> bool {
+    let trimmed = s.trim();
+    trimmed.starts_with("emulator-")
+        || trimmed.starts_with("usb:")
+        || trimmed.starts_with("adb-")
+        || trimmed.contains("._adb-tls")
+        || trimmed.contains(':')
+}
+
 #[tauri::command]
 pub async fn mirror_start(
     app: tauri::AppHandle,
@@ -2621,8 +2630,12 @@ pub async fn mirror_start(
     max_size: Option<u16>,
 ) -> Result<petak_core::mirror::session::MirrorInfo, String> {
     let exec = petak_core::exec::SystemExec;
-    let resolved_serial = petak_core::run::resolve_running_avd_serial(&exec, &serial)
-        .unwrap_or_else(|| serial.clone());
+    let resolved_serial = if is_direct_adb_serial(&serial) {
+        serial.clone()
+    } else {
+        petak_core::run::resolve_running_avd_serial(&exec, &serial)
+            .unwrap_or_else(|| serial.clone())
+    };
     let serial_for_start = resolved_serial.clone();
     let max = max_size.unwrap_or(1920);
 
@@ -2701,7 +2714,11 @@ pub async fn mirror_stop(
         Some(s)
     } else {
         let exec = petak_core::exec::SystemExec;
-        let alt = petak_core::run::resolve_running_avd_serial(&exec, target);
+        let alt = if is_direct_adb_serial(target) {
+            None
+        } else {
+            petak_core::run::resolve_running_avd_serial(&exec, target)
+        };
         let found_key = alt.as_ref().and_then(|a| {
             if sessions.contains_key(a) {
                 Some(a.clone())
@@ -2712,7 +2729,8 @@ pub async fn mirror_stop(
             sessions.keys().find(|k| {
                 *k == target
                     || k.eq_ignore_ascii_case(target)
-                    || petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(target)
+                    || (!target.is_empty() && (k.starts_with(target) || target.starts_with(k.as_str())))
+                    || (!is_direct_adb_serial(k) && petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(target))
                     || alt.as_deref() == Some(k.as_str())
             }).cloned()
         });
@@ -2734,10 +2752,17 @@ pub async fn mirror_input(
         session.send_input(&event).map_err(|e| e.to_string())
     } else {
         let exec = petak_core::exec::SystemExec;
-        let alt = petak_core::run::resolve_running_avd_serial(&exec, &serial);
+        let alt = if is_direct_adb_serial(&serial) {
+            None
+        } else {
+            petak_core::run::resolve_running_avd_serial(&exec, &serial)
+        };
         let found = alt.as_ref().and_then(|a| sessions.get(a)).or_else(|| {
             sessions.iter().find(|(k, _)| {
-                petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(&serial)
+                *k == &serial
+                    || k.eq_ignore_ascii_case(&serial)
+                    || (!serial.is_empty() && (k.starts_with(&serial) || serial.starts_with(k.as_str())))
+                    || (!is_direct_adb_serial(k) && petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(&serial))
             }).map(|(_, v)| v)
         });
         if let Some(session) = found {
@@ -2755,7 +2780,11 @@ pub async fn mirror_screenshot(
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
-        let resolved = petak_core::run::resolve_running_avd_serial(&exec, &serial).unwrap_or(serial);
+        let resolved = if is_direct_adb_serial(&serial) {
+            serial
+        } else {
+            petak_core::run::resolve_running_avd_serial(&exec, &serial).unwrap_or(serial)
+        };
         petak_core::mirror::session::take_screenshot(&exec, &resolved, path.as_deref())
             .map_err(|e| e.to_string())
     })
