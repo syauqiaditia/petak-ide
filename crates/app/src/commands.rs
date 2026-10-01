@@ -2657,9 +2657,9 @@ pub async fn mirror_start(
     let serial_for_start = resolved_serial.clone();
     let max = max_size.unwrap_or_else(|| {
         if resolved_serial.starts_with("emulator-") {
-            960
+            800
         } else {
-            1280
+            1080
         }
     });
 

@@ -190,17 +190,46 @@ pub fn serialize(ev: &InputEvent, w: &mut dyn Write) -> io::Result<()> {
                 w.write_all(&buf)?;
                 buf[1] = AKEY_ACTION_UP;
                 w.write_all(&buf)
+            } else if matches!(key, NavKey::Power) {
+                // Android PowerManager debounces power key events.
+                // A 0ms down-up causes Android to discard the tap or drop subsequent presses.
+                // A 60ms hold duration triggers power toggle cleanly.
+                let down = InputEvent::Key {
+                    keycode: AKEYCODE_POWER,
+                    action: KeyAction::Down,
+                };
+                serialize(&down, w)?;
+                std::thread::sleep(std::time::Duration::from_millis(60));
+                let up = InputEvent::Key {
+                    keycode: AKEYCODE_POWER,
+                    action: KeyAction::Up,
+                };
+                serialize(&up, w)?;
+
+                // If device was asleep and is waking up, also dispatch KEYCODE_WAKEUP (224)
+                let wake_down = InputEvent::Key {
+                    keycode: 224, // AKEYCODE_WAKEUP
+                    action: KeyAction::Down,
+                };
+                serialize(&wake_down, w)?;
+                std::thread::sleep(std::time::Duration::from_millis(30));
+                let wake_up = InputEvent::Key {
+                    keycode: 224,
+                    action: KeyAction::Up,
+                };
+                serialize(&wake_up, w)
             } else {
-                // Send keycode down + up
+                // Send keycode down + up with 20ms debounce
                 let down = InputEvent::Key {
                     keycode,
                     action: KeyAction::Down,
                 };
+                serialize(&down, w)?;
+                std::thread::sleep(std::time::Duration::from_millis(20));
                 let up = InputEvent::Key {
                     keycode,
                     action: KeyAction::Up,
                 };
-                serialize(&down, w)?;
                 serialize(&up, w)
             }
         }

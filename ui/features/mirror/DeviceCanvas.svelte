@@ -272,7 +272,7 @@
   }
 
   onMount(() => {
-    ctx = canvasEl.getContext('2d');
+    ctx = canvasEl.getContext('2d', { alpha: false, desynchronized: true });
     initDecoder();
     mirrorStore.registerFrameCallback(handlePacket);
     window.addEventListener('keydown', handleKeyDown);
