@@ -4,6 +4,7 @@ pub mod device;
 pub mod flutter;
 pub mod ios;
 pub mod logs;
+pub mod pairing;
 pub mod toolchain;
 
 pub use android::{
@@ -39,3 +40,7 @@ pub use logs::{
     StackLink,
 };
 pub use toolchain::{detect, Tool, Toolchain};
+pub use pairing::{
+    adb_connect, adb_pair, find_adb, parse_connect_output, parse_pair_output, PairResult,
+};
+pub use crate::exec::{Exec, SystemExec, SystemExec as ProcessExec};

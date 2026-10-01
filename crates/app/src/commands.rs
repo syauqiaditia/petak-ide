@@ -3773,6 +3773,29 @@ pub fn accounts_clear() -> Result<(), String> {
     petak_core::accounts::accounts_clear()
 }
 
+// ──────────── Batch 11 Wi-Fi Pairing ────────────
+
+#[tauri::command]
+pub async fn adb_pair(host: String, port: u16, code: String) -> Result<String, String> {
+    let exec = petak_core::run::ProcessExec;
+    match petak_core::run::adb_pair(&exec, &host, port, &code) {
+        Ok(res) => {
+            if res.success {
+                Ok(res.message)
+            } else {
+                Err(res.message)
+            }
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn adb_connect(host: String, port: u16) -> Result<String, String> {
+    let exec = petak_core::run::ProcessExec;
+    petak_core::run::adb_connect(&exec, &host, port).map_err(|e| e.to_string())
+}
+
 pub use crate::agent_commands::*;
 #[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;
 
