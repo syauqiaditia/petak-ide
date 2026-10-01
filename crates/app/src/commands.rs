@@ -2610,7 +2610,7 @@ impl Default for MirrorState {
 #[serde(rename_all = "camelCase")]
 pub struct MirrorFramePayload {
     pub serial: String,
-    pub data: Vec<u8>,
+    pub data: String,
 }
 
 fn is_direct_adb_serial(s: &str) -> bool {
@@ -2628,8 +2628,6 @@ pub async fn mirror_start(
     state: tauri::State<'_, MirrorState>,
     serial: String,
     max_size: Option<u16>,
-    on_frame: Option<tauri::ipc::Channel<tauri::ipc::Response>>,
-    on_status: Option<tauri::ipc::Channel<petak_core::mirror::session::MirrorStatus>>,
 ) -> Result<petak_core::mirror::session::MirrorInfo, String> {
     let exec = petak_core::exec::SystemExec;
     let resolved_serial = if is_direct_adb_serial(&serial) {
@@ -2653,12 +2651,8 @@ pub async fn mirror_start(
     let app_status = app.clone();
     let serial_for_status = serial.clone();
     let actual_status_serial = resolved_serial.clone();
-    let status_channel = on_status;
     std::thread::spawn(move || {
         while let Ok(status) = status_rx.recv() {
-            if let Some(ch) = &status_channel {
-                let _ = ch.send(status.clone());
-            }
             let _ = app_status.emit(
                 "mirror-status",
                 serde_json::json!({ "serial": serial_for_status, "status": status }),
@@ -2672,65 +2666,57 @@ pub async fn mirror_start(
         }
     });
 
-    // Frame forwarder: high performance zero-copy binary IPC channel
+    // Frame forwarder: high-performance base64 binary streaming
     let app_frame = app.clone();
     let serial_for_frame = serial.clone();
     let actual_frame_serial = resolved_serial.clone();
-    let frame_channel = on_frame;
     std::thread::spawn(move || {
-        let mut last_config: Option<Vec<u8>> = None;
+        use base64::Engine;
+        let mut last_config_b64: Option<String> = None;
         while let Ok(packet) = frame_rx.recv() {
             let is_config = !packet.is_empty() && packet[0] == 0;
             let is_key = !packet.is_empty() && packet[0] == 1;
 
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&packet);
+
             if is_config {
-                last_config = Some(packet.clone());
+                last_config_b64 = Some(b64.clone());
             } else if is_key {
-                if let Some(cfg) = &last_config {
-                    if let Some(ch) = &frame_channel {
-                        let _ = ch.send(tauri::ipc::Response::new(cfg.clone()));
-                    } else {
+                if let Some(cfg) = &last_config_b64 {
+                    let _ = app_frame.emit(
+                        "mirror-frame",
+                        MirrorFramePayload {
+                            serial: serial_for_frame.clone(),
+                            data: cfg.clone(),
+                        },
+                    );
+                    if actual_frame_serial != serial_for_frame {
                         let _ = app_frame.emit(
                             "mirror-frame",
                             MirrorFramePayload {
-                                serial: serial_for_frame.clone(),
+                                serial: actual_frame_serial.clone(),
                                 data: cfg.clone(),
                             },
                         );
-                        if actual_frame_serial != serial_for_frame {
-                            let _ = app_frame.emit(
-                                "mirror-frame",
-                                MirrorFramePayload {
-                                    serial: actual_frame_serial.clone(),
-                                    data: cfg.clone(),
-                                },
-                            );
-                        }
                     }
                 }
             }
 
-            if let Some(ch) = &frame_channel {
-                if ch.send(tauri::ipc::Response::new(packet)).is_err() {
-                    break;
-                }
-            } else {
+            let _ = app_frame.emit(
+                "mirror-frame",
+                MirrorFramePayload {
+                    serial: serial_for_frame.clone(),
+                    data: b64,
+                },
+            );
+            if actual_frame_serial != serial_for_frame {
                 let _ = app_frame.emit(
                     "mirror-frame",
                     MirrorFramePayload {
-                        serial: serial_for_frame.clone(),
-                        data: packet.clone(),
+                        serial: actual_frame_serial.clone(),
+                        data: base64::engine::general_purpose::STANDARD.encode(&packet),
                     },
                 );
-                if actual_frame_serial != serial_for_frame {
-                    let _ = app_frame.emit(
-                        "mirror-frame",
-                        MirrorFramePayload {
-                            serial: actual_frame_serial.clone(),
-                            data: packet,
-                        },
-                    );
-                }
             }
         }
     });

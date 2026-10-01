@@ -92,7 +92,15 @@ class MirrorStore {
       if (payload.serial === current || payload.serial === this.serial || payload.serial === this.activeRunSerial) {
         const raw = payload.data;
         let buf: ArrayBuffer;
-        if (raw instanceof Uint8Array) {
+        if (typeof raw === 'string') {
+          const bin = atob(raw);
+          const len = bin.length;
+          const u8 = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            u8[i] = bin.charCodeAt(i);
+          }
+          buf = u8.buffer;
+        } else if (raw instanceof Uint8Array) {
           buf = (raw.buffer as ArrayBuffer).slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
         } else if (Array.isArray(raw)) {
           buf = new Uint8Array(raw).buffer as ArrayBuffer;
