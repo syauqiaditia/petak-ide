@@ -80,14 +80,11 @@
             throw new Error(pairRes);
           }
 
-          // 2. Panggil api.adbConnect
-          const connectRes = await api.adbConnect(detectedIp, detectedPort);
-          if (
-            typeof connectRes === 'string' &&
-            /failed|error/i.test(connectRes) &&
-            !/already connected/i.test(connectRes)
-          ) {
-            throw new Error(connectRes);
+          // 2. Hubungkan via adbConnect (abaikan jika adb sudah auto-connect via TLS mDNS)
+          try {
+            await api.adbConnect(detectedIp, detectedPort);
+          } catch (e) {
+            console.warn('adbConnect notice:', e);
           }
 
           // 3. Panggil runStore.refreshDevices()

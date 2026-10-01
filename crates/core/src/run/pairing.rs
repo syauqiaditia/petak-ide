@@ -182,27 +182,224 @@ pub fn parse_mdns_connect_service(stdout: &str, host: &str) -> Option<u16> {
     None
 }
 
+#[cfg(target_os = "macos")]
+fn dnssd_resolve_pairing(service_name: &str) -> Option<(String, u16)> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    // 1. Browse for _adb-tls-pairing._tcp
+    let mut child = Command::new("dns-sd")
+        .args(["-B", "_adb-tls-pairing._tcp", "local"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let stdout = child.stdout.take()?;
+    let (tx, rx) = mpsc::channel();
+    let s_name = service_name.to_string();
+
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().flatten() {
+            if line.contains("_adb-tls-pairing._tcp") {
+                if let Some(instance) = line.split_whitespace().last() {
+                    if s_name.is_empty() || line.contains(&s_name) || instance.contains(&s_name) {
+                        let _ = tx.send(instance.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    let instance = rx.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let _ = child.kill();
+    let _ = child.wait();
+
+    // 2. Lookup instance endpoint
+    let mut child_lookup = Command::new("dns-sd")
+        .args(["-L", &instance, "_adb-tls-pairing._tcp", "local"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let stdout_lookup = child_lookup.stdout.take()?;
+    let (tx_l, rx_l) = mpsc::channel();
+
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout_lookup);
+        for line in reader.lines().flatten() {
+            if let Some(idx) = line.find("can be reached at ") {
+                let rest = &line[idx + "can be reached at ".len()..];
+                if let Some(token) = rest.split_whitespace().next() {
+                    let token = token.trim_end_matches('.');
+                    if let Some((h, p)) = token.rsplit_once(':') {
+                        if let Ok(port) = p.parse::<u16>() {
+                            let _ = tx_l.send((h.to_string(), port));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let (target_host, target_port) = rx_l.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let _ = child_lookup.kill();
+    let _ = child_lookup.wait();
+
+    // 3. Resolve target host to IPv4
+    let mut child_ip = Command::new("dns-sd")
+        .args(["-G", "v4", &target_host])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let stdout_ip = child_ip.stdout.take()?;
+    let (tx_ip, rx_ip) = mpsc::channel();
+
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout_ip);
+        for line in reader.lines().flatten() {
+            for token in line.split_whitespace() {
+                let parts: Vec<&str> = token.split('.').collect();
+                if parts.len() == 4 && parts.iter().all(|p| p.parse::<u8>().is_ok()) {
+                    let _ = tx_ip.send(token.to_string());
+                    return;
+                }
+            }
+        }
+    });
+
+    let ip = rx_ip.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let _ = child_ip.kill();
+    let _ = child_ip.wait();
+
+    Some((ip, target_port))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn dnssd_resolve_pairing(_service_name: &str) -> Option<(String, u16)> {
+    None
+}
+
 pub fn adb_find_pairing_service(
     exec: &dyn Exec,
     service_name: &str,
 ) -> io::Result<Option<(String, u16)>> {
     let adb = find_adb(exec);
-    let output = exec.run(Path::new("."), &adb, &["mdns", "services"], &[], None)?;
-    if !output.status.success() {
-        return Ok(None);
+    if let Ok(output) = exec.run(Path::new("."), &adb, &["mdns", "services"], &[], None) {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(res) = parse_mdns_services(&stdout, service_name) {
+                return Ok(Some(res));
+            }
+        }
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_mdns_services(&stdout, service_name))
+
+    if let Some(res) = dnssd_resolve_pairing(service_name) {
+        return Ok(Some(res));
+    }
+
+    Ok(None)
+}
+
+#[cfg(target_os = "macos")]
+fn dnssd_resolve_connect(_host: &str) -> Option<u16> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    let mut child = Command::new("dns-sd")
+        .args(["-B", "_adb-tls-connect._tcp", "local"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let stdout = child.stdout.take()?;
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().flatten() {
+            if line.contains("_adb-tls-connect._tcp") {
+                if let Some(instance) = line.split_whitespace().last() {
+                    let _ = tx.send(instance.to_string());
+                    break;
+                }
+            }
+        }
+    });
+
+    let instance = rx.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let _ = child.kill();
+    let _ = child.wait();
+
+    let mut child_lookup = Command::new("dns-sd")
+        .args(["-L", &instance, "_adb-tls-connect._tcp", "local"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    let stdout_lookup = child_lookup.stdout.take()?;
+    let (tx_l, rx_l) = mpsc::channel();
+
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout_lookup);
+        for line in reader.lines().flatten() {
+            if let Some(idx) = line.find("can be reached at ") {
+                let rest = &line[idx + "can be reached at ".len()..];
+                if let Some(token) = rest.split_whitespace().next() {
+                    let token = token.trim_end_matches('.');
+                    if let Some((_, p)) = token.rsplit_once(':') {
+                        if let Ok(port) = p.parse::<u16>() {
+                            let _ = tx_l.send(port);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    let port = rx_l.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let _ = child_lookup.kill();
+    let _ = child_lookup.wait();
+
+    Some(port)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn dnssd_resolve_connect(_host: &str) -> Option<u16> {
+    None
 }
 
 pub fn adb_find_connect_service(exec: &dyn Exec, host: &str) -> io::Result<Option<u16>> {
     let adb = find_adb(exec);
-    let output = exec.run(Path::new("."), &adb, &["mdns", "services"], &[], None)?;
-    if !output.status.success() {
-        return Ok(None);
+    if let Ok(output) = exec.run(Path::new("."), &adb, &["mdns", "services"], &[], None) {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(port) = parse_mdns_connect_service(&stdout, host) {
+                return Ok(Some(port));
+            }
+        }
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_mdns_connect_service(&stdout, host))
+
+    if let Some(port) = dnssd_resolve_connect(host) {
+        return Ok(Some(port));
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]
