@@ -32,9 +32,7 @@ class ToolchainStore {
       });
     }
     await this.loadConfig();
-    if (root) {
-      await this.refresh(root);
-    }
+    await this.refresh(root || '');
   }
 
   handleLspStatus(payload: LspStatusPayload) {

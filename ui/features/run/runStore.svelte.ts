@@ -571,6 +571,11 @@ class RunStore {
         ...this.emulatorStatuses,
         [name]: { state: 'stopped' },
       };
+      import('../mirror/mirrorStore.svelte').then((m) => {
+        if (m.mirrorStore.serial === name || (m.mirrorStore as any).activeRunSerial === name) {
+          m.mirrorStore.stop().catch(() => {});
+        }
+      }).catch(() => {});
       await this.refreshDevices();
     } catch (e: any) {
       console.error('[runStore] Failed to stop AVD:', e);

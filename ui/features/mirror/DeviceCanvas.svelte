@@ -69,12 +69,19 @@
           };
 
           try {
-            const isSupported = await VideoDecoder.isConfigSupported(config);
-            if (isSupported.supported && decoder && decoder.state !== 'closed') {
-              decoder.configure(config);
+            let configToUse = config;
+            try {
+              const res = await VideoDecoder.isConfigSupported(config);
+              if (!res.supported) {
+                configToUse = { codec: 'avc1.42001f', optimizeForLatency: true };
+              }
+            } catch (_) {
+              configToUse = { codec: 'avc1.42001f', optimizeForLatency: true };
+            }
+
+            if (decoder && decoder.state !== 'closed') {
+              decoder.configure(configToUse);
               isDecoderConfigured = true;
-            } else {
-              console.warn('[DeviceCanvas] VideoDecoder.isConfigSupported returned false for avc1.42001f');
             }
           } catch (cfgErr) {
             console.warn('[DeviceCanvas] isConfigSupported failed:', cfgErr);
