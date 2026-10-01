@@ -2671,7 +2671,34 @@ pub async fn mirror_start(
     let serial_for_frame = serial.clone();
     let actual_frame_serial = resolved_serial.clone();
     std::thread::spawn(move || {
+        let mut last_config: Option<Vec<u8>> = None;
         while let Ok(packet) = frame_rx.recv() {
+            let is_config = !packet.is_empty() && packet[0] == 0;
+            let is_key = !packet.is_empty() && packet[0] == 1;
+
+            if is_config {
+                last_config = Some(packet.clone());
+            } else if is_key {
+                if let Some(cfg) = &last_config {
+                    let _ = app_frame.emit(
+                        "mirror-frame",
+                        MirrorFramePayload {
+                            serial: serial_for_frame.clone(),
+                            data: cfg.clone(),
+                        },
+                    );
+                    if actual_frame_serial != serial_for_frame {
+                        let _ = app_frame.emit(
+                            "mirror-frame",
+                            MirrorFramePayload {
+                                serial: actual_frame_serial.clone(),
+                                data: cfg.clone(),
+                            },
+                        );
+                    }
+                }
+            }
+
             let _ = app_frame.emit(
                 "mirror-frame",
                 MirrorFramePayload {

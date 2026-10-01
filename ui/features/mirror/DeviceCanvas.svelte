@@ -103,6 +103,9 @@
         }
       } else if (kind === 1 || kind === 2) {
         // Frame packet (1 = Keyframe, 2 = Delta)
+        if (!isDecoderConfigured && mirrorStore.lastConfigPacket) {
+          await handlePacket(mirrorStore.lastConfigPacket);
+        }
         if (decoder && decoder.state === 'configured' && isDecoderConfigured) {
           try {
             const avccData = nalsToAvcc(payload);

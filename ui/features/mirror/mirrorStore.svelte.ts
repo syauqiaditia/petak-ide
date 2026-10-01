@@ -51,6 +51,7 @@ class MirrorStore {
 
   // Frame callbacks (set by DeviceCanvas component when mounted)
   private onFrameCallback: ((buf: ArrayBuffer) => void) | null = null;
+  lastConfigPacket = $state<ArrayBuffer | null>(null);
   private frameTimestamps: number[] = [];
   private pendingInputTimestamp: number | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -112,6 +113,13 @@ class MirrorStore {
 
   registerFrameCallback(cb: (buf: ArrayBuffer) => void) {
     this.onFrameCallback = cb;
+    if (this.lastConfigPacket) {
+      try {
+        cb(this.lastConfigPacket);
+      } catch (e) {
+        console.warn('[mirrorStore] replay lastConfigPacket error:', e);
+      }
+    }
   }
 
   unregisterFrameCallback() {
@@ -319,6 +327,7 @@ class MirrorStore {
     this.fps = 0;
     this.latencyMs = null;
     this.unregisterFrameCallback();
+    this.lastConfigPacket = null;
     if (this.toastTimer) {
       clearTimeout(this.toastTimer);
       this.toastTimer = null;
@@ -343,6 +352,10 @@ class MirrorStore {
   handleBinaryFrame(buf: ArrayBuffer) {
     if (this.status === 'connecting') {
       this.status = this.isViewOnly ? 'view-only' : 'live';
+    }
+    const bytes = new Uint8Array(buf);
+    if (bytes.length > 0 && bytes[0] === 0) {
+      this.lastConfigPacket = buf;
     }
     if (this.onFrameCallback) {
       this.onFrameCallback(buf);
