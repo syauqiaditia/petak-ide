@@ -44,6 +44,8 @@ pub enum MirrorStatus {
 enum SessionBackend {
     Android {
         control_stream: Arc<Mutex<Option<TcpStream>>>,
+        width: u16,
+        height: u16,
         // Handle to server resources — Drop kills server
         _server: server::ScrcpyServer,
         // Handle to video reader thread
@@ -280,6 +282,8 @@ impl MirrorSession {
                 device: serial.to_string(),
                 backend: SessionBackend::Android {
                     control_stream: control_arc,
+                    width: meta.width as u16,
+                    height: meta.height as u16,
                     _server: scrcpy_server,
                     _video_thread: Some(video_thread),
                 },
@@ -292,10 +296,50 @@ impl MirrorSession {
     /// Send an input event to the device.
     pub fn send_input(&self, ev: &InputEvent) -> io::Result<()> {
         match &self.backend {
-            SessionBackend::Android { control_stream, .. } => {
+            SessionBackend::Android { control_stream, width, height, .. } => {
                 let mut guard = control_stream.lock().unwrap();
                 if let Some(stream) = guard.as_mut() {
-                    control::serialize(ev, stream)
+                    // Normalize Touch/Scroll coordinates to stream's exact width/height
+                    // scrcpy server PositionMapper ignores events if sw != video_width or sh != video_height
+                    let fixed_ev = match ev {
+                        InputEvent::Touch { action, x, y, w, h } => {
+                            let (target_x, target_y) = if *w > 0 && *h > 0 && (*w != *width || *h != *height) {
+                                (
+                                    ((*x as f64 * *width as f64) / *w as f64).round() as u32,
+                                    ((*y as f64 * *height as f64) / *h as f64).round() as u32,
+                                )
+                            } else {
+                                (*x, *y)
+                            };
+                            InputEvent::Touch {
+                                action: *action,
+                                x: target_x,
+                                y: target_y,
+                                w: *width,
+                                h: *height,
+                            }
+                        }
+                        InputEvent::Scroll { x, y, w, h, dx, dy } => {
+                            let (target_x, target_y) = if *w > 0 && *h > 0 && (*w != *width || *h != *height) {
+                                (
+                                    ((*x as f64 * *width as f64) / *w as f64).round() as u32,
+                                    ((*y as f64 * *height as f64) / *h as f64).round() as u32,
+                                )
+                            } else {
+                                (*x, *y)
+                            };
+                            InputEvent::Scroll {
+                                x: target_x,
+                                y: target_y,
+                                w: *width,
+                                h: *height,
+                                dx: *dx,
+                                dy: *dy,
+                            }
+                        }
+                        other => other.clone(),
+                    };
+                    control::serialize(&fixed_ev, stream)
                 } else {
                     Err(io::Error::new(
                         io::ErrorKind::NotConnected,

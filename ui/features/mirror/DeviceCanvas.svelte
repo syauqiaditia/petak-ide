@@ -55,6 +55,8 @@
               if (canvasEl.width !== w || canvasEl.height !== h) {
                 canvasEl.width = w;
                 canvasEl.height = h;
+                mirrorStore.deviceWidth = w;
+                mirrorStore.deviceHeight = h;
               }
               ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
               frame.close();
@@ -160,7 +162,9 @@
     reticleY = e.clientY - rect.top;
     reticleVisible = true;
 
-    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, deviceWidth, deviceHeight);
+    const vWidth = canvasEl.width || deviceWidth || 800;
+    const vHeight = canvasEl.height || deviceHeight || 800;
+    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
     mirrorStore.sendInput({
       t: 'touch',
       action: 'down',
@@ -184,7 +188,9 @@
     }
     lastMoveTime = now;
 
-    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, deviceWidth, deviceHeight);
+    const vWidth = canvasEl.width || deviceWidth || 800;
+    const vHeight = canvasEl.height || deviceHeight || 800;
+    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
     mirrorStore.sendInput({
       t: 'touch',
       action: 'move',
@@ -201,7 +207,9 @@
     reticleVisible = false;
 
     const rect = canvasEl.getBoundingClientRect();
-    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, deviceWidth, deviceHeight);
+    const vWidth = canvasEl.width || deviceWidth || 800;
+    const vHeight = canvasEl.height || deviceHeight || 800;
+    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
     mirrorStore.sendInput({
       t: 'touch',
       action: 'up',
@@ -222,7 +230,9 @@
     if (isViewOnly) return;
     e.preventDefault();
     const rect = canvasEl.getBoundingClientRect();
-    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, deviceWidth, deviceHeight);
+    const vWidth = canvasEl.width || deviceWidth || 800;
+    const vHeight = canvasEl.height || deviceHeight || 800;
+    const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
     mirrorStore.sendInput({
       t: 'scroll',
       x: coords.x,
@@ -335,6 +345,7 @@
     onmouseup={handleMouseUp}
     onmouseleave={handleMouseLeave}
     onwheel={handleWheel}
+    oncontextmenu={(e) => e.preventDefault()}
   ></canvas>
 
   {#if reticleVisible}
