@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 use std::sync::mpsc::Sender;
+use std::sync::Mutex;
 use std::thread;
 
 use serde::{Deserialize, Serialize};
@@ -457,8 +459,73 @@ pub fn parse_track_devices_payload(payload: &str) -> Vec<Device> {
     devices
 }
 
-/// Build arguments for emulator command.
-pub fn build_emulator_args(avd: &str, headless: bool) -> io::Result<Vec<String>> {
+static RUNNING_EMULATOR_PIDS: Mutex<Option<HashMap<String, u32>>> = Mutex::new(None);
+
+pub fn record_emulator_pid(key: &str, pid: u32) {
+    if let Ok(mut guard) = RUNNING_EMULATOR_PIDS.lock() {
+        let map = guard.get_or_insert_with(HashMap::new);
+        map.insert(key.to_string(), pid);
+    }
+}
+
+pub fn remove_emulator_pid(key: &str) -> Option<u32> {
+    if let Ok(mut guard) = RUNNING_EMULATOR_PIDS.lock() {
+        if let Some(map) = guard.as_mut() {
+            return map.remove(key);
+        }
+    }
+    None
+}
+
+pub fn get_emulator_pid(key: &str) -> Option<u32> {
+    if let Ok(guard) = RUNNING_EMULATOR_PIDS.lock() {
+        if let Some(map) = guard.as_ref() {
+            return map.get(key).copied();
+        }
+    }
+    None
+}
+
+pub fn terminate_process_by_pid(pid: u32) {
+    append_emulator_log(&format!(
+        "terminate_process_by_pid: attempting to terminate PID {}",
+        pid
+    ));
+    #[cfg(unix)]
+    unsafe {
+        libc::killpg(pid as libc::pid_t, libc::SIGTERM);
+        libc::kill(pid as libc::pid_t, libc::SIGTERM);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        if libc::kill(pid as libc::pid_t, 0) == 0 {
+            libc::killpg(pid as libc::pid_t, libc::SIGKILL);
+            libc::kill(pid as libc::pid_t, libc::SIGKILL);
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .output();
+    }
+}
+
+/// Headless emulator flags depending on the target OS.
+/// On macOS (especially Apple Silicon ARM64), `-gpu swiftshader_indirect` causes ANGLE/Vulkan crashes.
+/// Using `-no-window -no-audio -no-snapshot-load` avoids GPU driver crashes and corrupt snapshot issues.
+pub fn headless_emulator_flags(is_macos: bool) -> &'static [&'static str] {
+    if is_macos {
+        &["-no-window", "-no-audio", "-no-snapshot-load"]
+    } else {
+        &["-no-window", "-no-audio", "-gpu", "swiftshader_indirect"]
+    }
+}
+
+/// Build arguments for emulator command targeting a specific OS.
+pub fn build_emulator_args_target(
+    avd: &str,
+    headless: bool,
+    is_macos: bool,
+) -> io::Result<Vec<String>> {
     if !is_valid_avd_name(avd) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -468,14 +535,16 @@ pub fn build_emulator_args(avd: &str, headless: bool) -> io::Result<Vec<String>>
 
     let mut args = vec!["-avd".to_string(), avd.to_string()];
     if headless {
-        args.extend([
-            "-no-window".to_string(),
-            "-no-audio".to_string(),
-            "-gpu".to_string(),
-            "swiftshader_indirect".to_string(),
-        ]);
+        for &flag in headless_emulator_flags(is_macos) {
+            args.push(flag.to_string());
+        }
     }
     Ok(args)
+}
+
+/// Build arguments for emulator command.
+pub fn build_emulator_args(avd: &str, headless: bool) -> io::Result<Vec<String>> {
+    build_emulator_args_target(avd, headless, cfg!(target_os = "macos"))
 }
 
 pub fn resolve_emulator_binary() -> String {
@@ -531,12 +600,12 @@ pub fn avd_start(
         args.push("-no-snapshot-load".to_string());
     }
     if headless {
-        args.extend([
-            "-no-window".to_string(),
-            "-no-audio".to_string(),
-            "-gpu".to_string(),
-            "swiftshader_indirect".to_string(),
-        ]);
+        let is_macos = cfg!(target_os = "macos");
+        for &flag in headless_emulator_flags(is_macos) {
+            if !args.iter().any(|a| a == flag) {
+                args.push(flag.to_string());
+            }
+        }
     }
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let (tx, _rx) = std::sync::mpsc::channel();
@@ -675,7 +744,13 @@ pub fn spawn_emulator_detached(
         cmd.arg("-wipe-data");
     }
     if headless {
-        cmd.args(["-no-window", "-no-audio", "-gpu", "swiftshader_indirect"]);
+        let is_macos = cfg!(target_os = "macos");
+        for &flag in headless_emulator_flags(is_macos) {
+            if flag == "-no-snapshot-load" && cold {
+                continue;
+            }
+            cmd.arg(flag);
+        }
     }
 
     crate::toolchain::apply_env(&mut cmd);
@@ -695,10 +770,12 @@ pub fn spawn_emulator_detached(
 
     match cmd.spawn() {
         Ok(child) => {
+            let pid = child.id();
             append_emulator_log(&format!(
                 "spawn_emulator_detached: spawned PID={:?}",
-                child.id()
+                pid
             ));
+            record_emulator_pid(avd, pid);
             Ok(child)
         }
         Err(e) => {
@@ -794,6 +871,9 @@ pub fn resolve_running_avd_serial(exec: &dyn Exec, avd_or_serial: &str) -> Optio
 }
 
 /// Stop a running AVD by finding its emulator device and killing it.
+/// Searches by AVD name or emulator serial (`emulator-xxxx`).
+/// Runs `adb -s <serial> emu kill`.
+/// If `emu kill` fails or emulator has not terminated, falls back to terminating child PID if known.
 pub fn avd_stop(exec: &dyn Exec, avd: &str) -> io::Result<()> {
     if !is_valid_avd_name(avd) {
         return Err(io::Error::new(
@@ -801,7 +881,10 @@ pub fn avd_stop(exec: &dyn Exec, avd: &str) -> io::Result<()> {
             format!("invalid AVD name: {}", avd),
         ));
     }
+    let target = avd.trim();
     let adb = resolve_adb_binary();
+
+    append_emulator_log(&format!("avd_stop: requesting stop for target '{}'", target));
 
     // List devices to find running emulators
     let output = exec.run(Path::new("."), &adb, &["devices"], &[], None)?;
@@ -817,34 +900,103 @@ pub fn avd_stop(exec: &dyn Exec, avd: &str) -> io::Result<()> {
         }
     }
 
-    // Match specific emulator by querying AVD name
-    for emu_id in &running_emulators {
-        if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
-            if name == avd {
-                let _ = exec.run(
-                    Path::new("."),
-                    &adb,
-                    &["-s", emu_id, "emu", "kill"],
-                    &[],
-                    None,
-                );
-                return Ok(());
+    let mut matched_serial: Option<String> = None;
+    let mut matched_avd_name: Option<String> = None;
+
+    // 1. Direct match if target is itself a serial (e.g. "emulator-5554")
+    if target.starts_with("emulator-") {
+        if running_emulators.iter().any(|s| s == target) {
+            matched_serial = Some(target.to_string());
+            if let Some(name) = get_running_avd_name(exec, &adb, target) {
+                matched_avd_name = Some(name);
             }
         }
     }
 
-    // Fallback: if only 1 emulator is running and get_running_avd_name was None (e.g. unmocked/console auth),
-    // we can stop that single emulator. If multiple emulators are running, never kill blindly.
-    if running_emulators.len() == 1 {
+    // 2. Search running emulators by AVD name or exact serial match
+    if matched_serial.is_none() {
+        for emu_id in &running_emulators {
+            if emu_id == target {
+                matched_serial = Some(emu_id.clone());
+                if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
+                    matched_avd_name = Some(name);
+                }
+                break;
+            }
+            if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
+                if name == target || name.eq_ignore_ascii_case(target) {
+                    matched_serial = Some(emu_id.clone());
+                    matched_avd_name = Some(name);
+                    break;
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: if only 1 emulator is running
+    if matched_serial.is_none() && running_emulators.len() == 1 {
         let emu_id = &running_emulators[0];
-        if get_running_avd_name(exec, &adb, emu_id).is_none() {
-            let _ = exec.run(
-                Path::new("."),
-                &adb,
-                &["-s", emu_id, "emu", "kill"],
-                &[],
-                None,
-            );
+        if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
+            if name == target || name.eq_ignore_ascii_case(target) {
+                matched_serial = Some(emu_id.clone());
+                matched_avd_name = Some(name);
+            }
+        } else {
+            matched_serial = Some(emu_id.clone());
+        }
+    }
+
+    let mut emu_kill_succeeded = false;
+    if let Some(ref serial) = matched_serial {
+        append_emulator_log(&format!("avd_stop: running 'adb -s {} emu kill'", serial));
+        let kill_res = exec.run(
+            Path::new("."),
+            &adb,
+            &["-s", serial, "emu", "kill"],
+            &[],
+            None,
+        );
+        if let Ok(out) = kill_res {
+            if out.status.success() {
+                emu_kill_succeeded = true;
+            } else {
+                append_emulator_log(&format!(
+                    "avd_stop: 'adb -s {} emu kill' returned non-zero status",
+                    serial
+                ));
+            }
+        } else {
+            append_emulator_log(&format!(
+                "avd_stop: failed to execute 'adb -s {} emu kill'",
+                serial
+            ));
+        }
+    }
+
+    // Fallback: Terminate child PID if known and emu_kill failed or process is still running
+    let known_pid = get_emulator_pid(target)
+        .or_else(|| matched_avd_name.as_deref().and_then(get_emulator_pid))
+        .or_else(|| matched_serial.as_deref().and_then(get_emulator_pid));
+
+    if let Some(pid) = known_pid {
+        #[cfg(unix)]
+        let still_alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
+        #[cfg(not(unix))]
+        let still_alive = !emu_kill_succeeded;
+
+        if !emu_kill_succeeded || still_alive {
+            append_emulator_log(&format!(
+                "avd_stop: fallback terminating PID {} (emu_kill_succeeded={})",
+                pid, emu_kill_succeeded
+            ));
+            terminate_process_by_pid(pid);
+        }
+        remove_emulator_pid(target);
+        if let Some(ref name) = matched_avd_name {
+            remove_emulator_pid(name);
+        }
+        if let Some(ref ser) = matched_serial {
+            remove_emulator_pid(ser);
         }
     }
 
@@ -1840,8 +1992,63 @@ emulator-5558          unauthorized transport_id:5
     #[test]
     fn test_build_emulator_args() {
         let args = build_emulator_args("jatim_dev", true).unwrap();
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(
+                args,
+                vec![
+                    "-avd",
+                    "jatim_dev",
+                    "-no-window",
+                    "-no-audio",
+                    "-no-snapshot-load"
+                ]
+            );
+            assert!(!args.contains(&"-gpu".to_string()));
+            assert!(!args.contains(&"swiftshader_indirect".to_string()));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(
+                args,
+                vec![
+                    "-avd",
+                    "jatim_dev",
+                    "-no-window",
+                    "-no-audio",
+                    "-gpu",
+                    "swiftshader_indirect"
+                ]
+            );
+        }
+
+        let err = build_emulator_args("bad;injection", true);
+        assert!(err.is_err());
+        let err_flag = build_emulator_args("--foo", true);
+        assert!(err_flag.is_err());
+    }
+
+    #[test]
+    fn test_build_emulator_args_macos_headless() {
+        let mac_args = build_emulator_args_target("jatim_dev", true, true).unwrap();
         assert_eq!(
-            args,
+            mac_args,
+            vec![
+                "-avd",
+                "jatim_dev",
+                "-no-window",
+                "-no-audio",
+                "-no-snapshot-load"
+            ]
+        );
+        assert!(!mac_args
+            .iter()
+            .any(|a| a == "-gpu" || a == "swiftshader_indirect"));
+        assert!(mac_args.iter().any(|a| a == "-no-snapshot-load"));
+
+        let non_mac_args = build_emulator_args_target("jatim_dev", true, false).unwrap();
+        assert_eq!(
+            non_mac_args,
             vec![
                 "-avd",
                 "jatim_dev",
@@ -1851,11 +2058,7 @@ emulator-5558          unauthorized transport_id:5
                 "swiftshader_indirect"
             ]
         );
-
-        let err = build_emulator_args("bad;injection", true);
-        assert!(err.is_err());
-        let err_flag = build_emulator_args("--foo", true);
-        assert!(err_flag.is_err());
+        assert!(non_mac_args.iter().any(|a| a == "swiftshader_indirect"));
     }
 
     #[test]
@@ -2033,6 +2236,59 @@ emulator-5558          unauthorized transport_id:5
         assert!(killed_5556.load(Ordering::SeqCst));
         // emulator-5554 was running Pixel_7, so it must NOT be killed!
         assert!(!killed_5554.load(Ordering::SeqCst));
+
+        // Stop by serial "emulator-5554" directly
+        let killed_5554_b = Arc::new(AtomicBool::new(false));
+        let killed_5556_b = Arc::new(AtomicBool::new(false));
+        let exec_b = MockStopExec {
+            killed_5554: killed_5554_b.clone(),
+            killed_5556: killed_5556_b.clone(),
+        };
+        let res_b = avd_stop(&exec_b, "emulator-5554");
+        assert!(res_b.is_ok());
+        assert!(killed_5554_b.load(Ordering::SeqCst));
+        assert!(!killed_5556_b.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_avd_stop_fallback_terminate_pid() {
+        struct MockFailExec;
+        impl Exec for MockFailExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _cmd: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<std::process::Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+
+                if args == &["devices"] {
+                    return Ok(std::process::Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: b"List of devices attached\n\n".to_vec(),
+                        stderr: Vec::new(),
+                    });
+                }
+                Ok(std::process::Output {
+                    status: std::process::ExitStatus::from_raw(1),
+                    stdout: Vec::new(),
+                    stderr: b"error\n".to_vec(),
+                })
+            }
+        }
+
+        // Register fake PID
+        record_emulator_pid("offline_avd", 999999);
+        assert_eq!(get_emulator_pid("offline_avd"), Some(999999));
+
+        let exec = MockFailExec;
+        let res = avd_stop(&exec, "offline_avd");
+        assert!(res.is_ok());
+        // PID should be removed after cleanup
+        assert_eq!(get_emulator_pid("offline_avd"), None);
     }
 
     #[test]
