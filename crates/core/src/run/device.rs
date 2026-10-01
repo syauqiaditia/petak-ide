@@ -787,6 +787,39 @@ pub fn spawn_emulator_detached(
 
 /// Query the running AVD name for an emulator device ID using `adb -s <id> emu avd name`.
 pub fn get_running_avd_name(exec: &dyn Exec, adb: &str, device_id: &str) -> Option<String> {
+    // 1. Modern Android emulators report AVD name directly via system property without telnet port
+    if let Ok(out) = exec.run(
+        Path::new("."),
+        adb,
+        &["-s", device_id, "shell", "getprop", "ro.boot.qemu.avd_name"],
+        &[],
+        None,
+    ) {
+        if out.status.success() {
+            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+
+    // 2. Kernel property fallback
+    if let Ok(out) = exec.run(
+        Path::new("."),
+        adb,
+        &["-s", device_id, "shell", "getprop", "ro.kernel.qemu.avd_name"],
+        &[],
+        None,
+    ) {
+        if out.status.success() {
+            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+
+    // 3. Fallback to `emu avd name`
     let out = exec
         .run(
             Path::new("."),
@@ -884,19 +917,7 @@ pub fn resolve_running_avd_serial(exec: &dyn Exec, avd_or_serial: &str) -> Optio
         && !trimmed.starts_with("adb-")
         && !trimmed.contains("._adb-tls")
     {
-        let emu_id = &running_emulators[0];
-        if let Some(name) = get_running_avd_name(exec, &adb, emu_id) {
-            if !name.eq_ignore_ascii_case(trimmed) {
-                return None;
-            }
-        }
-
-        let known_avds = list_avds(exec);
-        if known_avds.is_empty()
-            || known_avds.iter().any(|a| a.name.eq_ignore_ascii_case(trimmed))
-        {
-            return Some(emu_id.clone());
-        }
+        return Some(running_emulators[0].clone());
     }
 
     None

@@ -2633,8 +2633,26 @@ pub async fn mirror_start(
     let resolved_serial = if is_direct_adb_serial(&serial) {
         serial.clone()
     } else {
-        petak_core::run::resolve_running_avd_serial(&exec, &serial)
-            .unwrap_or_else(|| serial.clone())
+        petak_core::run::resolve_running_avd_serial(&exec, &serial).unwrap_or_else(|| {
+            if let Ok(out) = exec.run(
+                std::path::Path::new("."),
+                &petak_core::run::resolve_adb_binary(),
+                &["devices"],
+                &[],
+                None,
+            ) {
+                let s = String::from_utf8_lossy(&out.stdout);
+                for line in s.lines() {
+                    let line = line.trim();
+                    if line.starts_with("emulator-") && line.contains("device") && !line.contains("offline") {
+                        if let Some(id) = line.split_whitespace().next() {
+                            return id.to_string();
+                        }
+                    }
+                }
+            }
+            serial.clone()
+        })
     };
     let serial_for_start = resolved_serial.clone();
     let max = max_size.unwrap_or(1920);
