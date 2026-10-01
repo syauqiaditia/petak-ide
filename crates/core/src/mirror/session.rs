@@ -1,13 +1,12 @@
 /// MirrorSession: lifecycle management for one device mirror.
 ///
-/// Lazy: no threads/processes until `start()`. Clean: Drop kills server, removes forward.
+/// Lazy: no threads/processes until `start()`. Clean: Drop kills server, removes reverse.
 /// Video frames are sent to the caller via an mpsc channel.
 use std::io;
 use std::net::TcpStream;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -125,27 +124,49 @@ impl MirrorSession {
             return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
         }
 
-        // 2. Generate random scid
-        let scid: u32 = rand_scid();
-
-        // 3. Setup adb forward
-        let port = match server::setup_forward(exec.as_ref(), serial, scid) {
-            Ok(p) => p,
+        // 2. Bind local TcpListener for reverse tunnel
+        let listener = match std::net::TcpListener::bind("127.0.0.1:0") {
+            Ok(l) => l,
             Err(e) => {
                 let err_obj = serde_json::json!({
                     "platform": "android",
-                    "code": "adb_forward_failed",
-                    "message": format!("Gagal setup adb forward untuk {}: {}", serial, e)
+                    "code": "listener_bind_failed",
+                    "message": format!("Gagal bind local TcpListener untuk reverse tunnel {}: {}", serial, e)
+                });
+                return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+            }
+        };
+        let port = match listener.local_addr() {
+            Ok(addr) => addr.port(),
+            Err(e) => {
+                let err_obj = serde_json::json!({
+                    "platform": "android",
+                    "code": "listener_port_failed",
+                    "message": format!("Gagal membaca port TcpListener untuk reverse tunnel {}: {}", serial, e)
                 });
                 return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
             }
         };
 
-        // 4. Start server process
+        // 3. Generate random scid
+        let scid: u32 = rand_scid();
+
+        // 4. Setup adb reverse
+        if let Err(e) = server::setup_reverse(exec.as_ref(), serial, scid, port) {
+            let err_obj = serde_json::json!({
+                "platform": "android",
+                "code": "adb_reverse_failed",
+                "message": format!("Gagal setup adb reverse untuk {}: {}", serial, e)
+            });
+            return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
+        }
+
+        // 5. Start server process
         let (proc_tx, _proc_rx) = mpsc::channel();
         let server_proc = match server::start_server(spawn.as_ref(), serial, scid, max_size, proc_tx) {
             Ok(p) => p,
             Err(e) => {
+                server::remove_reverse(exec.as_ref(), serial, scid);
                 let err_obj = serde_json::json!({
                     "platform": "android",
                     "code": "scrcpy_start_failed",
@@ -163,17 +184,14 @@ impl MirrorSession {
             exec,
         };
 
-        // Give scrcpy-server a moment to start and bind its abstract socket
-        thread::sleep(Duration::from_millis(800));
-
-        // 5. Connect video + control sockets
-        let (video_stream, control_stream) = match server::connect_sockets(port) {
+        // 6. Accept video + control sockets (device connects back via adb reverse)
+        let (video_stream, control_stream) = match server::accept_sockets(&listener) {
             Ok(s) => s,
             Err(e) => {
                 let err_obj = serde_json::json!({
                     "platform": "android",
                     "code": "scrcpy_connect_failed",
-                    "message": format!("Gagal menghubungkan video/control socket ke scrcpy-server: {}", e)
+                    "message": format!("Gagal menerima video/control socket dari scrcpy-server: {}", e)
                 });
                 return Err(io::Error::new(io::ErrorKind::Other, err_obj.to_string()));
             }

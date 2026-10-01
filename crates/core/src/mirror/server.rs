@@ -2,13 +2,14 @@
 ///
 /// Steps:
 /// 1. adb push scrcpy-server-v4.1 /data/local/tmp/scrcpy-server.jar
-/// 2. adb forward tcp:<port> localabstract:scrcpy_<scid>
-/// 3. adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar \
+/// 2. Bind local TcpListener to ephemeral port
+/// 3. adb reverse localabstract:scrcpy_<scid> tcp:<port>
+/// 4. adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar \
 ///    app_process / com.genymobile.scrcpy.Server 4.1 \
-///    tunnel_forward=true audio=false control=true max_size=<max> ...
-/// 4. Connect to localhost:<port> — video socket first, then control socket.
+///    tunnel_forward=false audio=false control=true max_size=<max> ...
+/// 5. Accept incoming connections from device — video socket first, then control socket.
 use std::io;
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -160,7 +161,48 @@ pub fn push_server(exec: &dyn Exec, device: &str, local_jar: &str) -> io::Result
     Ok(())
 }
 
+/// Set up adb reverse and forward the abstract socket to the local port.
+pub fn setup_reverse(exec: &dyn Exec, device: &str, scid: u32, port: u16) -> io::Result<()> {
+    if !is_valid_device_id(device) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid device ID: {}", device),
+        ));
+    }
+    let adb = resolve_adb_binary();
+    let abstract_name = format!("localabstract:scrcpy_{:08x}", scid);
+    let tcp_spec = format!("tcp:{}", port);
+
+    let output = exec.run(
+        Path::new("."),
+        &adb,
+        &["-s", device, "reverse", &abstract_name, &tcp_spec],
+        &[],
+        None,
+    )?;
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        return Err(io::Error::other(format!("adb reverse failed: {}", err.trim())));
+    }
+    Ok(())
+}
+
+/// Remove the adb reverse for a given scid.
+pub fn remove_reverse(exec: &dyn Exec, device: &str, scid: u32) {
+    let adb = resolve_adb_binary();
+    let abstract_name = format!("localabstract:scrcpy_{:08x}", scid);
+    let _ = exec.run(
+        Path::new("."),
+        &adb,
+        &["-s", device, "reverse", "--remove", &abstract_name],
+        &[],
+        None,
+    );
+}
+
 /// Set up adb forward and return the local port.
+#[deprecated(note = "use setup_reverse instead to avoid race conditions")]
+#[allow(dead_code)]
 pub fn setup_forward(exec: &dyn Exec, device: &str, scid: u32) -> io::Result<u16> {
     let adb = resolve_adb_binary();
     let abstract_name = format!("localabstract:scrcpy_{:08x}", scid);
@@ -187,6 +229,8 @@ pub fn setup_forward(exec: &dyn Exec, device: &str, scid: u32) -> io::Result<u16
 }
 
 /// Remove the adb forward for a given port.
+#[deprecated(note = "use remove_reverse instead")]
+#[allow(dead_code)]
 pub fn remove_forward(exec: &dyn Exec, device: &str, port: u16) {
     let adb = resolve_adb_binary();
     let tcp_spec = format!("tcp:{}", port);
@@ -220,7 +264,7 @@ pub fn start_server(
 
     let shell_cmd = format!(
         "CLASSPATH={} app_process / com.genymobile.scrcpy.Server {} \
-         tunnel_forward=true audio=false control=true cleanup=false \
+         tunnel_forward=false audio=false control=true cleanup=false \
          send_device_meta=false send_frame_meta=true \
          send_dummy_byte=false \
          max_size={} scid={}",
@@ -236,6 +280,51 @@ pub fn start_server(
     )
 }
 
+/// Accept video and control connections from the scrcpy server.
+/// In reverse tunnel mode, the device connects to our local listener:
+/// connection 1 = Video stream, connection 2 = Control stream.
+pub fn accept_sockets(listener: &TcpListener) -> io::Result<(TcpStream, TcpStream)> {
+    let timeout = Duration::from_secs(10);
+    let video = accept_one(listener, timeout)?;
+    let control = accept_one(listener, timeout)?;
+
+    // Video stream: HAPUS read timeout 5 detik (None) agar tidak memicu os error 35
+    // (EAGAIN/EWOULDBLOCK) saat layar HP diam/idle.
+    video.set_read_timeout(None)?;
+
+    // Control stream: pertahankan read/write timeout 5 detik
+    control.set_read_timeout(Some(Duration::from_secs(5)))?;
+    control.set_write_timeout(Some(Duration::from_secs(5)))?;
+
+    Ok((video, control))
+}
+
+fn accept_one(listener: &TcpListener, timeout: Duration) -> io::Result<TcpStream> {
+    listener.set_nonblocking(true)?;
+    let start = std::time::Instant::now();
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false)?;
+                return Ok(stream);
+            }
+            Err(ref e)
+                if e.kind() == io::ErrorKind::WouldBlock
+                    || e.kind() == io::ErrorKind::Interrupted =>
+            {
+                if start.elapsed() >= timeout {
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "timed out waiting for scrcpy connection",
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// Connect to the scrcpy server via the forwarded port.
 /// The server expects the video socket first, then the control socket.
 /// Each connection starts with reading a dummy byte (if send_dummy_byte=true, but we set false).
@@ -246,7 +335,7 @@ pub fn connect_sockets(port: u16) -> io::Result<(TcpStream, TcpStream)> {
     let video = retry_connect(port, timeout)?;
     let control = retry_connect(port, timeout)?;
 
-    video.set_read_timeout(Some(Duration::from_secs(5)))?;
+    video.set_read_timeout(None)?;
     control.set_read_timeout(Some(Duration::from_secs(5)))?;
     control.set_write_timeout(Some(Duration::from_secs(5)))?;
 
@@ -281,10 +370,10 @@ pub struct ScrcpyServer {
 }
 
 impl ScrcpyServer {
-    /// Kill the server process and remove the adb forward.
+    /// Kill the server process and remove the adb reverse.
     pub fn stop(&mut self) {
         let _ = self.server_proc.kill();
-        remove_forward(self.exec.as_ref(), &self.device, self.port);
+        remove_reverse(self.exec.as_ref(), &self.device, self.scid);
     }
 }
 
@@ -423,7 +512,7 @@ mod tests {
         }
 
         struct MockExec {
-            forward_removed: Arc<AtomicBool>,
+            reverse_removed: Arc<AtomicBool>,
         }
         impl Exec for MockExec {
             fn run(
@@ -434,8 +523,11 @@ mod tests {
                 _env: &[(&str, &str)],
                 _stdin: Option<&[u8]>,
             ) -> io::Result<Output> {
-                if args.contains(&"forward") && args.contains(&"--remove") {
-                    self.forward_removed.store(true, Ordering::SeqCst);
+                if args.contains(&"reverse")
+                    && args.contains(&"--remove")
+                    && args.contains(&"localabstract:scrcpy_00001234")
+                {
+                    self.reverse_removed.store(true, Ordering::SeqCst);
                 }
                 #[cfg(unix)]
                 use std::os::unix::process::ExitStatusExt;
@@ -448,7 +540,7 @@ mod tests {
         }
 
         let killed = Arc::new(AtomicBool::new(false));
-        let forward_removed = Arc::new(AtomicBool::new(false));
+        let reverse_removed = Arc::new(AtomicBool::new(false));
 
         let server = ScrcpyServer {
             device: "emulator-5554".to_string(),
@@ -458,12 +550,12 @@ mod tests {
                 killed: killed.clone(),
             }),
             exec: Box::new(MockExec {
-                forward_removed: forward_removed.clone(),
+                reverse_removed: reverse_removed.clone(),
             }),
         };
 
         // When dropped (or cleared from MirrorState on app quit),
-        // ScrcpyServer must kill the server proc and remove adb forward
+        // ScrcpyServer must kill the server proc and remove adb reverse
         drop(server);
 
         assert!(
@@ -471,8 +563,250 @@ mod tests {
             "server process must be killed on drop"
         );
         assert!(
-            forward_removed.load(Ordering::SeqCst),
-            "adb forward must be removed on drop"
+            reverse_removed.load(Ordering::SeqCst),
+            "adb reverse must be removed on drop"
+        );
+    }
+
+    #[test]
+    fn test_setup_reverse_success() {
+        use std::process::Output;
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingExec {
+            calls: Arc<Mutex<Vec<Vec<String>>>>,
+        }
+        impl Exec for RecordingExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<Output> {
+                self.calls
+                    .lock()
+                    .unwrap()
+                    .push(args.iter().map(|s| s.to_string()).collect());
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+                Ok(Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let exec = RecordingExec {
+            calls: calls.clone(),
+        };
+
+        let res = setup_reverse(&exec, "emulator-5554", 0x1234abcd, 27183);
+        assert!(res.is_ok());
+
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(
+            recorded[0],
+            vec![
+                "-s",
+                "emulator-5554",
+                "reverse",
+                "localabstract:scrcpy_1234abcd",
+                "tcp:27183"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_setup_reverse_invalid_device() {
+        use std::process::Output;
+        struct DummyExec;
+        impl Exec for DummyExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                _args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<Output> {
+                panic!("should not run for invalid device");
+            }
+        }
+        let res = setup_reverse(&DummyExec, "device;inject", 0x1234, 27183);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_setup_reverse_adb_failure() {
+        use std::process::Output;
+        struct FailingExec;
+        impl Exec for FailingExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                _args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<Output> {
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+                Ok(Output {
+                    status: std::process::ExitStatus::from_raw(1),
+                    stdout: Vec::new(),
+                    stderr: b"error: closed\n".to_vec(),
+                })
+            }
+        }
+        let res = setup_reverse(&FailingExec, "emulator-5554", 0x1234, 27183);
+        assert!(res.is_err());
+        assert!(res
+            .unwrap_err()
+            .to_string()
+            .contains("adb reverse failed: error: closed"));
+    }
+
+    #[test]
+    fn test_remove_reverse_success() {
+        use std::process::Output;
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingExec {
+            calls: Arc<Mutex<Vec<Vec<String>>>>,
+        }
+        impl Exec for RecordingExec {
+            fn run(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _stdin: Option<&[u8]>,
+            ) -> io::Result<Output> {
+                self.calls
+                    .lock()
+                    .unwrap()
+                    .push(args.iter().map(|s| s.to_string()).collect());
+                #[cfg(unix)]
+                use std::os::unix::process::ExitStatusExt;
+                Ok(Output {
+                    status: std::process::ExitStatus::from_raw(0),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                })
+            }
+        }
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let exec = RecordingExec {
+            calls: calls.clone(),
+        };
+
+        remove_reverse(&exec, "emulator-5554", 0x00005678);
+
+        let recorded = calls.lock().unwrap();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(
+            recorded[0],
+            vec![
+                "-s",
+                "emulator-5554",
+                "reverse",
+                "--remove",
+                "localabstract:scrcpy_00005678"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_accept_sockets_sets_correct_timeouts() {
+        use std::io::Write;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let handle = std::thread::spawn(move || {
+            let mut s1 = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            let mut s2 = TcpStream::connect(("127.0.0.1", port)).unwrap();
+            s1.write_all(b"video").unwrap();
+            s2.write_all(b"ctrl").unwrap();
+        });
+
+        let (video, control) = accept_sockets(&listener).unwrap();
+        handle.join().unwrap();
+
+        // Video socket MUST have None read timeout (idle screen shouldn't EAGAIN)
+        assert_eq!(video.read_timeout().unwrap(), None);
+
+        // Control socket MUST have 5s read/write timeout
+        assert_eq!(
+            control.read_timeout().unwrap(),
+            Some(Duration::from_secs(5))
+        );
+        assert_eq!(
+            control.write_timeout().unwrap(),
+            Some(Duration::from_secs(5))
+        );
+    }
+
+    #[test]
+    fn test_start_server_tunnel_forward_false() {
+        use std::sync::{Arc, Mutex};
+        struct MockSpawn {
+            cmd: Arc<Mutex<String>>,
+        }
+        impl Spawn for MockSpawn {
+            fn spawn(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _tx: Sender<ProcLine>,
+            ) -> io::Result<Box<dyn Proc>> {
+                if let Some(cmd) = args.last() {
+                    *self.cmd.lock().unwrap() = cmd.to_string();
+                }
+                struct DummyProc;
+                impl Proc for DummyProc {
+                    fn stdin_write(&mut self, _data: &[u8]) -> io::Result<()> {
+                        Ok(())
+                    }
+                    fn kill(&mut self) -> io::Result<()> {
+                        Ok(())
+                    }
+                    fn pid(&self) -> Option<u32> {
+                        Some(1234)
+                    }
+                }
+                Ok(Box::new(DummyProc))
+            }
+        }
+
+        let cmd = Arc::new(Mutex::new(String::new()));
+        let spawn = MockSpawn { cmd: cmd.clone() };
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let _ = start_server(&spawn, "emulator-5554", 0x12345678, 1920, tx).unwrap();
+
+        let command_str = cmd.lock().unwrap().clone();
+        assert!(
+            command_str.contains("tunnel_forward=false"),
+            "shell command must include tunnel_forward=false"
+        );
+        assert!(
+            command_str.contains("scid=12345678"),
+            "shell command must include scid"
+        );
+        assert!(
+            command_str.contains("max_size=1920"),
+            "shell command must include max_size"
         );
     }
 }
