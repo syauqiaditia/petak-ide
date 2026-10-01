@@ -150,11 +150,10 @@
     }
   }
 
-  function handlePointerDown(e: PointerEvent) {
+  function handleMouseDown(e: MouseEvent) {
     if (isViewOnly) return;
     mirrorStore.isFocused = true;
     isPointerDown = true;
-    canvasEl.setPointerCapture?.(e.pointerId);
 
     const rect = canvasEl.getBoundingClientRect();
     reticleX = e.clientX - rect.left;
@@ -172,7 +171,7 @@
     });
   }
 
-  function handlePointerMove(e: PointerEvent) {
+  function handleMouseMove(e: MouseEvent) {
     if (!isPointerDown || isViewOnly) return;
 
     const rect = canvasEl.getBoundingClientRect();
@@ -196,13 +195,10 @@
     });
   }
 
-  function handlePointerUp(e: PointerEvent) {
+  function handleMouseUp(e: MouseEvent) {
     if (!isPointerDown || isViewOnly) return;
     isPointerDown = false;
     reticleVisible = false;
-    try {
-      canvasEl.releasePointerCapture?.(e.pointerId);
-    } catch (_) {}
 
     const rect = canvasEl.getBoundingClientRect();
     const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, deviceWidth, deviceHeight);
@@ -214,6 +210,12 @@
       w: coords.w,
       h: coords.h,
     });
+  }
+
+  function handleMouseLeave(e: MouseEvent) {
+    if (isPointerDown) {
+      handleMouseUp(e);
+    }
   }
 
   function handleWheel(e: WheelEvent) {
@@ -328,10 +330,10 @@
   <canvas
     bind:this={canvasEl}
     class="device-screen-canvas"
-    onpointerdown={handlePointerDown}
-    onpointermove={handlePointerMove}
-    onpointerup={handlePointerUp}
-    onpointercancel={handlePointerUp}
+    onmousedown={handleMouseDown}
+    onmousemove={handleMouseMove}
+    onmouseup={handleMouseUp}
+    onmouseleave={handleMouseLeave}
     onwheel={handleWheel}
   ></canvas>
 

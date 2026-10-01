@@ -127,8 +127,12 @@ pub fn serialize(ev: &InputEvent, w: &mut dyn Write) -> io::Result<()> {
                 _ => 0xFFFF,
             };
             buf[22..24].copy_from_slice(&pressure.to_be_bytes());
-            // action_button: u32 = 0, buttons: u32 = 0
-            // buf[24..28] and buf[28..32] are already 0
+            let (action_btn, buttons) = match action {
+                TouchAction::Up => (0u32, 0u32),
+                _ => (1u32, 1u32), // AMOTION_EVENT_BUTTON_PRIMARY
+            };
+            buf[24..28].copy_from_slice(&action_btn.to_be_bytes());
+            buf[28..32].copy_from_slice(&buttons.to_be_bytes());
             w.write_all(&buf)
         }
         InputEvent::Scroll {
