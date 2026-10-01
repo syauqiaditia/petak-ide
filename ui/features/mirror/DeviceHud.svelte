@@ -5,14 +5,14 @@
   let latency = $derived(mirrorStore.latencyMs);
 
   let fpsColor = $derived(
-    fps >= 45 ? '#7fc98f' : fps >= 20 ? '#e8b45a' : '#f07a74'
+    fps >= 40 ? '#7fc98f' : fps > 0 ? '#e8b45a' : '#8b8f98'
   );
 </script>
 
 <div class="screen-hud-pill">
-  <span style:color={fpsColor}>{fps} FPS</span>
+  <span style:color={fpsColor}>{fps > 0 ? `${fps} FPS` : 'Idle'}</span>
   <span class="latency">
-    {latency !== null ? `${latency} ms` : '— ms'}
+    {latency !== null && latency < 1500 ? `${latency} ms` : '— ms'}
   </span>
 </div>
 

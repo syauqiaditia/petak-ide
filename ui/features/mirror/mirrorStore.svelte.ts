@@ -85,6 +85,21 @@ class MirrorStore {
       }
     });
 
+    // Idle decay: if screen is static and no frame renders for >1.2s, decay to 0 FPS / Idle
+    if (typeof window !== 'undefined') {
+      setInterval(() => {
+        const now = performance.now();
+        if (
+          this.frameTimestamps.length > 0 &&
+          now - this.frameTimestamps[this.frameTimestamps.length - 1] > 1200
+        ) {
+          this.frameTimestamps = [];
+          this.fps = 0;
+          this.latencyMs = null;
+        }
+      }, 500);
+    }
+
     // Listen to mirror-frame events (forwarded from core video stream)
     api.onMirrorFrame?.((payload) => {
       if (!payload) return;
@@ -160,11 +175,13 @@ class MirrorStore {
     this.fps = calcFps(this.frameTimestamps, now);
 
     if (this.pendingInputTimestamp !== null) {
-      const lat = calcLatency(this.pendingInputTimestamp, now);
-      if (lat !== null) {
-        this.latencyMs = lat;
-        this.pendingInputTimestamp = null;
+      if (now - this.pendingInputTimestamp < 1500) {
+        const lat = calcLatency(this.pendingInputTimestamp, now);
+        if (lat !== null) {
+          this.latencyMs = lat;
+        }
       }
+      this.pendingInputTimestamp = null;
     }
   }
 
@@ -438,14 +455,7 @@ class MirrorStore {
   }
 
   async sendInput(ev: InputEvent) {
-    if (!this.serial) return;
-    if (this.status !== 'live') {
-      if (this.fps > 0 || this.frameTimestamps.length > 0) {
-        this.status = this.isViewOnly ? 'view-only' : 'live';
-      } else {
-        return;
-      }
-    }
+    if (!this.serial || this.status === 'picker' || this.status === 'empty') return;
     if (this.isViewOnly && (ev.t === 'touch' || ev.t === 'key' || ev.t === 'text' || ev.t === 'scroll')) {
       return;
     }

@@ -17,6 +17,7 @@
   let reticleX = $state(0);
   let reticleY = $state(0);
   let isPointerDown = false;
+  let lastMoveTime = 0;
 
   let isFocused = $derived(mirrorStore.isFocused);
   let deviceWidth = $derived(mirrorStore.deviceWidth);
@@ -177,6 +178,12 @@
     const rect = canvasEl.getBoundingClientRect();
     reticleX = e.clientX - rect.left;
     reticleY = e.clientY - rect.top;
+
+    const now = performance.now();
+    if (now - lastMoveTime < 16) {
+      return; // Throttle IPC to 60Hz max
+    }
+    lastMoveTime = now;
 
     const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, deviceWidth, deviceHeight);
     mirrorStore.sendInput({
