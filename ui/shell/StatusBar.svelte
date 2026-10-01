@@ -167,7 +167,7 @@
     {#if mirrorStore.status === 'live'}
       <span class="mirror-status-tag live">
         <span class="dot mirror-dot-live"></span>
-        {mirrorStore.deviceName} mirror live ({mirrorStore.fps} fps{mirrorStore.latencyMs !== null ? ` · ${mirrorStore.latencyMs}ms` : ''})
+        {mirrorStore.deviceName} mirror live ({mirrorStore.fps > 0 ? `${mirrorStore.fps} fps` : 'Idle'}{mirrorStore.latencyMs !== null && mirrorStore.fps > 0 ? ` · ${mirrorStore.latencyMs}ms` : ''})
       </span>
     {:else if mirrorStore.status === 'view-only'}
       <span class="mirror-status-tag viewonly">

@@ -155,6 +155,7 @@
   }
 
   function handleMouseDown(e: MouseEvent) {
+    api.mirrorLog('UI-MOUSE-DOWN', `target=${(e.target as HTMLElement)?.tagName} isViewOnly=${isViewOnly} client=(${e.clientX},${e.clientY})`);
     if (isViewOnly) return;
     mirrorStore.isFocused = true;
     isPointerDown = true;
@@ -340,6 +341,12 @@
   class:view-only={isViewOnly}
   role="region"
   aria-label="Device screen display"
+  onmousedown={handleMouseDown}
+  onmousemove={handleMouseMove}
+  onmouseup={handleMouseUp}
+  onmouseleave={handleMouseLeave}
+  onwheel={handleWheel}
+  oncontextmenu={(e) => e.preventDefault()}
 >
   <canvas
     bind:this={canvasEl}
