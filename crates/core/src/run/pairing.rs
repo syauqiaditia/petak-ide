@@ -99,16 +99,54 @@ pub fn parse_connect_output(
 pub fn adb_pair(exec: &dyn Exec, host: &str, port: u16, code: &str) -> io::Result<PairResult> {
     let adb = find_adb(exec);
     let target = format!("{}:{}", host.trim(), port);
+    let code_input = format!("{}\n", code.trim());
+    crate::mirror::trace::log(
+        "PAIR-EXEC",
+        &format!("Running adb pair {} with code len={}", target, code.trim().len()),
+    );
+
+    // Try passing code via stdin (standard ADB behavior across versions)
     let output = exec.run(
         Path::new("."),
         &adb,
-        &["pair", &target, code.trim()],
+        &["pair", &target],
         &[],
-        None,
-    )?;
+        Some(code_input.as_bytes()),
+    );
+
+    let output = match output {
+        Ok(out) if out.status.success() => out,
+        Ok(out) => {
+            let combined = format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            if combined.to_lowercase().contains("successfully paired") {
+                out
+            } else {
+                // Fallback: try with argument AND code via stdin
+                exec.run(
+                    Path::new("."),
+                    &adb,
+                    &["pair", &target, code.trim()],
+                    &[],
+                    Some(code_input.as_bytes()),
+                )
+                .unwrap_or(out)
+            }
+        }
+        Err(e) => return Err(e),
+    };
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    Ok(parse_pair_output(output.status.success(), &stdout, &stderr))
+    let res = parse_pair_output(output.status.success(), &stdout, &stderr);
+    crate::mirror::trace::log(
+        "PAIR-RESULT",
+        &format!("Success: {}, Message: {}", res.success, res.message),
+    );
+    Ok(res)
 }
 
 pub fn adb_connect(exec: &dyn Exec, host: &str, port: u16) -> io::Result<String> {
@@ -237,10 +275,10 @@ fn dnssd_resolve_pairing(service_name: &str) -> Option<(String, u16)> {
             if let Some(idx) = line.find("can be reached at ") {
                 let rest = &line[idx + "can be reached at ".len()..];
                 if let Some(token) = rest.split_whitespace().next() {
-                    let token = token.trim_end_matches('.');
                     if let Some((h, p)) = token.rsplit_once(':') {
+                        let clean_h = h.trim_end_matches('.');
                         if let Ok(port) = p.parse::<u16>() {
-                            let _ = tx_l.send((h.to_string(), port));
+                            let _ = tx_l.send((clean_h.to_string(), port));
                             break;
                         }
                     }
@@ -249,13 +287,28 @@ fn dnssd_resolve_pairing(service_name: &str) -> Option<(String, u16)> {
         }
     });
 
-    let (target_host, target_port) = rx_l.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let (target_host, target_port) = rx_l.recv_timeout(Duration::from_millis(2000)).ok()?;
     let _ = child_lookup.kill();
     let _ = child_lookup.wait();
 
     // 3. Resolve target host to IPv4
+    let clean_host = target_host.trim_end_matches('.');
+
+    // Try standard socket resolver first (macOS mDNSResponder handles .local)
+    use std::net::ToSocketAddrs;
+    if let Ok(mut addrs) = format!("{}:{}", clean_host, target_port).to_socket_addrs() {
+        if let Some(addr) = addrs.find(|a| a.is_ipv4()) {
+            let ip = addr.ip().to_string();
+            crate::mirror::trace::log(
+                "DNSSD",
+                &format!("Resolved IP via to_socket_addrs: {}:{}", ip, target_port),
+            );
+            return Some((ip, target_port));
+        }
+    }
+
     let mut child_ip = Command::new("dns-sd")
-        .args(["-G", "v4", &target_host])
+        .args(["-G", "v4", clean_host])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
@@ -277,7 +330,7 @@ fn dnssd_resolve_pairing(service_name: &str) -> Option<(String, u16)> {
         }
     });
 
-    let ip = rx_ip.recv_timeout(Duration::from_millis(1500)).ok()?;
+    let ip = rx_ip.recv_timeout(Duration::from_millis(2000)).ok()?;
     let _ = child_ip.kill();
     let _ = child_ip.wait();
 
@@ -496,9 +549,11 @@ mod tests {
             _env: &[(&str, &str)],
             _stdin: Option<&[u8]>,
         ) -> io::Result<std::process::Output> {
-            if args.len() >= 3 && args[0] == "pair" {
+            if args.len() >= 2 && args[0] == "pair" {
                 assert_eq!(args[1], "192.168.1.50:37123");
-                assert_eq!(args[2], "654321");
+                if args.len() >= 3 {
+                    assert_eq!(args[2], "654321");
+                }
                 let status_code = if self.pair_success { 0 } else { 1 };
                 return Ok(std::process::Output {
                     status: std::process::ExitStatus::from_raw(status_code),
