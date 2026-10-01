@@ -385,6 +385,9 @@ pub fn run() {
             commands::accounts_test,
             commands::accounts_clear,
             commands::mirror_open,
+            // Batch 11
+            commands::adb_pair,
+            commands::adb_connect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
