@@ -20,8 +20,7 @@
         "minHeight": 600,
         "decorations": true,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "acceptsFirstMouse": true
+        "hiddenTitle": true
       }
     ],
     "security": {
