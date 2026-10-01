@@ -65,6 +65,7 @@
           const config: VideoDecoderConfig = {
             codec: 'avc1.42001f', // Baseline H.264
             optimizeForLatency: true,
+            hardwareAcceleration: 'prefer-hardware',
             description: payload,
           };
 
@@ -73,10 +74,18 @@
             try {
               const res = await VideoDecoder.isConfigSupported(config);
               if (!res.supported) {
-                configToUse = { codec: 'avc1.42001f', optimizeForLatency: true };
+                configToUse = {
+                  codec: 'avc1.42001f',
+                  optimizeForLatency: true,
+                  hardwareAcceleration: 'prefer-hardware',
+                };
               }
             } catch (_) {
-              configToUse = { codec: 'avc1.42001f', optimizeForLatency: true };
+              configToUse = {
+                codec: 'avc1.42001f',
+                optimizeForLatency: true,
+                hardwareAcceleration: 'prefer-hardware',
+              };
             }
 
             if (decoder && decoder.state !== 'closed') {
