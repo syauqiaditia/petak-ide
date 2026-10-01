@@ -72,7 +72,14 @@ class MirrorStore {
 
     // Listen to mirror-status events (e.g. needs_usb, failed, etc.)
     api.onMirrorStatus?.((payload) => {
-      if (payload.status) {
+      if (!payload || !payload.status) return;
+      const current = this.activeRunSerial || this.serial;
+      if (!current) return;
+      if (
+        payload.serial === current ||
+        payload.serial === this.serial ||
+        payload.serial === this.activeRunSerial
+      ) {
         this.handleMirrorStatus(payload.status);
       }
     });
@@ -179,6 +186,7 @@ class MirrorStore {
     const prevSerial = this.activeRunSerial || this.serial;
     this.activeRunSerial = null;
     this.serial = '';
+    this.deviceName = 'Pilih Device';
     if (prevSerial) {
       api.mirrorStop(prevSerial).catch(() => {});
     }
@@ -350,7 +358,7 @@ class MirrorStore {
   }
 
   handleBinaryFrame(buf: ArrayBuffer) {
-    if (this.status === 'connecting') {
+    if (this.status === 'connecting' || this.status === 'disconnected') {
       this.status = this.isViewOnly ? 'view-only' : 'live';
     }
     const bytes = new Uint8Array(buf);
@@ -411,7 +419,14 @@ class MirrorStore {
   }
 
   async sendInput(ev: InputEvent) {
-    if (!this.serial || this.status !== 'live') return;
+    if (!this.serial) return;
+    if (this.status !== 'live') {
+      if (this.fps > 0 || this.frameTimestamps.length > 0) {
+        this.status = this.isViewOnly ? 'view-only' : 'live';
+      } else {
+        return;
+      }
+    }
     if (this.isViewOnly && (ev.t === 'touch' || ev.t === 'key' || ev.t === 'text' || ev.t === 'scroll')) {
       return;
     }

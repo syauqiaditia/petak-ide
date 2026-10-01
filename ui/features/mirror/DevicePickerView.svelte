@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { runStore } from '../run/runStore.svelte';
   import { mirrorStore } from './mirrorStore.svelte';
   import { settingsStore } from '../settings/settingsStore.svelte';
@@ -25,6 +26,10 @@
     if (!card.canMirror) return;
     mirrorStore.start(card.id);
   }
+
+  onMount(() => {
+    runStore.refreshDevices().catch(() => {});
+  });
 </script>
 
 <div class="picker-container">

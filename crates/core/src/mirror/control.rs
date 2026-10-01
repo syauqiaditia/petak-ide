@@ -15,7 +15,9 @@ pub enum InputEvent {
         action: TouchAction,
         x: u32,
         y: u32,
+        #[serde(default = "default_w")]
         w: u16,
+        #[serde(default = "default_h")]
         h: u16,
     },
     #[serde(rename = "scroll")]
@@ -52,14 +54,19 @@ pub enum KeyAction {
     Up,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+fn default_w() -> u16 { 1080 }
+fn default_h() -> u16 { 2400 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NavKey {
     Back,
     Home,
     Recents,
     Power,
+    #[serde(alias = "volume_up", alias = "volumeup")]
     Volup,
+    #[serde(alias = "volume_down", alias = "volumedown")]
     Voldown,
 }
 

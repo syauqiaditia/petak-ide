@@ -2772,11 +2772,13 @@ pub async fn mirror_stop(
 pub async fn mirror_input(
     state: tauri::State<'_, MirrorState>,
     serial: String,
-    event: petak_core::mirror::control::InputEvent,
+    event: Option<petak_core::mirror::control::InputEvent>,
+    ev: Option<petak_core::mirror::control::InputEvent>,
 ) -> Result<(), String> {
+    let input_ev = event.or(ev).ok_or_else(|| "missing input event".to_string())?;
     let sessions = state.sessions.lock().map_err(|e| e.to_string())?;
     if let Some(session) = sessions.get(&serial) {
-        session.send_input(&event).map_err(|e| e.to_string())
+        session.send_input(&input_ev).map_err(|e| e.to_string())
     } else {
         let exec = petak_core::exec::SystemExec;
         let alt = if is_direct_adb_serial(&serial) {
@@ -2793,7 +2795,7 @@ pub async fn mirror_input(
             }).map(|(_, v)| v)
         });
         if let Some(session) = found {
-            session.send_input(&event).map_err(|e| e.to_string())
+            session.send_input(&input_ev).map_err(|e| e.to_string())
         } else {
             Err(format!("No mirror session for {}", serial))
         }

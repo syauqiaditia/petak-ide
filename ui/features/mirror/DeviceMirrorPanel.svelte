@@ -76,14 +76,18 @@
     <div class="drag-shield"></div>
   {/if}
 
-  <!-- Top Toolbar -->
-  <DeviceToolbarTop />
+  <!-- Top Toolbar (Only when NOT in picker or empty mode) -->
+  {#if mirrorStore.status !== 'picker' && mirrorStore.status !== 'empty'}
+    <DeviceToolbarTop />
+  {/if}
 
   <!-- Center Stage (Bezel + Screen / States) -->
   <DeviceStage {onSelectDevice} {onOpenLogcat} />
 
-  <!-- Bottom Toolbar (Android Nav / iOS Home bar) -->
-  <DeviceToolbarBottom />
+  <!-- Bottom Toolbar (Android Nav / iOS Home bar - only when live, view-only, or active stream) -->
+  {#if mirrorStore.status === 'live' || mirrorStore.status === 'view-only' || mirrorStore.status === 'disconnected'}
+    <DeviceToolbarBottom />
+  {/if}
 
   <!-- Screenshot / Action Toast -->
   {#if toastMsg}

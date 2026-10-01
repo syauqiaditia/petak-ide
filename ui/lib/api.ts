@@ -1578,7 +1578,7 @@ export const api = {
     if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       return;
     }
-    return invoke('mirror_input', { serial, ev });
+    return invoke('mirror_input', { serial, event: ev, ev });
   },
 
   async mirrorScreenshot(serial: string, path?: string | null): Promise<string> {
