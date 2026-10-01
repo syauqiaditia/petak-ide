@@ -2628,6 +2628,8 @@ pub async fn mirror_start(
     state: tauri::State<'_, MirrorState>,
     serial: String,
     max_size: Option<u16>,
+    on_frame: Option<tauri::ipc::Channel<tauri::ipc::Response>>,
+    on_status: Option<tauri::ipc::Channel<petak_core::mirror::session::MirrorStatus>>,
 ) -> Result<petak_core::mirror::session::MirrorInfo, String> {
     let exec = petak_core::exec::SystemExec;
     let resolved_serial = if is_direct_adb_serial(&serial) {
@@ -2651,8 +2653,12 @@ pub async fn mirror_start(
     let app_status = app.clone();
     let serial_for_status = serial.clone();
     let actual_status_serial = resolved_serial.clone();
+    let status_channel = on_status;
     std::thread::spawn(move || {
         while let Ok(status) = status_rx.recv() {
+            if let Some(ch) = &status_channel {
+                let _ = ch.send(status.clone());
+            }
             let _ = app_status.emit(
                 "mirror-status",
                 serde_json::json!({ "serial": serial_for_status, "status": status }),
@@ -2666,10 +2672,11 @@ pub async fn mirror_start(
         }
     });
 
-    // Frame forwarder
+    // Frame forwarder: high performance zero-copy binary IPC channel
     let app_frame = app.clone();
     let serial_for_frame = serial.clone();
     let actual_frame_serial = resolved_serial.clone();
+    let frame_channel = on_frame;
     std::thread::spawn(move || {
         let mut last_config: Option<Vec<u8>> = None;
         while let Ok(packet) = frame_rx.recv() {
@@ -2680,40 +2687,50 @@ pub async fn mirror_start(
                 last_config = Some(packet.clone());
             } else if is_key {
                 if let Some(cfg) = &last_config {
-                    let _ = app_frame.emit(
-                        "mirror-frame",
-                        MirrorFramePayload {
-                            serial: serial_for_frame.clone(),
-                            data: cfg.clone(),
-                        },
-                    );
-                    if actual_frame_serial != serial_for_frame {
+                    if let Some(ch) = &frame_channel {
+                        let _ = ch.send(tauri::ipc::Response::new(cfg.clone()));
+                    } else {
                         let _ = app_frame.emit(
                             "mirror-frame",
                             MirrorFramePayload {
-                                serial: actual_frame_serial.clone(),
+                                serial: serial_for_frame.clone(),
                                 data: cfg.clone(),
                             },
                         );
+                        if actual_frame_serial != serial_for_frame {
+                            let _ = app_frame.emit(
+                                "mirror-frame",
+                                MirrorFramePayload {
+                                    serial: actual_frame_serial.clone(),
+                                    data: cfg.clone(),
+                                },
+                            );
+                        }
                     }
                 }
             }
 
-            let _ = app_frame.emit(
-                "mirror-frame",
-                MirrorFramePayload {
-                    serial: serial_for_frame.clone(),
-                    data: packet.clone(),
-                },
-            );
-            if actual_frame_serial != serial_for_frame {
+            if let Some(ch) = &frame_channel {
+                if ch.send(tauri::ipc::Response::new(packet)).is_err() {
+                    break;
+                }
+            } else {
                 let _ = app_frame.emit(
                     "mirror-frame",
                     MirrorFramePayload {
-                        serial: actual_frame_serial.clone(),
-                        data: packet,
+                        serial: serial_for_frame.clone(),
+                        data: packet.clone(),
                     },
                 );
+                if actual_frame_serial != serial_for_frame {
+                    let _ = app_frame.emit(
+                        "mirror-frame",
+                        MirrorFramePayload {
+                            serial: actual_frame_serial.clone(),
+                            data: packet,
+                        },
+                    );
+                }
             }
         }
     });
@@ -3738,7 +3755,3 @@ pub use crate::agent_commands::*;
 #[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;
 
 use tauri::ipc::Response;
-
-pub fn test_channel_compilation(ch: tauri::ipc::Channel<Response>) {
-    let _ = ch.send(Response::new(vec![1, 2, 3]));
-}

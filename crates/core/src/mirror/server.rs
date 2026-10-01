@@ -266,7 +266,7 @@ pub fn start_server(
         "CLASSPATH={} app_process / com.genymobile.scrcpy.Server {} \
          tunnel_forward=false audio=false control=true cleanup=false \
          send_device_meta=false send_frame_meta=true \
-         send_dummy_byte=false \
+         send_dummy_byte=false max_fps=60 video_bit_rate=8000000 \
          max_size={} scid={}",
         SERVER_REMOTE_PATH, SCRCPY_VERSION, max_size_str, scid_hex
     );

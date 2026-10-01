@@ -8,6 +8,8 @@
   let ctx: CanvasRenderingContext2D | null = null;
   let decoder: VideoDecoder | null = null;
   let isDecoderConfigured = false;
+  let pendingFrame: VideoFrame | null = null;
+  let rafId = 0;
 
   // Touch reticle state
   let reticleVisible = $state(false);
@@ -29,19 +31,32 @@
     try {
       decoder = new VideoDecoder({
         output: (frame: VideoFrame) => {
-          if (!canvasEl || !ctx) {
-            frame.close();
-            return;
+          if (pendingFrame) {
+            pendingFrame.close();
           }
-          const w = frame.displayWidth || frame.codedWidth || canvasEl.width;
-          const h = frame.displayHeight || frame.codedHeight || canvasEl.height;
-          if (canvasEl.width !== w || canvasEl.height !== h) {
-            canvasEl.width = w;
-            canvasEl.height = h;
+          pendingFrame = frame;
+
+          if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+              rafId = 0;
+              const frame = pendingFrame;
+              if (!frame) return;
+              pendingFrame = null;
+              if (!canvasEl || !ctx) {
+                frame.close();
+                return;
+              }
+              const w = frame.displayWidth || frame.codedWidth || canvasEl.width;
+              const h = frame.displayHeight || frame.codedHeight || canvasEl.height;
+              if (canvasEl.width !== w || canvasEl.height !== h) {
+                canvasEl.width = w;
+                canvasEl.height = h;
+              }
+              ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
+              frame.close();
+              mirrorStore.recordFrameRendered();
+            });
           }
-          ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
-          frame.close();
-          mirrorStore.recordFrameRendered();
         },
         error: (err: Error) => {
           console.error('[DeviceCanvas] VideoDecoder error:', err);
@@ -271,6 +286,14 @@
   onDestroy(() => {
     mirrorStore.unregisterFrameCallback();
     window.removeEventListener('keydown', handleKeyDown);
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    if (pendingFrame) {
+      pendingFrame.close();
+      pendingFrame = null;
+    }
     if (decoder && decoder.state !== 'closed') {
       try {
         decoder.close();
