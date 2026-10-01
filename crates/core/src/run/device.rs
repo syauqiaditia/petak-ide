@@ -514,7 +514,7 @@ pub fn terminate_process_by_pid(pid: u32) {
 /// Using `-no-window -no-audio -no-snapshot-load` avoids GPU driver crashes and corrupt snapshot issues.
 pub fn headless_emulator_flags(is_macos: bool) -> &'static [&'static str] {
     if is_macos {
-        &["-no-window", "-no-audio", "-no-snapshot-load"]
+        &["-no-window", "-no-audio", "-gpu", "auto-no-window", "-no-snapshot-load"]
     } else {
         &["-no-window", "-no-audio", "-gpu", "swiftshader_indirect"]
     }
@@ -2091,12 +2091,15 @@ emulator-5558          unauthorized transport_id:5
                 "jatim_dev",
                 "-no-window",
                 "-no-audio",
+                "-gpu",
+                "auto-no-window",
                 "-no-snapshot-load"
             ]
         );
         assert!(!mac_args
             .iter()
-            .any(|a| a == "-gpu" || a == "swiftshader_indirect"));
+            .any(|a| a == "swiftshader_indirect"));
+        assert!(mac_args.iter().any(|a| a == "auto-no-window"));
         assert!(mac_args.iter().any(|a| a == "-no-snapshot-load"));
 
         let non_mac_args = build_emulator_args_target("jatim_dev", true, false).unwrap();
