@@ -901,7 +901,7 @@ pub fn test_repo_path() -> Option<String> {
 }
 
 #[tauri::command]
-pub fn test_env(name: String) -> Option<String> {
+pub fn test_env(_name: String) -> Option<String> {
     #[cfg(debug_assertions)]
     {
         if name.starts_with("PETAK_") {
@@ -2710,7 +2710,7 @@ pub async fn mirror_stop(
             }
         }).or_else(|| {
             sessions.keys().find(|k| {
-                k == target
+                *k == target
                     || k.eq_ignore_ascii_case(target)
                     || petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(target)
                     || alt.as_deref() == Some(k.as_str())
