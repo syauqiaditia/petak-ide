@@ -901,11 +901,11 @@ pub fn test_repo_path() -> Option<String> {
 }
 
 #[tauri::command]
-pub fn test_env(_name: String) -> Option<String> {
+pub fn test_env(name: String) -> Option<String> {
     #[cfg(debug_assertions)]
     {
         if name.starts_with("PETAK_") {
-            return std::env::var(name).ok();
+            return std::env::var(&name).ok();
         }
     }
     None
@@ -3736,3 +3736,9 @@ pub fn accounts_clear() -> Result<(), String> {
 
 pub use crate::agent_commands::*;
 #[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;
+
+use tauri::ipc::Response;
+
+pub fn test_channel_compilation(ch: tauri::ipc::Channel<Response>) {
+    let _ = ch.send(Response::new(vec![1, 2, 3]));
+}
