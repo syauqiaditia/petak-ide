@@ -33,34 +33,21 @@
     try {
       decoder = new VideoDecoder({
         output: (frame: VideoFrame) => {
-          if (pendingFrame) {
-            pendingFrame.close();
+          if (!canvasEl || !ctx) {
+            frame.close();
+            return;
           }
-          pendingFrame = frame;
-
-          if (!rafId) {
-            rafId = requestAnimationFrame(() => {
-              rafId = 0;
-              const frame = pendingFrame;
-              if (!frame) return;
-              pendingFrame = null;
-              if (!canvasEl || !ctx) {
-                frame.close();
-                return;
-              }
-              const w = frame.displayWidth || frame.codedWidth || canvasEl.width;
-              const h = frame.displayHeight || frame.codedHeight || canvasEl.height;
-              if (canvasEl.width !== w || canvasEl.height !== h) {
-                canvasEl.width = w;
-                canvasEl.height = h;
-                mirrorStore.deviceWidth = w;
-                mirrorStore.deviceHeight = h;
-              }
-              ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
-              frame.close();
-              mirrorStore.recordFrameRendered();
-            });
+          const w = frame.displayWidth || frame.codedWidth || canvasEl.width;
+          const h = frame.displayHeight || frame.codedHeight || canvasEl.height;
+          if (canvasEl.width !== w || canvasEl.height !== h) {
+            canvasEl.width = w;
+            canvasEl.height = h;
+            mirrorStore.deviceWidth = w;
+            mirrorStore.deviceHeight = h;
           }
+          ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
+          frame.close();
+          mirrorStore.recordFrameRendered();
         },
         error: (err: Error) => {
           console.error('[DeviceCanvas] VideoDecoder error:', err);
@@ -95,30 +82,22 @@
           };
 
           try {
-            let configToUse = config;
+            decoder.configure(config);
+            isDecoderConfigured = true;
+            api.mirrorLog('UI-CONFIG-OK', `Configured with ${codec}`);
+          } catch (e: any) {
             try {
-              const res = await VideoDecoder.isConfigSupported(config);
-              if (!res.supported) {
-                configToUse = {
-                  codec,
-                  optimizeForLatency: true,
-                  hardwareAcceleration: 'prefer-hardware',
-                };
-              }
-            } catch (_) {
-              configToUse = {
+              decoder.configure({
                 codec,
                 optimizeForLatency: true,
                 hardwareAcceleration: 'prefer-hardware',
-              };
-            }
-
-            if (decoder && decoder.state !== 'closed') {
-              decoder.configure(configToUse);
+              });
               isDecoderConfigured = true;
+              api.mirrorLog('UI-CONFIG-FALLBACK', `Fallback configured with ${codec}`);
+            } catch (err2: any) {
+              console.warn('[DeviceCanvas] decoder.configure failed:', err2);
+              api.mirrorLog('UI-CONFIG-ERR', err2.message);
             }
-          } catch (cfgErr) {
-            console.warn('[DeviceCanvas] isConfigSupported failed:', cfgErr);
           }
         }
       } else if (kind === 1 || kind === 2) {
@@ -310,14 +289,6 @@
   onDestroy(() => {
     mirrorStore.unregisterFrameCallback();
     window.removeEventListener('keydown', handleKeyDown);
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = 0;
-    }
-    if (pendingFrame) {
-      pendingFrame.close();
-      pendingFrame = null;
-    }
     if (decoder && decoder.state !== 'closed') {
       try {
         decoder.close();
