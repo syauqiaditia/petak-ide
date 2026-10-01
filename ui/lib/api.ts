@@ -1056,6 +1056,20 @@ export const api = {
     return invoke('sim_open_app');
   },
 
+  async adbPair(host: string, port: number, code: string): Promise<string> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return `Mock paired to ${host}:${port}`;
+    }
+    return invoke<string>('adb_pair', { host, port, code });
+  },
+
+  async adbConnect(host: string, port: number): Promise<string> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return `Mock connected to ${host}:${port}`;
+    }
+    return invoke<string>('adb_connect', { host, port });
+  },
+
   mirrorPermissionStatus(deviceId?: string): Promise<MirrorPermissionStatus> {
     return invoke<MirrorPermissionStatus>('mirror_permission_status', { deviceId }).catch(() => ({
       granted: true,
@@ -1578,7 +1592,7 @@ export const api = {
     if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       return;
     }
-    return invoke('mirror_log', { tag, message }).catch(() => {});
+    await invoke('mirror_log', { tag, message }).catch(() => {});
   },
 
   async mirrorInput(serial: string, ev: InputEvent): Promise<void> {

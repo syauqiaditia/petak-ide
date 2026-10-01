@@ -4,6 +4,9 @@
   import { mirrorStore } from './mirrorStore.svelte';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { dedupeAndCategorizeDevices, type MirrorDeviceCard } from './pickerLogic';
+  import PairDeviceModal from '../run/PairDeviceModal.svelte';
+
+  let showPairModal = $state(false);
 
   let autoMirrorNext = $state(
     typeof localStorage !== 'undefined'
@@ -38,6 +41,13 @@
       <span class="picker-title">PILIH DEVICE UNTUK MIRROR</span>
       <span class="picker-sub">Pilih perangkat target yang ingin dimirror</span>
     </div>
+    <button
+      class="btn-pair-wifi"
+      onclick={() => (showPairModal = true)}
+      title="Pasangkan Perangkat via Wi-Fi"
+    >
+      + Pasangkan via Wi-Fi
+    </button>
   </div>
 
   <div class="cards-list">
@@ -45,9 +55,14 @@
       <div class="empty-state">
         <div class="empty-icon">📱</div>
         <div class="empty-text">Tidak ada device atau simulator terdeteksi</div>
-        <button class="btn-refresh" onclick={() => runStore.refreshDevices()}>
-          Pindai Ulang Device
-        </button>
+        <div class="empty-actions">
+          <button class="btn-refresh" onclick={() => runStore.refreshDevices()}>
+            Pindai Ulang Device
+          </button>
+          <button class="btn-pair-wifi-alt" onclick={() => (showPairModal = true)}>
+            + Pasangkan via Wi-Fi
+          </button>
+        </div>
       </div>
     {:else}
       {#each cards as card (card.id)}
@@ -124,6 +139,8 @@
   </div>
 </div>
 
+<PairDeviceModal open={showPairModal} onClose={() => (showPairModal = false)} />
+
 <style>
   .picker-container {
     display: flex;
@@ -138,6 +155,27 @@
     padding: 16px;
     border-bottom: 1px solid #202227;
     background: #16171b;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .btn-pair-wifi {
+    background: #202533;
+    border: 1px solid #2e3a54;
+    color: #8ea8db;
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .btn-pair-wifi:hover {
+    background: #28334a;
+    border-color: #435b88;
+    color: #cfe0ff;
   }
   .picker-title {
     font-size: 11px;
@@ -301,5 +339,24 @@
     color: #8ea8db;
     font-size: 11px;
     cursor: pointer;
+  }
+  .empty-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .btn-pair-wifi-alt {
+    background: #202533;
+    border: 1px solid #2e3a54;
+    padding: 6px 12px;
+    border-radius: 6px;
+    color: #8ea8db;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-pair-wifi-alt:hover {
+    background: #28334a;
+    color: #cfe0ff;
   }
 </style>

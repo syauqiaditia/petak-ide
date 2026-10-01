@@ -5,6 +5,9 @@
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
   import { api, type EmulatorStatusEvent } from '../../lib/api';
   import { groupDevices, type SnapshotEmulator, type SnapshotPhysical } from './deviceLogic';
+  import PairDeviceModal from './PairDeviceModal.svelte';
+
+  let showPairModal = $state(false);
 
   let grouped = $derived(
     groupDevices(runStore.snapshot, runStore.devices, runStore.avds)
@@ -141,6 +144,14 @@
   <div class="header">
     <span class="header-title">DEVICES & EMULATORS</span>
     <div class="header-actions">
+      <button
+        class="pair-wifi-header-btn"
+        onclick={() => (showPairModal = true)}
+        title="Pasangkan Perangkat via Wi-Fi"
+        aria-label="Pasangkan Perangkat via Wi-Fi"
+      >
+        + Wi-Fi
+      </button>
       <button
         class="refresh-btn"
         class:spinning={isRefreshing}
@@ -383,14 +394,27 @@
     {/if}
 
     <!-- PHYSICAL DEVICES -->
-    <div class="section-title mt">
-      PHYSICAL DEVICES ({physicalDevices.length})
+    <div class="section-title mt section-title-row">
+      <span>PHYSICAL DEVICES ({physicalDevices.length})</span>
+      <button
+        class="section-pair-btn"
+        onclick={() => (showPairModal = true)}
+        title="Pasangkan Perangkat via Wi-Fi"
+      >
+        + Pasangkan via Wi-Fi
+      </button>
     </div>
 
     {#if physicalDevices.length === 0}
       <div class="empty-state">
         <span>No physical device connected</span>
         <span class="subtext">Connect phone via USB or Wi-Fi with debugging enabled.</span>
+        <button
+          class="empty-pair-btn"
+          onclick={() => (showPairModal = true)}
+        >
+          + Pasangkan via Wi-Fi
+        </button>
       </div>
     {:else}
       <div class="device-group">
@@ -450,6 +474,8 @@
   </div>
 </div>
 
+<PairDeviceModal open={showPairModal} onClose={() => (showPairModal = false)} />
+
 <style>
   .devices-panel {
     width: 270px;
@@ -483,6 +509,24 @@
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+  .pair-wifi-header-btn {
+    height: 22px;
+    padding: 0 7px;
+    font-size: 10px;
+    font-weight: 500;
+    background: #202430;
+    color: #8ea8db;
+    border: 1px solid #2e384c;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .pair-wifi-header-btn:hover {
+    background: #28334a;
+    color: #cfe0ff;
+    border-color: #405273;
   }
   .close-btn {
     width: 24px;
@@ -538,6 +582,42 @@
   }
   .section-title.mt {
     margin-top: 14px;
+  }
+  .section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .section-pair-btn {
+    background: transparent;
+    border: 1px solid #2e384c;
+    color: #8ea8db;
+    font-size: 9.5px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .section-pair-btn:hover {
+    color: #cfe0ff;
+    background: #202430;
+    border-color: #405273;
+  }
+  .empty-pair-btn {
+    margin-top: 6px;
+    background: #202430;
+    border: 1px solid #2e384c;
+    color: #8ea8db;
+    font-size: 10.5px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: all 0.15s;
+  }
+  .empty-pair-btn:hover {
+    background: #28334a;
+    color: #cfe0ff;
   }
   .section-split {
     display: flex;
