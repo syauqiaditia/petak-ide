@@ -166,24 +166,14 @@ class MirrorStore {
   }
 
   async showDevicePicker() {
-    const prevSerial = this.activeRunSerial || this.serial;
-    await this.stop();
-    if (prevSerial) {
-      const dev = runStore.devices.find((d) => d.id === prevSerial);
-      const isAvd =
-        prevSerial.startsWith('emulator-') ||
-        dev?.kind === 'emulator' ||
-        (dev as any)?.kind === 'avd' ||
-        dev?.platform === 'android';
-      if (isAvd) {
-        try {
-          await api.avdStop(prevSerial);
-        } catch (err) {
-          console.warn('[mirrorStore] avdStop error on switch device:', err);
-        }
-      }
-    }
+    // Switch device should immediately show picker without throwing or killing background emulator
     this.status = 'picker';
+    const prevSerial = this.activeRunSerial || this.serial;
+    this.activeRunSerial = null;
+    this.serial = '';
+    if (prevSerial) {
+      api.mirrorStop(prevSerial).catch(() => {});
+    }
   }
 
   async toggle() {
