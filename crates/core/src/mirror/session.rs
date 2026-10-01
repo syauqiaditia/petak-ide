@@ -103,6 +103,16 @@ impl MirrorSession {
 
         let _ = status_tx.send(MirrorStatus::Connecting);
 
+        // 0. Clean up any previous scrcpy server process on device to avoid port/display contention
+        let adb_cleanup = crate::run::resolve_adb_binary();
+        let _ = exec.run(
+            std::path::Path::new("."),
+            &adb_cleanup,
+            &["-s", serial, "shell", "pkill -f com.genymobile.scrcpy.Server || true"],
+            &[],
+            None,
+        );
+
         // 1. Resolve and push server jar
         let jar_path = match server::resolve_server_jar() {
             Ok(p) => p,
@@ -283,10 +293,9 @@ impl MirrorSession {
     pub fn send_input(&self, ev: &InputEvent) -> io::Result<()> {
         match &self.backend {
             SessionBackend::Android { control_stream, .. } => {
-                let guard = control_stream.lock().unwrap();
-                if let Some(stream) = guard.as_ref() {
-                    let mut s = stream.try_clone()?;
-                    control::serialize(ev, &mut s)
+                let mut guard = control_stream.lock().unwrap();
+                if let Some(stream) = guard.as_mut() {
+                    control::serialize(ev, stream)
                 } else {
                     Err(io::Error::new(
                         io::ErrorKind::NotConnected,

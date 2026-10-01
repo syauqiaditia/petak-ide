@@ -52,6 +52,7 @@ class MirrorStore {
   // Frame callbacks (set by DeviceCanvas component when mounted)
   private onFrameCallback: ((buf: ArrayBuffer) => void) | null = null;
   lastConfigPacket = $state<ArrayBuffer | null>(null);
+  lastKeyPacket = $state<ArrayBuffer | null>(null);
   private frameTimestamps: number[] = [];
   private pendingInputTimestamp: number | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -133,6 +134,13 @@ class MirrorStore {
         cb(this.lastConfigPacket);
       } catch (e) {
         console.warn('[mirrorStore] replay lastConfigPacket error:', e);
+      }
+    }
+    if (this.lastKeyPacket) {
+      try {
+        cb(this.lastKeyPacket);
+      } catch (e) {
+        console.warn('[mirrorStore] replay lastKeyPacket error:', e);
       }
     }
   }
@@ -344,6 +352,7 @@ class MirrorStore {
     this.latencyMs = null;
     this.unregisterFrameCallback();
     this.lastConfigPacket = null;
+    this.lastKeyPacket = null;
     if (this.toastTimer) {
       clearTimeout(this.toastTimer);
       this.toastTimer = null;
@@ -372,6 +381,8 @@ class MirrorStore {
     const bytes = new Uint8Array(buf);
     if (bytes.length > 0 && bytes[0] === 0) {
       this.lastConfigPacket = buf;
+    } else if (bytes.length > 0 && bytes[0] === 1) {
+      this.lastKeyPacket = buf;
     }
     if (this.onFrameCallback) {
       this.onFrameCallback(buf);

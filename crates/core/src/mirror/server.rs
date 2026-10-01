@@ -380,6 +380,14 @@ impl ScrcpyServer {
     pub fn stop(&mut self) {
         let _ = self.server_proc.kill();
         remove_reverse(self.exec.as_ref(), &self.device, self.scid);
+        let adb = resolve_adb_binary();
+        let _ = self.exec.run(
+            std::path::Path::new("."),
+            &adb,
+            &["-s", &self.device, "shell", "pkill -f com.genymobile.scrcpy.Server || true"],
+            &[],
+            None,
+        );
     }
 }
 

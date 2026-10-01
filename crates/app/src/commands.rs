@@ -2663,6 +2663,12 @@ pub async fn mirror_start(
         }
     });
 
+    // Clean up any existing active session for this device first
+    if let Ok(mut sessions) = state.sessions.lock() {
+        let removed = sessions.remove(&resolved_serial).or_else(|| sessions.remove(&serial));
+        drop(removed);
+    }
+
     let (info, session, frame_rx, status_rx) =
         tauri::async_runtime::spawn_blocking(move || {
             petak_core::mirror::session::MirrorSession::start(&serial_for_start, max)
@@ -2746,7 +2752,7 @@ pub async fn mirror_start(
     });
 
     if let Ok(mut sessions) = state.sessions.lock() {
-        sessions.insert(serial.clone(), session);
+        sessions.insert(resolved_serial.clone(), session);
     }
 
     Ok(info)

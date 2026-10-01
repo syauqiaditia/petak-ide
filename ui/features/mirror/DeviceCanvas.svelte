@@ -8,6 +8,7 @@
   let ctx: CanvasRenderingContext2D | null = null;
   let decoder: VideoDecoder | null = null;
   let isDecoderConfigured = false;
+  let hasDecodedKeyframe = false;
   let pendingFrame: VideoFrame | null = null;
   let rafId = 0;
 
@@ -23,6 +24,8 @@
   let isViewOnly = $derived(mirrorStore.isViewOnly);
 
   function initDecoder() {
+    isDecoderConfigured = false;
+    hasDecodedKeyframe = false;
     if (typeof VideoDecoder === 'undefined') {
       console.warn('[DeviceCanvas] VideoDecoder is not supported in this environment');
       return;
@@ -121,6 +124,9 @@
         if (!isDecoderConfigured && mirrorStore.lastConfigPacket) {
           await handlePacket(mirrorStore.lastConfigPacket);
         }
+        if (kind === 2 && !hasDecodedKeyframe && mirrorStore.lastKeyPacket) {
+          await handlePacket(mirrorStore.lastKeyPacket);
+        }
         if (decoder && decoder.state === 'configured' && isDecoderConfigured) {
           try {
             const avccData = nalsToAvcc(payload);
@@ -130,6 +136,9 @@
               data: avccData,
             });
             decoder.decode(chunk);
+            if (kind === 1) {
+              hasDecodedKeyframe = true;
+            }
           } catch (decodeErr) {
             console.warn('[DeviceCanvas] decode error:', decodeErr);
           }
