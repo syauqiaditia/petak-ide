@@ -16,7 +16,7 @@ import {
   reduceRunEvent,
   type OutputItem,
 } from './logic';
-import { pruneDeviceSelection } from './deviceLogic';
+import { pruneDeviceSelection, clearBootingForOnline } from './deviceLogic';
 import type { RunUiState } from './runStateMachine';
 
 class RunStore {
@@ -40,6 +40,65 @@ class RunStore {
 
   get selectedDevice(): Device | null {
     return this.devices.find((d) => d.id === this.selectedDeviceId) || (this.devices.length > 0 ? this.devices[0] : null);
+  }
+
+  get emulators(): Array<{ id: string; name: string; running?: boolean; deviceId?: string | null; kind?: string }> {
+    const result: Array<{ id: string; name: string; running?: boolean; deviceId?: string | null; kind?: string }> = [];
+    const seen = new Set<string>();
+
+    if (this.snapshot?.emulators) {
+      for (const e of this.snapshot.emulators) {
+        const isOnlineInDevs = this.devices.some(
+          (d) => (d.id === e.id || d.id === e.deviceId || d.name === e.name) && d.state === 'online'
+        );
+        const isRunning =
+          e.state === 'running' ||
+          isOnlineInDevs ||
+          this.emulatorStatuses[e.name]?.state === 'running' ||
+          (e.deviceId ? this.emulatorStatuses[e.deviceId]?.state === 'running' : false);
+        result.push({
+          id: e.id,
+          name: e.name,
+          running: isRunning,
+          deviceId: e.deviceId,
+          kind: e.kind,
+        });
+        seen.add(e.id);
+        seen.add(e.name);
+        if (e.deviceId) seen.add(e.deviceId);
+      }
+    }
+
+    for (const d of this.devices) {
+      const isEmu = d.kind === 'emulator' || (d.id && d.id.startsWith('emulator-'));
+      if (isEmu && !seen.has(d.id) && !seen.has(d.name)) {
+        result.push({
+          id: d.id,
+          name: d.name,
+          running: d.state === 'online',
+          deviceId: d.id,
+          kind: d.platform === 'ios' ? 'ios-sim' : 'android-avd',
+        });
+        seen.add(d.id);
+        seen.add(d.name);
+      }
+    }
+
+    for (const avd of this.avds || []) {
+      if (!seen.has(avd.name)) {
+        const isOnline = this.devices.some((d) => (d.name === avd.name || d.id === avd.name) && d.state === 'online');
+        const st = this.emulatorStatuses[avd.name]?.state;
+        result.push({
+          id: avd.name,
+          name: avd.name,
+          running: isOnline || st === 'running',
+          kind: 'android-avd',
+        });
+        seen.add(avd.name);
+      }
+    }
+
+    return result;
   }
 
   // Run lifecycle & state
@@ -184,6 +243,29 @@ class RunStore {
 
   updateSnapshot(snap: DevicesSnapshot) {
     this.snapshot = snap;
+    if (snap?.emulators) {
+      const next = { ...this.emulatorStatuses };
+      let changed = false;
+      for (const emu of snap.emulators) {
+        if (emu.state === 'running') {
+          if (emu.id && next[emu.id]?.state === 'booting') {
+            delete next[emu.id];
+            changed = true;
+          }
+          if (emu.name && next[emu.name]?.state === 'booting') {
+            delete next[emu.name];
+            changed = true;
+          }
+          if (emu.deviceId && next[emu.deviceId]?.state === 'booting') {
+            delete next[emu.deviceId];
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        this.emulatorStatuses = next;
+      }
+    }
     const devs: Device[] = [];
     for (const emu of snap.emulators || []) {
       if (emu.state === 'running' || emu.state === 'booting') {
@@ -214,6 +296,7 @@ class RunStore {
 
   updateDevices(list: Device[]) {
     this.devices = list || [];
+    this.emulatorStatuses = clearBootingForOnline(this.emulatorStatuses, this.devices);
     this.selectedDeviceId = pruneDeviceSelection(this.selectedDeviceId, this.devices);
   }
 
@@ -502,6 +585,31 @@ class RunStore {
       if (onlineDev || status?.state === 'running' || status?.state === 'failed') {
         this.stopAutoPolling();
         if (onlineDev) {
+          const next = { ...this.emulatorStatuses };
+          let changed = false;
+          if (next[name]?.state === 'booting') {
+            delete next[name];
+            changed = true;
+          }
+          if (onlineDev.id && next[onlineDev.id]?.state === 'booting') {
+            delete next[onlineDev.id];
+            changed = true;
+          }
+          if (onlineDev.name && next[onlineDev.name]?.state === 'booting') {
+            delete next[onlineDev.name];
+            changed = true;
+          }
+          if (changed) {
+            this.emulatorStatuses = next;
+          }
+          if (this.snapshot?.emulators) {
+            const emu = this.snapshot.emulators.find(
+              (e) => e.name === name || e.id === name || e.deviceId === onlineDev.id
+            );
+            if (emu && emu.state === 'booting') {
+              emu.state = 'running';
+            }
+          }
           this.selectDevice(onlineDev.id);
         }
       }

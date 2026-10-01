@@ -389,3 +389,38 @@ export function groupDevices(
     pickerItems,
   };
 }
+
+/**
+ * Remove 'booting' status from emulatorStatuses for devices that are now online.
+ */
+export function clearBootingForOnline(
+  emulatorStatuses: Record<string, { state: 'stopped' | 'booting' | 'running' | 'failed'; error?: string }>,
+  devices: Device[]
+): Record<string, { state: 'stopped' | 'booting' | 'running' | 'failed'; error?: string }> {
+  if (!emulatorStatuses || Object.keys(emulatorStatuses).length === 0) {
+    return emulatorStatuses || {};
+  }
+  const next = { ...emulatorStatuses };
+  let changed = false;
+
+  for (const d of devices) {
+    if (d.state === 'online') {
+      if (d.id && next[d.id]?.state === 'booting') {
+        delete next[d.id];
+        changed = true;
+      }
+      if (d.name && next[d.name]?.state === 'booting') {
+        delete next[d.name];
+        changed = true;
+      }
+      for (const [key, val] of Object.entries(next)) {
+        if (val.state === 'booting' && (key === d.id || key === d.name)) {
+          delete next[key];
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return changed ? next : emulatorStatuses;
+}
