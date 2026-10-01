@@ -75,6 +75,25 @@ class MirrorStore {
         this.handleMirrorStatus(payload.status);
       }
     });
+
+    // Listen to mirror-frame events (forwarded from core video stream)
+    api.onMirrorFrame?.((payload) => {
+      if (!payload) return;
+      const current = this.activeRunSerial || this.serial;
+      if (!current) return;
+      if (payload.serial === current || payload.serial === this.serial || payload.serial === this.activeRunSerial) {
+        const raw = payload.data;
+        let buf: ArrayBuffer;
+        if (raw instanceof Uint8Array) {
+          buf = (raw.buffer as ArrayBuffer).slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+        } else if (Array.isArray(raw)) {
+          buf = new Uint8Array(raw).buffer as ArrayBuffer;
+        } else {
+          buf = new Uint8Array(raw as any).buffer as ArrayBuffer;
+        }
+        this.handleBinaryFrame(buf);
+      }
+    });
   }
 
   setWidth(newWidth: number) {
@@ -146,7 +165,24 @@ class MirrorStore {
     }
   }
 
-  showDevicePicker() {
+  async showDevicePicker() {
+    const prevSerial = this.activeRunSerial || this.serial;
+    await this.stop();
+    if (prevSerial) {
+      const dev = runStore.devices.find((d) => d.id === prevSerial);
+      const isAvd =
+        prevSerial.startsWith('emulator-') ||
+        dev?.kind === 'emulator' ||
+        (dev as any)?.kind === 'avd' ||
+        dev?.platform === 'android';
+      if (isAvd) {
+        try {
+          await api.avdStop(prevSerial);
+        } catch (err) {
+          console.warn('[mirrorStore] avdStop error on switch device:', err);
+        }
+      }
+    }
     this.status = 'picker';
   }
 
@@ -164,7 +200,19 @@ class MirrorStore {
       localStorage.setItem('petak.mirror.open', 'true');
     }
 
+    // UQi lifecycle rule: If session already live/connecting and no specific new target, keep streaming seamlessly
+    if (
+      !targetSerial &&
+      this.activeRunSerial &&
+      (this.status === 'live' || this.status === 'view-only' || this.status === 'connecting')
+    ) {
+      return;
+    }
+
     if (targetSerial) {
+      if (this.activeRunSerial && this.activeRunSerial !== targetSerial) {
+        await this.stopDevice(this.activeRunSerial);
+      }
       this.serial = targetSerial;
       this.deviceName = targetSerial;
       await this.start(targetSerial);
@@ -189,7 +237,28 @@ class MirrorStore {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('petak.mirror.open', 'false');
     }
+    // UQi lifecycle revision: Close (X) / Esc / Toggle Hide ONLY hides the panel.
+    // Do NOT stop mirror stream or kill emulator on hide.
+  }
+
+  async stopDevice(targetSerial?: string) {
+    const s = targetSerial || this.activeRunSerial || this.serial;
     await this.stop();
+    if (s) {
+      const dev = runStore.devices.find((d) => d.id === s);
+      const isAvd =
+        s.startsWith('emulator-') ||
+        dev?.kind === 'emulator' ||
+        (dev as any)?.kind === 'avd' ||
+        dev?.platform === 'android';
+      if (isAvd) {
+        try {
+          await api.avdStop(s);
+        } catch (err) {
+          console.warn('[mirrorStore] avdStop error on stopDevice:', err);
+        }
+      }
+    }
   }
 
   async start(serialToStart?: string) {

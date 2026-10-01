@@ -1570,6 +1570,10 @@ export const api = {
     return listen<{ serial: string; status: { state: string; message?: string } }>('mirror-status', (event) => cb(event.payload));
   },
 
+  onMirrorFrame(cb: (payload: { serial: string; data: number[] | Uint8Array }) => void): Promise<UnlistenFn> {
+    return listen<{ serial: string; data: number[] | Uint8Array }>('mirror-frame', (event) => cb(event.payload));
+  },
+
   async mirrorInput(serial: string, ev: InputEvent): Promise<void> {
     if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       return;

@@ -236,12 +236,12 @@
     const androidOk = !!(tc?.adb || tc?.androidHome);
     const javaOk = !!tc?.java;
     const kotlinOk = !!tc?.kotlinLs || kotlinInstalled;
-    const scrcpyOk = false;
+    const scrcpyOk = !!tc?.scrcpy;
     const xcodeOk = !!(tc?.xcrun || tc?.sourcekit);
 
     const essentialTools = [flutterOk, dartOk, androidOk, javaOk, kotlinOk];
     const readyCount = [flutterOk, dartOk, androidOk, javaOk, kotlinOk, scrcpyOk, xcodeOk].filter(Boolean).length;
-    const actionsNeeded = essentialTools.filter((ok) => !ok).length + 1;
+    const actionsNeeded = essentialTools.filter((ok) => !ok).length;
 
     return {
       tc,
@@ -698,19 +698,23 @@
           <!-- 6. scrcpy Device Mirroring -->
           <div class="tool-item">
             <div class="tool-left">
-              <span class="status-badge-dot warn"></span>
+              <span class="status-badge-dot" class:ok={toolchainSummary.scrcpyOk} class:warn={!toolchainSummary.scrcpyOk}></span>
               <div class="tool-labels">
                 <div class="tool-name-row">
                   <span class="tool-name">scrcpy Mirroring</span>
-                  <span class="tool-version">Missing in PATH</span>
+                  <span class="tool-version">{toolchainSummary.scrcpyOk ? (toolchainSummary.tc?.scrcpy?.version || 'Ready') : 'Missing in PATH'}</span>
                 </div>
-                <span class="tool-detail">Dibutuhkan untuk mirror layar device Android USB</span>
+                <span class="tool-detail">{toolchainSummary.scrcpyOk ? (toolchainSummary.tc?.scrcpy?.path || 'scrcpy binary ready') : 'Dibutuhkan untuk mirror layar device Android USB'}</span>
               </div>
             </div>
             <div class="tool-action">
-              <button class="btn-doctor-action guide" onclick={() => (scrcpyModalOpen = true)}>
-                <span>📖</span> {dict.btnScrcpyGuide}
-              </button>
+              {#if toolchainSummary.scrcpyOk}
+                <span class="badge-ready">✓ Ready</span>
+              {:else}
+                <button class="btn-doctor-action guide" onclick={() => (scrcpyModalOpen = true)}>
+                  <span>📖</span> {dict.btnScrcpyGuide}
+                </button>
+              {/if}
             </div>
           </div>
 
