@@ -2691,11 +2691,17 @@ pub async fn mirror_stop(
     serial: String,
 ) -> Result<(), String> {
     let mut sessions = state.sessions.lock().map_err(|e| e.to_string())?;
-    let removed = if let Some(s) = sessions.remove(&serial) {
+    let target = serial.trim();
+    if target == "all" || target.is_empty() {
+        sessions.clear();
+        return Ok(());
+    }
+
+    let removed = if let Some(s) = sessions.remove(target) {
         Some(s)
     } else {
         let exec = petak_core::exec::SystemExec;
-        let alt = petak_core::run::resolve_running_avd_serial(&exec, &serial);
+        let alt = petak_core::run::resolve_running_avd_serial(&exec, target);
         let found_key = alt.as_ref().and_then(|a| {
             if sessions.contains_key(a) {
                 Some(a.clone())
@@ -2704,7 +2710,10 @@ pub async fn mirror_stop(
             }
         }).or_else(|| {
             sessions.keys().find(|k| {
-                petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(&serial)
+                k == target
+                    || k.eq_ignore_ascii_case(target)
+                    || petak_core::run::resolve_running_avd_serial(&exec, k).as_deref() == Some(target)
+                    || alt.as_deref() == Some(k.as_str())
             }).cloned()
         });
         found_key.and_then(|k| sessions.remove(&k))
@@ -2898,6 +2907,9 @@ pub async fn avd_start(
                             if parts.len() >= 2 && parts[0].starts_with("emulator-") && parts[1] == "device" {
                                 let serial = parts[0];
                                 found_serial = Some(serial.to_string());
+                                if let Some(pid) = petak_core::run::get_emulator_pid(&mon_avd) {
+                                    petak_core::run::record_emulator_pid(serial, pid);
+                                }
 
                                 // Check boot completed
                                 if let Ok(boot_out) = std::process::Command::new(&adb)
