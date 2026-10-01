@@ -1070,6 +1070,13 @@ export const api = {
     return invoke<string>('adb_connect', { host, port });
   },
 
+  async adbFindPairingService(serviceName: string): Promise<[string, number] | null> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return null;
+    }
+    return invoke<[string, number] | null>('adb_find_pairing_service', { serviceName });
+  },
+
   mirrorPermissionStatus(deviceId?: string): Promise<MirrorPermissionStatus> {
     return invoke<MirrorPermissionStatus>('mirror_permission_status', { deviceId }).catch(() => ({
       granted: true,

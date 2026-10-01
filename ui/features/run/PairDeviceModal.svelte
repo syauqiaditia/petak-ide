@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { api } from '../../lib/api';
   import { runStore } from './runStore.svelte';
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
@@ -10,6 +10,11 @@
     resolveConnectPort,
     executePairAndConnect,
   } from './wifiPairingLogic';
+  import {
+    buildAdbQrPayload,
+    generateAdbPairingCredentials,
+    generateQrSvg,
+  } from './qrcode';
 
   let {
     open = false,
@@ -19,8 +24,9 @@
     onClose: () => void;
   } = $props();
 
-  let activeTab = $state<'code' | 'instructions'>('code');
+  let activeTab = $state<'qr' | 'code' | 'instructions'>('qr');
 
+  // Manual code state
   let ip = $state('');
   let pairingPort = $state('');
   let pairingCode = $state('');
@@ -31,16 +37,115 @@
 
   let ipInputEl = $state<HTMLInputElement | null>(null);
 
+  // QR code state
+  let credentials = $state(generateAdbPairingCredentials());
+  let qrSvg = $derived(
+    generateQrSvg(buildAdbQrPayload(credentials.serviceName, credentials.password), {
+      size: 220,
+      margin: 2,
+    })
+  );
+  let qrStatus = $state<'waiting' | 'pairing' | 'error'>('waiting');
+  let qrStatusText = $state('Menunggu pemindaian dari kamera HP...');
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let isPolling = false;
+
+  function stopPolling() {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+    isPolling = false;
+  }
+
+  function startPolling() {
+    stopPolling();
+    qrStatus = 'waiting';
+    qrStatusText = 'Menunggu pemindaian dari kamera HP...';
+
+    pollInterval = setInterval(async () => {
+      if (isPolling || !open || activeTab !== 'qr') return;
+      isPolling = true;
+      try {
+        const res = await api.adbFindPairingService(credentials.serviceName);
+        if (res && Array.isArray(res) && res.length >= 2) {
+          stopPolling();
+          const [detectedIp, detectedPort] = res;
+          qrStatus = 'pairing';
+          qrStatusText = 'Perangkat terdeteksi! Memasangkan...';
+
+          // 1. Panggil api.adbPair
+          const pairRes = await api.adbPair(detectedIp, detectedPort, credentials.password);
+          if (typeof pairRes === 'string' && /failed|error/i.test(pairRes)) {
+            throw new Error(pairRes);
+          }
+
+          // 2. Panggil api.adbConnect
+          const connectRes = await api.adbConnect(detectedIp, detectedPort);
+          if (
+            typeof connectRes === 'string' &&
+            /failed|error/i.test(connectRes) &&
+            !/already connected/i.test(connectRes)
+          ) {
+            throw new Error(connectRes);
+          }
+
+          // 3. Panggil runStore.refreshDevices()
+          await runStore.refreshDevices();
+
+          // 4. Toast sukses
+          toolchainStore.showToast('Perangkat berhasil dipasangkan via QR Code!');
+
+          // 5. Tutup modal otomatis
+          onClose();
+        }
+      } catch (err: any) {
+        stopPolling();
+        qrStatus = 'error';
+        const msg = err?.message || String(err) || 'Gagal memasangkan via QR Code';
+        errorMessage = msg;
+        qrStatusText = `Gagal: ${msg}`;
+      } finally {
+        isPolling = false;
+      }
+    }, 1500);
+  }
+
+  function refreshQr() {
+    credentials = generateAdbPairingCredentials();
+    errorMessage = null;
+    startPolling();
+  }
+
   $effect(() => {
     if (open) {
       status = 'idle';
       errorMessage = null;
-      tick().then(() => {
-        if (ipInputEl && activeTab === 'code') {
-          ipInputEl.focus();
-        }
-      });
+
+      if (activeTab === 'qr') {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+
+      if (activeTab === 'code') {
+        tick().then(() => {
+          if (ipInputEl) {
+            ipInputEl.focus();
+          }
+        });
+      }
+    } else {
+      stopPolling();
     }
+
+    return () => {
+      stopPolling();
+    };
+  });
+
+  onDestroy(() => {
+    stopPolling();
   });
 
   let isIpValid = $derived(validateIp(ip));
@@ -141,10 +246,18 @@
         <button
           type="button"
           class="tab-btn"
+          class:active={activeTab === 'qr'}
+          onclick={() => (activeTab = 'qr')}
+        >
+          Pindai Kode QR
+        </button>
+        <button
+          type="button"
+          class="tab-btn"
           class:active={activeTab === 'code'}
           onclick={() => (activeTab = 'code')}
         >
-          Kode Pemasangan
+          Kode Pemasangan (Manual)
         </button>
         <button
           type="button"
@@ -164,7 +277,47 @@
           </div>
         {/if}
 
-        {#if activeTab === 'code'}
+        {#if activeTab === 'qr'}
+          <div class="qr-tab-content">
+            <div class="qr-card">
+              <div class="qr-svg-wrapper">
+                {@html qrSvg}
+              </div>
+            </div>
+
+            <div class="qr-meta-card">
+              <div class="qr-meta-row">
+                <span class="meta-label">Nama Layanan (mDNS):</span>
+                <code class="meta-code">{credentials.serviceName}</code>
+              </div>
+              <div class="qr-status-indicator">
+                {#if qrStatus === 'pairing'}
+                  <span class="spinner"></span>
+                {:else if qrStatus === 'waiting'}
+                  <span class="pulse-dot"></span>
+                {:else}
+                  <span class="status-icon-err">⚠</span>
+                {/if}
+                <span class="status-label-text">{qrStatusText}</span>
+              </div>
+            </div>
+
+            <div class="qr-actions-row">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                onclick={refreshQr}
+                disabled={qrStatus === 'pairing'}
+              >
+                🔄 Refresh QR / Buat Ulang Kode QR
+              </button>
+            </div>
+
+            <div class="qr-instruction-hint">
+              Buka HP &rarr; Pengaturan &rarr; Pilihan Pengembang &rarr; Debugging Nirkabel &rarr; Pasangkan dengan kode QR
+            </div>
+          </div>
+        {:else if activeTab === 'code'}
           <form onsubmit={(e) => { e.preventDefault(); handlePair(); }} class="form-content">
             <div class="form-group">
               <label for="wifi-ip" class="field-label">
@@ -261,41 +414,76 @@
             <div class="instruction-intro">
               Pastikan HP Android dan komputer terhubung ke jaringan Wi-Fi lokal yang sama.
             </div>
-            <ol class="steps-list">
-              <li class="step-item">
-                <span class="step-number">1</span>
-                <div class="step-text">
-                  Buka <strong>Pengaturan</strong> di HP Android &rarr; <strong>Pilihan Pengembang</strong> (Developer Options).
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-number">2</span>
-                <div class="step-text">
-                  Aktifkan <strong>Debugging Nirkabel</strong> (Wireless Debugging) dan pastikan HP satu jaringan Wi-Fi dengan komputer.
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-number">3</span>
-                <div class="step-text">
-                  Pilih <strong>"Pasangkan perangkat dengan kode pemasangan"</strong> (Pair device with pairing code).
-                </div>
-              </li>
-              <li class="step-item">
-                <span class="step-number">4</span>
-                <div class="step-text">
-                  Masukkan alamat IP, Port 5-digit, dan Kode Pemasangan 6-digit yang muncul di layar HP ke form ini.
-                </div>
-              </li>
-            </ol>
+
+            <div class="method-section">
+              <div class="method-title">Metode 1: Pindai Kode QR (Direkomendasikan)</div>
+              <ol class="steps-list">
+                <li class="step-item">
+                  <span class="step-number">1</span>
+                  <div class="step-text">
+                    Buka <strong>Pengaturan</strong> di HP Android &rarr; <strong>Pilihan Pengembang</strong> (Developer Options).
+                  </div>
+                </li>
+                <li class="step-item">
+                  <span class="step-number">2</span>
+                  <div class="step-text">
+                    Aktifkan <strong>Debugging Nirkabel</strong> (Wireless Debugging) dan pastikan HP satu jaringan Wi-Fi dengan komputer.
+                  </div>
+                </li>
+                <li class="step-item">
+                  <span class="step-number">3</span>
+                  <div class="step-text">
+                    Pilih <strong>"Pasangkan perangkat dengan kode QR"</strong> (Pair device with QR code).
+                  </div>
+                </li>
+                <li class="step-item">
+                  <span class="step-number">4</span>
+                  <div class="step-text">
+                    Arahkan kamera HP ke Kode QR di layar Petak. Perangkat akan terdeteksi dan tersambung otomatis.
+                  </div>
+                </li>
+              </ol>
+            </div>
+
+            <div class="method-section">
+              <div class="method-title">Metode 2: Kode Pemasangan 6-Digit (Manual)</div>
+              <ol class="steps-list">
+                <li class="step-item">
+                  <span class="step-number">1</span>
+                  <div class="step-text">
+                    Di menu Debugging Nirkabel HP, pilih <strong>"Pasangkan perangkat dengan kode pemasangan"</strong> (Pair device with pairing code).
+                  </div>
+                </li>
+                <li class="step-item">
+                  <span class="step-number">2</span>
+                  <div class="step-text">
+                    Masukkan alamat IP, Port 5-digit, dan Kode Pemasangan 6-digit yang muncul di layar HP ke form ini.
+                  </div>
+                </li>
+              </ol>
+            </div>
           </div>
         {/if}
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick={onClose} disabled={status === 'pairing'}>
+        <button
+          class="btn btn-secondary"
+          onclick={onClose}
+          disabled={status === 'pairing' || qrStatus === 'pairing'}
+        >
           Batal
         </button>
-        {#if activeTab === 'code'}
+        {#if activeTab === 'qr'}
+          <button
+            type="button"
+            class="btn btn-secondary"
+            onclick={refreshQr}
+            disabled={qrStatus === 'pairing'}
+          >
+            Refresh QR
+          </button>
+        {:else if activeTab === 'code'}
           <button
             class="btn btn-primary"
             onclick={handlePair}
@@ -309,8 +497,8 @@
             {/if}
           </button>
         {:else}
-          <button class="btn btn-primary" onclick={() => (activeTab = 'code')}>
-            Lanjut ke Form
+          <button class="btn btn-primary" onclick={() => (activeTab = 'qr')}>
+            Pindai Kode QR
           </button>
         {/if}
       </div>
@@ -445,6 +633,128 @@
     flex-shrink: 0;
   }
 
+  /* QR Code Tab Styles */
+  .qr-tab-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .qr-card {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+
+  .qr-svg-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    line-height: 0;
+  }
+
+  .qr-meta-card {
+    width: 100%;
+    background: #141518;
+    border: 1px solid #26282e;
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+  }
+
+  .qr-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11.5px;
+  }
+
+  .meta-label {
+    color: #8b8f98;
+  }
+
+  .meta-code {
+    color: #cfe0ff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: #1c1d22;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #26282e;
+  }
+
+  .qr-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #8ea8db;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4370ba;
+    box-shadow: 0 0 0 0 rgba(67, 112, 186, 0.7);
+    animation: pulse 1.6s infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(67, 112, 186, 0.7);
+    }
+    70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 6px rgba(67, 112, 186, 0);
+    }
+    100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(67, 112, 186, 0);
+    }
+  }
+
+  .status-icon-err {
+    color: #ff8b94;
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .status-label-text {
+    flex: 1;
+    line-height: 1.3;
+  }
+
+  .qr-actions-row {
+    display: flex;
+    justify-content: center;
+  }
+
+  .btn-sm {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11.5px;
+  }
+
+  .qr-instruction-hint {
+    font-size: 11px;
+    color: #727680;
+    text-align: center;
+    line-height: 1.4;
+    max-width: 90%;
+  }
+
+  /* Manual Form Styles */
   .form-content {
     display: flex;
     flex-direction: column;
@@ -530,6 +840,7 @@
     color: #ff8b94;
   }
 
+  /* Step Instructions Styles */
   .instructions-wrap {
     display: flex;
     flex-direction: column;
@@ -544,6 +855,18 @@
     border-radius: 6px;
     border: 1px solid #2a3449;
     line-height: 1.4;
+  }
+
+  .method-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .method-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #cfe0ff;
   }
 
   .steps-list {
