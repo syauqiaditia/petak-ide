@@ -61,15 +61,12 @@ test('credentials: generateAdbPairingCredentials produces required format and le
     `Service name "${creds.serviceName}" must match format studio-petak-[a-z0-9]{8}`
   );
 
-  // password: 12-16 characters, alphanumeric
-  assert.ok(
-    creds.password.length >= 12 && creds.password.length <= 16,
-    `Password length ${creds.password.length} must be between 12 and 16 characters`
-  );
+  // password: 6 digits numeric
+  assert.equal(creds.password.length, 6, 'Password length must be 6 digits');
   assert.match(
     creds.password,
-    /^[A-Za-z0-9]+$/,
-    'Password must be alphanumeric'
+    /^[0-9]{6}$/,
+    'Password must be 6 digits'
   );
 });
 

@@ -52,7 +52,6 @@ export function buildAdbQrPayload(serviceName: string, password: string): string
  */
 export function generateAdbPairingCredentials(): { serviceName: string; password: string } {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const passChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
   const getRandomString = (len: number, charset: string): string => {
     let res = '';
@@ -71,7 +70,17 @@ export function generateAdbPairingCredentials(): { serviceName: string; password
   };
 
   const serviceName = `studio-petak-${getRandomString(8, chars)}`;
-  const password = getRandomString(14, passChars);
+  
+  // Universal 6-digit numeric pairing code for maximum Android vendor compatibility
+  let password = '';
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint32Array(1);
+    crypto.getRandomValues(bytes);
+    password = (100000 + (bytes[0] % 900000)).toString();
+  } else {
+    password = Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
   return { serviceName, password };
 }
 
