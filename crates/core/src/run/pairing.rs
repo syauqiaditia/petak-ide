@@ -99,45 +99,18 @@ pub fn parse_connect_output(
 pub fn adb_pair(exec: &dyn Exec, host: &str, port: u16, code: &str) -> io::Result<PairResult> {
     let adb = find_adb(exec);
     let target = format!("{}:{}", host.trim(), port);
-    let code_input = format!("{}\n", code.trim());
     crate::mirror::trace::log(
         "PAIR-EXEC",
         &format!("Running adb pair {} with code len={}", target, code.trim().len()),
     );
 
-    // Try passing code via stdin (standard ADB behavior across versions)
     let output = exec.run(
         Path::new("."),
         &adb,
-        &["pair", &target],
+        &["pair", &target, code.trim()],
         &[],
-        Some(code_input.as_bytes()),
-    );
-
-    let output = match output {
-        Ok(out) if out.status.success() => out,
-        Ok(out) => {
-            let combined = format!(
-                "{}{}",
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            );
-            if combined.to_lowercase().contains("successfully paired") {
-                out
-            } else {
-                // Fallback: try with argument AND code via stdin
-                exec.run(
-                    Path::new("."),
-                    &adb,
-                    &["pair", &target, code.trim()],
-                    &[],
-                    Some(code_input.as_bytes()),
-                )
-                .unwrap_or(out)
-            }
-        }
-        Err(e) => return Err(e),
-    };
+        None,
+    )?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

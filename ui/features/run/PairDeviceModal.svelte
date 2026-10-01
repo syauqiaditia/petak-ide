@@ -99,7 +99,10 @@
       } catch (err: any) {
         stopPolling();
         qrStatus = 'error';
-        const msg = err?.message || String(err) || 'Gagal memasangkan via QR Code';
+        const rawMsg = err?.message || String(err) || 'Gagal memasangkan via QR Code';
+        const msg = rawMsg.includes('protocol fault')
+          ? 'Handshake terputus atau sesi QR kedaluwarsa. Silakan klik Refresh QR dan scan ulang.'
+          : rawMsg;
         errorMessage = msg;
         qrStatusText = `Gagal: ${msg}`;
       } finally {
