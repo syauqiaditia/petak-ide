@@ -146,6 +146,24 @@ test('canvas decoding: DeviceCanvas configures VideoDecoder and decodes chunks',
   assert.ok(canvasCode.includes('decoder.decode(chunk)'), 'Frame packets (kind 1/2) must pass chunk to decoder');
 });
 
+test('canvas hardware acceleration: DeviceCanvas configures hardwareAcceleration prefer-hardware', () => {
+  const canvasPath = path.resolve(uiRoot, 'features/mirror/DeviceCanvas.svelte');
+  const canvasCode = fs.readFileSync(canvasPath, 'utf-8');
+
+  // Must configure hardwareAcceleration: 'prefer-hardware' for WebCodecs VideoDecoder
+  assert.ok(
+    canvasCode.includes("hardwareAcceleration: 'prefer-hardware'"),
+    "DeviceCanvas must configure hardwareAcceleration: 'prefer-hardware'"
+  );
+
+  // Must apply prefer-hardware to both primary and fallback VideoDecoder configurations
+  const occurrences = canvasCode.split("hardwareAcceleration: 'prefer-hardware'").length - 1;
+  assert.ok(
+    occurrences >= 2,
+    `Expected at least 2 configurations with hardwareAcceleration: 'prefer-hardware' (primary and fallback), got ${occurrences}`
+  );
+});
+
 // =============================================================================
 // Suite 2: Mirror Lifecycle (UQi Revision: Hide on Close, Stop on Switch/Explicit)
 // =============================================================================
