@@ -2054,10 +2054,13 @@ emulator-5558          unauthorized transport_id:5
                     "jatim_dev",
                     "-no-window",
                     "-no-audio",
+                    "-gpu",
+                    "auto-no-window",
                     "-no-snapshot-load"
                 ]
             );
-            assert!(!args.contains(&"-gpu".to_string()));
+            assert!(args.contains(&"-gpu".to_string()));
+            assert!(args.contains(&"auto-no-window".to_string()));
             assert!(!args.contains(&"swiftshader_indirect".to_string()));
         }
         #[cfg(not(target_os = "macos"))]
