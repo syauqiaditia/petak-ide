@@ -172,7 +172,7 @@ class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, value: kCFBooleanTrue)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_Baseline_AutoLevel)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: fps * 2))
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: fps))
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: NSNumber(value: 4_000_000))
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: fps))
@@ -570,6 +570,7 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
             session.addInput(input)
 
             let output = AVCaptureVideoDataOutput()
+            output.alwaysDiscardsLateVideoFrames = true
             output.videoSettings = [
                 kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
             ]
@@ -584,15 +585,31 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
             }
             session.addOutput(output)
 
+            // Frame rate synchronization if supported by connection
+            if let connection = output.connection(with: .video) {
+                if connection.isVideoMinFrameDurationSupported {
+                    connection.videoMinFrameDuration = CMTime(value: 1, timescale: Int32(self.config.fps))
+                }
+            }
+
+            // Adaptive resolution bounded by config (1080p / 960p target) preserving native aspect ratio
             let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
-            let width = Int(dims.width > 0 ? dims.width : 1179)
-            let height = Int(dims.height > 0 ? dims.height : 2556)
+            let nativeWidth = Double(dims.width > 0 ? dims.width : 1179)
+            let nativeHeight = Double(dims.height > 0 ? dims.height : 2556)
+
+            let maxBound: Double = 1080.0
+            let targetMaxW = min(Double(self.config.width > 0 ? self.config.width : 500), maxBound)
+            let targetMaxH = min(Double(self.config.height > 0 ? self.config.height : 1080), maxBound)
+            let scale = min(targetMaxW / nativeWidth, targetMaxH / nativeHeight, 1.0)
+
+            let width = max(2, Int((nativeWidth * scale).rounded()) & ~1)
+            let height = max(2, Int((nativeHeight * scale).rounded()) & ~1)
 
             self.encoder = H264Encoder(width: width, height: height, fps: self.config.fps)
             self.session = session
 
             session.startRunning()
-            logStderr("[ios-capture] AVCaptureSession started running successfully: \(width)x\(height) @ \(self.config.fps)fps")
+            logStderr("[ios-capture] AVCaptureSession started running successfully: \(width)x\(height) @ \(self.config.fps)fps (native: \(Int(nativeWidth))x\(Int(nativeHeight)))")
 
             emitStatus([
                 "status": "live",
