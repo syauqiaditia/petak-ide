@@ -317,7 +317,7 @@ class MirrorStore {
     const dev = runStore.devices.find((d) => d.id === targetSerial) || runStore.selectedDevice;
     if (dev) {
       this.deviceName = dev.name;
-      this.isViewOnly = dev.platform === 'ios';
+      this.isViewOnly = dev.platform === 'ios' && dev.kind === 'physical';
     }
 
     this.status = 'connecting';

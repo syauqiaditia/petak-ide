@@ -16,7 +16,7 @@
     {#if status === 'live'}
       <span class="device-badge-live" title="Full interactive control (touch, swipe, scroll, keyboard, navigation)">
         <span class="dot-live"></span>
-        Android — Interactive
+        Live
       </span>
     {:else if status === 'view-only'}
       <span class="device-badge-viewonly" title="iOS screen mirroring (view only)">iOS — View only</span>
