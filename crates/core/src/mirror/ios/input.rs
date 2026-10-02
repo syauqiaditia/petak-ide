@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::exec::Exec;
@@ -70,6 +70,129 @@ impl TouchTracker {
 pub fn touch_tracker() -> &'static TouchTracker {
     static TRACKER: OnceLock<TouchTracker> = OnceLock::new();
     TRACKER.get_or_init(TouchTracker::new)
+}
+
+pub trait DaemonWriter: io::Write + Send {}
+impl<T: io::Write + Send> DaemonWriter for T {}
+
+pub type SharedDaemonWriter = Arc<Mutex<Box<dyn DaemonWriter>>>;
+
+/// Registry managing active simtouch daemon stdin streams per UDID.
+#[derive(Default)]
+pub struct DaemonTracker {
+    daemons: Mutex<HashMap<String, SharedDaemonWriter>>,
+}
+
+impl DaemonTracker {
+    pub fn new() -> Self {
+        Self {
+            daemons: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn register(&self, udid: &str, writer: Box<dyn DaemonWriter>) -> SharedDaemonWriter {
+        let mut map = self.daemons.lock().unwrap();
+        let shared = Arc::new(Mutex::new(writer));
+        map.insert(udid.to_string(), Arc::clone(&shared));
+        shared
+    }
+
+    pub fn register_shared(&self, udid: &str, shared: SharedDaemonWriter) {
+        let mut map = self.daemons.lock().unwrap();
+        map.insert(udid.to_string(), shared);
+    }
+
+    pub fn unregister(&self, udid: &str) {
+        let mut map = self.daemons.lock().unwrap();
+        map.remove(udid);
+    }
+
+    pub fn get(&self, udid: &str) -> Option<SharedDaemonWriter> {
+        let map = self.daemons.lock().unwrap();
+        map.get(udid).cloned()
+    }
+
+    pub fn clear(&self) {
+        let mut map = self.daemons.lock().unwrap();
+        map.clear();
+    }
+}
+
+pub fn daemon_tracker() -> &'static DaemonTracker {
+    static TRACKER: OnceLock<DaemonTracker> = OnceLock::new();
+    TRACKER.get_or_init(DaemonTracker::new)
+}
+
+/// Map an Android/web keycode to USB HID Keyboard Page 0x07 usage code.
+pub fn android_to_hid_keycode(android_keycode: u32) -> Option<u32> {
+    match android_keycode {
+        66 => Some(40),      // Enter -> USB HID 40 (0x28)
+        67 => Some(42),      // Backspace -> USB HID 42 (0x2A)
+        61 => Some(43),      // Tab -> USB HID 43 (0x2B)
+        62 => Some(44),      // Space -> USB HID 44 (0x2C)
+        111 => Some(41),     // Escape -> USB HID 41 (0x29)
+        112 => Some(76),     // Delete -> USB HID 76 (0x4C)
+        21 => Some(80),      // Arrow Left -> USB HID 80 (0x50)
+        22 => Some(79),      // Arrow Right -> USB HID 79 (0x4F)
+        19 => Some(82),      // Arrow Up -> USB HID 82 (0x52)
+        20 => Some(81),      // Arrow Down -> USB HID 81 (0x51)
+        3 | 122 => Some(74), // Home -> USB HID 74 (0x4A)
+        123 => Some(77),     // End -> USB HID 77 (0x4D)
+        92 => Some(75),      // Page Up -> USB HID 75 (0x4B)
+        93 => Some(78),      // Page Down -> USB HID 78 (0x4E)
+        _ => None,
+    }
+}
+
+/// Send a raw command string to the simtouch daemon stdin stream.
+pub fn send_daemon_command(stdin: &mut dyn io::Write, cmd: &str) -> io::Result<()> {
+    stdin.write_all(cmd.as_bytes())?;
+    if !cmd.ends_with('\n') {
+        stdin.write_all(b"\n")?;
+    }
+    stdin.flush()
+}
+
+/// Format an InputEvent into a simtouch daemon command line and send it to stdin.
+pub fn send_daemon_event(stdin: &mut dyn io::Write, event: &InputEvent) -> io::Result<()> {
+    match event {
+        InputEvent::Touch { action, x, y, w, h } => {
+            let cmd = match action {
+                TouchAction::Down => format!("d {} {} {} {}", x, y, w, h),
+                TouchAction::Move => format!("m {} {} {} {}", x, y, w, h),
+                TouchAction::Up => format!("u {} {} {} {}", x, y, w, h),
+            };
+            send_daemon_command(stdin, &cmd)
+        }
+        InputEvent::Text { text } => {
+            let escaped = text.replace('\r', "").replace('\n', "\\n");
+            let cmd = format!("text {}", escaped);
+            send_daemon_command(stdin, &cmd)
+        }
+        InputEvent::Key { keycode, .. } => {
+            let hid = android_to_hid_keycode(*keycode).unwrap_or(*keycode);
+            let cmd = format!("k {}", hid);
+            send_daemon_command(stdin, &cmd)
+        }
+        InputEvent::Nav { key } => {
+            let btn_name = match key {
+                NavKey::Home => "home",
+                NavKey::Power => "lock",
+                NavKey::Volup => "volume_up",
+                NavKey::Voldown => "volume_down",
+                _ => return Ok(()),
+            };
+            let cmd = format!("b {}", btn_name);
+            send_daemon_command(stdin, &cmd)
+        }
+        InputEvent::Scroll { x, y, w, h, dx, dy } => {
+            let x2 = (*x as f32 + dx).max(0.0) as u32;
+            let y2 = (*y as f32 + dy).max(0.0) as u32;
+            let cmd = format!("s {} {} {} {} {} {} 200 10", x, y, x2, y2, w, h);
+            send_daemon_command(stdin, &cmd)
+        }
+        InputEvent::Rotate => Ok(()),
+    }
 }
 
 /// Resolve the path to the `simtouch` binary.
@@ -149,6 +272,13 @@ pub fn simtouch_binary_name() -> String {
 /// 3. Falls back to AppleScript / CGEvent on macOS if Accessibility is granted.
 /// 4. If none is available, documents view-only status and returns an informative error.
 pub fn send_simulator_input(exec: &dyn Exec, udid: &str, event: &InputEvent) -> io::Result<()> {
+    // 0. Try active persistent simtouch daemon if registered for this UDID
+    if let Some(daemon) = daemon_tracker().get(udid) {
+        if let Ok(mut writer) = daemon.lock() {
+            return send_daemon_event(&mut **writer, event);
+        }
+    }
+
     // 1. Try simtouch native helper if present
     if has_simtouch(exec) {
         return send_simtouch_input(exec, udid, event);
@@ -325,7 +455,8 @@ pub fn send_simtouch_input(exec: &dyn Exec, udid: &str, event: &InputEvent) -> i
             Ok(())
         }
         InputEvent::Key { keycode, .. } => {
-            let key_str = keycode.to_string();
+            let hid = android_to_hid_keycode(*keycode).unwrap_or(*keycode);
+            let key_str = hid.to_string();
             let out = exec.run(
                 Path::new("."),
                 &simtouch_bin,
@@ -342,7 +473,19 @@ pub fn send_simtouch_input(exec: &dyn Exec, udid: &str, event: &InputEvent) -> i
             }
             Ok(())
         }
-        InputEvent::Text { .. } => {
+        InputEvent::Text { text } => {
+            let out = exec.run(
+                Path::new("."),
+                &simtouch_bin,
+                &["text", text, "--udid", udid],
+                &[],
+                None,
+            );
+            if let Ok(o) = out {
+                if o.status.success() {
+                    return Ok(());
+                }
+            }
             // Text input over simtouch falls back to idb if available
             if has_idb(exec) {
                 return send_idb_input(exec, udid, event);
@@ -980,5 +1123,217 @@ mod tests {
             resolved,
             Some(helper_bin.canonicalize().unwrap_or(helper_bin))
         );
+    }
+
+    struct MockPipeWriter {
+        buffer: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl io::Write for MockPipeWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.buffer.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_android_to_hid_keycode_mapping() {
+        assert_eq!(android_to_hid_keycode(66), Some(40)); // Enter
+        assert_eq!(android_to_hid_keycode(67), Some(42)); // Backspace
+        assert_eq!(android_to_hid_keycode(61), Some(43)); // Tab
+        assert_eq!(android_to_hid_keycode(62), Some(44)); // Space
+        assert_eq!(android_to_hid_keycode(111), Some(41)); // Escape
+        assert_eq!(android_to_hid_keycode(112), Some(76)); // Delete
+        assert_eq!(android_to_hid_keycode(21), Some(80)); // Arrow Left
+        assert_eq!(android_to_hid_keycode(22), Some(79)); // Arrow Right
+        assert_eq!(android_to_hid_keycode(19), Some(82)); // Arrow Up
+        assert_eq!(android_to_hid_keycode(20), Some(81)); // Arrow Down
+        assert_eq!(android_to_hid_keycode(3), Some(74)); // Home
+        assert_eq!(android_to_hid_keycode(122), Some(74)); // Home
+        assert_eq!(android_to_hid_keycode(123), Some(77)); // End
+        assert_eq!(android_to_hid_keycode(92), Some(75)); // Page Up
+        assert_eq!(android_to_hid_keycode(93), Some(78)); // Page Down
+        assert_eq!(android_to_hid_keycode(999), None);
+    }
+
+    #[test]
+    fn test_send_daemon_command_stream() {
+        let mut buf = Vec::new();
+        send_daemon_command(&mut buf, "d 10 20 100 200").unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap(), "d 10 20 100 200\n");
+
+        let mut buf2 = Vec::new();
+        send_daemon_command(&mut buf2, "u 10 20 100 200\n").unwrap();
+        assert_eq!(String::from_utf8(buf2).unwrap(), "u 10 20 100 200\n");
+    }
+
+    #[test]
+    fn test_simulator_input_with_daemon_touch_stream() {
+        let udid = "DAEMON-TOUCH-UDID-001";
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let writer = Box::new(MockPipeWriter {
+            buffer: Arc::clone(&buf),
+        });
+        daemon_tracker().register(udid, writer);
+
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+            idb_available: false,
+            simtouch_available: true,
+        };
+
+        // 1. Down
+        let ev_down = InputEvent::Touch {
+            action: TouchAction::Down,
+            x: 100,
+            y: 200,
+            w: 800,
+            h: 1600,
+        };
+        send_simulator_input(&fake, udid, &ev_down).unwrap();
+
+        // 2. Move (streamed real-time, no delay)
+        let ev_move = InputEvent::Touch {
+            action: TouchAction::Move,
+            x: 100,
+            y: 250,
+            w: 800,
+            h: 1600,
+        };
+        send_simulator_input(&fake, udid, &ev_move).unwrap();
+
+        // 3. Up
+        let ev_up = InputEvent::Touch {
+            action: TouchAction::Up,
+            x: 100,
+            y: 250,
+            w: 800,
+            h: 1600,
+        };
+        send_simulator_input(&fake, udid, &ev_up).unwrap();
+
+        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        assert_eq!(
+            output,
+            "d 100 200 800 1600\nm 100 250 800 1600\nu 100 250 800 1600\n"
+        );
+
+        // FakeExec must NOT have been called (events streamed over daemon pipe, 0 process forks!)
+        assert_eq!(fake.calls.lock().unwrap().len(), 0);
+
+        daemon_tracker().unregister(udid);
+    }
+
+    #[test]
+    fn test_simulator_input_with_daemon_text() {
+        let udid = "DAEMON-TEXT-UDID-002";
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let writer = Box::new(MockPipeWriter {
+            buffer: Arc::clone(&buf),
+        });
+        daemon_tracker().register(udid, writer);
+
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+            idb_available: false,
+            simtouch_available: true,
+        };
+
+        let ev_text = InputEvent::Text {
+            text: "Hello World".to_string(),
+        };
+        send_simulator_input(&fake, udid, &ev_text).unwrap();
+
+        let ev_text_newline = InputEvent::Text {
+            text: "Line1\nLine2".to_string(),
+        };
+        send_simulator_input(&fake, udid, &ev_text_newline).unwrap();
+
+        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        assert_eq!(output, "text Hello World\ntext Line1\\nLine2\n");
+        assert_eq!(fake.calls.lock().unwrap().len(), 0);
+
+        daemon_tracker().unregister(udid);
+    }
+
+    #[test]
+    fn test_simulator_input_with_daemon_key_and_nav() {
+        let udid = "DAEMON-KEY-UDID-003";
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let writer = Box::new(MockPipeWriter {
+            buffer: Arc::clone(&buf),
+        });
+        daemon_tracker().register(udid, writer);
+
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+            idb_available: false,
+            simtouch_available: true,
+        };
+
+        // Android Enter (66) -> USB HID 40
+        let ev_enter = InputEvent::Key {
+            keycode: 66,
+            action: KeyAction::Down,
+        };
+        send_simulator_input(&fake, udid, &ev_enter).unwrap();
+
+        // Android Backspace (67) -> USB HID 42
+        let ev_backspace = InputEvent::Key {
+            keycode: 67,
+            action: KeyAction::Down,
+        };
+        send_simulator_input(&fake, udid, &ev_backspace).unwrap();
+
+        // Nav Home
+        let ev_home = InputEvent::Nav { key: NavKey::Home };
+        send_simulator_input(&fake, udid, &ev_home).unwrap();
+
+        // Scroll
+        let ev_scroll = InputEvent::Scroll {
+            x: 100,
+            y: 200,
+            w: 800,
+            h: 1600,
+            dx: 0.0,
+            dy: 50.0,
+        };
+        send_simulator_input(&fake, udid, &ev_scroll).unwrap();
+
+        let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
+        assert_eq!(
+            output,
+            "k 40\nk 42\nb home\ns 100 200 100 250 800 1600 200 10\n"
+        );
+        assert_eq!(fake.calls.lock().unwrap().len(), 0);
+
+        daemon_tracker().unregister(udid);
+    }
+
+    #[test]
+    fn test_simulator_input_daemon_fallback_when_unregistered() {
+        let udid = "DAEMON-FALLBACK-UDID-004";
+        // Ensure not registered
+        daemon_tracker().unregister(udid);
+
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+            idb_available: false,
+            simtouch_available: true,
+        };
+
+        let ev = InputEvent::Key {
+            keycode: 66, // Enter mapped to 40
+            action: KeyAction::Down,
+        };
+        send_simulator_input(&fake, udid, &ev).unwrap();
+
+        let calls = fake.calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[1], vec!["simtouch", "key", "40", "--udid", udid]);
     }
 }

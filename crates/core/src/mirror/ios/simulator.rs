@@ -15,6 +15,8 @@ use crate::run::ios::{is_valid_udid, parse_simctl_devices, simctl_boot};
 pub struct IosSimulatorSession {
     pub udid: String,
     child: Arc<Mutex<Option<Child>>>,
+    pub daemon_child: Arc<Mutex<Option<Child>>>,
+    pub daemon_stdin: Arc<Mutex<Option<std::process::ChildStdin>>>,
     _reader_thread: Option<thread::JoinHandle<()>>,
     _stderr_thread: Option<thread::JoinHandle<()>>,
 }
@@ -211,11 +213,33 @@ impl IosSimulatorSession {
             codec: "h264".to_string(),
         };
 
+        // 7. Spawn simtouch daemon if simtouch is available
+        let mut daemon_child_proc = None;
+        let mut daemon_stdin_proc = None;
+        if crate::mirror::ios::input::has_simtouch(exec) {
+            let simtouch_bin = crate::mirror::ios::input::simtouch_binary_name();
+            let mut daemon_cmd = Command::new(&simtouch_bin);
+            crate::toolchain::apply_env(&mut daemon_cmd);
+            daemon_cmd
+                .args(&["daemon", "--udid", udid])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped());
+            if let Ok(mut child_proc) = daemon_cmd.spawn() {
+                daemon_stdin_proc = child_proc.stdin.take();
+                daemon_child_proc = Some(child_proc);
+            }
+        }
+        let daemon_child = Arc::new(Mutex::new(daemon_child_proc));
+        let daemon_stdin = Arc::new(Mutex::new(daemon_stdin_proc));
+
         Ok((
             info,
             Self {
                 udid: udid.to_string(),
                 child: child_arc,
+                daemon_child,
+                daemon_stdin,
                 _reader_thread: Some(reader_thread),
                 _stderr_thread: Some(stderr_thread),
             },
@@ -230,16 +254,31 @@ impl IosSimulatorSession {
         exec: &dyn Exec,
         event: &crate::mirror::control::InputEvent,
     ) -> io::Result<()> {
+        if let Ok(mut guard) = self.daemon_stdin.lock() {
+            if let Some(ref mut stdin) = *guard {
+                return crate::mirror::ios::input::send_daemon_event(stdin, event);
+            }
+        }
         send_simulator_input(exec, &self.udid, event)
     }
 
-    /// Stop simulator mirror session and kill child capture process.
+    /// Stop simulator mirror session and kill child capture and daemon processes.
     pub fn stop(&self) {
         if let Ok(mut guard) = self.child.lock() {
             if let Some(mut proc) = guard.take() {
                 let _ = proc.kill();
             }
         }
+        if let Ok(mut guard) = self.daemon_stdin.lock() {
+            let _ = guard.take();
+        }
+        if let Ok(mut guard) = self.daemon_child.lock() {
+            if let Some(mut proc) = guard.take() {
+                let _ = proc.kill();
+                let _ = proc.wait();
+            }
+        }
+        crate::mirror::ios::input::daemon_tracker().unregister(&self.udid);
     }
 }
 
@@ -507,5 +546,31 @@ mod tests {
 
         let resolved = resolve_swift_helper_path_internal(None, tmp_dir.path().to_str());
         assert_eq!(resolved, helper_dev.canonicalize().unwrap_or(helper_dev));
+    }
+
+    #[test]
+    fn test_simulator_session_daemon_fields_and_cleanup() {
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+        };
+        let udid = "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90";
+        let session = IosSimulatorSession {
+            udid: udid.to_string(),
+            child: Arc::new(Mutex::new(None)),
+            daemon_child: Arc::new(Mutex::new(None)),
+            daemon_stdin: Arc::new(Mutex::new(None)),
+            _reader_thread: None,
+            _stderr_thread: None,
+        };
+
+        // When daemon_stdin is None, send_input falls back to send_simulator_input
+        let ev = crate::mirror::control::InputEvent::Nav {
+            key: crate::mirror::control::NavKey::Home,
+        };
+        let _ = session.send_input(&fake, &ev);
+
+        // Stop session cleans up without panicking
+        session.stop();
+        assert!(session.daemon_stdin.lock().unwrap().is_none());
     }
 }
