@@ -148,6 +148,15 @@ export function mirrorStateMachine(
   }
 }
 
+/**
+ * Determines whether a device must be mirrored in view-only mode.
+ * Only physical iOS devices are view-only. iOS Simulators and Android devices support live touch.
+ */
+export function isDeviceViewOnly(dev: { platform?: string; kind?: string } | null | undefined): boolean {
+  if (!dev) return false;
+  return dev.platform === 'ios' && dev.kind === 'physical';
+}
+
 
 /**
  * Splits Annex-B stream into individual NAL units by 0x000001 or 0x00000001 start codes.
