@@ -26,6 +26,6 @@ if [ -f "$SWIFT_SRC" ]; then
     -framework CoreMedia \
     -framework CoreGraphics \
     -framework Foundation \
-    -target arm64-apple-macos13.0 \
+    -target arm64-apple-macos14.0 \
     "$SWIFT_SRC" -o "$SWIFT_TARGET" || echo "Warning: swiftc build failed or not supported on Linux host"
 fi
