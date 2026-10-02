@@ -87,6 +87,18 @@ const AMOTION_ACTION_DOWN: u8 = 0;
 const AMOTION_ACTION_UP: u8 = 1;
 const AMOTION_ACTION_MOVE: u8 = 2;
 
+fn float_to_i16fp(f: f32) -> i16 {
+    let clamped = f.clamp(-1.0, 1.0);
+    let scaled = (clamped * 32768.0) as i32;
+    if scaled >= 0x7fff {
+        0x7fff
+    } else if scaled <= -0x8000 {
+        -0x8000
+    } else {
+        scaled as i16
+    }
+}
+
 // Android keycodes for nav keys
 const AKEYCODE_BACK: u32 = 4;
 const AKEYCODE_HOME: u32 = 3;
@@ -143,17 +155,23 @@ pub fn serialize(ev: &InputEvent, w: &mut dyn Write) -> io::Result<()> {
             dx,
             dy,
         } => {
-            let mut buf = [0u8; 25];
+            let mut buf = [0u8; 21];
             buf[0] = TYPE_INJECT_SCROLL;
             buf[1..5].copy_from_slice(&x.to_be_bytes());
             buf[5..9].copy_from_slice(&y.to_be_bytes());
             buf[9..11].copy_from_slice(&sw.to_be_bytes());
             buf[11..13].copy_from_slice(&sh.to_be_bytes());
-            // hscroll and vscroll as IEEE 754 f32 big-endian
-            buf[13..17].copy_from_slice(&dx.to_be_bytes());
-            buf[17..21].copy_from_slice(&dy.to_be_bytes());
+
+            // In scrcpy 4.1, hscroll and vscroll are in [-16, 16], normalized to [-1, 1] as i16 fixed-point
+            let h_norm = (dx / 16.0).clamp(-1.0, 1.0);
+            let v_norm = (dy / 16.0).clamp(-1.0, 1.0);
+            let hscroll = float_to_i16fp(h_norm);
+            let vscroll = float_to_i16fp(v_norm);
+
+            buf[13..15].copy_from_slice(&(hscroll as u16).to_be_bytes());
+            buf[15..17].copy_from_slice(&(vscroll as u16).to_be_bytes());
             // buttons: u32 = 0
-            // buf[21..25] already 0
+            buf[17..21].copy_from_slice(&0u32.to_be_bytes());
             w.write_all(&buf)
         }
         InputEvent::Key { keycode, action } => {
@@ -270,7 +288,7 @@ mod tests {
         };
         let mut buf = Vec::new();
         serialize(&ev, &mut buf).unwrap();
-        assert_eq!(buf.len(), 25);
+        assert_eq!(buf.len(), 21);
         assert_eq!(buf[0], TYPE_INJECT_SCROLL);
     }
 

@@ -136,6 +136,9 @@
     mirrorStore.isFocused = true;
     isPointerDown = true;
 
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
     const rect = canvasEl.getBoundingClientRect();
 
     const vWidth = canvasEl.width || deviceWidth || 800;
@@ -181,6 +184,9 @@
     if (!isPointerDown || isViewOnly) return;
     isPointerDown = false;
 
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+
     const rect = canvasEl.getBoundingClientRect();
     const vWidth = canvasEl.width || deviceWidth || 800;
     const vHeight = canvasEl.height || deviceHeight || 800;
@@ -195,12 +201,6 @@
     });
   }
 
-  function handleMouseLeave(e: MouseEvent) {
-    if (isPointerDown) {
-      handleMouseUp(e);
-    }
-  }
-
   function handleWheel(e: WheelEvent) {
     if (isViewOnly) return;
     e.preventDefault();
@@ -208,14 +208,19 @@
     const vWidth = canvasEl.width || deviceWidth || 800;
     const vHeight = canvasEl.height || deviceHeight || 800;
     const coords = translateCanvasToDevice(e.clientX, e.clientY, rect, vWidth, vHeight);
+
+    // Invert delta for natural Android scroll direction and clamp to [-16, 16]
+    const dx = Math.max(-16, Math.min(16, -e.deltaX / 10));
+    const dy = Math.max(-16, Math.min(16, -e.deltaY / 10));
+
     mirrorStore.sendInput({
       t: 'scroll',
       x: coords.x,
       y: coords.y,
       w: coords.w,
       h: coords.h,
-      dx: Math.round(e.deltaX),
-      dy: Math.round(e.deltaY),
+      dx,
+      dy,
     });
   }
 
@@ -289,6 +294,8 @@
   onDestroy(() => {
     mirrorStore.unregisterFrameCallback();
     window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
     if (decoder && decoder.state !== 'closed') {
       try {
         decoder.close();
@@ -304,9 +311,6 @@
   role="region"
   aria-label="Device screen display"
   onmousedown={handleMouseDown}
-  onmousemove={handleMouseMove}
-  onmouseup={handleMouseUp}
-  onmouseleave={handleMouseLeave}
   onwheel={handleWheel}
   oncontextmenu={(e) => e.preventDefault()}
 >
