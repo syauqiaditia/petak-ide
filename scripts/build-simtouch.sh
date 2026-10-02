@@ -24,13 +24,18 @@ SWIFT_SRC="$ROOT_DIR/crates/core/src/mirror/ios/petak_ios_capture.swift"
 SWIFT_TARGET="$OUT_DIR/petak_ios_capture"
 if [ -f "$SWIFT_SRC" ]; then
   echo "[build-simtouch] Compiling petak_ios_capture.swift -> $SWIFT_TARGET"
-  swiftc -O \
-    -framework ScreenCaptureKit \
-    -framework VideoToolbox \
-    -framework CoreMedia \
-    -framework CoreGraphics \
-    -framework Foundation \
-    -framework AppKit \
-    -target arm64-apple-macos14.0 \
-    "$SWIFT_SRC" -o "$SWIFT_TARGET" || echo "Warning: swiftc build failed or not supported on Linux host"
+  if [ "$(uname)" = "Darwin" ]; then
+    swiftc -O \
+      -framework ScreenCaptureKit \
+      -framework VideoToolbox \
+      -framework CoreMedia \
+      -framework CoreGraphics \
+      -framework Foundation \
+      -framework AppKit \
+      -target arm64-apple-macos14.0 \
+      "$SWIFT_SRC" -o "$SWIFT_TARGET"
+    echo "[build-simtouch] Done: $SWIFT_TARGET"
+  else
+    echo "Warning: swiftc build failed or not supported on Linux host"
+  fi
 fi

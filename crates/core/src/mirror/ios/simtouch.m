@@ -154,6 +154,27 @@ static BOOL sendIndigoMessage(id client, void *message) {
     return YES;
 }
 
+static void sendIndigoMessageAsync(id client, void *message) {
+    if (!message) return;
+
+    SEL sel = @selector(sendWithMessage:freeWhenDone:completionQueue:completion:);
+    if (![client respondsToSelector:sel]) {
+        free(message);
+        fprintf(stderr, "[simtouch] client does not respond to sendWithMessage\n");
+        return;
+    }
+
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    [client sendWithMessage:message
+               freeWhenDone:YES
+            completionQueue:queue
+                 completion:^(NSError *err) {
+        if (err) {
+            fprintf(stderr, "[simtouch] sendIndigoMessageAsync error: %s\n", [[err description] UTF8String]);
+        }
+    }];
+}
+
 static void warmServices(id client, void *simKitHandle) {
     if (!simKitHandle) return;
 
@@ -331,6 +352,77 @@ static int handleTap(id client, void *simKitHandle, int argc, const char *argv[]
     return 0;
 }
 
+static int performSwipe(id client, void *simKitHandle,
+                         double x1, double y1, double x2, double y2,
+                         double w, double h, int duration_ms, int steps,
+                         BOOL asyncDispatch) {
+    IndigoHIDMessageForMouseNSEventFn fnMouse =
+        (IndigoHIDMessageForMouseNSEventFn)dlsym(simKitHandle, "IndigoHIDMessageForMouseNSEvent");
+    if (!fnMouse) {
+        fprintf(stderr, "[simtouch] Symbol IndigoHIDMessageForMouseNSEvent not found\n");
+        return 1;
+    }
+
+    double x1_norm = clamp01(x1 / w);
+    double y1_norm = clamp01(y1 / h);
+    double x2_norm = clamp01(x2 / w);
+    double y2_norm = clamp01(y2 / h);
+
+    CGPoint pt1 = CGPointMake(x1_norm, y1_norm);
+    CGPoint pt2 = CGPointMake(x2_norm, y2_norm);
+
+    unsigned int stepUs = (unsigned int)((duration_ms * 1000) / (steps + 2));
+    if (stepUs < 8000) stepUs = 8000;
+
+    // DOWN: eventType 1, direction 1
+    void *downMsg = buildMouseMessage(fnMouse, &pt1, NULL, 1, 1, w, h);
+    if (!downMsg) {
+        fprintf(stderr, "[simtouch] Failed to build swipe DOWN message\n");
+        return 1;
+    }
+    if (asyncDispatch) {
+        sendIndigoMessageAsync(client, downMsg);
+    } else if (!sendIndigoMessage(client, downMsg)) {
+        fprintf(stderr, "[simtouch] Failed to send swipe DOWN\n");
+        return 1;
+    }
+
+    usleep(stepUs);
+
+    // Interpolation steps: eventType 6 (dragged), direction 0 (move)
+    for (int i = 1; i <= steps; i++) {
+        double t = (double)i / (double)steps;
+        double cx = x1_norm + (x2_norm - x1_norm) * t;
+        double cy = y1_norm + (y2_norm - y1_norm) * t;
+        CGPoint cpt = CGPointMake(cx, cy);
+
+        void *moveMsg = buildMouseMessage(fnMouse, &cpt, NULL, 6, 0, w, h);
+        if (moveMsg) {
+            if (asyncDispatch) {
+                sendIndigoMessageAsync(client, moveMsg);
+            } else {
+                sendIndigoMessage(client, moveMsg);
+            }
+        }
+        usleep(stepUs);
+    }
+
+    // UP: eventType 2, direction 2
+    void *upMsg = buildMouseMessage(fnMouse, &pt2, NULL, 2, 2, w, h);
+    if (!upMsg) {
+        fprintf(stderr, "[simtouch] Failed to build swipe UP message\n");
+        return 1;
+    }
+    if (asyncDispatch) {
+        sendIndigoMessageAsync(client, upMsg);
+    } else if (!sendIndigoMessage(client, upMsg)) {
+        fprintf(stderr, "[simtouch] Failed to send swipe UP\n");
+        return 1;
+    }
+
+    return 0;
+}
+
 static int handleSwipe(id client, void *simKitHandle, int argc, const char *argv[], int startIdx) {
     if (startIdx + 6 > argc) {
         fprintf(stderr, "Usage: simtouch swipe <x1> <y1> <x2> <y2> <w> <h> [duration_ms] [steps] [--udid <udid>]\n");
@@ -359,55 +451,7 @@ static int handleSwipe(id client, void *simKitHandle, int argc, const char *argv
         if (steps <= 0) steps = 10;
     }
 
-    IndigoHIDMessageForMouseNSEventFn fnMouse =
-        (IndigoHIDMessageForMouseNSEventFn)dlsym(simKitHandle, "IndigoHIDMessageForMouseNSEvent");
-    if (!fnMouse) {
-        fprintf(stderr, "[simtouch] Symbol IndigoHIDMessageForMouseNSEvent not found\n");
-        return 1;
-    }
-
-    double x1_norm = clamp01(x1 / w);
-    double y1_norm = clamp01(y1 / h);
-    double x2_norm = clamp01(x2 / w);
-    double y2_norm = clamp01(y2 / h);
-
-    CGPoint pt1 = CGPointMake(x1_norm, y1_norm);
-    CGPoint pt2 = CGPointMake(x2_norm, y2_norm);
-
-    unsigned int stepUs = (unsigned int)((duration_ms * 1000) / (steps + 2));
-    if (stepUs < 8000) stepUs = 8000;
-
-    // DOWN: eventType 1, direction 1
-    void *downMsg = buildMouseMessage(fnMouse, &pt1, NULL, 1, 1, w, h);
-    if (!downMsg || !sendIndigoMessage(client, downMsg)) {
-        fprintf(stderr, "[simtouch] Failed to send swipe DOWN\n");
-        return 1;
-    }
-
-    usleep(stepUs);
-
-    // Interpolation steps: eventType 6 (dragged), direction 0 (move)
-    for (int i = 1; i <= steps; i++) {
-        double t = (double)i / (double)steps;
-        double cx = x1_norm + (x2_norm - x1_norm) * t;
-        double cy = y1_norm + (y2_norm - y1_norm) * t;
-        CGPoint cpt = CGPointMake(cx, cy);
-
-        void *moveMsg = buildMouseMessage(fnMouse, &cpt, NULL, 6, 0, w, h);
-        if (moveMsg) {
-            sendIndigoMessage(client, moveMsg);
-        }
-        usleep(stepUs);
-    }
-
-    // UP: eventType 2, direction 2
-    void *upMsg = buildMouseMessage(fnMouse, &pt2, NULL, 2, 2, w, h);
-    if (!upMsg || !sendIndigoMessage(client, upMsg)) {
-        fprintf(stderr, "[simtouch] Failed to send swipe UP\n");
-        return 1;
-    }
-
-    return 0;
+    return performSwipe(client, simKitHandle, x1, y1, x2, y2, w, h, duration_ms, steps, NO);
 }
 
 static int handleButton(id client, void *simKitHandle, int argc, const char *argv[], int startIdx) {
@@ -667,7 +711,7 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (fnMouse) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
-                    if (downMsg) sendIndigoMessage(client, downMsg);
+                    if (downMsg) sendIndigoMessageAsync(client, downMsg);
                 }
             }
         } else if (line[0] == 'm' && line[1] == ' ') {
@@ -678,7 +722,7 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (fnMouse) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *moveMsg = buildMouseMessage(fnMouse, &pt, NULL, 6, 0, w, h);
-                    if (moveMsg) sendIndigoMessage(client, moveMsg);
+                    if (moveMsg) sendIndigoMessageAsync(client, moveMsg);
                 }
             }
         } else if (line[0] == 'u' && line[1] == ' ') {
@@ -689,7 +733,7 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (fnMouse) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
-                    if (upMsg) sendIndigoMessage(client, upMsg);
+                    if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
             }
         } else if (line[0] == 't' && line[1] == ' ') {
@@ -700,10 +744,10 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (fnMouse) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
-                    if (downMsg) sendIndigoMessage(client, downMsg);
+                    if (downMsg) sendIndigoMessageAsync(client, downMsg);
                     usleep(15000);
                     void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
-                    if (upMsg) sendIndigoMessage(client, upMsg);
+                    if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
             }
         } else if (line[0] == 'k' && line[1] == ' ') {
@@ -711,10 +755,10 @@ static int runDaemon(id client, void *simKitHandle) {
             if (sscanf(line + 2, "%u", &keycode) == 1) {
                 if (fnHIDArb) {
                     void *down = fnHIDArb(0x32, 0x07, keycode, 1);
-                    if (down) sendIndigoMessage(client, down);
+                    if (down) sendIndigoMessageAsync(client, down);
                     usleep(15000);
                     void *up = fnHIDArb(0x32, 0x07, keycode, 2);
-                    if (up) sendIndigoMessage(client, up);
+                    if (up) sendIndigoMessageAsync(client, up);
                 }
             }
         } else if (line[0] == 'b' && line[1] == ' ') {
@@ -725,18 +769,18 @@ static int runDaemon(id client, void *simKitHandle) {
             const char *textStr = line + 5;
             handleText(client, simKitHandle, textStr);
         } else if (line[0] == 's' && line[1] == ' ') {
-            char argsBuf[256];
-            strncpy(argsBuf, line + 2, sizeof(argsBuf) - 1);
-            argsBuf[sizeof(argsBuf) - 1] = '\0';
-            char *tokens[8];
-            int count = 0;
-            char *tok = strtok(argsBuf, " ");
-            while (tok && count < 8) {
-                tokens[count++] = tok;
-                tok = strtok(NULL, " ");
-            }
-            if (count >= 6) {
-                handleSwipe(client, simKitHandle, count, (const char **)tokens, 0);
+            double x1 = 0, y1 = 0, x2 = 0, y2 = 0, w = 1, h = 1;
+            int duration_ms = 200, steps = 10;
+            int parsed = sscanf(line + 2, "%lf %lf %lf %lf %lf %lf %d %d",
+                                &x1, &y1, &x2, &y2, &w, &h, &duration_ms, &steps);
+            if (parsed >= 6) {
+                if (w <= 0.0) w = 1.0;
+                if (h <= 0.0) h = 1.0;
+                if (duration_ms <= 0) duration_ms = 200;
+                if (steps <= 0) steps = 10;
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    performSwipe(client, simKitHandle, x1, y1, x2, y2, w, h, duration_ms, steps, YES);
+                });
             }
         } else {
             fprintf(stderr, "[simtouch] daemon unknown line: %s\n", line);
