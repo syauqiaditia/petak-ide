@@ -42,11 +42,11 @@ impl IosSimulatorSession {
         // 1. Check if booted, boot if necessary
         ensure_simulator_booted(exec, udid)?;
 
-        // 2. Open Simulator.app to ensure window is on screen for ScreenCaptureKit
+        // 2. Open Simulator.app in background/hidden (-g -j) without stealing user focus
         let _ = exec.run(
             Path::new("."),
             "open",
-            &["-a", "Simulator", "--args", "-CurrentDeviceUDID", udid],
+            &["-g", "-j", "-a", "Simulator", "--args", "-CurrentDeviceUDID", udid],
             &[],
             None,
         );
