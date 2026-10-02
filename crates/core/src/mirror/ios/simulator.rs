@@ -46,7 +46,27 @@ impl IosSimulatorSession {
         let _ = exec.run(
             Path::new("."),
             "open",
-            &["-g", "-j", "-a", "Simulator", "--args", "-CurrentDeviceUDID", udid],
+            &[
+                "-g",
+                "-j",
+                "-a",
+                "Simulator",
+                "--args",
+                "-CurrentDeviceUDID",
+                udid,
+            ],
+            &[],
+            None,
+        );
+
+        // Hide simulator window immediately via AppleScript to run headless
+        let _ = exec.run(
+            Path::new("."),
+            "osascript",
+            &[
+                "-e",
+                "tell application \"System Events\" to set visible of (first process whose name is \"Simulator\") to false",
+            ],
             &[],
             None,
         );
@@ -280,33 +300,35 @@ pub fn resolve_swift_helper_path_internal(
     manifest_dir: Option<&str>,
 ) -> PathBuf {
     // 1. App bundle Resources (macOS) or beside executable:
-    //    .app/Contents/MacOS/Petak -> .app/Contents/Resources/petak_ios_capture.swift
+    //    .app/Contents/MacOS/Petak -> .app/Contents/Resources/petak_ios_capture
     if let Some(exe) = current_exe {
         if let Some(parent) = exe.parent() {
-            let res_swift = parent.join("../Resources/petak_ios_capture.swift");
-            if res_swift.is_file() {
-                return res_swift.canonicalize().unwrap_or(res_swift);
-            }
-            let res_bin = parent.join("../Resources/petak_ios_capture");
-            if res_bin.is_file() {
-                return res_bin.canonicalize().unwrap_or(res_bin);
-            }
-            let beside_swift = parent.join("petak_ios_capture.swift");
-            if beside_swift.is_file() {
-                return beside_swift.canonicalize().unwrap_or(beside_swift);
-            }
-            let beside_bin = parent.join("petak_ios_capture");
-            if beside_bin.is_file() {
-                return beside_bin.canonicalize().unwrap_or(beside_bin);
+            let candidates = [
+                parent.join("../Resources/petak_ios_capture"),
+                parent.join("../Resources/petak_ios_capture.swift"),
+                parent.join("../Resources/_up_/core/src/mirror/ios/petak_ios_capture.swift"),
+                parent.join("../Resources/resources/petak_ios_capture"),
+                parent.join("petak_ios_capture"),
+                parent.join("petak_ios_capture.swift"),
+            ];
+            for candidate in candidates {
+                if candidate.is_file() {
+                    return candidate.canonicalize().unwrap_or(candidate);
+                }
             }
         }
     }
 
     // 2. Check relative to CARGO_MANIFEST_DIR / source tree
     let manifest = manifest_dir.unwrap_or(".");
-    let src_path = Path::new(manifest).join("src/mirror/ios/petak_ios_capture.swift");
-    if src_path.is_file() {
-        return src_path;
+    let dev_candidates = [
+        Path::new(manifest).join("src/mirror/ios/petak_ios_capture.swift"),
+        Path::new(manifest).join("crates/core/src/mirror/ios/petak_ios_capture.swift"),
+    ];
+    for candidate in dev_candidates {
+        if candidate.is_file() {
+            return candidate.canonicalize().unwrap_or(candidate);
+        }
     }
 
     // 3. Check binary in /tmp or standard cache
@@ -316,7 +338,7 @@ pub fn resolve_swift_helper_path_internal(
     }
 
     // Default to src_path
-    src_path
+    Path::new(manifest).join("src/mirror/ios/petak_ios_capture.swift")
 }
 
 #[cfg(test)]
@@ -382,6 +404,47 @@ mod tests {
     }
 
     #[test]
+    fn test_simulator_start_calls_open_and_osascript_autohide() {
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+        };
+        let udid = "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90";
+        let res = IosSimulatorSession::start(&fake, udid, 1000);
+        if let Ok((_info, session, _frame_rx, _status_rx)) = res {
+            session.stop();
+        }
+
+        let calls = fake.calls.lock().unwrap();
+        assert!(calls.len() >= 4);
+        assert_eq!(
+            calls[0],
+            vec!["xcrun", "simctl", "list", "devices", "--json"]
+        );
+        assert_eq!(calls[1], vec!["xcrun", "simctl", "boot", udid]);
+        assert_eq!(
+            calls[2],
+            vec![
+                "open",
+                "-g",
+                "-j",
+                "-a",
+                "Simulator",
+                "--args",
+                "-CurrentDeviceUDID",
+                udid
+            ]
+        );
+        assert_eq!(
+            calls[3],
+            vec![
+                "osascript",
+                "-e",
+                "tell application \"System Events\" to set visible of (first process whose name is \"Simulator\") to false"
+            ]
+        );
+    }
+
+    #[test]
     fn test_resolve_swift_helper_path() {
         let path = resolve_swift_helper_path();
         assert!(
@@ -405,6 +468,62 @@ mod tests {
         std::fs::write(&fake_exe, "").unwrap();
 
         let resolved = resolve_swift_helper_path_internal(Some(&fake_exe), None);
-        assert_eq!(resolved, helper_swift.canonicalize().unwrap_or(helper_swift));
+        assert_eq!(
+            resolved,
+            helper_swift.canonicalize().unwrap_or(helper_swift)
+        );
+    }
+
+    #[test]
+    fn test_resolve_swift_helper_path_mac_bundle_native_priority() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let macos_dir = tmp_dir.path().join("Contents/MacOS");
+        let resources_dir = tmp_dir.path().join("Contents/Resources");
+        std::fs::create_dir_all(&macos_dir).unwrap();
+        std::fs::create_dir_all(&resources_dir).unwrap();
+
+        let helper_bin = resources_dir.join("petak_ios_capture");
+        let helper_swift = resources_dir.join("petak_ios_capture.swift");
+        std::fs::write(&helper_bin, "ELF or Mach-O binary").unwrap();
+        std::fs::write(&helper_swift, "// swift capture script").unwrap();
+
+        let fake_exe = macos_dir.join("Petak");
+        std::fs::write(&fake_exe, "").unwrap();
+
+        let resolved = resolve_swift_helper_path_internal(Some(&fake_exe), None);
+        assert_eq!(resolved, helper_bin.canonicalize().unwrap_or(helper_bin));
+    }
+
+    #[test]
+    fn test_resolve_swift_helper_path_tauri_up_bundle() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let macos_dir = tmp_dir.path().join("Contents/MacOS");
+        let up_dir = tmp_dir
+            .path()
+            .join("Contents/Resources/_up_/core/src/mirror/ios");
+        std::fs::create_dir_all(&macos_dir).unwrap();
+        std::fs::create_dir_all(&up_dir).unwrap();
+
+        let helper_up = up_dir.join("petak_ios_capture.swift");
+        std::fs::write(&helper_up, "// swift capture script in tauri bundle").unwrap();
+
+        let fake_exe = macos_dir.join("Petak");
+        std::fs::write(&fake_exe, "").unwrap();
+
+        let resolved = resolve_swift_helper_path_internal(Some(&fake_exe), None);
+        assert_eq!(resolved, helper_up.canonicalize().unwrap_or(helper_up));
+    }
+
+    #[test]
+    fn test_resolve_swift_helper_path_manifest_crates_core() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dev_dir = tmp_dir.path().join("crates/core/src/mirror/ios");
+        std::fs::create_dir_all(&dev_dir).unwrap();
+
+        let helper_dev = dev_dir.join("petak_ios_capture.swift");
+        std::fs::write(&helper_dev, "// dev swift capture").unwrap();
+
+        let resolved = resolve_swift_helper_path_internal(None, tmp_dir.path().to_str());
+        assert_eq!(resolved, helper_dev.canonicalize().unwrap_or(helper_dev));
     }
 }
