@@ -450,7 +450,7 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
         // Find connected iOS device using DiscoverySession with mediaType: nil / muxed
         var devices: [AVCaptureDevice] = []
-        if #available(macOS 10.15, *) {
+        if #available(macOS 14.0, *) {
             let discovery = AVCaptureDevice.DiscoverySession(
                 deviceTypes: [.external, .builtInWideAngleCamera],
                 mediaType: nil,
