@@ -191,6 +191,17 @@ static void *buildMouseMessage(IndigoHIDMessageForMouseNSEventFn fnMouse,
     return msg;
 }
 
+static BOOL isDeviceBooted(id dev) {
+    if (!dev) return NO;
+    if ([dev respondsToSelector:@selector(state)]) {
+        if ([dev state] == 3) return YES;
+    }
+    if ([dev respondsToSelector:@selector(stateString)]) {
+        if ([[dev stateString] isEqualToString:@"Booted"]) return YES;
+    }
+    return NO;
+}
+
 static id resolveSimDevice(NSString *targetUDID) {
     loadCoreSimulator();
 
@@ -226,37 +237,51 @@ static id resolveSimDevice(NSString *targetUDID) {
         return nil;
     }
 
+    id matchedDevice = nil;
+    id firstBootedDevice = nil;
+
     for (id dev in devices) {
-        NSUUID *uuid = nil;
-        if ([dev respondsToSelector:@selector(UDID)]) {
-            uuid = [dev UDID];
+        if (!firstBootedDevice && isDeviceBooted(dev)) {
+            firstBootedDevice = dev;
         }
-        NSString *uuidStr = [uuid UUIDString];
 
         if (targetUDID) {
+            NSUUID *uuid = nil;
+            if ([dev respondsToSelector:@selector(UDID)]) {
+                uuid = [dev UDID];
+            }
+            NSString *uuidStr = [uuid UUIDString];
             if (uuidStr && [uuidStr caseInsensitiveCompare:targetUDID] == NSOrderedSame) {
-                return dev;
-            }
-        } else {
-            // Find first booted device: state 3 (Booted) or stateString == "Booted"
-            BOOL isBooted = NO;
-            if ([dev respondsToSelector:@selector(state)]) {
-                if ([dev state] == 3) isBooted = YES;
-            }
-            if (!isBooted && [dev respondsToSelector:@selector(stateString)]) {
-                if ([[dev stateString] isEqualToString:@"Booted"]) isBooted = YES;
-            }
-            if (isBooted) {
-                return dev;
+                matchedDevice = dev;
             }
         }
     }
 
     if (targetUDID) {
-        fprintf(stderr, "[simtouch] Device with UDID %s not found\n", [targetUDID UTF8String]);
-    } else {
-        fprintf(stderr, "[simtouch] No booted simulator device found\n");
+        if (matchedDevice && isDeviceBooted(matchedDevice)) {
+            return matchedDevice;
+        }
+
+        if (firstBootedDevice) {
+            NSUUID *bootedUUID = nil;
+            if ([firstBootedDevice respondsToSelector:@selector(UDID)]) {
+                bootedUUID = [firstBootedDevice UDID];
+            }
+            fprintf(stderr, "[simtouch] Target UDID %s not booted, falling back to booted simulator %s\n",
+                    [targetUDID UTF8String],
+                    bootedUUID ? [[bootedUUID UUIDString] UTF8String] : "unknown");
+            return firstBootedDevice;
+        }
+
+        fprintf(stderr, "[simtouch] Device with UDID %s not found or booted, and no booted simulator available\n", [targetUDID UTF8String]);
+        return nil;
     }
+
+    if (firstBootedDevice) {
+        return firstBootedDevice;
+    }
+
+    fprintf(stderr, "[simtouch] No booted simulator device found\n");
     return nil;
 }
 
@@ -292,7 +317,7 @@ static int handleTap(id client, void *simKitHandle, int argc, const char *argv[]
         return 1;
     }
 
-    usleep(50000); // 50ms hold
+    usleep(30000); // 30ms hold (<35ms latency)
 
     // UP: eventType 2, direction 2
     void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);

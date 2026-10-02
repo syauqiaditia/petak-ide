@@ -7,14 +7,18 @@ OUT_DIR="${1:-$ROOT_DIR/target/release}"
 mkdir -p "$OUT_DIR"
 TARGET="$OUT_DIR/simtouch"
 echo "[build-simtouch] Compiling simtouch.m -> $TARGET"
-clang -framework Foundation -framework CoreGraphics \
-  -F/Library/Developer/PrivateFrameworks \
-  -framework CoreSimulator \
-  -rpath /Library/Developer/PrivateFrameworks \
-  -rpath /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks \
-  -fno-objc-arc -O2 \
-  "$SRC" -o "$TARGET"
-echo "[build-simtouch] Done: $TARGET"
+if [ "$(uname)" = "Darwin" ]; then
+  clang -framework Foundation -framework CoreGraphics \
+    -F/Library/Developer/PrivateFrameworks \
+    -framework CoreSimulator \
+    -rpath /Library/Developer/PrivateFrameworks \
+    -rpath /Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks \
+    -fno-objc-arc -O2 \
+    "$SRC" -o "$TARGET"
+  echo "[build-simtouch] Done: $TARGET"
+else
+  echo "Warning: clang build failed or not supported on Linux host (requires macOS host with Xcode frameworks)"
+fi
 
 SWIFT_SRC="$ROOT_DIR/crates/core/src/mirror/ios/petak_ios_capture.swift"
 SWIFT_TARGET="$OUT_DIR/petak_ios_capture"
