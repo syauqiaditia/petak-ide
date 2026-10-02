@@ -374,7 +374,7 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             streamConfig.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             streamConfig.capturesAudio = false
             streamConfig.showsCursor = false
-            streamConfig.queueDepth = 1
+            streamConfig.queueDepth = 3
 
             do {
                 let stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
