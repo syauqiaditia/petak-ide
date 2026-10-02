@@ -33,6 +33,11 @@
 - (NSArray<SimDevice *> *)availableDevices;
 @end
 
+@interface NSObject (SimServiceContext)
++ (id)sharedServiceContextForDeveloperDir:(id)developerDir error:(NSError **)error;
+- (id)defaultDeviceSetWithError:(NSError **)error;
+@end
+
 @interface NSObject (SimDeviceLegacyHIDClient)
 - (instancetype)initWithDevice:(id)device error:(NSError **)error;
 - (void)sendWithMessage:(void *)message
@@ -187,19 +192,25 @@ static void *buildMouseMessage(IndigoHIDMessageForMouseNSEventFn fnMouse,
 }
 
 static id resolveSimDevice(NSString *targetUDID) {
-    Class SimDeviceSetClass = NSClassFromString(@"SimDeviceSet");
-    if (!SimDeviceSetClass) {
-        loadCoreSimulator();
-        SimDeviceSetClass = NSClassFromString(@"SimDeviceSet");
+    loadCoreSimulator();
+
+    Class SimServiceContextClass = NSClassFromString(@"SimServiceContext");
+    id serviceContext = nil;
+    if ([SimServiceContextClass respondsToSelector:@selector(sharedServiceContextForDeveloperDir:error:)]) {
+        serviceContext = [SimServiceContextClass sharedServiceContextForDeveloperDir:nil error:nil];
     }
-    if (!SimDeviceSetClass) {
-        fprintf(stderr, "[simtouch] SimDeviceSet class not found in CoreSimulator\n");
-        return nil;
+    id deviceSet = nil;
+    if (serviceContext && [serviceContext respondsToSelector:@selector(defaultDeviceSetWithError:)]) {
+        deviceSet = [serviceContext defaultDeviceSetWithError:nil];
+    } else {
+        Class SimDeviceSetClass = NSClassFromString(@"SimDeviceSet");
+        if ([SimDeviceSetClass respondsToSelector:@selector(defaultSet)]) {
+            deviceSet = [SimDeviceSetClass defaultSet];
+        }
     }
 
-    id deviceSet = [SimDeviceSetClass defaultSet];
     if (!deviceSet) {
-        fprintf(stderr, "[simtouch] [SimDeviceSet defaultSet] returned nil\n");
+        fprintf(stderr, "[simtouch] Failed to resolve SimDeviceSet (SimServiceContext / SimDeviceSet)\n");
         return nil;
     }
 
@@ -227,10 +238,10 @@ static id resolveSimDevice(NSString *targetUDID) {
                 return dev;
             }
         } else {
-            // Find first booted device: state 2 or stateString == "Booted"
+            // Find first booted device: state 3 (Booted) or stateString == "Booted"
             BOOL isBooted = NO;
             if ([dev respondsToSelector:@selector(state)]) {
-                if ([dev state] == 2) isBooted = YES;
+                if ([dev state] == 3) isBooted = YES;
             }
             if (!isBooted && [dev respondsToSelector:@selector(stateString)]) {
                 if ([[dev stateString] isEqualToString:@"Booted"]) isBooted = YES;
