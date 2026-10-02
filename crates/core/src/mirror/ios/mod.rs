@@ -209,6 +209,11 @@ mod tests {
 
         let webcam_only = vec![devices[0].clone()];
         assert!(select_ios_capture_device(&webcam_only, None).is_none());
+
+        // When target UDID does not match internal AVFoundation unique_id, fallback to first iOS device
+        let chosen_fallback = select_ios_capture_device(&devices, Some("00008110-00012CCE0C09401E"));
+        assert!(chosen_fallback.is_some());
+        assert_eq!(chosen_fallback.unwrap().name, "UQi");
     }
 
     #[test]

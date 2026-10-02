@@ -26,8 +26,19 @@ impl IosPhysicalSession {
     /// Start physical iPhone capture via CoreMediaIO/AVFoundation.
     /// Returns `(MirrorInfo, session, frame_rx, status_rx)`.
     pub fn start(
-        _exec: &dyn Exec,
+        exec: &dyn Exec,
         identifier: &str,
+        max_size: u16,
+    ) -> io::Result<(MirrorInfo, Self, Receiver<Vec<u8>>, Receiver<MirrorStatus>)> {
+        Self::start_with_name(exec, identifier, None, max_size)
+    }
+
+    /// Start physical iPhone capture via CoreMediaIO/AVFoundation with optional device name.
+    /// Returns `(MirrorInfo, session, frame_rx, status_rx)`.
+    pub fn start_with_name(
+        exec: &dyn Exec,
+        identifier: &str,
+        device_name: Option<&str>,
         max_size: u16,
     ) -> io::Result<(MirrorInfo, Self, Receiver<Vec<u8>>, Receiver<MirrorStatus>)> {
         if !is_valid_udid(identifier) {
@@ -46,6 +57,29 @@ impl IosPhysicalSession {
         let width = 1179.min(max_size as u32);
         let height = 2556.min((max_size as f32 * 2.16) as u32);
 
+        // Resolve device name if not explicitly passed
+        let mut resolved_name = device_name
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string());
+        if resolved_name.is_none() {
+            if let Ok(out) = exec.run(
+                std::path::Path::new("."),
+                "xcrun",
+                &["devicectl", "list", "devices", "--json-output", "-"],
+                &[],
+                None,
+            ) {
+                let json_str = String::from_utf8_lossy(&out.stdout);
+                if let Ok(devices) = crate::run::ios::parse_devicectl_devices(&json_str) {
+                    if let Some(d) = devices.into_iter().find(|d| d.id == identifier) {
+                        if !d.name.trim().is_empty() {
+                            resolved_name = Some(d.name.trim().to_string());
+                        }
+                    }
+                }
+            }
+        }
+
         let mut cmd = if helper_path.extension().and_then(|s| s.to_str()) == Some("swift") {
             let mut c = Command::new("swift");
             c.arg(&helper_path);
@@ -55,18 +89,28 @@ impl IosPhysicalSession {
         };
         crate::toolchain::apply_env(&mut cmd);
 
-        cmd.args(&[
-            "--mode",
-            "physical",
-            "--udid",
-            identifier,
-            "--width",
-            &width.to_string(),
-            "--height",
-            &height.to_string(),
-            "--fps",
-            "60",
-        ])
+        let mut args = vec![
+            "--mode".to_string(),
+            "physical".to_string(),
+            "--udid".to_string(),
+            identifier.to_string(),
+        ];
+        if let Some(ref name) = resolved_name {
+            args.push("--device-name".to_string());
+            args.push(name.clone());
+        }
+        let w_str = width.to_string();
+        let h_str = height.to_string();
+        args.extend_from_slice(&[
+            "--width".to_string(),
+            w_str,
+            "--height".to_string(),
+            h_str,
+            "--fps".to_string(),
+            "60".to_string(),
+        ]);
+
+        cmd.args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
@@ -294,9 +338,15 @@ impl IosPhysicalSession {
             }
         });
 
+        let display_name = if let Some(ref name) = resolved_name {
+            format!("{} ({})", name, identifier)
+        } else {
+            format!("iPhone ({})", identifier)
+        };
+
         let info = MirrorInfo {
             serial: identifier.to_string(),
-            name: format!("iPhone ({})", identifier),
+            name: display_name,
             width,
             height,
             codec: "h264".to_string(),
@@ -341,5 +391,20 @@ impl IosPhysicalSession {
 impl Drop for IosPhysicalSession {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::exec::SystemExec;
+
+    #[test]
+    fn test_invalid_udid_rejected() {
+        let exec = SystemExec;
+        let res = IosPhysicalSession::start(&exec, "invalid-not-a-udid", 1080);
+        assert!(res.is_err());
+        let err = res.err().unwrap();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 }

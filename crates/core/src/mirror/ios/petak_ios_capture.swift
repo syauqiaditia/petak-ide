@@ -68,7 +68,7 @@ func parseArguments() -> CaptureConfig {
             if i + 1 < args.count { config.mode = args[i + 1]; i += 1 }
         case "--udid":
             if i + 1 < args.count { config.udid = args[i + 1]; i += 1 }
-        case "--name":
+        case "--name", "--device-name":
             if i + 1 < args.count { config.deviceName = args[i + 1]; i += 1 }
         case "--width":
             if i + 1 < args.count { config.width = Int(args[i + 1]) ?? config.width; i += 1 }
@@ -463,9 +463,6 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
             &allow
         )
 
-        // Give CoreMediaIO a moment to register iOS devices
-        Thread.sleep(forTimeInterval: 0.5)
-
         // Request Camera authorization if notDetermined so macOS permission dialog appears
         let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
         if authStatus == .notDetermined {
@@ -490,25 +487,44 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         let session = AVCaptureSession()
         session.sessionPreset = .high
 
-        // Find connected iOS device using DiscoverySession with mediaType: nil / muxed
+        // Find connected iOS device using DiscoverySession with retry loop (10x, 500ms delay)
+        // CoreMediaIO DAL requires a moment to register iOS screen capture devices after allow property is set.
         var devices: [AVCaptureDevice] = []
-        if #available(macOS 14.0, *) {
-            let discovery = AVCaptureDevice.DiscoverySession(
-                deviceTypes: [.external, .builtInWideAngleCamera],
-                mediaType: nil,
-                position: .unspecified
-            )
-            devices = discovery.devices
-        }
-        if devices.isEmpty {
-            devices = AVCaptureDevice.devices(for: .muxed) + AVCaptureDevice.devices(for: .video)
-        }
+        var iosDevices: [AVCaptureDevice] = []
+        let maxRetries = 10
 
-        let iosDevices = devices.filter { dev in
-            let isIosModel = dev.modelID == "iOS Device" || dev.modelID.hasPrefix("iOS")
-            let isMuxed = dev.hasMediaType(.muxed)
-            let isLikelyIos = isIosModel || isMuxed || dev.localizedName.contains("iPhone") || dev.localizedName.contains("iPad")
-            return isLikelyIos
+        for attempt in 1...maxRetries {
+            Thread.sleep(forTimeInterval: 0.5)
+
+            if #available(macOS 14.0, *) {
+                let discovery = AVCaptureDevice.DiscoverySession(
+                    deviceTypes: [.external, .builtInWideAngleCamera, .continuityCamera],
+                    mediaType: nil,
+                    position: .unspecified
+                )
+                devices = discovery.devices
+            } else {
+                devices = []
+            }
+            if devices.isEmpty {
+                devices = AVCaptureDevice.devices(for: .muxed) + AVCaptureDevice.devices(for: .video)
+            }
+
+            iosDevices = devices.filter { dev in
+                let isIosModel = dev.modelID == "iOS Device" || dev.modelID.hasPrefix("iOS")
+                let isMuxed = dev.hasMediaType(.muxed)
+                let isLikelyIos = isIosModel || isMuxed || dev.localizedName.contains("iPhone") || dev.localizedName.contains("iPad")
+                return isLikelyIos
+            }
+
+            if !iosDevices.isEmpty {
+                logStderr("[ios-capture] Found \(iosDevices.count) iOS candidate device(s) on attempt \(attempt)/\(maxRetries) (total devices: \(devices.count)).")
+                break
+            }
+
+            if attempt < maxRetries {
+                logStderr("[ios-capture] Attempt \(attempt)/\(maxRetries): no iOS capture device ready yet (total devices: \(devices.count)). Retrying in 500ms...")
+            }
         }
 
         logStderr("[ios-capture] Found \(devices.count) total devices, \(iosDevices.count) iOS candidate devices.")
@@ -518,9 +534,10 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
         let targetDevice: AVCaptureDevice?
         if !self.config.udid.isEmpty {
-            targetDevice = iosDevices.first { $0.uniqueID == self.config.udid }
-                ?? iosDevices.first { $0.modelID == self.config.udid }
+            targetDevice = iosDevices.first { $0.uniqueID.caseInsensitiveCompare(self.config.udid) == .orderedSame }
+                ?? iosDevices.first { $0.modelID.caseInsensitiveCompare(self.config.udid) == .orderedSame }
                 ?? (!self.config.deviceName.isEmpty ? iosDevices.first { $0.localizedName.caseInsensitiveCompare(self.config.deviceName) == .orderedSame } : nil)
+                ?? (!self.config.deviceName.isEmpty ? iosDevices.first { $0.localizedName.localizedCaseInsensitiveContains(self.config.deviceName) } : nil)
                 ?? iosDevices.first
         } else if !self.config.deviceName.isEmpty {
             targetDevice = iosDevices.first { $0.localizedName.caseInsensitiveCompare(self.config.deviceName) == .orderedSame }
