@@ -292,6 +292,13 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { [weak self] content, error in
             guard let self = self else { return }
             if let error = error {
+                if attempt < maxAttempts {
+                    logStderr("[ios-capture] ScreenCaptureKit pending permission or window access (attempt \(attempt)/\(maxAttempts)): \(error.localizedDescription), retrying in 1s...")
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                        self?.findSimulatorWindowAndStart(attempt: attempt + 1, maxAttempts: maxAttempts)
+                    }
+                    return
+                }
                 let msg = "ScreenCaptureKit error: \(error.localizedDescription)"
                 logStderr("[ios-capture] \(msg)")
                 emitStatus([
@@ -302,6 +309,13 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             }
 
             guard let content = content else {
+                if attempt < maxAttempts {
+                    logStderr("[ios-capture] No shareable content yet (attempt \(attempt)/\(maxAttempts)), retrying in 1s...")
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                        self?.findSimulatorWindowAndStart(attempt: attempt + 1, maxAttempts: maxAttempts)
+                    }
+                    return
+                }
                 let msg = "No shareable content available from ScreenCaptureKit"
                 logStderr("[ios-capture] \(msg)")
                 emitStatus([
