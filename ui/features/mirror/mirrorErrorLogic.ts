@@ -2,6 +2,8 @@
  * Pure logic for device mirror platform classification, honest messaging, and error sanitation (B3).
  */
 
+import { isIosSimulatorDevice } from './pickerLogic.ts';
+
 export interface DeviceClassification {
   platform: 'android' | 'ios';
   kind: 'android' | 'ios-physical' | 'ios-simulator';
@@ -9,29 +11,30 @@ export interface DeviceClassification {
 }
 
 export function classifyMirrorDevice(
-  device?: { platform?: string; kind?: string; id?: string; name?: string } | null,
+  device?: { platform?: string; kind?: string; id?: string; name?: string; sdk?: string | null; group?: string } | null,
   serial?: string
 ): DeviceClassification {
-  const devId = (device?.id || serial || '').toLowerCase();
-  const devName = (device?.name || '').toLowerCase();
+  const devId = (device?.id || serial || '');
+  const devName = (device?.name || '');
   const rawKind = (device?.kind || '').toLowerCase();
   const rawPlatform = (device?.platform || '').toLowerCase();
 
   const isIos =
     rawPlatform === 'ios' ||
     rawKind.includes('ios') ||
-    devId.includes('iphone') ||
-    devName.includes('iphone') ||
-    devId.includes('ipad') ||
-    devName.includes('ipad');
+    devId.toLowerCase().includes('iphone') ||
+    devName.toLowerCase().includes('iphone') ||
+    devId.toLowerCase().includes('ipad') ||
+    devName.toLowerCase().includes('ipad') ||
+    devId.toLowerCase().startsWith('00008');
 
   if (isIos) {
-    const isSim =
-      rawKind === 'ios-sim' ||
-      rawKind === 'ios-simulator' ||
-      rawKind === 'simulator' ||
-      devId.includes('simulator') ||
-      devName.includes('simulator');
+    const isSim = isIosSimulatorDevice({
+      ...(device || {}),
+      id: devId,
+      name: devName,
+      platform: 'ios',
+    });
 
     if (isSim) {
       return { platform: 'ios', kind: 'ios-simulator', isPhysical: false };

@@ -13,6 +13,54 @@ export interface MirrorDeviceCard {
 }
 
 /**
+ * Check whether a device represents an iOS simulator (B14).
+ * Checks kind, group, sdk, name, id, and UUID v4 (36-char) while excluding physical UDID (00008...).
+ */
+export function isIosSimulatorDevice(d: Device | { [key: string]: any }): boolean {
+  if (!d) return false;
+  if (d.platform && d.platform !== 'ios') return false;
+
+  const kind = ((d as any).kind || '').toLowerCase();
+  if (
+    kind === 'simulator' ||
+    kind === 'ios-simulator' ||
+    kind === 'ios-sim' ||
+    kind === 'emulator'
+  ) {
+    return true;
+  }
+
+  const group = ((d as any).group || '').toLowerCase();
+  if (group === 'simulator') {
+    return true;
+  }
+
+  const sdk = ((d as any).sdk || '').toLowerCase();
+  if (sdk.includes('coresimulator') || sdk.includes('simruntime')) {
+    return true;
+  }
+
+  const name = ((d as any).name || '').toLowerCase();
+  if (name.includes('simulator') || name.includes('ios simulator')) {
+    return true;
+  }
+
+  const id = ((d as any).id || '').toLowerCase();
+  if (id.includes('simulator')) {
+    return true;
+  }
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    (d as any).id || ''
+  );
+  if (isUuid && !id.startsWith('00008')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Deduplicate and categorize connected devices and emulators for Mirror selection.
  * Rules:
  * 1. Physical iPhone deduplication: If multiple entries exist for the same iPhone,
@@ -30,17 +78,42 @@ export function dedupeAndCategorizeDevices(
   const seenIphone = new Set<string>();
 
   // 1. Group / dedupe physical iPhones
-  const iphoneEntries = devices.filter((d) => {
-    const name = (d.name || '').toLowerCase();
-    const id = (d.id || '').toLowerCase();
-    const isSim = d.kind === 'emulator' || name.includes('simulator') || id.includes('simulator');
-    return d.platform === 'ios' && !isSim && (d.kind === 'physical' || name.includes('iphone') || id.includes('iphone'));
-  });
+  const physicalIphones = devices.filter((d) => d.platform === 'ios' && !isIosSimulatorDevice(d));
 
-  if (iphoneEntries.length > 0) {
-    // If multiple entries for the same physical iPhone, merge into one
-    const hasUsb = iphoneEntries.some((d) => d.transport === 'usb' || d.id.includes('usb') || !d.id.includes('.'));
-    const primary = iphoneEntries[0];
+  const iphoneGroups: Device[][] = [];
+  for (const d of physicalIphones) {
+    const cleanName = (d.name || '').replace(/\s*\((Wi-Fi|USB)\)/gi, '').trim().toLowerCase();
+    const cleanId = (d.id || '').split('.')[0].split(':')[0].toLowerCase();
+
+    const group = iphoneGroups.find((g) =>
+      g.some((existing) => {
+        const existingCleanId = (existing.id || '').split('.')[0].split(':')[0].toLowerCase();
+        if (cleanId && existingCleanId && cleanId === existingCleanId) return true;
+        const existingCleanName = (existing.name || '').replace(/\s*\((Wi-Fi|USB)\)/gi, '').trim().toLowerCase();
+        if (cleanName && existingCleanName && cleanName === existingCleanName) return true;
+        return false;
+      })
+    );
+
+    if (group) {
+      group.push(d);
+    } else {
+      iphoneGroups.push([d]);
+    }
+  }
+
+  for (const group of iphoneGroups) {
+    const isUsbEntry = (d: Device) => {
+      if (d.transport === 'usb') return true;
+      if (d.transport === 'wifi') return false;
+      const lowerId = (d.id || '').toLowerCase();
+      if (lowerId.includes('usb')) return true;
+      if (lowerId.includes('.') || lowerId.includes(':')) return false;
+      return true;
+    };
+
+    const hasUsb = group.some(isUsbEntry);
+    const primary = group.find(isUsbEntry) || group[0];
     const name = primary.name.replace(/\s*\((Wi-Fi|USB)\)/gi, '').trim() || 'iPhone';
 
     result.push({
@@ -55,7 +128,7 @@ export function dedupeAndCategorizeDevices(
       platform: 'ios',
     });
 
-    for (const d of iphoneEntries) {
+    for (const d of group) {
       seenIphone.add(d.id);
     }
   }
@@ -68,8 +141,7 @@ export function dedupeAndCategorizeDevices(
     const lowerId = (d.id || '').toLowerCase();
 
     if (d.platform === 'ios') {
-      const isSim = d.kind === 'emulator' || lowerName.includes('simulator') || lowerId.includes('simulator');
-      const isBooted = d.state === 'online' || (d.state as string) === 'booted';
+      const isBooted = d.state === 'online' || (d.state as string) === 'booted' || !d.state;
       result.push({
         id: d.id,
         name: d.name,
