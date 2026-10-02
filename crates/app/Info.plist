@@ -4,5 +4,7 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Petak memakai kamera untuk mirror layar iPhone yang tersambung USB.</string>
+	<key>NSScreenCaptureDescription</key>
+	<string>Petak memerlukan izin perekaman layar untuk mirror tampilan iOS Simulator secara langsung dan mulus 60 FPS.</string>
 </dict>
 </plist>
