@@ -54,8 +54,7 @@ impl IosPhysicalSession {
         let _ = status_tx.send(MirrorStatus::Connecting);
 
         let helper_path = resolve_swift_helper_path();
-        let width = 1179.min(max_size as u32);
-        let height = 2556.min((max_size as f32 * 2.16) as u32);
+        let (width, height) = compute_physical_dimensions(max_size);
 
         // Resolve device name if not explicitly passed
         let mut resolved_name = device_name
@@ -394,6 +393,20 @@ impl Drop for IosPhysicalSession {
     }
 }
 
+/// Compute optimal adaptive dimensions for physical iPhone mirroring.
+/// Enforces max bound (1080p / 960p), preserves ~2.16 (19.5:9) aspect ratio,
+/// and guarantees even dimensions for H.264 encoding.
+pub fn compute_physical_dimensions(max_size: u16) -> (u32, u32) {
+    let max_dim = if max_size == 0 {
+        1080
+    } else {
+        (max_size as u32).min(1080)
+    };
+    let height = (max_dim & !1).max(2);
+    let width = ((((height as f32) / 2.16).round() as u32) & !1).max(2);
+    (width, height)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -406,5 +419,32 @@ mod tests {
         assert!(res.is_err());
         let err = res.err().unwrap();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_compute_physical_dimensions() {
+        // Default / 1080p target
+        let (w1080, h1080) = compute_physical_dimensions(1080);
+        assert_eq!(h1080, 1080);
+        assert_eq!(w1080, 500);
+        assert_eq!(w1080 % 2, 0);
+        assert_eq!(h1080 % 2, 0);
+
+        // 960p target
+        let (w960, h960) = compute_physical_dimensions(960);
+        assert_eq!(h960, 960);
+        assert_eq!(w960, 444);
+        assert_eq!(w960 % 2, 0);
+        assert_eq!(h960 % 2, 0);
+
+        // Zero / unconstrained defaults to 1080p
+        let (w0, h0) = compute_physical_dimensions(0);
+        assert_eq!(h0, 1080);
+        assert_eq!(w0, 500);
+
+        // Values over 1080 clamped to 1080p
+        let (w_over, h_over) = compute_physical_dimensions(2556);
+        assert_eq!(h_over, 1080);
+        assert_eq!(w_over, 500);
     }
 }
