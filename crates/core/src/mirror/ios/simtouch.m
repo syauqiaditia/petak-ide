@@ -3,10 +3,12 @@
 // Petak: Native iOS Simulator Touch Helper via SimulatorKit / IndigoHID
 //
 // Usage:
+//   simtouch daemon [--udid <udid>]
 //   simtouch tap <x> <y> <w> <h> [--udid <udid>]
 //   simtouch swipe <x1> <y1> <x2> <y2> <w> <h> [duration_ms] [steps] [--udid <udid>]
 //   simtouch button <home|lock|volume_up|volume_down> [--udid <udid>]
 //   simtouch key <keycode> [--udid <udid>]
+//   simtouch text <string> [--udid <udid>]
 //
 
 #import <Foundation/Foundation.h>
@@ -508,16 +510,255 @@ static int handleKey(id client, void *simKitHandle, int argc, const char *argv[]
     return 0;
 }
 
+#pragma mark - Keyboard Mapping & Text Input
+
+static BOOL charToHID(char c, uint32_t *outUsage, BOOL *outShift) {
+    if (c >= 'a' && c <= 'z') {
+        *outUsage = 4 + (uint32_t)(c - 'a');
+        *outShift = NO;
+        return YES;
+    }
+    if (c >= 'A' && c <= 'Z') {
+        *outUsage = 4 + (uint32_t)(c - 'A');
+        *outShift = YES;
+        return YES;
+    }
+    if (c >= '1' && c <= '9') {
+        *outUsage = 30 + (uint32_t)(c - '1');
+        *outShift = NO;
+        return YES;
+    }
+    if (c == '0') {
+        *outUsage = 39;
+        *outShift = NO;
+        return YES;
+    }
+    if (c == ' ') {
+        *outUsage = 44;
+        *outShift = NO;
+        return YES;
+    }
+    // Symbols without shift
+    switch (c) {
+        case '-': *outUsage = 45; *outShift = NO; return YES;
+        case '=': *outUsage = 46; *outShift = NO; return YES;
+        case '[': *outUsage = 47; *outShift = NO; return YES;
+        case ']': *outUsage = 48; *outShift = NO; return YES;
+        case '\\': *outUsage = 49; *outShift = NO; return YES;
+        case ';': *outUsage = 51; *outShift = NO; return YES;
+        case '\'': *outUsage = 52; *outShift = NO; return YES;
+        case '`': *outUsage = 53; *outShift = NO; return YES;
+        case ',': *outUsage = 54; *outShift = NO; return YES;
+        case '.': *outUsage = 55; *outShift = NO; return YES;
+        case '/': *outUsage = 56; *outShift = NO; return YES;
+
+        // Symbols with shift
+        case '!': *outUsage = 30; *outShift = YES; return YES;
+        case '@': *outUsage = 31; *outShift = YES; return YES;
+        case '#': *outUsage = 32; *outShift = YES; return YES;
+        case '$': *outUsage = 33; *outShift = YES; return YES;
+        case '%': *outUsage = 34; *outShift = YES; return YES;
+        case '^': *outUsage = 35; *outShift = YES; return YES;
+        case '&': *outUsage = 36; *outShift = YES; return YES;
+        case '*': *outUsage = 37; *outShift = YES; return YES;
+        case '(': *outUsage = 38; *outShift = YES; return YES;
+        case ')': *outUsage = 39; *outShift = YES; return YES;
+        case '_': *outUsage = 45; *outShift = YES; return YES;
+        case '+': *outUsage = 46; *outShift = YES; return YES;
+        case '{': *outUsage = 47; *outShift = YES; return YES;
+        case '}': *outUsage = 48; *outShift = YES; return YES;
+        case '|': *outUsage = 49; *outShift = YES; return YES;
+        case ':': *outUsage = 51; *outShift = YES; return YES;
+        case '"': *outUsage = 52; *outShift = YES; return YES;
+        case '~': *outUsage = 53; *outShift = YES; return YES;
+        case '<': *outUsage = 54; *outShift = YES; return YES;
+        case '>': *outUsage = 55; *outShift = YES; return YES;
+        case '?': *outUsage = 56; *outShift = YES; return YES;
+        case '\n':
+        case '\r': *outUsage = 40; *outShift = NO; return YES;
+        case '\t': *outUsage = 43; *outShift = NO; return YES;
+        default: return NO;
+    }
+}
+
+static void sendKeyStroke(id client, IndigoHIDMessageForHIDArbitraryFn fnHIDArb, uint32_t usage, BOOL shift) {
+    if (!fnHIDArb || !client) return;
+    if (shift) {
+        void *shiftDown = fnHIDArb(0x32, 0x07, 225, 1);
+        if (shiftDown) sendIndigoMessage(client, shiftDown);
+        usleep(5000);
+    }
+    void *keyDown = fnHIDArb(0x32, 0x07, usage, 1);
+    if (keyDown) sendIndigoMessage(client, keyDown);
+    usleep(15000);
+    void *keyUp = fnHIDArb(0x32, 0x07, usage, 2);
+    if (keyUp) sendIndigoMessage(client, keyUp);
+    if (shift) {
+        usleep(5000);
+        void *shiftUp = fnHIDArb(0x32, 0x07, 225, 2);
+        if (shiftUp) sendIndigoMessage(client, shiftUp);
+    }
+    usleep(10000); // 10ms hold between keystrokes
+}
+
+static int handleText(id client, void *simKitHandle, const char *str) {
+    if (!str || !simKitHandle) return 1;
+    IndigoHIDMessageForHIDArbitraryFn fnHIDArb =
+        (IndigoHIDMessageForHIDArbitraryFn)dlsym(simKitHandle, "IndigoHIDMessageForHIDArbitrary");
+    if (!fnHIDArb) {
+        fprintf(stderr, "[simtouch] Symbol IndigoHIDMessageForHIDArbitrary not found\n");
+        return 1;
+    }
+    size_t len = strlen(str);
+    for (size_t i = 0; i < len; i++) {
+        char c = str[i];
+        if (c == '\\' && i + 1 < len) {
+            char next = str[i + 1];
+            if (next == 'n') {
+                sendKeyStroke(client, fnHIDArb, 40, NO); // Enter
+                i++;
+                continue;
+            } else if (next == 't') {
+                sendKeyStroke(client, fnHIDArb, 43, NO); // Tab
+                i++;
+                continue;
+            } else if (next == '\\') {
+                sendKeyStroke(client, fnHIDArb, 49, NO); // Backslash
+                i++;
+                continue;
+            }
+        }
+        uint32_t usage = 0;
+        BOOL shift = NO;
+        if (charToHID(c, &usage, &shift)) {
+            sendKeyStroke(client, fnHIDArb, usage, shift);
+        } else {
+            fprintf(stderr, "[simtouch] Unsupported char: %c (0x%02x)\n", c, (unsigned char)c);
+        }
+    }
+    return 0;
+}
+
+#pragma mark - Persistent Daemon Loop
+
+static int runDaemon(id client, void *simKitHandle) {
+    IndigoHIDMessageForMouseNSEventFn fnMouse =
+        (IndigoHIDMessageForMouseNSEventFn)dlsym(simKitHandle, "IndigoHIDMessageForMouseNSEvent");
+    IndigoHIDMessageForHIDArbitraryFn fnHIDArb =
+        (IndigoHIDMessageForHIDArbitraryFn)dlsym(simKitHandle, "IndigoHIDMessageForHIDArbitrary");
+
+    fprintf(stderr, "[simtouch] daemon ready\n");
+    fflush(stderr);
+
+    char line[8192];
+    while (fgets(line, sizeof(line), stdin)) {
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[len - 1] = '\0';
+            len--;
+        }
+        if (len == 0) continue;
+
+        if (line[0] == 'd' && line[1] == ' ') {
+            double x = 0, y = 0, w = 1, h = 1;
+            if (sscanf(line + 2, "%lf %lf %lf %lf", &x, &y, &w, &h) >= 4) {
+                if (w <= 0.0) w = 1.0;
+                if (h <= 0.0) h = 1.0;
+                if (fnMouse) {
+                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
+                    if (downMsg) sendIndigoMessage(client, downMsg);
+                }
+            }
+        } else if (line[0] == 'm' && line[1] == ' ') {
+            double x = 0, y = 0, w = 1, h = 1;
+            if (sscanf(line + 2, "%lf %lf %lf %lf", &x, &y, &w, &h) >= 4) {
+                if (w <= 0.0) w = 1.0;
+                if (h <= 0.0) h = 1.0;
+                if (fnMouse) {
+                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    void *moveMsg = buildMouseMessage(fnMouse, &pt, NULL, 6, 0, w, h);
+                    if (moveMsg) sendIndigoMessage(client, moveMsg);
+                }
+            }
+        } else if (line[0] == 'u' && line[1] == ' ') {
+            double x = 0, y = 0, w = 1, h = 1;
+            if (sscanf(line + 2, "%lf %lf %lf %lf", &x, &y, &w, &h) >= 4) {
+                if (w <= 0.0) w = 1.0;
+                if (h <= 0.0) h = 1.0;
+                if (fnMouse) {
+                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
+                    if (upMsg) sendIndigoMessage(client, upMsg);
+                }
+            }
+        } else if (line[0] == 't' && line[1] == ' ') {
+            double x = 0, y = 0, w = 1, h = 1;
+            if (sscanf(line + 2, "%lf %lf %lf %lf", &x, &y, &w, &h) >= 4) {
+                if (w <= 0.0) w = 1.0;
+                if (h <= 0.0) h = 1.0;
+                if (fnMouse) {
+                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
+                    if (downMsg) sendIndigoMessage(client, downMsg);
+                    usleep(15000);
+                    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
+                    if (upMsg) sendIndigoMessage(client, upMsg);
+                }
+            }
+        } else if (line[0] == 'k' && line[1] == ' ') {
+            uint32_t keycode = 0;
+            if (sscanf(line + 2, "%u", &keycode) == 1) {
+                if (fnHIDArb) {
+                    void *down = fnHIDArb(0x32, 0x07, keycode, 1);
+                    if (down) sendIndigoMessage(client, down);
+                    usleep(15000);
+                    void *up = fnHIDArb(0x32, 0x07, keycode, 2);
+                    if (up) sendIndigoMessage(client, up);
+                }
+            }
+        } else if (line[0] == 'b' && line[1] == ' ') {
+            const char *btn = line + 2;
+            const char *bArgv[1] = { btn };
+            handleButton(client, simKitHandle, 1, bArgv, 0);
+        } else if (strncmp(line, "text ", 5) == 0) {
+            const char *textStr = line + 5;
+            handleText(client, simKitHandle, textStr);
+        } else if (line[0] == 's' && line[1] == ' ') {
+            char argsBuf[256];
+            strncpy(argsBuf, line + 2, sizeof(argsBuf) - 1);
+            argsBuf[sizeof(argsBuf) - 1] = '\0';
+            char *tokens[8];
+            int count = 0;
+            char *tok = strtok(argsBuf, " ");
+            while (tok && count < 8) {
+                tokens[count++] = tok;
+                tok = strtok(NULL, " ");
+            }
+            if (count >= 6) {
+                handleSwipe(client, simKitHandle, count, (const char **)tokens, 0);
+            }
+        } else {
+            fprintf(stderr, "[simtouch] daemon unknown line: %s\n", line);
+        }
+    }
+
+    fprintf(stderr, "[simtouch] daemon exiting (stdin EOF)\n");
+    return 0;
+}
+
 #pragma mark - Main Entrypoint
 
 int main(int argc, const char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "simtouch: Native iOS Simulator Touch Helper\n\n");
         fprintf(stderr, "Commands:\n");
+        fprintf(stderr, "  simtouch daemon [--udid <udid>]\n");
         fprintf(stderr, "  simtouch tap <x> <y> <w> <h> [--udid <udid>]\n");
         fprintf(stderr, "  simtouch swipe <x1> <y1> <x2> <y2> <w> <h> [duration_ms] [steps] [--udid <udid>]\n");
         fprintf(stderr, "  simtouch button <home|lock|volume_up|volume_down> [--udid <udid>]\n");
         fprintf(stderr, "  simtouch key <keycode> [--udid <udid>]\n");
+        fprintf(stderr, "  simtouch text <string> [--udid <udid>]\n");
         return 1;
     }
 
@@ -577,7 +818,16 @@ int main(int argc, const char *argv[]) {
     const char *cmd = posArgs[0];
     int status = 0;
 
-    if (strcmp(cmd, "tap") == 0) {
+    if (strcmp(cmd, "daemon") == 0) {
+        status = runDaemon(client, simKitHandle);
+    } else if (strcmp(cmd, "text") == 0) {
+        if (posCount < 2) {
+            fprintf(stderr, "Usage: simtouch text <string> [--udid <udid>]\n");
+            status = 1;
+        } else {
+            status = handleText(client, simKitHandle, posArgs[1]);
+        }
+    } else if (strcmp(cmd, "tap") == 0) {
         status = handleTap(client, simKitHandle, posCount, posArgs, 1);
     } else if (strcmp(cmd, "swipe") == 0) {
         status = handleSwipe(client, simKitHandle, posCount, posArgs, 1);
