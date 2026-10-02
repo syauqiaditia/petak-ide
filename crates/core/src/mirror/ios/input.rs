@@ -188,7 +188,7 @@ pub fn send_daemon_event(stdin: &mut dyn io::Write, event: &InputEvent) -> io::R
         InputEvent::Scroll { x, y, w, h, dx, dy } => {
             let x2 = (*x as f32 + dx).max(0.0) as u32;
             let y2 = (*y as f32 + dy).max(0.0) as u32;
-            let cmd = format!("s {} {} {} {} {} {} 200 10", x, y, x2, y2, w, h);
+            let cmd = format!("s {} {} {} {} {} {} 120 8", x, y, x2, y2, w, h);
             send_daemon_command(stdin, &cmd)
         }
         InputEvent::Rotate => Ok(()),
@@ -415,7 +415,7 @@ pub fn send_simtouch_input(exec: &dyn Exec, udid: &str, event: &InputEvent) -> i
                 Path::new("."),
                 &simtouch_bin,
                 &[
-                    "swipe", &x1_str, &y1_str, &x2_str, &y2_str, &w_str, &h_str, "200", "10",
+                    "swipe", &x1_str, &y1_str, &x2_str, &y2_str, &w_str, &h_str, "120", "8",
                     "--udid", udid,
                 ],
                 &[],
@@ -929,8 +929,8 @@ mod tests {
                 "250",
                 "800",
                 "1600",
-                "200",
-                "10",
+                "120",
+                "8",
                 "--udid",
                 "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90"
             ]
@@ -1307,7 +1307,7 @@ mod tests {
         let output = String::from_utf8(buf.lock().unwrap().clone()).unwrap();
         assert_eq!(
             output,
-            "k 40\nk 42\nb home\ns 100 200 100 250 800 1600 200 10\n"
+            "k 40\nk 42\nb home\ns 100 200 100 250 800 1600 120 8\n"
         );
         assert_eq!(fake.calls.lock().unwrap().len(), 0);
 
