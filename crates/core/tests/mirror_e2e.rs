@@ -179,6 +179,13 @@ fn test_mirror_session_inject_input() {
         .send_input(&InputEvent::Nav { key: NavKey::Home })
         .expect("nav home failed");
 
+    // Text injection test
+    session
+        .send_input(&InputEvent::Text {
+            text: "Hello from Petak".to_string(),
+        })
+        .expect("text injection failed");
+
     // Rotate
     session
         .send_input(&InputEvent::Rotate)
