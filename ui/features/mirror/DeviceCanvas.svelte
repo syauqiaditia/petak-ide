@@ -9,6 +9,7 @@
   let ctx: CanvasRenderingContext2D | null = null;
   let decoder: VideoDecoder | null = null;
   let isDecoderConfigured = false;
+  let lastConfigSignature = '';
   let hasDecodedKeyframe = false;
   let pendingFrame: VideoFrame | null = null;
   let rafId = 0;
@@ -24,6 +25,7 @@
 
   function initDecoder() {
     isDecoderConfigured = false;
+    lastConfigSignature = '';
     hasDecodedKeyframe = false;
     if (typeof VideoDecoder === 'undefined') {
       console.warn('[DeviceCanvas] VideoDecoder is not supported in this environment');
@@ -74,6 +76,11 @@
           const nals = splitNals(payload);
           const { codec, description } = parseH264Config(nals);
 
+          const configSig = `${codec}:${Array.from(description).join(',')}`;
+          if (isDecoderConfigured && decoder && decoder.state === 'configured' && lastConfigSignature === configSig) {
+            return;
+          }
+
           const config: VideoDecoderConfig = {
             codec,
             optimizeForLatency: true,
@@ -84,6 +91,7 @@
           try {
             decoder.configure(config);
             isDecoderConfigured = true;
+            lastConfigSignature = configSig;
             api.mirrorLog('UI-CONFIG-OK', `Configured with ${codec}`);
           } catch (e: any) {
             try {
@@ -93,6 +101,7 @@
                 hardwareAcceleration: 'prefer-hardware',
               });
               isDecoderConfigured = true;
+              lastConfigSignature = configSig;
               api.mirrorLog('UI-CONFIG-FALLBACK', `Fallback configured with ${codec}`);
             } catch (err2: any) {
               console.warn('[DeviceCanvas] decoder.configure failed:', err2);
@@ -302,6 +311,8 @@
       } catch (_) {}
     }
     decoder = null;
+    isDecoderConfigured = false;
+    lastConfigSignature = '';
   });
 </script>
 

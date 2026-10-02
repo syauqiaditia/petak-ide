@@ -164,6 +164,52 @@ test('canvas hardware acceleration: DeviceCanvas configures hardwareAcceleration
   );
 });
 
+test('canvas config dedup: DeviceCanvas skips redundant decoder.configure when signature matches', () => {
+  const canvasPath = path.resolve(uiRoot, 'features/mirror/DeviceCanvas.svelte');
+  const canvasCode = fs.readFileSync(canvasPath, 'utf-8');
+
+  // Must declare lastConfigSignature
+  assert.ok(canvasCode.includes('lastConfigSignature'), 'Must track lastConfigSignature');
+
+  // Must compute config signature
+  assert.ok(canvasCode.includes('configSig'), 'Must compute configSig');
+
+  // Must check if decoder is already configured with identical signature
+  assert.ok(
+    canvasCode.includes('lastConfigSignature === configSig'),
+    'Must check if lastConfigSignature matches current configSig'
+  );
+
+  // Must reset lastConfigSignature in initDecoder
+  assert.ok(
+    canvasCode.includes("lastConfigSignature = ''"),
+    'Must reset lastConfigSignature on init or teardown'
+  );
+});
+
+test('physical capture: cleanup zombies before spawn, 120 keyframe interval, and automated handshake', () => {
+  const physicalRsPath = path.resolve(__dirname, '../crates/core/src/mirror/ios/physical.rs');
+  const physicalRsCode = fs.readFileSync(physicalRsPath, 'utf-8');
+
+  assert.ok(
+    physicalRsCode.includes('pkill') && physicalRsCode.includes('petak_ios_capture.*--mode.*physical'),
+    'physical.rs must clean up stale petak_ios_capture zombie processes before spawn'
+  );
+
+  const swiftHelperPath = path.resolve(__dirname, '../crates/core/src/mirror/ios/petak_ios_capture.swift');
+  const swiftCode = fs.readFileSync(swiftHelperPath, 'utf-8');
+
+  assert.ok(
+    swiftCode.includes('kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: 120)'),
+    'petak_ios_capture.swift must set MaxKeyFrameInterval to 120'
+  );
+
+  assert.ok(
+    swiftCode.includes('triggerQuickTimeHandshake') && swiftCode.includes('QuickTime Player'),
+    'petak_ios_capture.swift must implement automated QuickTime CoreMediaIO handshake'
+  );
+});
+
 // =============================================================================
 // Suite 2: Mirror Lifecycle (UQi Revision: Hide on Close, Stop on Switch/Explicit)
 // =============================================================================

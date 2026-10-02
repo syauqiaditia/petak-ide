@@ -172,7 +172,7 @@ class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, value: kCFBooleanTrue)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_Baseline_AutoLevel)
-        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: fps))
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: 120))
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: NSNumber(value: 4_000_000))
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: fps))
@@ -522,6 +522,10 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
                 break
             }
 
+            if attempt == 2 && iosDevices.isEmpty {
+                triggerQuickTimeHandshake()
+            }
+
             if attempt < maxRetries {
                 logStderr("[ios-capture] Attempt \(attempt)/\(maxRetries): no iOS capture device ready yet (total devices: \(devices.count)). Retrying in 500ms...")
             }
@@ -638,6 +642,27 @@ class PhysicalDeviceCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
     func stop() {
         session?.stopRunning()
+    }
+
+    private func triggerQuickTimeHandshake() {
+        logStderr("[ios-capture] Triggering automated QuickTime CoreMediaIO handshake...")
+        let task = Process()
+        task.launchPath = "/usr/bin/osascript"
+        task.arguments = [
+            "-e", "tell application \"QuickTime Player\"",
+            "-e", "try",
+            "-e", "set r to (new movie recording)",
+            "-e", "delay 0.3",
+            "-e", "close r saving no",
+            "-e", "end try",
+            "-e", "quit",
+            "-e", "end tell"
+        ]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        task.launch()
+        task.waitUntilExit()
     }
 }
 #endif

@@ -120,6 +120,11 @@ impl IosPhysicalSession {
             cmd.process_group(0);
         }
 
+        // Clean up stale physical capture processes to prevent USB frame bandwidth contention
+        let _ = Command::new("pkill")
+            .args(["-f", "petak_ios_capture.*--mode.*physical"])
+            .status();
+
         let mut child = cmd.spawn().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::Other,
