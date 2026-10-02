@@ -44,6 +44,9 @@ import AVFoundation
 import CoreMediaIO
 #endif
 
+// Ensure AppKit / NSApplication is initialized before any SkyLight/ScreenCaptureKit calls
+_ = NSApplication.shared
+
 // MARK: - CLI Arguments
 
 struct CaptureConfig {
@@ -282,50 +285,67 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     func start() {
-        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { [weak self] content, error in
+        findSimulatorWindowAndStart(attempt: 1, maxAttempts: 15)
+    }
+
+    private func findSimulatorWindowAndStart(attempt: Int, maxAttempts: Int) {
+        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { [weak self] content, error in
             guard let self = self else { return }
             if let error = error {
+                let msg = "ScreenCaptureKit error: \(error.localizedDescription)"
+                logStderr("[ios-capture] \(msg)")
                 emitStatus([
-                    "status": "fallback",
-                    "reason": "ScreenCaptureKit error: \(error.localizedDescription)",
-                    "message": "Screen recording permission not granted or window access restricted; starting simctl screenshot polling fallback"
+                    "status": "error",
+                    "message": msg
                 ])
-                startSimctlScreenshotFallback(config: self.config)
-                return
+                exit(1)
             }
 
             guard let content = content else {
+                let msg = "No shareable content available from ScreenCaptureKit"
+                logStderr("[ios-capture] \(msg)")
                 emitStatus([
-                    "status": "fallback",
-                    "reason": "No shareable content available",
-                    "message": "Starting simctl screenshot polling fallback"
+                    "status": "error",
+                    "message": msg
                 ])
-                startSimctlScreenshotFallback(config: self.config)
-                return
+                exit(1)
             }
 
             // Find Simulator window
-            let simWindow = content.windows.first { window in
-                let owner = window.owningApplication?.applicationName ?? ""
-                let title = window.title ?? ""
-                return owner == "Simulator" || owner.contains("Simulator") || title.contains("iPhone") || title.contains("iPad")
+            let simWindow = content.windows.first { w in
+                let owner = w.owningApplication?.applicationName ?? ""
+                let isSim = owner == "Simulator" || owner.contains("Simulator")
+                let title = w.title ?? ""
+                let isPhone = title.contains("iPhone") || title.contains("iPad") || (!self.config.deviceName.isEmpty && title.contains(self.config.deviceName))
+                let hasSize = w.frame.width >= 200 && w.frame.height >= 400
+                return (isSim || isPhone) && hasSize
             }
 
             guard let window = simWindow else {
+                if attempt < maxAttempts {
+                    logStderr("[ios-capture] Simulator window not found yet (attempt \(attempt)/\(maxAttempts)), retrying in 300ms...")
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                        self?.findSimulatorWindowAndStart(attempt: attempt + 1, maxAttempts: maxAttempts)
+                    }
+                    return
+                }
+
+                let msg = "Simulator window not found after \(maxAttempts) attempts. Ensure iOS Simulator is running and not closed."
+                logStderr("[ios-capture] \(msg)")
                 emitStatus([
-                    "status": "fallback",
-                    "reason": "Simulator window not found on screen",
-                    "message": "Simulator window is minimized or not launched. Starting simctl screenshot polling fallback"
+                    "status": "error",
+                    "message": msg
                 ])
-                startSimctlScreenshotFallback(config: self.config)
-                return
+                exit(1)
             }
 
             let width = Int(window.frame.width)
             let height = Int(window.frame.height)
 
             guard let enc = H264Encoder(width: width, height: height, fps: self.config.fps) else {
-                emitStatus(["status": "error", "message": "Failed to create H264 encoder"])
+                let msg = "Failed to create H264 encoder for dimensions \(width)x\(height)"
+                logStderr("[ios-capture] \(msg)")
+                emitStatus(["status": "error", "message": msg])
                 exit(1)
             }
             self.encoder = enc
@@ -337,6 +357,7 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: Int32(self.config.fps))
             streamConfig.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             streamConfig.capturesAudio = false
+            streamConfig.showsCursor = false
 
             do {
                 let stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
@@ -345,14 +366,16 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
                 stream.startCapture { err in
                     if let err = err {
+                        let msg = "SCStream startCapture error: \(err.localizedDescription)"
+                        logStderr("[ios-capture] \(msg)")
                         emitStatus([
-                            "status": "fallback",
-                            "reason": "SCStream startCapture error: \(err.localizedDescription)",
-                            "message": "Switching to simctl screenshot fallback"
+                            "status": "error",
+                            "message": msg
                         ])
-                        startSimctlScreenshotFallback(config: self.config)
+                        exit(1)
                     } else {
                         self.running = true
+                        logStderr("[ios-capture] ScreenCaptureKit stream live: \(width)x\(height) @ \(self.config.fps)fps (window: '\(window.title ?? "")')")
                         emitStatus([
                             "status": "live",
                             "width": width,
@@ -365,12 +388,13 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                     }
                 }
             } catch {
+                let msg = "Failed to initialize SCStream: \(error.localizedDescription)"
+                logStderr("[ios-capture] \(msg)")
                 emitStatus([
-                    "status": "fallback",
-                    "reason": "Failed to initialize SCStream: \(error.localizedDescription)",
-                    "message": "Switching to simctl screenshot fallback"
+                    "status": "error",
+                    "message": msg
                 ])
-                startSimctlScreenshotFallback(config: self.config)
+                exit(1)
             }
         }
     }
@@ -714,10 +738,16 @@ func main() {
             activeSimulatorCapture = sim
             sim.start()
         } else {
-            startSimctlScreenshotFallback(config: config)
+            let msg = "ScreenCaptureKit requires macOS 12.3 or later"
+            logStderr("[ios-capture] \(msg)")
+            emitStatus(["status": "error", "message": msg])
+            exit(1)
         }
         #else
-        startSimctlScreenshotFallback(config: config)
+        let msg = "ScreenCaptureKit is not available on this platform"
+        logStderr("[ios-capture] \(msg)")
+        emitStatus(["status": "error", "message": msg])
+        exit(1)
         #endif
     }
 
