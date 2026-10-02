@@ -6,6 +6,12 @@ use crate::mirror::control::{InputEvent, NavKey, TouchAction};
 
 /// Resolve the path to the `simtouch` binary.
 pub fn resolve_simtouch_path() -> Option<PathBuf> {
+    #[cfg(test)]
+    {
+        // Avoid host filesystem leakage during unit testing with mock Exec
+        None
+    }
+    #[cfg(not(test))]
     resolve_simtouch_path_internal(
         std::env::current_exe().ok().as_deref(),
         std::env::var("CARGO_MANIFEST_DIR").ok().as_deref(),
@@ -52,11 +58,11 @@ pub fn resolve_simtouch_path_internal(
 
 /// Check if `simtouch` binary is available on the system.
 pub fn has_simtouch(exec: &dyn Exec) -> bool {
-    if resolve_simtouch_path().is_some() {
+    let output = exec.run(Path::new("."), "which", &["simtouch"], &[], None);
+    if output.map(|o| o.status.success()).unwrap_or(false) {
         return true;
     }
-    let output = exec.run(Path::new("."), "which", &["simtouch"], &[], None);
-    output.map(|o| o.status.success()).unwrap_or(false)
+    resolve_simtouch_path().is_some()
 }
 
 /// Determine the binary command name or path to invoke `simtouch`.
@@ -699,6 +705,21 @@ mod tests {
         std::fs::write(&fake_exe, "").unwrap();
 
         let resolved = resolve_simtouch_path_internal(Some(&fake_exe), None);
+        assert_eq!(resolved, Some(helper_bin.canonicalize().unwrap_or(helper_bin)));
+    }
+
+    #[test]
+    fn test_resolve_simtouch_path_target_release() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let manifest_dir = tmp_dir.path().join("crates/core");
+        let target_release = tmp_dir.path().join("target/release");
+        std::fs::create_dir_all(&manifest_dir).unwrap();
+        std::fs::create_dir_all(&target_release).unwrap();
+
+        let helper_bin = target_release.join("simtouch");
+        std::fs::write(&helper_bin, "#!/bin/sh\n").unwrap();
+
+        let resolved = resolve_simtouch_path_internal(None, manifest_dir.to_str());
         assert_eq!(resolved, Some(helper_bin.canonicalize().unwrap_or(helper_bin)));
     }
 }
