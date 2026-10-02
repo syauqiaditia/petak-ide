@@ -173,6 +173,8 @@ class H264Encoder {
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_Baseline_AutoLevel)
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: NSNumber(value: fps * 2))
         VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: NSNumber(value: 4_000_000))
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
+        VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: NSNumber(value: fps))
         VTCompressionSessionPrepareToEncodeFrames(session)
     }
 
@@ -372,6 +374,7 @@ class SimulatorCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             streamConfig.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
             streamConfig.capturesAudio = false
             streamConfig.showsCursor = false
+            streamConfig.queueDepth = 1
 
             do {
                 let stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
