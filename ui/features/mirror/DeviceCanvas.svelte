@@ -161,8 +161,8 @@
     const rect = canvasEl.getBoundingClientRect();
 
     const now = performance.now();
-    if (now - lastMoveTime < 16) {
-      return; // Throttle IPC to 60Hz max
+    if (now - lastMoveTime < 8) {
+      return; // Throttle IPC to 120Hz polling
     }
     lastMoveTime = now;
 

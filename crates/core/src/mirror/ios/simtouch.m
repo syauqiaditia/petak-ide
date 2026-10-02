@@ -629,20 +629,20 @@ static void sendKeyStroke(id client, IndigoHIDMessageForHIDArbitraryFn fnHIDArb,
     if (!fnHIDArb || !client) return;
     if (shift) {
         void *shiftDown = fnHIDArb(0x32, 0x07, 225, 1);
-        if (shiftDown) sendIndigoMessage(client, shiftDown);
-        usleep(5000);
+        if (shiftDown) sendIndigoMessageAsync(client, shiftDown);
+        usleep(1000);
     }
     void *keyDown = fnHIDArb(0x32, 0x07, usage, 1);
-    if (keyDown) sendIndigoMessage(client, keyDown);
-    usleep(15000);
+    if (keyDown) sendIndigoMessageAsync(client, keyDown);
+    usleep(5000);
     void *keyUp = fnHIDArb(0x32, 0x07, usage, 2);
-    if (keyUp) sendIndigoMessage(client, keyUp);
+    if (keyUp) sendIndigoMessageAsync(client, keyUp);
     if (shift) {
-        usleep(5000);
+        usleep(1000);
         void *shiftUp = fnHIDArb(0x32, 0x07, 225, 2);
-        if (shiftUp) sendIndigoMessage(client, shiftUp);
+        if (shiftUp) sendIndigoMessageAsync(client, shiftUp);
     }
-    usleep(10000); // 10ms hold between keystrokes
+    usleep(2000); // 2ms hold between keystrokes
 }
 
 static int handleText(id client, void *simKitHandle, const char *str) {
@@ -745,7 +745,7 @@ static int runDaemon(id client, void *simKitHandle) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
                     if (downMsg) sendIndigoMessageAsync(client, downMsg);
-                    usleep(15000);
+                    usleep(5000);
                     void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
                     if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
@@ -756,7 +756,7 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (fnHIDArb) {
                     void *down = fnHIDArb(0x32, 0x07, keycode, 1);
                     if (down) sendIndigoMessageAsync(client, down);
-                    usleep(15000);
+                    usleep(5000);
                     void *up = fnHIDArb(0x32, 0x07, keycode, 2);
                     if (up) sendIndigoMessageAsync(client, up);
                 }
@@ -770,14 +770,14 @@ static int runDaemon(id client, void *simKitHandle) {
             handleText(client, simKitHandle, textStr);
         } else if (line[0] == 's' && line[1] == ' ') {
             double x1 = 0, y1 = 0, x2 = 0, y2 = 0, w = 1, h = 1;
-            int duration_ms = 200, steps = 10;
+            int duration_ms = 120, steps = 8;
             int parsed = sscanf(line + 2, "%lf %lf %lf %lf %lf %lf %d %d",
                                 &x1, &y1, &x2, &y2, &w, &h, &duration_ms, &steps);
             if (parsed >= 6) {
                 if (w <= 0.0) w = 1.0;
                 if (h <= 0.0) h = 1.0;
-                if (duration_ms <= 0) duration_ms = 200;
-                if (steps <= 0) steps = 10;
+                if (duration_ms <= 0) duration_ms = 120;
+                if (steps <= 0) steps = 8;
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     performSwipe(client, simKitHandle, x1, y1, x2, y2, w, h, duration_ms, steps, YES);
                 });
