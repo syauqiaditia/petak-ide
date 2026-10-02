@@ -1,8 +1,76 @@
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::exec::Exec;
 use crate::mirror::control::{InputEvent, NavKey, TouchAction};
+
+/// Active touch state tracking for an iOS simulator device.
+#[derive(Debug, Clone)]
+pub struct ActiveTouch {
+    pub start_x: u32,
+    pub start_y: u32,
+    pub last_x: u32,
+    pub last_y: u32,
+    pub w: u16,
+    pub h: u16,
+    pub start_time: Instant,
+}
+
+/// Stateful tracker managing in-flight touch and drag gestures per UDID.
+#[derive(Default)]
+pub struct TouchTracker {
+    touches: Mutex<HashMap<String, ActiveTouch>>,
+}
+
+impl TouchTracker {
+    pub fn new() -> Self {
+        Self {
+            touches: Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub fn on_down(&self, udid: &str, x: u32, y: u32, w: u16, h: u16) {
+        let mut touches = self.touches.lock().unwrap();
+        touches.insert(
+            udid.to_string(),
+            ActiveTouch {
+                start_x: x,
+                start_y: y,
+                last_x: x,
+                last_y: y,
+                w,
+                h,
+                start_time: Instant::now(),
+            },
+        );
+    }
+
+    pub fn on_move(&self, udid: &str, x: u32, y: u32) {
+        let mut touches = self.touches.lock().unwrap();
+        if let Some(touch) = touches.get_mut(udid) {
+            touch.last_x = x;
+            touch.last_y = y;
+        }
+    }
+
+    pub fn on_up(&self, udid: &str) -> Option<ActiveTouch> {
+        let mut touches = self.touches.lock().unwrap();
+        touches.remove(udid)
+    }
+
+    pub fn clear(&self) {
+        let mut touches = self.touches.lock().unwrap();
+        touches.clear();
+    }
+}
+
+pub fn touch_tracker() -> &'static TouchTracker {
+    static TRACKER: OnceLock<TouchTracker> = OnceLock::new();
+    TRACKER.get_or_init(TouchTracker::new)
+}
 
 /// Resolve the path to the `simtouch` binary.
 pub fn resolve_simtouch_path() -> Option<PathBuf> {
@@ -109,43 +177,102 @@ pub fn send_simulator_input(exec: &dyn Exec, udid: &str, event: &InputEvent) -> 
 pub fn send_simtouch_input(exec: &dyn Exec, udid: &str, event: &InputEvent) -> io::Result<()> {
     let simtouch_bin = simtouch_binary_name();
     match event {
-        InputEvent::Touch {
-            action,
-            x,
-            y,
-            w,
-            h,
-        } => {
-            if matches!(action, TouchAction::Down | TouchAction::Up) {
-                let x_str = x.to_string();
-                let y_str = y.to_string();
-                let w_str = w.to_string();
-                let h_str = h.to_string();
-                let out = exec.run(
-                    Path::new("."),
-                    &simtouch_bin,
-                    &["tap", &x_str, &y_str, &w_str, &h_str, "--udid", udid],
-                    &[],
-                    None,
-                )?;
-                if !out.status.success() {
-                    let err = String::from_utf8_lossy(&out.stderr);
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("simtouch tap failed: {}", err.trim()),
-                    ));
+        InputEvent::Touch { action, x, y, w, h } => {
+            let tracker = touch_tracker();
+            match action {
+                TouchAction::Down => {
+                    tracker.on_down(udid, *x, *y, *w, *h);
+                    Ok(())
+                }
+                TouchAction::Move => {
+                    tracker.on_move(udid, *x, *y);
+                    Ok(())
+                }
+                TouchAction::Up => {
+                    let maybe_active = tracker.on_up(udid);
+                    if let Some(mut active) = maybe_active {
+                        active.last_x = *x;
+                        active.last_y = *y;
+                        let dx = active.last_x as f64 - active.start_x as f64;
+                        let dy = active.last_y as f64 - active.start_y as f64;
+                        let dist = (dx * dx + dy * dy).sqrt();
+                        let elapsed = active.start_time.elapsed();
+
+                        if dist >= 15.0 {
+                            let duration_ms = (elapsed.as_millis() as u64).clamp(50, 500) as u32;
+                            let x1_str = active.start_x.to_string();
+                            let y1_str = active.start_y.to_string();
+                            let x2_str = active.last_x.to_string();
+                            let y2_str = active.last_y.to_string();
+                            let w_val = if *w > 0 { *w } else { active.w };
+                            let h_val = if *h > 0 { *h } else { active.h };
+                            let w_str = w_val.to_string();
+                            let h_str = h_val.to_string();
+                            let dur_str = duration_ms.to_string();
+                            let out = exec.run(
+                                Path::new("."),
+                                &simtouch_bin,
+                                &[
+                                    "swipe", &x1_str, &y1_str, &x2_str, &y2_str, &w_str, &h_str,
+                                    &dur_str, "10", "--udid", udid,
+                                ],
+                                &[],
+                                None,
+                            )?;
+                            if !out.status.success() {
+                                let err = String::from_utf8_lossy(&out.stderr);
+                                return Err(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    format!("simtouch swipe failed: {}", err.trim()),
+                                ));
+                            }
+                        } else if elapsed < Duration::from_millis(500) {
+                            let w_val = if *w > 0 { *w } else { active.w };
+                            let h_val = if *h > 0 { *h } else { active.h };
+                            let x_str = x.to_string();
+                            let y_str = y.to_string();
+                            let w_str = w_val.to_string();
+                            let h_str = h_val.to_string();
+                            let out = exec.run(
+                                Path::new("."),
+                                &simtouch_bin,
+                                &["tap", &x_str, &y_str, &w_str, &h_str, "--udid", udid],
+                                &[],
+                                None,
+                            )?;
+                            if !out.status.success() {
+                                let err = String::from_utf8_lossy(&out.stderr);
+                                return Err(io::Error::new(
+                                    io::ErrorKind::Other,
+                                    format!("simtouch tap failed: {}", err.trim()),
+                                ));
+                            }
+                        }
+                    } else {
+                        let x_str = x.to_string();
+                        let y_str = y.to_string();
+                        let w_str = w.to_string();
+                        let h_str = h.to_string();
+                        let out = exec.run(
+                            Path::new("."),
+                            &simtouch_bin,
+                            &["tap", &x_str, &y_str, &w_str, &h_str, "--udid", udid],
+                            &[],
+                            None,
+                        )?;
+                        if !out.status.success() {
+                            let err = String::from_utf8_lossy(&out.stderr);
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("simtouch tap failed: {}", err.trim()),
+                            ));
+                        }
+                    }
+                    Ok(())
                 }
             }
-            Ok(())
         }
-        InputEvent::Scroll {
-            x,
-            y,
-            w,
-            h,
-            dx,
-            dy,
-        } => {
+        InputEvent::Scroll { x, y, w, h, dx, dy } => {
             let x2 = (*x as f32 + dx).max(0.0) as u32;
             let y2 = (*y as f32 + dy).max(0.0) as u32;
             let x1_str = x.to_string();
@@ -471,29 +598,159 @@ mod tests {
             idb_available: false,
             simtouch_available: true,
         };
-        let ev = InputEvent::Touch {
+        let udid = "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90";
+        let ev_down = InputEvent::Touch {
             action: TouchAction::Down,
             x: 100,
             y: 200,
             w: 800,
             h: 1600,
         };
-        let res = send_simulator_input(&fake, "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90", &ev);
-        assert!(res.is_ok());
+        let res_down = send_simulator_input(&fake, udid, &ev_down);
+        assert!(res_down.is_ok());
+
+        // Down must not trigger tap
+        {
+            let calls = fake.calls.lock().unwrap();
+            let taps = calls
+                .iter()
+                .filter(|c| c.contains(&"tap".to_string()))
+                .count();
+            assert_eq!(taps, 0);
+        }
+
+        let ev_up = InputEvent::Touch {
+            action: TouchAction::Up,
+            x: 100,
+            y: 200,
+            w: 800,
+            h: 1600,
+        };
+        let res_up = send_simulator_input(&fake, udid, &ev_up);
+        assert!(res_up.is_ok());
 
         let calls = fake.calls.lock().unwrap();
-        assert_eq!(calls.len(), 2); // which simtouch, then simtouch tap
+        let tap_calls: Vec<_> = calls
+            .iter()
+            .filter(|c| c.contains(&"tap".to_string()))
+            .collect();
+        assert_eq!(tap_calls.len(), 1);
         assert_eq!(
-            calls[1],
-            vec![
-                "simtouch",
-                "tap",
-                "100",
-                "200",
-                "800",
-                "1600",
-                "--udid",
-                "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90"
+            tap_calls[0],
+            &vec![
+                "simtouch".to_string(),
+                "tap".to_string(),
+                "100".to_string(),
+                "200".to_string(),
+                "800".to_string(),
+                "1600".to_string(),
+                "--udid".to_string(),
+                udid.to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_simulator_input_with_simtouch_swipe_gesture() {
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+            idb_available: false,
+            simtouch_available: true,
+        };
+        let udid = "B3D5F257-9B4C-6D8E-1E0F-9B8557EF7A12";
+        let ev_down = InputEvent::Touch {
+            action: TouchAction::Down,
+            x: 100,
+            y: 200,
+            w: 800,
+            h: 1600,
+        };
+        assert!(send_simulator_input(&fake, udid, &ev_down).is_ok());
+
+        let ev_move = InputEvent::Touch {
+            action: TouchAction::Move,
+            x: 100,
+            y: 250,
+            w: 800,
+            h: 1600,
+        };
+        assert!(send_simulator_input(&fake, udid, &ev_move).is_ok());
+
+        // Move must not trigger simtouch
+        {
+            let calls = fake.calls.lock().unwrap();
+            let sim_actions = calls
+                .iter()
+                .filter(|c| c.first().map(|s| s.as_str()) == Some("simtouch"))
+                .count();
+            assert_eq!(sim_actions, 0);
+        }
+
+        let ev_up = InputEvent::Touch {
+            action: TouchAction::Up,
+            x: 100,
+            y: 250,
+            w: 800,
+            h: 1600,
+        };
+        assert!(send_simulator_input(&fake, udid, &ev_up).is_ok());
+
+        let calls = fake.calls.lock().unwrap();
+        let swipe_calls: Vec<_> = calls
+            .iter()
+            .filter(|c| c.contains(&"swipe".to_string()))
+            .collect();
+        assert_eq!(swipe_calls.len(), 1);
+        let sc = swipe_calls[0];
+        assert_eq!(sc[0], "simtouch");
+        assert_eq!(sc[1], "swipe");
+        assert_eq!(sc[2], "100");
+        assert_eq!(sc[3], "200");
+        assert_eq!(sc[4], "100");
+        assert_eq!(sc[5], "250");
+        assert_eq!(sc[6], "800");
+        assert_eq!(sc[7], "1600");
+        let dur: u32 = sc[8].parse().unwrap();
+        assert!(dur >= 50 && dur <= 500);
+        assert_eq!(sc[9], "10");
+        assert_eq!(sc[10], "--udid");
+        assert_eq!(sc[11], udid);
+    }
+
+    #[test]
+    fn test_simulator_input_with_simtouch_up_without_down() {
+        let fake = FakeExec {
+            calls: Mutex::new(Vec::new()),
+            idb_available: false,
+            simtouch_available: true,
+        };
+        let udid = "C4E6A368-0C5D-7E9F-2F1A-0C9668FA8B23";
+        let ev_up = InputEvent::Touch {
+            action: TouchAction::Up,
+            x: 150,
+            y: 350,
+            w: 800,
+            h: 1600,
+        };
+        assert!(send_simulator_input(&fake, udid, &ev_up).is_ok());
+
+        let calls = fake.calls.lock().unwrap();
+        let tap_calls: Vec<_> = calls
+            .iter()
+            .filter(|c| c.contains(&"tap".to_string()))
+            .collect();
+        assert_eq!(tap_calls.len(), 1);
+        assert_eq!(
+            tap_calls[0],
+            &vec![
+                "simtouch".to_string(),
+                "tap".to_string(),
+                "150".to_string(),
+                "350".to_string(),
+                "800".to_string(),
+                "1600".to_string(),
+                "--udid".to_string(),
+                udid.to_string(),
             ]
         );
     }
@@ -569,9 +826,7 @@ mod tests {
             idb_available: false,
             simtouch_available: true,
         };
-        let ev = InputEvent::Nav {
-            key: NavKey::Power,
-        };
+        let ev = InputEvent::Nav { key: NavKey::Power };
         let res = send_simulator_input(&fake, "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90", &ev);
         assert!(res.is_ok());
 
@@ -596,9 +851,7 @@ mod tests {
             idb_available: false,
             simtouch_available: true,
         };
-        let ev1 = InputEvent::Nav {
-            key: NavKey::Volup,
-        };
+        let ev1 = InputEvent::Nav { key: NavKey::Volup };
         let _ = send_simulator_input(&fake, "E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90", &ev1);
         let ev2 = InputEvent::Nav {
             key: NavKey::Voldown,
@@ -705,7 +958,10 @@ mod tests {
         std::fs::write(&fake_exe, "").unwrap();
 
         let resolved = resolve_simtouch_path_internal(Some(&fake_exe), None);
-        assert_eq!(resolved, Some(helper_bin.canonicalize().unwrap_or(helper_bin)));
+        assert_eq!(
+            resolved,
+            Some(helper_bin.canonicalize().unwrap_or(helper_bin))
+        );
     }
 
     #[test]
@@ -720,6 +976,9 @@ mod tests {
         std::fs::write(&helper_bin, "#!/bin/sh\n").unwrap();
 
         let resolved = resolve_simtouch_path_internal(None, manifest_dir.to_str());
-        assert_eq!(resolved, Some(helper_bin.canonicalize().unwrap_or(helper_bin)));
+        assert_eq!(
+            resolved,
+            Some(helper_bin.canonicalize().unwrap_or(helper_bin))
+        );
     }
 }

@@ -42,13 +42,12 @@ impl IosSimulatorSession {
         // 1. Check if booted, boot if necessary
         ensure_simulator_booted(exec, udid)?;
 
-        // 2. Open Simulator.app in background/hidden (-g -j) without stealing user focus
+        // 2. Open Simulator.app in background (-g) without stealing user focus (-j removed to avoid compositor suspend)
         let _ = exec.run(
             Path::new("."),
             "open",
             &[
                 "-g",
-                "-j",
                 "-a",
                 "Simulator",
                 "--args",
@@ -59,17 +58,8 @@ impl IosSimulatorSession {
             None,
         );
 
-        // Hide simulator window immediately via AppleScript to run headless
-        let _ = exec.run(
-            Path::new("."),
-            "osascript",
-            &[
-                "-e",
-                "tell application \"System Events\" to set visible of (first process whose name is \"Simulator\") to false",
-            ],
-            &[],
-            None,
-        );
+        // Activate Petak so its window stays in front without hiding Simulator window
+        let _ = exec.run(Path::new("."), "open", &["-a", "Petak"], &[], None);
 
         // 3. Resolve path to Swift capture helper
         let helper_path = resolve_swift_helper_path();
@@ -426,7 +416,6 @@ mod tests {
             vec![
                 "open",
                 "-g",
-                "-j",
                 "-a",
                 "Simulator",
                 "--args",
@@ -434,14 +423,7 @@ mod tests {
                 udid
             ]
         );
-        assert_eq!(
-            calls[3],
-            vec![
-                "osascript",
-                "-e",
-                "tell application \"System Events\" to set visible of (first process whose name is \"Simulator\") to false"
-            ]
-        );
+        assert_eq!(calls[3], vec!["open", "-a", "Petak"]);
     }
 
     #[test]
