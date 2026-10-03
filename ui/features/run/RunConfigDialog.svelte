@@ -17,13 +17,35 @@
   let workspaceRoot = $derived(root || runStore.root || '');
 
   let localConfigs = $state<RunConfig[]>([]);
-  let selectedConfigIndex = $state<number>(0);
+  let selectedConfigName = $state<string>('');
   let activeRunnerConfigName = $state<string>('');
 
   let entrypointExists = $state<boolean | null>(null);
   let isCheckingEntrypoint = $state<boolean>(false);
   let checkTimer: ReturnType<typeof setTimeout> | null = null;
   let saveStatus = $state<string | null>(null);
+
+  let suggestedEntrypoints = $state<string[]>([
+    'lib/main.dart',
+    'lib/main_dev.dart',
+    'lib/main_prod.dart',
+    'lib/main_staging.dart',
+  ]);
+
+  $effect(() => {
+    if (open && workspaceRoot) {
+      api
+        .findFiles('main', 20)
+        .then((matches) => {
+          const dartFiles = matches
+            .map((m) => m.path)
+            .filter((p) => p.endsWith('.dart') && (p.startsWith('lib/') || p.includes('main')));
+          const set = new Set([...suggestedEntrypoints, ...dartFiles]);
+          suggestedEntrypoints = Array.from(set);
+        })
+        .catch(() => {});
+    }
+  });
 
   $effect(() => {
     if (open) {
@@ -38,19 +60,19 @@
             kind: 'flutter',
             target: 'lib/main.dart',
             flavor: 'dev',
+            additionalArgs: '',
             dartDefines: ['ENV=dev'],
           },
         ];
       }
       activeRunnerConfigName = runStore.selectedConfigName || localConfigs[0]?.name || 'dev';
-      const idx = localConfigs.findIndex((c) => c.name === activeRunnerConfigName);
-      selectedConfigIndex = idx >= 0 ? idx : 0;
+      selectedConfigName = activeRunnerConfigName || localConfigs[0]?.name || 'dev';
       saveStatus = null;
     }
   });
 
   let currentSelectedConfig = $derived<RunConfig | null>(
-    localConfigs[selectedConfigIndex] ?? null
+    localConfigs.find((c) => c.name === selectedConfigName) ?? localConfigs[0] ?? null
   );
 
   let flutterConfigs = $derived(localConfigs.filter((c) => c.kind === 'flutter'));
@@ -82,10 +104,7 @@
   });
 
   function handleSelectConfig(cfg: RunConfig) {
-    const idx = localConfigs.findIndex((c) => c === cfg);
-    if (idx >= 0) {
-      selectedConfigIndex = idx;
-    }
+    selectedConfigName = cfg.name;
   }
 
   function handleAddConfig(kind: 'flutter' | 'gradle') {
@@ -104,6 +123,7 @@
             kind: 'flutter',
             target: 'lib/main.dart',
             flavor: '',
+            additionalArgs: '',
             dartDefines: [],
           }
         : {
@@ -111,10 +131,11 @@
             kind: 'gradle',
             module: 'app',
             variant: 'assembleDebug',
+            additionalArgs: '',
           };
 
     localConfigs = [...localConfigs, newCfg];
-    selectedConfigIndex = localConfigs.length - 1;
+    selectedConfigName = name;
   }
 
   function handleRemoveConfig() {
@@ -122,13 +143,17 @@
       window.alert('Minimal satu konfigurasi run harus tersedia.');
       return;
     }
-    const removedName = localConfigs[selectedConfigIndex]?.name;
-    localConfigs = localConfigs.filter((_, idx) => idx !== selectedConfigIndex);
-    if (selectedConfigIndex >= localConfigs.length) {
-      selectedConfigIndex = localConfigs.length - 1;
+    const removedName = selectedConfigName;
+    const currentIndex = localConfigs.findIndex((c) => c.name === removedName);
+    const nextConfig = localConfigs[currentIndex + 1] ?? localConfigs[currentIndex - 1] ?? null;
+    localConfigs = localConfigs.filter((c) => c.name !== removedName);
+    if (nextConfig) {
+      selectedConfigName = nextConfig.name;
+    } else if (localConfigs.length > 0) {
+      selectedConfigName = localConfigs[0].name;
     }
     if (activeRunnerConfigName === removedName) {
-      activeRunnerConfigName = localConfigs[0]?.name || '';
+      activeRunnerConfigName = selectedConfigName;
     }
   }
 
@@ -148,7 +173,7 @@
     };
 
     localConfigs = [...localConfigs, duplicate];
-    selectedConfigIndex = localConfigs.length - 1;
+    selectedConfigName = copyName;
   }
 
   async function persistConfigs(setActive: boolean = false): Promise<boolean> {
@@ -183,7 +208,7 @@
       await api.runConfigsSave(workspaceRoot, payload);
       await runStore.saveConfigs(payload);
       activeRunnerConfigName = targetActive;
-      saveStatus = 'Tersimpan ke .petak/run.json';
+      saveStatus = '✓ Diterapkan';
       setTimeout(() => (saveStatus = null), 3000);
       return true;
     } catch (e: any) {
@@ -335,7 +360,14 @@
                   id="cfg-name"
                   type="text"
                   class="form-input"
-                  bind:value={currentSelectedConfig.name}
+                  value={currentSelectedConfig.name}
+                  oninput={(e) => {
+                    const newName = (e.target as HTMLInputElement).value;
+                    if (currentSelectedConfig) {
+                      currentSelectedConfig.name = newName;
+                      selectedConfigName = newName;
+                    }
+                  }}
                   placeholder="e.g. dev, prod, main_uat"
                 />
               </div>
@@ -348,10 +380,16 @@
                     <input
                       id="cfg-target"
                       type="text"
+                      list="entrypoint-suggestions"
                       class="form-input mono"
                       bind:value={currentSelectedConfig.target}
                       placeholder="lib/main.dart"
                     />
+                    <datalist id="entrypoint-suggestions">
+                      {#each suggestedEntrypoints as ep}
+                        <option value={ep}></option>
+                      {/each}
+                    </datalist>
                     <button
                       class="browse-btn"
                       type="button"
@@ -382,20 +420,7 @@
                     id="cfg-args"
                     type="text"
                     class="form-input mono"
-                    value={(currentSelectedConfig.dartDefines || []).map((d) => `--dart-define=${d}`).join(' ')}
-                    oninput={(e) => {
-                      const val = (e.target as HTMLInputElement).value;
-                      const parts = val.split(' ').map((p) => p.trim()).filter(Boolean);
-                      const defines: string[] = [];
-                      for (const part of parts) {
-                        if (part.startsWith('--dart-define=')) {
-                          defines.push(part.replace('--dart-define=', ''));
-                        }
-                      }
-                      if (currentSelectedConfig) {
-                        currentSelectedConfig.dartDefines = defines;
-                      }
-                    }}
+                    bind:value={currentSelectedConfig.additionalArgs}
                     placeholder="--flavor dev --dart-define=ENV=dev"
                   />
                   <span class="field-hint">Argumen CLI tambahan yang diteruskan ke <code>flutter run</code>.</span>

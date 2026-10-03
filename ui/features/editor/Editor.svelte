@@ -60,6 +60,8 @@
   import type { GitDiffFile, GitBlameLine } from '../git/types';
   import { createCodeFoldingExtension, saveFileFoldState, restoreFileFoldState } from './folding';
   import FindReplaceBar from './FindReplaceBar.svelte';
+  import ImagePreview from './ImagePreview.svelte';
+  import { isImageFile } from './imageUtils';
 
   let {
     folderPath = '',
@@ -859,6 +861,10 @@
     }
   });
 
+  let activeIsImage = $derived(
+    tabsManager.activeTab ? isImageFile(tabsManager.activeTab.path) : false
+  );
+
   // Watch for active tab changes and swap EditorState
   $effect(() => {
     const active = tabsManager.activeTab;
@@ -875,7 +881,7 @@
 
       currentSwappedPath = activePath;
 
-      if (active) {
+      if (active && !isImageFile(active.path)) {
         if (!active.state) {
           active.state = createEditorState(active.savedContent, active.name);
         }
@@ -907,7 +913,7 @@
         const head = active.state.selection.main.head;
         const line = active.state.doc.lineAt(head);
         onCursorChange?.(`Ln ${line.number}, Col ${head - line.from + 1}`);
-      } else {
+      } else if (!active) {
         // No active tab
         const emptyState = createEditorState('', 'Untitled');
         view.setState(emptyState);
@@ -977,12 +983,16 @@
     </div>
   {/if}
 
+  {#if activeIsImage && tabsManager.activeTab}
+    <ImagePreview filePath={tabsManager.activeTab.path} />
+  {/if}
+
   <!-- Editor container -->
   <div
     class="editor-container"
     bind:this={container}
     oncontextmenu={handleEditorContextMenu}
-    class:hidden={tabsManager.tabs.length === 0}
+    class:hidden={tabsManager.tabs.length === 0 || activeIsImage}
   ></div>
 
   <FindReplaceBar

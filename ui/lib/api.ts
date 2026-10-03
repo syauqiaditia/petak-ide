@@ -376,6 +376,7 @@ export interface RunConfig {
   variant?: string | null;
   applicationId?: string | null;
   activity?: string | null;
+  additionalArgs?: string | null;
 }
 
 export interface RunConfigFile {
@@ -493,6 +494,10 @@ export const api = {
 
   readFile(path: string): Promise<string> {
     return invoke<string>('read_file', { path });
+  },
+
+  readFileBase64(path: string): Promise<string> {
+    return invoke<string>('read_file_base64', { path });
   },
 
   saveFile(path: string, content: string): Promise<void> {

@@ -17,10 +17,27 @@ export function isEntryStaged(entry: GitStatusEntry): boolean {
   return entry.index !== 'unmodified' && entry.index !== 'untracked';
 }
 
+export function isEntryUntracked(entry: GitStatusEntry): boolean {
+  return entry.worktree === 'untracked' && !isEntryStaged(entry);
+}
+
 export function filterUnifiedChanges(entries: GitStatusEntry[] = []): GitStatusEntry[] {
   return entries.filter(
     (e) => e.index !== 'unmodified' || e.worktree !== 'unmodified' || e.conflicted
   );
+}
+
+export function filterTrackedChanges(entries: GitStatusEntry[] = []): GitStatusEntry[] {
+  return filterUnifiedChanges(entries).filter((e) => !isEntryUntracked(e));
+}
+
+export function filterUnversionedFiles(entries: GitStatusEntry[] = []): GitStatusEntry[] {
+  return filterUnifiedChanges(entries).filter((e) => isEntryUntracked(e));
+}
+
+export function formatGroupHeader(name: string, count: number): string {
+  const fileWord = count === 1 ? 'file' : 'files';
+  return `${name} (${count} ${fileWord})`;
 }
 
 export function countCheckedEntries(entries: GitStatusEntry[] = []): number {
@@ -122,7 +139,8 @@ export interface FileContextAction {
     | 'show_history'
     | 'copy_path'
     | 'reveal_finder'
-    | 'delete_untracked';
+    | 'delete_untracked'
+    | 'add_to_vcs';
   label: string;
   danger?: boolean;
 }
@@ -144,6 +162,7 @@ export function getFileContextActions(
   ];
 
   if (isUntracked) {
+    actions.unshift({ id: 'add_to_vcs', label: 'Add to VCS' });
     actions.push({ id: 'delete_untracked', label: 'Delete untracked', danger: true });
   }
 

@@ -8,7 +8,7 @@
     "build": "vite build",
     "check": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "python3 scripts/check-app-symbols.py && node --test --experimental-strip-types tests/mirror_logic.test.mjs tests/editor_keymap_snippets.test.mjs tests/batch2_logic.test.mjs tests/batch3_logic.test.mjs tests/ghost_text_logic.test.mjs tests/mr_logic.test.mjs tests/agent_logic.test.mjs tests/batch4_ui_logic.test.mjs tests/batch5_ui_logic.test.mjs tests/batch6_ui_logic.test.mjs tests/batch7_ui_logic.test.mjs tests/batch8_ui_logic.test.mjs tests/batch9_ui_logic.test.mjs tests/batch10_ui_logic.test.mjs tests/batch11_ui_logic.test.mjs tests/batch12_qr_logic.test.mjs tests/h264_avcc.test.mjs tests/batch13_ios_touch.test.mjs tests/batch14_picker_ios.test.mjs tests/batch15_b23_ui.test.mjs",
+    "test": "python3 scripts/check-app-symbols.py && node --test --experimental-strip-types tests/mirror_logic.test.mjs tests/editor_keymap_snippets.test.mjs tests/batch2_logic.test.mjs tests/batch3_logic.test.mjs tests/ghost_text_logic.test.mjs tests/mr_logic.test.mjs tests/agent_logic.test.mjs tests/batch4_ui_logic.test.mjs tests/batch5_ui_logic.test.mjs tests/batch6_ui_logic.test.mjs tests/batch7_ui_logic.test.mjs tests/batch8_ui_logic.test.mjs tests/batch9_ui_logic.test.mjs tests/batch10_ui_logic.test.mjs tests/batch11_ui_logic.test.mjs tests/batch12_qr_logic.test.mjs tests/h264_avcc.test.mjs tests/batch13_ios_touch.test.mjs tests/batch14_picker_ios.test.mjs tests/batch15_b23_ui.test.mjs tests/batch24_ui.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
