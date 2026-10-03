@@ -3,6 +3,12 @@
   import { toolchainStore, type LspState } from './toolchainStore.svelte';
   import { api, type KotlinLsStatus } from '../../lib/api';
   import { settingsStore } from '../settings/settingsStore.svelte';
+  import {
+    TOOLCHAIN_FLUTTER_SVG,
+    TOOLCHAIN_DART_SVG,
+    TOOLCHAIN_JAVA_SVG,
+    TOOLCHAIN_ANDROID_SVG,
+  } from '../../icons';
 
   let {
     root = '',
@@ -86,6 +92,20 @@
       <span class="header-sub">Runtime status of mobile dev tools</span>
     </div>
     <div class="header-actions">
+      <button
+        class="btn-rescan"
+        disabled={toolchainStore.loading}
+        onclick={async () => {
+          await toolchainStore.refresh(root);
+          try {
+            kotlinStatus = await api.kotlinLsStatus();
+          } catch {}
+        }}
+        title="Pindai ulang toolchain secara live"
+      >
+        <span class="refresh-icon" class:spinning={toolchainStore.loading}>🔄</span>
+        <span>{toolchainStore.loading ? 'Memindai…' : 'Pindai Ulang'}</span>
+      </button>
       <button class="btn-open-settings" onclick={onOpenSettings} title="Open full Settings dialog (Cmd-,)">
         <span class="gear-icon">⚙</span>
         Open Settings
@@ -182,7 +202,10 @@
     <div class="section-title mt">DETECTED DEVELOPER TOOLS</div>
     <div class="tools-table">
       <div class="tool-row">
-        <span class="tool-name">Flutter</span>
+        <span class="tool-name">
+          <span class="tool-svg-icon">{@html TOOLCHAIN_FLUTTER_SVG}</span>
+          Flutter
+        </span>
         <span class="tool-info">
           {#if toolchainStore.toolchain?.flutter}
             <span class="path">{toolchainStore.toolchain.flutter.path}</span>
@@ -194,7 +217,10 @@
       </div>
 
       <div class="tool-row">
-        <span class="tool-name">Dart</span>
+        <span class="tool-name">
+          <span class="tool-svg-icon">{@html TOOLCHAIN_DART_SVG}</span>
+          Dart
+        </span>
         <span class="tool-info">
           {#if toolchainStore.toolchain?.dart}
             <span class="path">{toolchainStore.toolchain.dart.path}</span>
@@ -206,7 +232,10 @@
       </div>
 
       <div class="tool-row">
-        <span class="tool-name">Android SDK / ADB</span>
+        <span class="tool-name">
+          <span class="tool-svg-icon">{@html TOOLCHAIN_ANDROID_SVG}</span>
+          Android SDK / ADB
+        </span>
         <span class="tool-info">
           {#if toolchainStore.toolchain?.adb}
             <span class="path">{toolchainStore.toolchain.adb.path}</span>
@@ -218,7 +247,10 @@
       </div>
 
       <div class="tool-row">
-        <span class="tool-name">Java JDK</span>
+        <span class="tool-name">
+          <span class="tool-svg-icon">{@html TOOLCHAIN_JAVA_SVG}</span>
+          Java JDK
+        </span>
         <span class="tool-info">
           {#if toolchainStore.toolchain?.java}
             <span class="path">{toolchainStore.toolchain.java.path}</span>
@@ -271,6 +303,52 @@
     font-size: 11px;
     color: #555861;
     margin-left: 8px;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-rescan {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #1e2538;
+    border: 1px solid #2f3b5c;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #6ea8ff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-rescan:hover:not(:disabled) {
+    background: #273352;
+    color: #8bb8ff;
+  }
+  .btn-rescan:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+  .refresh-icon.spinning {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .tool-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tool-svg-icon {
+    display: flex;
+    align-items: center;
+    width: 15px;
+    height: 15px;
+    color: #8b8f98;
   }
   .btn-open-settings {
     display: flex;

@@ -132,13 +132,22 @@
     const q = query.trim().toLowerCase();
 
     if (currentMode === 'files') {
-      const items: SearchItem[] = fileResults.map((f) => ({
-        id: f.path,
-        type: 'file',
-        title: f.path,
-        indices: f.indices,
-        fileMatch: f,
-      }));
+      const items: SearchItem[] = fileResults.map((f) => {
+        const lastSlash = f.path.lastIndexOf('/');
+        const fileName = lastSlash !== -1 ? f.path.slice(lastSlash + 1) : f.path;
+        const dirPath = lastSlash !== -1 ? f.path.slice(0, lastSlash + 1) : '';
+        const fileNameIndices = f.indices
+          ? f.indices.filter((idx) => idx > lastSlash).map((idx) => idx - (lastSlash + 1))
+          : undefined;
+        return {
+          id: f.path,
+          type: 'file',
+          title: fileName,
+          subtitle: dirPath,
+          indices: fileNameIndices,
+          fileMatch: f,
+        };
+      });
       return [{ items }];
     }
 
@@ -221,13 +230,22 @@
       if (q && fileResults.length > 0) {
         resultSections.push({
           name: 'FILES',
-          items: fileResults.map((f) => ({
-            id: f.path,
-            type: 'file',
-            title: f.path,
-            indices: f.indices,
-            fileMatch: f,
-          })),
+          items: fileResults.map((f) => {
+            const lastSlash = f.path.lastIndexOf('/');
+            const fileName = lastSlash !== -1 ? f.path.slice(lastSlash + 1) : f.path;
+            const dirPath = lastSlash !== -1 ? f.path.slice(0, lastSlash + 1) : '';
+            const fileNameIndices = f.indices
+              ? f.indices.filter((idx) => idx > lastSlash).map((idx) => idx - (lastSlash + 1))
+              : undefined;
+            return {
+              id: f.path,
+              type: 'file',
+              title: fileName,
+              subtitle: dirPath,
+              indices: fileNameIndices,
+              fileMatch: f,
+            };
+          }),
         });
       } else if (!q && recentFiles && recentFiles.length > 0) {
         resultSections.push({
@@ -556,8 +574,11 @@
                 <div class="item-shortcut">{item.shortcut}</div>
               {/if}
             {:else if item.type === 'file'}
-              <div class="item-title">
-                <span class="title-text">{#each splitByIndices(item.title, item.indices) as chunk}{#if chunk.match}<span class="match-highlight">{chunk.text}</span>{:else}<span>{chunk.text}</span>{/if}{/each}</span>
+              <div class="item-title file-item-title">
+                <span class="file-name-bold">{#each splitByIndices(item.title, item.indices) as chunk}{#if chunk.match}<span class="match-highlight">{chunk.text}</span>{:else}<span>{chunk.text}</span>{/if}{/each}</span>
+                {#if item.subtitle}
+                  <span class="file-dir-path">{item.subtitle}</span>
+                {/if}
               </div>
             {:else if item.type === 'recent'}
               <div class="item-title">
@@ -760,6 +781,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .file-name-bold {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e6e7ea;
+    white-space: nowrap;
+  }
+
+  .file-dir-path {
+    font-size: 11px;
+    color: #8b8f98;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .item-subtitle {

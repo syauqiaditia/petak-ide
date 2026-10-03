@@ -5,6 +5,12 @@
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { dedupeAndCategorizeDevices, type MirrorDeviceCard } from './pickerLogic';
   import PairDeviceModal from '../run/PairDeviceModal.svelte';
+  import {
+    ANDROID_EMULATOR_SVG,
+    IOS_SIMULATOR_SVG,
+    DEVICE_USB_SVG,
+    DEVICE_WIFI_SVG,
+  } from '../../icons';
 
   let showPairModal = $state(false);
 
@@ -83,13 +89,13 @@
             <div class="device-info-row">
               <span class="device-icon">
                 {#if card.category === 'android-emulator'}
-                  🤖
-                {:else if card.category === 'android-usb'}
-                  📱
+                  {@html ANDROID_EMULATOR_SVG}
                 {:else if card.category === 'ios-simulator'}
-                  🍎
+                  {@html IOS_SIMULATOR_SVG}
+                {:else if card.isUsb}
+                  {@html DEVICE_USB_SVG}
                 {:else}
-                  🍏
+                  {@html DEVICE_WIFI_SVG}
                 {/if}
               </span>
               <span class="device-name" title={card.name}>{card.name}</span>
@@ -229,7 +235,12 @@
     gap: 8px;
   }
   .device-icon {
-    font-size: 16px;
+    display: flex;
+    align-items: center;
+    width: 16px;
+    height: 16px;
+    color: #8b8f98;
+    flex-shrink: 0;
   }
   .device-name {
     font-size: 13px;

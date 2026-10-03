@@ -5,6 +5,7 @@
   import MrThread from './MrThread.svelte';
   import MrMergeBar from './MrMergeBar.svelte';
   import { renderMrMarkdown } from './mrMarkdown';
+  import { MR_APPROVE_SVG, MR_REBASE_SVG } from '../../icons';
 
   let {
     mrDetail,
@@ -21,6 +22,7 @@
     onApprove,
     onUnapprove,
     onExecuteMerge,
+    onRebase,
   } = $props<{
     mrDetail: MergeRequest;
     diffFiles: GitDiffFile[];
@@ -40,12 +42,49 @@
       squash: boolean;
       shouldRemoveSourceBranch: boolean;
     }) => Promise<void>;
+    onRebase?: () => Promise<void>;
   }>();
 
-  type TabKind = 'overview' | 'changes' | 'discussions';
-  let activeTab = $state<TabKind>('overview');
+  type TabKind = 'discussions' | 'commits' | 'changes';
+  let activeTab = $state<TabKind>('discussions');
   let checkoutStatus = $state<string | null>(null);
   let isCheckingOut = $state(false);
+
+  let isApproved = $state(false);
+  let isApproving = $state(false);
+  let isRebasing = $state(false);
+  let rebaseNotice = $state<string | null>(null);
+
+  async function handleApproveToggle() {
+    if (isApproving) return;
+    isApproving = true;
+    try {
+      if (isApproved) {
+        if (onUnapprove) await onUnapprove();
+        isApproved = false;
+      } else {
+        if (onApprove) await onApprove();
+        isApproved = true;
+      }
+    } finally {
+      isApproving = false;
+    }
+  }
+
+  async function handleRebase() {
+    if (isRebasing || !onRebase) return;
+    isRebasing = true;
+    rebaseNotice = null;
+    try {
+      await onRebase();
+      rebaseNotice = 'Rebase berhasil diinisiasi.';
+      setTimeout(() => (rebaseNotice = null), 4000);
+    } catch (e: any) {
+      rebaseNotice = `Gagal rebase: ${e?.message || e}`;
+    } finally {
+      isRebasing = false;
+    }
+  }
 
   let headPipe = $derived(mrDetail.headPipeline || (pipelines.length > 0 ? pipelines[0] : null));
 
@@ -101,6 +140,31 @@
       </div>
 
       <div class="title-right">
+        {#if onApprove}
+          <button
+            class="btn-action btn-approve"
+            class:approved={isApproved}
+            disabled={isApproving || tokenScope === 'none' || tokenScope === 'readOnly'}
+            onclick={handleApproveToggle}
+            title={isApproved ? 'Batalkan persetujuan' : 'Setujui MR (Approve)'}
+          >
+            <span class="btn-svg">{@html MR_APPROVE_SVG}</span>
+            <span>{isApproved ? '✓ Disetujui' : 'Setujui'}</span>
+          </button>
+        {/if}
+
+        {#if onRebase}
+          <button
+            class="btn-action btn-rebase"
+            disabled={isRebasing || tokenScope === 'none' || tokenScope === 'readOnly'}
+            onclick={handleRebase}
+            title="Rebase branch sumber ke branch target"
+          >
+            <span class="btn-svg" class:spinning={isRebasing}>{@html MR_REBASE_SVG}</span>
+            <span>{isRebasing ? 'Rebasing…' : 'Rebase'}</span>
+          </button>
+        {/if}
+
         <button
           class="btn-checkout"
           disabled={isCheckingOut}
@@ -183,31 +247,31 @@
     <div class="subtabs-bar">
       <button
         class="subtab-btn"
-        class:active={activeTab === 'overview'}
-        onclick={() => (activeTab = 'overview')}
+        class:active={activeTab === 'discussions'}
+        onclick={() => (activeTab = 'discussions')}
       >
-        Overview
+        Discussion ({discussions.length})
+      </button>
+      <button
+        class="subtab-btn"
+        class:active={activeTab === 'commits'}
+        onclick={() => (activeTab = 'commits')}
+      >
+        Commits
       </button>
       <button
         class="subtab-btn"
         class:active={activeTab === 'changes'}
         onclick={() => (activeTab = 'changes')}
       >
-        Perubahan Berkas ({diffFiles.length})
-      </button>
-      <button
-        class="subtab-btn"
-        class:active={activeTab === 'discussions'}
-        onclick={() => (activeTab = 'discussions')}
-      >
-        Diskusi ({discussions.length})
+        Changes ({diffFiles.length})
       </button>
     </div>
   </div>
 
   <!-- Main Content Area -->
   <div class="detail-body">
-    {#if activeTab === 'overview'}
+    {#if activeTab === 'discussions'}
       <div class="overview-pane">
         {#if mrDetail.description}
           <div class="description-card">
@@ -216,19 +280,50 @@
         {:else}
           <div class="empty-desc">Tidak ada deskripsi yang ditulis untuk MR ini.</div>
         {/if}
+
+        <div class="thread-divider">
+          <span>DISCUSSION THREADS</span>
+        </div>
+
+        <MrThread
+          {discussions}
+          {tokenScope}
+          {onAddNote}
+          {onResolveDiscussion}
+          {onCreateNewThread}
+        />
+      </div>
+    {:else if activeTab === 'commits'}
+      <div class="commits-pane">
+        <div class="commits-list">
+          <div class="commit-item">
+            <div class="commit-avatar">
+              {mrDetail.author.name ? mrDetail.author.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div class="commit-info">
+              <span class="commit-title">{mrDetail.title}</span>
+              <span class="commit-meta">
+                {mrDetail.author.name || mrDetail.author.username} · {formatDate(mrDetail.createdAt)}
+              </span>
+            </div>
+            <div class="commit-sha-badge">
+              <code>{mrDetail.sha ? mrDetail.sha.slice(0, 7) : 'head'}</code>
+              <button
+                class="btn-copy-sha"
+                type="button"
+                title="Salin SHA"
+                onclick={() => navigator.clipboard.writeText(mrDetail.sha || '')}
+              >
+                📋
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     {:else if activeTab === 'changes'}
       <MrFiles
         {diffFiles}
         {tokenScope}
-      />
-    {:else if activeTab === 'discussions'}
-      <MrThread
-        {discussions}
-        {tokenScope}
-        {onAddNote}
-        {onResolveDiscussion}
-        {onCreateNewThread}
       />
     {/if}
   </div>
@@ -326,6 +421,163 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .btn-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .btn-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-approve {
+    background: #1a261e;
+    border: 1px solid #7fc98f;
+    color: #7fc98f;
+  }
+
+  .btn-approve:hover:not(:disabled) {
+    background: #243d2c;
+  }
+
+  .btn-approve.approved {
+    background: #238636;
+    border-color: #238636;
+    color: #ffffff;
+  }
+
+  .btn-rebase {
+    background: #202227;
+    border: 1px solid #2c2e34;
+    color: #d8d9dc;
+  }
+
+  .btn-rebase:hover:not(:disabled) {
+    background: #282a32;
+    color: #ffffff;
+    border-color: #3e414a;
+  }
+
+  .btn-svg {
+    display: flex;
+    align-items: center;
+    width: 14px;
+    height: 14px;
+  }
+
+  .btn-svg.spinning {
+    animation: mr-spin 1s linear infinite;
+  }
+
+  @keyframes mr-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .thread-divider {
+    display: flex;
+    align-items: center;
+    padding: 16px 0 8px 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: #787c86;
+    letter-spacing: 0.5px;
+    border-top: 1px solid #26282d;
+    margin-top: 16px;
+  }
+
+  .commits-pane {
+    padding: 16px 20px;
+    overflow-y: auto;
+  }
+
+  .commits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .commit-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #1c1d22;
+    border: 1px solid #26282d;
+  }
+
+  .commit-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #3574f0;
+    color: #ffffff;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .commit-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .commit-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e6e7ea;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .commit-meta {
+    font-size: 11px;
+    color: #8b8f98;
+  }
+
+  .commit-sha-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #141518;
+    border: 1px solid #2c2e34;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .commit-sha-badge code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: #6ea8ff;
+  }
+
+  .btn-copy-sha {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    color: #8b8f98;
+    padding: 0;
+  }
+
+  .btn-copy-sha:hover {
+    color: #ffffff;
   }
 
   .btn-checkout {

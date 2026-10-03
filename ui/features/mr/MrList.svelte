@@ -14,6 +14,7 @@
     onSearchChange,
     onRefresh,
     onEnableDemoMode,
+    onCreateMr,
   } = $props<{
     mergeRequests: MergeRequest[];
     activeFilter: MrFilter;
@@ -27,6 +28,7 @@
     onSearchChange?: (q: string) => void;
     onRefresh?: () => void;
     onEnableDemoMode?: () => void;
+    onCreateMr?: () => void;
   }>();
 
   let searchInput = $state('');
@@ -64,14 +66,24 @@
           <span class="demo-badge">DEMO</span>
         {/if}
       </div>
-      {#if onRefresh}
-        <button class="btn-refresh" onclick={onRefresh} title="Segarkan daftar MR" disabled={isLoading}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M23 4v6h-6M1 20v-6h6"></path>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-        </button>
-      {/if}
+      <div class="header-actions">
+        {#if onCreateMr}
+          <button class="btn-create-mr" onclick={onCreateMr} title="Buat Merge Request Baru (+)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        {/if}
+        {#if onRefresh}
+          <button class="btn-refresh" onclick={onRefresh} title="Segarkan daftar MR" disabled={isLoading}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        {/if}
+      </div>
     </div>
 
     <!-- Filter Tabs -->
@@ -246,6 +258,30 @@
     font-weight: 700;
     padding: 1px 6px;
     border-radius: 10px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-create-mr {
+    background: #1e2538;
+    border: 1px solid #2f3b5c;
+    color: #6ea8ff;
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s;
+  }
+
+  .btn-create-mr:hover {
+    background: #273352;
+    color: #8bb8ff;
   }
 
   .btn-refresh {

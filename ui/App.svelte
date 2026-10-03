@@ -1557,6 +1557,7 @@
   <TitleBar
     projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
     {branchName}
+    {showDashboard}
     onPickFolder={handlePickFolder}
     onSelectProject={openFolder}
     onOpenDashboard={() => (isDashboardOpen = !isDashboardOpen)}
@@ -1566,11 +1567,20 @@
 
   <div class="main-body">
     {#if currentFolderPath}
-      <Rail
-        bind:activeTab={activeRailTab}
-        onToggleAgents={toggleAgentsPanel}
-        isAgentsOpen={isAgentPanelOpen}
-      />
+      {#if !showDashboard}
+        <Rail
+          bind:activeTab={activeRailTab}
+          onToggleAgents={toggleAgentsPanel}
+          isAgentsOpen={isAgentPanelOpen}
+          onOpenTerminal={handleOpenTerminal}
+          onOpenRun={openRun}
+          onOpenLogcat={openLogcat}
+          onOpenProblems={openProblems}
+          onToggleDevices={() => panelStore.toggleRightPanel('devices')}
+          onToggleMirror={() => mirrorStore.toggle()}
+          onSelectRailTab={(t) => (activeRailTab = t)}
+        />
+      {/if}
     {/if}
     <div class="center-area">
       {#if showDashboard}
@@ -1635,7 +1645,7 @@
     </div>
 
     <!-- Slot: Phase 5 Agent Panel (reserved, collapsible, immediately LEFT of Device Mirror) -->
-    {#if isAgentPanelOpen}
+    {#if !showDashboard && isAgentPanelOpen}
       {#if AgentsPanelComponent}
         <AgentsPanelComponent onClose={() => (isAgentPanelOpen = false)} />
       {:else}
@@ -1664,29 +1674,33 @@
     {/if}
 
     <!-- Outer Right Dock: Device Mirror Panel OR Devices Panel (single active right panel B1) -->
-    {#if panelStore.activeRightPanel === 'mirror' && DeviceMirrorPanelComponent}
-      <DeviceMirrorPanelComponent
-        onSelectDevice={() => panelStore.openRightPanel('devices')}
-        onOpenLogcat={openLogcat}
-        onClose={() => panelStore.closeRightPanel()}
-      />
-    {:else if panelStore.activeRightPanel === 'devices' && DevicesPanelComponent}
-      <div class="right-devices-panel">
-        <DevicesPanelComponent onClose={() => panelStore.closeRightPanel()} />
-      </div>
+    {#if !showDashboard}
+      {#if panelStore.activeRightPanel === 'mirror' && DeviceMirrorPanelComponent}
+        <DeviceMirrorPanelComponent
+          onSelectDevice={() => panelStore.openRightPanel('devices')}
+          onOpenLogcat={openLogcat}
+          onClose={() => panelStore.closeRightPanel()}
+        />
+      {:else if panelStore.activeRightPanel === 'devices' && DevicesPanelComponent}
+        <div class="right-devices-panel">
+          <DevicesPanelComponent onClose={() => panelStore.closeRightPanel()} />
+        </div>
+      {/if}
     {/if}
   </div>
 
-  <StatusBar
-    {branchName}
-    {statusText}
-    {statusKind}
-    {isBench}
-    {fileType}
-    {cursorInfo}
-    onOpenProblems={openProblems}
-    onOpenToolchains={openToolchains}
-  />
+  {#if !showDashboard}
+    <StatusBar
+      {branchName}
+      {statusText}
+      {statusKind}
+      {isBench}
+      {fileType}
+      {cursorInfo}
+      onOpenProblems={openProblems}
+      onOpenToolchains={openToolchains}
+    />
+  {/if}
 
   {#if isPreview}
     <div class="preview-badge">PREVIEW — BUKAN APP (DUMMY DATA)</div>

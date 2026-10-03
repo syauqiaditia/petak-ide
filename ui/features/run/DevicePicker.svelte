@@ -8,6 +8,12 @@
     type PickerDeviceItem,
   } from './deviceLogic';
   import { popupStore } from '../../shell/popupStore.svelte';
+  import {
+    ANDROID_EMULATOR_SVG,
+    IOS_SIMULATOR_SVG,
+    DEVICE_USB_SVG,
+    DEVICE_WIFI_SVG,
+  } from '../../icons';
 
   let open = $derived(popupStore.isOpen('device'));
   let isRefreshing = $state(false);
@@ -81,10 +87,24 @@
     onclick={toggleOpen}
     title={activeItem ? `Device: ${formatDeviceLabel(activeItem.name, activeItem.sdk)} (${activeItem.state})` : 'No device connected'}
   >
-    <svg class="device-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="7" y="3" width="10" height="18" rx="2"></rect>
-      <path d="M11 18h2"></path>
-    </svg>
+    <span class="device-icon-wrap">
+      {#if activeItem?.group === 'Simulator'}
+        {@html IOS_SIMULATOR_SVG}
+      {:else if activeItem?.group === 'Emulator'}
+        {@html ANDROID_EMULATOR_SVG}
+      {:else if activeItem?.connection === 'connected'}
+        {#if activeItem.transportBadge === 'Wi-Fi'}
+          {@html DEVICE_WIFI_SVG}
+        {:else}
+          {@html DEVICE_USB_SVG}
+        {/if}
+      {:else}
+        <svg class="device-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="7" y="3" width="10" height="18" rx="2"></rect>
+          <path d="M11 18h2"></path>
+        </svg>
+      {/if}
+    </span>
 
     {#if activeItem}
       <span class="device-name">{formatDeviceLabel(activeItem.name, activeItem.sdk)}</span>
@@ -119,6 +139,7 @@
               class:selected={isSelected}
               onclick={() => handleSelect(item.id)}
             >
+              <span class="item-custom-icon">{@html ANDROID_EMULATOR_SVG}</span>
               <span class="status-dot" class:online={item.state === 'online'} class:booting={item.state === 'booting'}></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
@@ -143,6 +164,7 @@
               class:selected={isSelected}
               onclick={() => handleSelect(item.id)}
             >
+              <span class="item-custom-icon">{@html IOS_SIMULATOR_SVG}</span>
               <span class="status-dot online"></span>
               <div class="item-text">
                 <span class="item-title">{item.name}</span>
@@ -170,6 +192,13 @@
               onclick={() => handleSelect(item.id)}
               title={tooltip}
             >
+              <span class="item-custom-icon">
+                {#if item.transportBadge === 'Wi-Fi'}
+                  {@html DEVICE_WIFI_SVG}
+                {:else}
+                  {@html DEVICE_USB_SVG}
+                {/if}
+              </span>
               <span class="status-dot online"></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
@@ -224,6 +253,13 @@
               role="button"
               tabindex="-1"
             >
+              <span class="item-custom-icon">
+                {#if item.transportBadge === 'Wi-Fi'}
+                  {@html DEVICE_WIFI_SVG}
+                {:else}
+                  {@html DEVICE_USB_SVG}
+                {/if}
+              </span>
               <span class="status-dot" class:paired={!isLocked} class:locked={isLocked}></span>
               <div class="item-text">
                 <span class="item-title">{formatDeviceLabel(item.name, item.sdk)}</span>
@@ -292,6 +328,22 @@
   }
   .trigger-btn:hover {
     background: #23252b;
+  }
+  .device-icon-wrap {
+    display: flex;
+    align-items: center;
+    width: 15px;
+    height: 15px;
+    color: #b9bcc3;
+    flex-shrink: 0;
+  }
+  .item-custom-icon {
+    display: flex;
+    align-items: center;
+    width: 14px;
+    height: 14px;
+    color: #8b8f98;
+    flex-shrink: 0;
   }
   .device-icon {
     color: #b9bcc3;

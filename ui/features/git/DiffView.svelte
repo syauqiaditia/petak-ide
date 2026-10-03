@@ -32,6 +32,25 @@
 
   let hunkElements = $state<HTMLElement[]>([]);
 
+  let leftPanelEl = $state<HTMLElement | null>(null);
+  let rightPanelEl = $state<HTMLElement | null>(null);
+  let isSyncingScroll = false;
+
+  function handleSyncScroll(source: 'left' | 'right') {
+    if (isSyncingScroll) return;
+    isSyncingScroll = true;
+    if (source === 'left' && leftPanelEl && rightPanelEl) {
+      rightPanelEl.scrollTop = leftPanelEl.scrollTop;
+      rightPanelEl.scrollLeft = leftPanelEl.scrollLeft;
+    } else if (source === 'right' && leftPanelEl && rightPanelEl) {
+      leftPanelEl.scrollTop = rightPanelEl.scrollTop;
+      leftPanelEl.scrollLeft = rightPanelEl.scrollLeft;
+    }
+    requestAnimationFrame(() => {
+      isSyncingScroll = false;
+    });
+  }
+
   function scrollToHunk(idx: number) {
     if (idx < 0 || idx >= totalHunks) return;
     currentHunkIdx = idx;
@@ -179,45 +198,45 @@
             {activeKind === 'staged' ? 'Index (Staged)' : 'Working Tree'}
           </span>
         </div>
-      {/if}
 
-      <!-- Hunks List -->
-      <div class="hunks-container">
-        {#each hunks as hunk, hunkIdx (hunkIdx)}
+        <div class="sbs-split-wrapper">
+          <!-- Left Panel (Original) -->
           <div
-            class="hunk-block"
-            bind:this={hunkElements[hunkIdx]}
-            class:active-hunk={hunkIdx === currentHunkIdx}
+            class="sbs-panel-side left-panel hunks-container"
+            bind:this={leftPanelEl}
+            onscroll={() => handleSyncScroll('left')}
           >
-            <!-- Hunk Header Bar -->
-            <div class="hunk-header">
-              <span class="hunk-range">{hunk.header}</span>
-              {#if activeKind === 'worktree'}
-                <button
-                  class="hunk-action-btn stage"
-                  onclick={() => handleHunkAction(hunkIdx)}
-                >
-                  Stage hunk
-                </button>
-              {:else if activeKind === 'staged'}
-                <button
-                  class="hunk-action-btn unstage"
-                  onclick={() => handleHunkAction(hunkIdx)}
-                >
-                  Unstage hunk
-                </button>
-              {/if}
-            </div>
-
-            <!-- Diff Lines -->
-            {#if gitStore.diffMode === 'sbs'}
-              <!-- Side by Side Mode -->
+            {#each hunks as hunk, hunkIdx (hunkIdx)}
               {@const sbsHunk = sbsHunks[hunkIdx]}
-              <div class="sbs-rows code">
-                {#each sbsHunk.rows as row, rowIdx (rowIdx)}
-                  <div class="sbs-row">
-                    <!-- Left Side -->
-                    <div class="sbs-cell left {row.left.kind}">
+              <div
+                class="hunk-block"
+                bind:this={hunkElements[hunkIdx]}
+                class:active-hunk={hunkIdx === currentHunkIdx}
+              >
+                <!-- Hunk Header Bar -->
+                <div class="hunk-header">
+                  <span class="hunk-range">{hunk.header}</span>
+                  {#if activeKind === 'worktree'}
+                    <button
+                      class="hunk-action-btn stage"
+                      onclick={() => handleHunkAction(hunkIdx)}
+                    >
+                      Stage hunk
+                    </button>
+                  {:else if activeKind === 'staged'}
+                    <button
+                      class="hunk-action-btn unstage"
+                      onclick={() => handleHunkAction(hunkIdx)}
+                    >
+                      Unstage hunk
+                    </button>
+                  {/if}
+                </div>
+
+                <!-- Diff Lines -->
+                <div class="sbs-rows code">
+                  {#each sbsHunk.rows as row, rowIdx (rowIdx)}
+                    <div class="sbs-row sbs-cell left {row.left.kind}">
                       <span class="gutter">{row.left.lineNo ?? ''}</span>
                       <span class="cell-text">
                         {#if row.left.tokens && row.left.tokens.length > 0}
@@ -233,11 +252,35 @@
                         {/if}
                       </span>
                     </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
 
-                    <div class="divider"></div>
+          <div class="sbs-vertical-divider"></div>
 
-                    <!-- Right Side -->
-                    <div class="sbs-cell right {row.right.kind}">
+          <!-- Right Panel (Modified) -->
+          <div
+            class="sbs-panel-side right-panel hunks-container"
+            bind:this={rightPanelEl}
+            onscroll={() => handleSyncScroll('right')}
+          >
+            {#each hunks as hunk, hunkIdx (hunkIdx)}
+              {@const sbsHunk = sbsHunks[hunkIdx]}
+              <div
+                class="hunk-block"
+                class:active-hunk={hunkIdx === currentHunkIdx}
+              >
+                <!-- Hunk Header Bar -->
+                <div class="hunk-header">
+                  <span class="hunk-range">{hunk.header}</span>
+                </div>
+
+                <!-- Diff Lines -->
+                <div class="sbs-rows code">
+                  {#each sbsHunk.rows as row, rowIdx (rowIdx)}
+                    <div class="sbs-row sbs-cell right {row.right.kind}">
                       <span class="gutter">{row.right.lineNo ?? ''}</span>
                       <span class="cell-text">
                         {#if row.right.tokens && row.right.tokens.length > 0}
@@ -253,29 +296,59 @@
                         {/if}
                       </span>
                     </div>
-                  </div>
-                {/each}
+                  {/each}
+                </div>
               </div>
-            {:else}
-              <!-- Unified Mode -->
-              <div class="unified-rows code">
-                {#each hunk.lines as line, lineIdx (lineIdx)}
-                  <div class="unified-row {line.kind}">
-                    <span class="gutter old">{line.oldNo ?? ''}</span>
-                    <span class="gutter new">{line.newNo ?? ''}</span>
-                    <span class="sign">
-                      {#if line.kind === 'add'}+{/if}
-                      {#if line.kind === 'del'}−{/if}
-                      {#if line.kind === 'context'}&nbsp;{/if}
-                    </span>
-                    <span class="cell-text">{line.text}</span>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+            {/each}
           </div>
-        {/each}
-      </div>
+        </div>
+      {:else}
+        <!-- Unified Mode -->
+        <div class="diff-content">
+          <div class="hunks-container">
+            {#each hunks as hunk, hunkIdx (hunkIdx)}
+              <div
+                class="hunk-block"
+                bind:this={hunkElements[hunkIdx]}
+                class:active-hunk={hunkIdx === currentHunkIdx}
+              >
+                <div class="hunk-header">
+                  <span class="hunk-range">{hunk.header}</span>
+                  {#if activeKind === 'worktree'}
+                    <button
+                      class="hunk-action-btn stage"
+                      onclick={() => handleHunkAction(hunkIdx)}
+                    >
+                      Stage hunk
+                    </button>
+                  {:else if activeKind === 'staged'}
+                    <button
+                      class="hunk-action-btn unstage"
+                      onclick={() => handleHunkAction(hunkIdx)}
+                    >
+                      Unstage hunk
+                    </button>
+                  {/if}
+                </div>
+                <div class="unified-rows code">
+                  {#each hunk.lines as line, lineIdx (lineIdx)}
+                    <div class="unified-row {line.kind}">
+                      <span class="gutter old">{line.oldNo ?? ''}</span>
+                      <span class="gutter new">{line.newNo ?? ''}</span>
+                      <span class="sign">
+                        {#if line.kind === 'add'}+{/if}
+                        {#if line.kind === 'del'}−{/if}
+                        {#if line.kind === 'context'}&nbsp;{/if}
+                      </span>
+                      <span class="cell-text">{line.text}</span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -527,6 +600,28 @@
   }
 
   /* Side by side styles */
+  .sbs-split-wrapper {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .sbs-panel-side {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+    white-space: pre;
+    background: #1a1b1f;
+  }
+
+  .sbs-vertical-divider {
+    width: 1px;
+    background: #26282d;
+    flex-shrink: 0;
+  }
+
   .sbs-rows {
     display: flex;
     flex-direction: column;
@@ -536,6 +631,8 @@
     display: flex;
     height: 22px;
     line-height: 22px;
+    width: 100%;
+    min-width: fit-content;
   }
 
   .sbs-cell {

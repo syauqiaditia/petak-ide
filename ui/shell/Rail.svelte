@@ -1,22 +1,40 @@
 <script lang="ts">
   import { panelStore } from './panelStore.svelte';
   import { settingsStore } from '../features/settings/settingsStore.svelte';
+  import { TOOL_WINDOWS_SVG } from '../icons';
 
   let {
     activeTab = $bindable('project'),
     onTabChange,
     onToggleAgents,
     isAgentsOpen = false,
+    onOpenTerminal,
+    onOpenRun,
+    onOpenLogcat,
+    onOpenProblems,
+    onToggleDevices,
+    onToggleMirror,
+    onSelectRailTab,
   } = $props<{
     activeTab?: string;
     onTabChange?: (tab: string) => void;
     onToggleAgents?: () => void;
     isAgentsOpen?: boolean;
+    onOpenTerminal?: () => void;
+    onOpenRun?: () => void;
+    onOpenLogcat?: () => void;
+    onOpenProblems?: () => void;
+    onToggleDevices?: () => void;
+    onToggleMirror?: () => void;
+    onSelectRailTab?: (tab: string) => void;
   }>();
+
+  let isToolWindowsOpen = $state(false);
 
   function selectTab(tab: string) {
     activeTab = tab;
     onTabChange?.(tab);
+    onSelectRailTab?.(tab);
   }
 
   function handleAgentsClick() {
@@ -26,7 +44,16 @@
       selectTab('agents');
     }
   }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+      e.preventDefault();
+      isToolWindowsOpen = !isToolWindowsOpen;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="rail">
   <button
@@ -85,31 +112,91 @@
 
   <div class="spacer"></div>
 
-  <!-- Sun / Moon Quick Theme Toggle (Item 8) -->
+  <!-- Tool Windows Quick Menu Button -->
   <button
-    class="rail-btn theme-toggle-btn"
-    onclick={() => settingsStore.toggleTheme()}
-    aria-label="Toggle Theme"
-    title={settingsStore.theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
+    class="rail-btn tool-windows-btn"
+    class:active={isToolWindowsOpen}
+    onclick={() => (isToolWindowsOpen = !isToolWindowsOpen)}
+    aria-label="Tool Windows Quick Menu"
+    aria-haspopup="true"
+    title="Tool Windows (⌘0)"
   >
-    {#if settingsStore.theme === 'dark'}
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <circle cx="12" cy="12" r="5"></circle>
-        <line x1="12" y1="1" x2="12" y2="3"></line>
-        <line x1="12" y1="21" x2="12" y2="23"></line>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-        <line x1="1" y1="12" x2="3" y2="12"></line>
-        <line x1="21" y1="12" x2="23" y2="12"></line>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-      </svg>
-    {:else}
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-      </svg>
-    {/if}
+    <span class="rail-icon-svg">{@html TOOL_WINDOWS_SVG}</span>
   </button>
+
+  {#if isToolWindowsOpen}
+    <div class="tw-backdrop" onclick={() => (isToolWindowsOpen = false)} role="presentation">
+      <div
+        class="tw-popup"
+        onclick={(e) => e.stopPropagation()}
+        role="menu"
+        tabindex="-1"
+      >
+        <div class="tw-group-title">PANEL UTAMA</div>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('project'); }}>
+          <span class="tw-shortcut-badge">1</span>
+          <span class="tw-emoji">📁</span>
+          <span class="tw-name">Project Explorer</span>
+          <span class="tw-kbd">⌘1</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('git'); }}>
+          <span class="tw-shortcut-badge">2</span>
+          <span class="tw-emoji">🌿</span>
+          <span class="tw-name">Git Source Control</span>
+          <span class="tw-kbd">⌘2</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('mr'); }}>
+          <span class="tw-shortcut-badge">3</span>
+          <span class="tw-emoji">🔀</span>
+          <span class="tw-name">GitLab Merge Requests</span>
+          <span class="tw-kbd">⌘5</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; handleAgentsClick(); }}>
+          <span class="tw-shortcut-badge">4</span>
+          <span class="tw-emoji">✨</span>
+          <span class="tw-name">AI Agents Panel</span>
+          <span class="tw-kbd">⌘6</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onToggleMirror?.(); }}>
+          <span class="tw-shortcut-badge">5</span>
+          <span class="tw-emoji">📱</span>
+          <span class="tw-name">Device Mirror Dock</span>
+          <span class="tw-kbd">⌘⇧D</span>
+        </button>
+
+        <div class="tw-sep"></div>
+
+        <div class="tw-group-title">PANEL BAWAH</div>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onOpenTerminal?.(); }}>
+          <span class="tw-shortcut-badge">T</span>
+          <span class="tw-emoji">💻</span>
+          <span class="tw-name">Terminal</span>
+          <span class="tw-kbd">⌃`</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onOpenRun?.(); }}>
+          <span class="tw-shortcut-badge">R</span>
+          <span class="tw-emoji">⚡</span>
+          <span class="tw-name">Run / Build Output</span>
+          <span class="tw-kbd">⌘4</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onOpenLogcat?.(); }}>
+          <span class="tw-shortcut-badge">L</span>
+          <span class="tw-emoji">📋</span>
+          <span class="tw-name">Logcat Device Logs</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onOpenProblems?.(); }}>
+          <span class="tw-shortcut-badge">P</span>
+          <span class="tw-emoji">⚠️</span>
+          <span class="tw-name">Problems & Diagnostics</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onToggleDevices?.(); }}>
+          <span class="tw-shortcut-badge">D</span>
+          <span class="tw-emoji">📱</span>
+          <span class="tw-name">Devices & Emulators</span>
+        </button>
+      </div>
+    </div>
+  {/if}
 
   <!-- Settings Gear Button (Item 7 & 8) -->
   <button
@@ -162,5 +249,97 @@
   }
   .settings-btn {
     margin-bottom: 8px;
+  }
+  .rail-icon-svg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+  }
+  .tw-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+  }
+  .tw-popup {
+    position: absolute;
+    left: 54px;
+    bottom: 50px;
+    width: 230px;
+    background: #1c1d22;
+    border: 1px solid #26282d;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+    padding: 6px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 1000;
+  }
+  .tw-group-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #6b707d;
+    letter-spacing: 0.6px;
+    padding: 6px 10px 4px 10px;
+  }
+  .tw-menu-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    color: #bcbec4;
+    font-size: 12.5px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .tw-menu-btn:hover {
+    background: #262830;
+    color: #ffffff;
+  }
+  .tw-shortcut-badge {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    background: #22242b;
+    border: 1px solid #2c2e36;
+    color: #8b8f98;
+    font-size: 10px;
+    font-weight: 600;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+  .tw-emoji {
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .tw-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tw-kbd {
+    font-size: 10.5px;
+    color: #6b707d;
+    background: #16171b;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: inherit;
+    flex-shrink: 0;
+  }
+  .tw-sep {
+    height: 1px;
+    background: #26282d;
+    margin: 4px 6px;
   }
 </style>

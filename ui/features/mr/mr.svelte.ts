@@ -12,6 +12,7 @@ import type {
   MrFilter,
   MergeRequestParams,
   InlinePositionParams,
+  CreateMrParams,
 } from './types';
 import type { GitDiffFile } from '../git/types';
 import { filterMergeRequests, canWrite } from './mrLogic';
@@ -372,6 +373,46 @@ class MrStore {
       throw e;
     } finally {
       this.isMerging = false;
+    }
+  }
+
+  /**
+   * Create a new Merge Request.
+   */
+  async createMr(params: CreateMrParams): Promise<MergeRequest> {
+    if (!this.canPerformWrite && !this.isDemoMode) {
+      throw new Error("Aksi dinonaktifkan: token butuh scope 'api' untuk menulis ke GitLab.");
+    }
+    this.actionError = null;
+    try {
+      const newMr = await api.mrCreate(params, this.currentFolderPath);
+      this.mergeRequests = [newMr, ...this.mergeRequests];
+      this.selectMr(newMr.iid);
+      this.actionSuccess = `Merge Request !${newMr.iid} berhasil dibuat.`;
+      return newMr;
+    } catch (e: any) {
+      this.actionError = e?.message || String(e);
+      throw e;
+    }
+  }
+
+  /**
+   * Rebase MR source branch onto target branch.
+   */
+  async rebase(iid: number) {
+    if (!this.canPerformWrite && !this.isDemoMode) {
+      throw new Error("Aksi dinonaktifkan: token butuh scope 'api' untuk menulis ke GitLab.");
+    }
+    this.actionError = null;
+    try {
+      await api.mrRebase(iid, this.currentFolderPath);
+      this.actionSuccess = `Rebase MR !${iid} telah dimulai.`;
+      if (this.selectedIid) {
+        await this.selectMr(this.selectedIid);
+      }
+    } catch (e: any) {
+      this.actionError = e?.message || String(e);
+      throw e;
     }
   }
 
