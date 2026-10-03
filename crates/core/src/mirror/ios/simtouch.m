@@ -84,6 +84,39 @@ static double clamp01(double v) {
     return v;
 }
 
+static CGPoint normalizeWindowCoordinates(double x, double y, double w, double h, double *outW, double *outH) {
+    if (w <= 0.0 || h <= 0.0) {
+        if (outW) *outW = 1.0;
+        if (outH) *outH = 1.0;
+        return CGPointZero;
+    }
+
+    // Detect if coordinates come from a captured macOS Simulator window with chrome & bezel.
+    // Standard macOS Simulator window has ~52-54pt titlebar, ~18-20pt top bezel (total ~72pt top),
+    // ~26pt bottom bezel (total ~98pt vertical chrome), and ~27pt left & right bezels (~54pt horizontal chrome).
+    if (w >= 300.0 && h >= 600.0 && h > w * 1.8) {
+        double leftInset = 27.0;
+        double rightInset = 27.0;
+        double topInset = 72.0;
+        double bottomInset = 26.0;
+
+        double activeW = w - (leftInset + rightInset);
+        double activeH = h - (topInset + bottomInset);
+
+        if (activeW > 100.0 && activeH > 200.0) {
+            if (outW) *outW = activeW;
+            if (outH) *outH = activeH;
+            double normX = clamp01((x - leftInset) / activeW);
+            double normY = clamp01((y - topInset) / activeH);
+            return CGPointMake(normX, normY);
+        }
+    }
+
+    if (outW) *outW = w;
+    if (outH) *outH = h;
+    return CGPointMake(clamp01(x / w), clamp01(y / h));
+}
+
 static void *loadSimulatorKit(void) {
     static void *handle = NULL;
     if (handle) return handle;
@@ -347,10 +380,11 @@ static int handleTap(id client, void *simKitHandle, int argc, const char *argv[]
         return 1;
     }
 
-    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+    double activeW = w, activeH = h;
+    CGPoint pt = normalizeWindowCoordinates(x, y, w, h, &activeW, &activeH);
 
     // DOWN: eventType 1, direction 1
-    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
+    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, activeW, activeH);
     if (!downMsg || !sendIndigoMessage(client, downMsg)) {
         fprintf(stderr, "[simtouch] Failed to send touch DOWN\n");
         return 1;
@@ -359,7 +393,7 @@ static int handleTap(id client, void *simKitHandle, int argc, const char *argv[]
     usleep(30000); // 30ms hold (<35ms latency)
 
     // UP: eventType 2, direction 2
-    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
+    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, activeW, activeH);
     if (!upMsg || !sendIndigoMessage(client, upMsg)) {
         fprintf(stderr, "[simtouch] Failed to send touch UP\n");
         return 1;
@@ -379,19 +413,24 @@ static int performSwipe(id client, void *simKitHandle,
         return 1;
     }
 
-    double x1_norm = clamp01(x1 / w);
-    double y1_norm = clamp01(y1 / h);
-    double x2_norm = clamp01(x2 / w);
-    double y2_norm = clamp01(y2 / h);
+    double activeW1 = w, activeH1 = h;
+    double activeW2 = w, activeH2 = h;
+    CGPoint pt1 = normalizeWindowCoordinates(x1, y1, w, h, &activeW1, &activeH1);
+    CGPoint pt2 = normalizeWindowCoordinates(x2, y2, w, h, &activeW2, &activeH2);
 
-    CGPoint pt1 = CGPointMake(x1_norm, y1_norm);
-    CGPoint pt2 = CGPointMake(x2_norm, y2_norm);
+    double x1_norm = pt1.x;
+    double y1_norm = pt1.y;
+    double x2_norm = pt2.x;
+    double y2_norm = pt2.y;
+
+    double activeW = (activeW1 + activeW2) * 0.5;
+    double activeH = (activeH1 + activeH2) * 0.5;
 
     unsigned int stepUs = (unsigned int)((duration_ms * 1000) / (steps + 2));
     if (stepUs < 8000) stepUs = 8000;
 
     // DOWN: eventType 1, direction 1
-    void *downMsg = buildMouseMessage(fnMouse, &pt1, NULL, 1, 1, w, h);
+    void *downMsg = buildMouseMessage(fnMouse, &pt1, NULL, 1, 1, activeW, activeH);
     if (!downMsg) {
         fprintf(stderr, "[simtouch] Failed to build swipe DOWN message\n");
         return 1;
@@ -730,20 +769,21 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (w <= 0.0) w = 1.0;
                 if (h <= 0.0) h = 1.0;
                 if (fnMouse) {
-                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    double activeW = w, activeH = h;
+                    CGPoint pt = normalizeWindowCoordinates(x, y, w, h, &activeW, &activeH);
                     // Deduplicate / synthesize UP if previous touch was left hanging
                     if (isTouchDown) {
                         void *upMsg = buildMouseMessage(fnMouse, &lastPt, NULL, 2, 2, lastW, lastH);
                         if (upMsg) sendIndigoMessageAsync(client, upMsg);
                         usleep(5000);
                     }
-                    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
+                    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, activeW, activeH);
                     if (downMsg) sendIndigoMessageAsync(client, downMsg);
                     isTouchDown = YES;
                     lastDownMs = current_time_ms();
                     lastPt = pt;
-                    lastW = w;
-                    lastH = h;
+                    lastW = activeW;
+                    lastH = activeH;
                 }
             }
         } else if (line[0] == 'm' && line[1] == ' ') {
@@ -752,12 +792,13 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (w <= 0.0) w = 1.0;
                 if (h <= 0.0) h = 1.0;
                 if (fnMouse && isTouchDown) {
-                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
-                    void *moveMsg = buildMouseMessage(fnMouse, &pt, NULL, 6, 0, w, h);
+                    double activeW = w, activeH = h;
+                    CGPoint pt = normalizeWindowCoordinates(x, y, w, h, &activeW, &activeH);
+                    void *moveMsg = buildMouseMessage(fnMouse, &pt, NULL, 6, 0, activeW, activeH);
                     if (moveMsg) sendIndigoMessageAsync(client, moveMsg);
                     lastPt = pt;
-                    lastW = w;
-                    lastH = h;
+                    lastW = activeW;
+                    lastH = activeH;
                 }
             }
         } else if (line[0] == 'u' && line[1] == ' ') {
@@ -766,7 +807,8 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (w <= 0.0) w = 1.0;
                 if (h <= 0.0) h = 1.0;
                 if (fnMouse) {
-                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    double activeW = w, activeH = h;
+                    CGPoint pt = normalizeWindowCoordinates(x, y, w, h, &activeW, &activeH);
                     if (isTouchDown) {
                         isTouchDown = NO;
                         uint64_t elapsed = current_time_ms() - lastDownMs;
@@ -775,7 +817,7 @@ static int runDaemon(id client, void *simKitHandle) {
                             usleep((useconds_t)((35 - elapsed) * 1000));
                         }
                     }
-                    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
+                    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, activeW, activeH);
                     if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
             }
@@ -785,11 +827,12 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (w <= 0.0) w = 1.0;
                 if (h <= 0.0) h = 1.0;
                 if (fnMouse) {
-                    CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
-                    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
+                    double activeW = w, activeH = h;
+                    CGPoint pt = normalizeWindowCoordinates(x, y, w, h, &activeW, &activeH);
+                    void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, activeW, activeH);
                     if (downMsg) sendIndigoMessageAsync(client, downMsg);
                     usleep(35000); // 35ms hold for guaranteed UIKit tap recognition
-                    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
+                    void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, activeW, activeH);
                     if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
             }
