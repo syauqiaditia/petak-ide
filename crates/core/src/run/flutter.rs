@@ -347,6 +347,11 @@ impl FlutterRun {
             args.push("--dart-define".to_string());
             args.push(def.clone());
         }
+        if let Some(ref extra) = cfg.additional_args {
+            for arg in extra.split_whitespace() {
+                args.push(arg.to_string());
+            }
+        }
 
         let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
 
@@ -830,6 +835,7 @@ mod tests {
             target: None,
             flavor: None,
             dart_defines: vec![],
+            additional_args: None,
             module: None,
             variant: None,
             application_id: None,
@@ -962,6 +968,7 @@ mod tests {
             target: None,
             flavor: None,
             dart_defines: vec![],
+            additional_args: None,
             module: None,
             variant: None,
             application_id: None,
@@ -1052,6 +1059,7 @@ mod tests {
             target: None,
             flavor: None,
             dart_defines: vec![],
+            additional_args: None,
             module: None,
             variant: None,
             application_id: None,
@@ -1217,6 +1225,82 @@ mod tests {
             non_json_count > 10,
             "Expected > 10 non-JSON logs, got {}",
             non_json_count
+        );
+    }
+
+    #[test]
+    fn test_flutter_run_additional_args_forwarded() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+
+        struct ArgCaptureSpawn {
+            captured_args: Arc<Mutex<Vec<String>>>,
+        }
+
+        impl Spawn for ArgCaptureSpawn {
+            fn spawn(
+                &self,
+                _cwd: &Path,
+                _program: &str,
+                args: &[&str],
+                _env: &[(&str, &str)],
+                _tx: Sender<ProcLine>,
+            ) -> io::Result<Box<dyn Proc>> {
+                *self.captured_args.lock().unwrap() =
+                    args.iter().map(|s| s.to_string()).collect();
+                Ok(Box::new(MockProc {
+                    pid: 9999,
+                    stdin_lines: Arc::new(Mutex::new(Vec::new())),
+                    killed: Arc::new(AtomicBool::new(false)),
+                }))
+            }
+        }
+
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let spawn = ArgCaptureSpawn {
+            captured_args: Arc::clone(&captured),
+        };
+
+        let cfg = RunConfig {
+            name: "extra_args_test".to_string(),
+            kind: crate::run::config::RunKind::Flutter,
+            target: Some("lib/main.dart".to_string()),
+            flavor: Some("dev".to_string()),
+            dart_defines: vec!["FLAG=1".to_string()],
+            additional_args: Some("--web-port 8080 --verbose --dart-define=EXTRA=2".to_string()),
+            module: None,
+            variant: None,
+            application_id: None,
+            activity: None,
+        };
+
+        let lib_dir = dir.path().join("lib");
+        std::fs::create_dir_all(&lib_dir).unwrap();
+        std::fs::write(lib_dir.join("main.dart"), "// main").unwrap();
+
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let _runner = FlutterRun::start(&spawn, dir.path(), &cfg, "emulator-5554", tx)
+            .expect("start should succeed");
+
+        let args = captured.lock().unwrap().clone();
+        assert_eq!(
+            args,
+            vec![
+                "run",
+                "-d",
+                "emulator-5554",
+                "--machine",
+                "-t",
+                "lib/main.dart",
+                "--flavor",
+                "dev",
+                "--dart-define",
+                "FLAG=1",
+                "--web-port",
+                "8080",
+                "--verbose",
+                "--dart-define=EXTRA=2",
+            ]
         );
     }
 }

@@ -50,6 +50,11 @@ pub fn read_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn read_file_base64(path: String) -> Result<String, String> {
+    petak_core::fs::read_file_base64(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn save_file(app: tauri::AppHandle, path: String, content: String) -> Result<(), String> {
     petak_core::fs::save_file(&path, &content).map_err(|e| e.to_string())?;
 

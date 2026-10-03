@@ -29,6 +29,8 @@ pub struct RunConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dart_defines: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_args: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant: Option<String>,
@@ -158,6 +160,7 @@ pub fn auto_detect_run_configs(root: &Path) -> RunConfigFile {
                             target: Some(format!("lib/{}", file_name)),
                             flavor: None,
                             dart_defines: Vec::new(),
+                            additional_args: None,
                             module: None,
                             variant: None,
                             application_id: None,
@@ -174,6 +177,7 @@ pub fn auto_detect_run_configs(root: &Path) -> RunConfigFile {
                     target: Some("lib/main.dart".to_string()),
                     flavor: None,
                     dart_defines: Vec::new(),
+                    additional_args: None,
                     module: None,
                     variant: None,
                     application_id: None,
@@ -205,6 +209,7 @@ pub fn auto_detect_run_configs(root: &Path) -> RunConfigFile {
             target: None,
             flavor: None,
             dart_defines: Vec::new(),
+            additional_args: None,
             module: Some(":app".to_string()),
             variant: Some("debug".to_string()),
             application_id: None,
@@ -350,6 +355,7 @@ dependencies:
                 target: Some("lib/main.dart".to_string()),
                 flavor: Some("dev".to_string()),
                 dart_defines: vec!["API_URL=https://dev.example.com".to_string()],
+                additional_args: None,
                 module: None,
                 variant: None,
                 application_id: None,
@@ -362,6 +368,40 @@ dependencies:
 
         let loaded = load_run_config(root).expect("load should succeed");
         assert_eq!(loaded, config_file);
+    }
+
+    #[test]
+    fn test_run_config_additional_args_serialization() {
+        let json_with_args = r#"{
+            "name": "custom_args",
+            "kind": "flutter",
+            "additionalArgs": "--verbose --web-port 8080"
+        }"#;
+
+        let parsed: RunConfig = serde_json::from_str(json_with_args).unwrap();
+        assert_eq!(
+            parsed.additional_args,
+            Some("--verbose --web-port 8080".to_string())
+        );
+
+        let serialized = serde_json::to_string(&parsed).unwrap();
+        assert!(serialized.contains(r#""additionalArgs":"--verbose --web-port 8080""#));
+
+        // When additional_args is None, it should not appear in serialized JSON (skip_serializing_if)
+        let config_none = RunConfig {
+            name: "no_args".to_string(),
+            kind: RunKind::Flutter,
+            target: None,
+            flavor: None,
+            dart_defines: vec![],
+            additional_args: None,
+            module: None,
+            variant: None,
+            application_id: None,
+            activity: None,
+        };
+        let serialized_none = serde_json::to_string(&config_none).unwrap();
+        assert!(!serialized_none.contains("additionalArgs"));
     }
 
     #[test]
