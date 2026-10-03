@@ -76,22 +76,72 @@ pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
 }
 
 fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Option<Tool>) {
-    let flutter_cmd = crate::toolchain::resolve_flutter(Some(root))
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "flutter".to_string());
+    let mut candidate_cmds = Vec::new();
 
-    let output = match exec.run(root, &flutter_cmd, &["--version", "--machine"], &[], None) {
-        Ok(out) if out.status.success() => out,
-        _ => {
-            if flutter_cmd != "flutter" {
-                match exec.run(root, "flutter", &["--version", "--machine"], &[], None) {
-                    Ok(out) if out.status.success() => out,
-                    _ => return (None, None),
-                }
-            } else {
-                return (None, None);
+    if let Some(p) = crate::toolchain::resolve_flutter(Some(root)) {
+        candidate_cmds.push(p.to_string_lossy().to_string());
+    }
+    candidate_cmds.push("flutter".to_string());
+
+    // Standard macOS / user paths
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    if let Some(ref h) = home {
+        for sub in &[
+            "SDK/flutter/bin/flutter",
+            ".flutter/bin/flutter",
+            "flutter/bin/flutter",
+            "development/flutter/bin/flutter",
+            "fvm/default/bin/flutter",
+        ] {
+            let p = h.join(sub);
+            if p.is_file() {
+                candidate_cmds.push(p.to_string_lossy().to_string());
             }
         }
+    }
+
+    for sys in &[
+        "/opt/homebrew/bin/flutter",
+        "/usr/local/bin/flutter",
+    ] {
+        let p = Path::new(sys);
+        if p.is_file() {
+            candidate_cmds.push(sys.to_string());
+        }
+    }
+
+    let mut output = None;
+    for cmd in &candidate_cmds {
+        match exec.run(root, cmd, &["--version", "--machine"], &[], None) {
+            Ok(out) if out.status.success() => {
+                output = Some(out);
+                break;
+            }
+            _ => continue,
+        }
+    }
+
+    // Fallback: if GUI PATH minimal, probe shell which flutter
+    if output.is_none() {
+        let curr_path = std::env::var("PATH").unwrap_or_default();
+        if crate::toolchain::is_minimal_path(&curr_path) {
+            for probed in crate::toolchain::probe_shell_which(std::time::Duration::from_secs(3)) {
+                if probed.file_name().and_then(|n| n.to_str()) == Some("flutter") {
+                    let cmd = probed.to_string_lossy().to_string();
+                    if let Ok(out) = exec.run(root, &cmd, &["--version", "--machine"], &[], None) {
+                        if out.status.success() {
+                            output = Some(out);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let output = match output {
+        Some(out) => out,
+        None => return (None, None),
     };
 
     let v: serde_json::Value = match serde_json::from_slice(&output.stdout) {
@@ -224,33 +274,97 @@ fn parse_emulator_version(text: &str) -> Option<String> {
 }
 
 fn detect_java(root: &Path, exec: &dyn Exec) -> Option<Tool> {
-    let java_cmd = match std::env::var("JAVA_HOME") {
-        Ok(home) => {
-            let p = Path::new(&home).join("bin").join("java");
-            if p.exists() {
-                p.to_string_lossy().to_string()
-            } else {
-                "java".to_string()
+    let mut candidates = Vec::new();
+
+    if let Ok(home) = std::env::var("JAVA_HOME") {
+        let p = Path::new(&home).join("bin").join("java");
+        if p.exists() {
+            candidates.push(p.to_string_lossy().to_string());
+        }
+    }
+
+    if let Some(jdk_home) = crate::toolchain::resolve_jdk_home() {
+        let p = jdk_home.join("bin").join("java");
+        if p.exists() {
+            candidates.push(p.to_string_lossy().to_string());
+        }
+    }
+
+    // macOS standard JVM paths
+    let mut jvm_parents = vec![PathBuf::from("/Library/Java/JavaVirtualMachines")];
+    if let Some(h) = std::env::var_os("HOME").map(PathBuf::from) {
+        jvm_parents.push(h.join("Library").join("Java").join("JavaVirtualMachines"));
+    }
+    for jvm_parent in jvm_parents {
+        if jvm_parent.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&jvm_parent) {
+                for entry in entries.flatten() {
+                    let java_bin = entry.path().join("Contents").join("Home").join("bin").join("java");
+                    if java_bin.is_file() {
+                        candidates.push(java_bin.to_string_lossy().to_string());
+                    }
+                }
             }
         }
-        Err(_) => "java".to_string(),
-    };
-
-    match exec.run(root, &java_cmd, &["-version"], &[], None) {
-        Ok(out) if out.status.success() => {
-            let combined = format!(
-                "{}\n{}",
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            );
-            let version = parse_java_version(&combined);
-            Some(Tool {
-                path: java_cmd,
-                version,
-            })
-        }
-        _ => None,
     }
+
+    for opt_java in &[
+        "/opt/homebrew/opt/openjdk/bin/java",
+        "/opt/homebrew/bin/java",
+        "/usr/local/opt/openjdk/bin/java",
+        "/usr/local/bin/java",
+        "/usr/bin/java",
+    ] {
+        let p = Path::new(opt_java);
+        if p.is_file() {
+            candidates.push(opt_java.to_string());
+        }
+    }
+
+    candidates.push("java".to_string());
+
+    for cmd in &candidates {
+        if let Ok(out) = exec.run(root, cmd, &["-version"], &[], None) {
+            if out.status.success() {
+                let combined = format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&out.stdout),
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                let version = parse_java_version(&combined);
+                return Some(Tool {
+                    path: cmd.clone(),
+                    version,
+                });
+            }
+        }
+    }
+
+    // Fallback: if GUI PATH minimal, probe shell which java
+    let curr_path = std::env::var("PATH").unwrap_or_default();
+    if crate::toolchain::is_minimal_path(&curr_path) {
+        for probed in crate::toolchain::probe_shell_which(std::time::Duration::from_secs(3)) {
+            if probed.file_name().and_then(|n| n.to_str()) == Some("java") {
+                let cmd = probed.to_string_lossy().to_string();
+                if let Ok(out) = exec.run(root, &cmd, &["-version"], &[], None) {
+                    if out.status.success() {
+                        let combined = format!(
+                            "{}\n{}",
+                            String::from_utf8_lossy(&out.stdout),
+                            String::from_utf8_lossy(&out.stderr)
+                        );
+                        let version = parse_java_version(&combined);
+                        return Some(Tool {
+                            path: cmd,
+                            version,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn parse_java_version(text: &str) -> Option<String> {

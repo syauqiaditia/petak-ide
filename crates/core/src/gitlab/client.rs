@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use crate::exec::Exec;
 use crate::git::model::DiffFile;
 use crate::gitlab::model::{
-    convert_gitlab_diffs, Discussion, GitLabChangesRaw, GitLabDiffRaw, GitLabProject, GitLabUser,
+    convert_gitlab_diffs, CreateMrParams, Discussion, GitLabChangesRaw, GitLabDiffRaw, GitLabProject, GitLabUser,
     InlinePositionParams, JobInfo, MergeRequest, MergeRequestParams, Note, MrListQuery, PageInfo,
     PaginatedList, PersonalAccessToken, PipelineInfo, TokenScopeMode,
 };
@@ -988,6 +988,74 @@ impl GitLabClient {
         );
         let resp = self.execute_write("POST", &url, None)?;
         serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn create_merge_request(
+        &self,
+        project_id: &str,
+        params: &CreateMrParams,
+    ) -> Result<MergeRequest, GitLabError> {
+        if params.source_branch.trim().is_empty() {
+            return Err(GitLabError::Validation(
+                "source_branch wajib diisi".to_string(),
+            ));
+        }
+        if params.target_branch.trim().is_empty() {
+            return Err(GitLabError::Validation(
+                "target_branch wajib diisi".to_string(),
+            ));
+        }
+        if params.title.trim().is_empty() {
+            return Err(GitLabError::Validation(
+                "title wajib diisi".to_string(),
+            ));
+        }
+
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests",
+            self.base_url,
+            url_encode_path(project_id)
+        );
+
+        let mut map = serde_json::Map::new();
+        map.insert("source_branch".into(), serde_json::json!(params.source_branch.trim()));
+        map.insert("target_branch".into(), serde_json::json!(params.target_branch.trim()));
+        map.insert("title".into(), serde_json::json!(params.title.trim()));
+        if let Some(ref desc) = params.description {
+            map.insert("description".into(), serde_json::json!(desc));
+        }
+        if let Some(ref assignees) = params.assignee_ids {
+            map.insert("assignee_ids".into(), serde_json::json!(assignees));
+        }
+        if let Some(ref reviewers) = params.reviewer_ids {
+            map.insert("reviewer_ids".into(), serde_json::json!(reviewers));
+        }
+        if let Some(rm) = params.remove_source_branch {
+            map.insert("remove_source_branch".into(), serde_json::json!(rm));
+        }
+
+        let payload = serde_json::Value::Object(map);
+        let resp = self.execute_write("POST", &url, Some(&payload))?;
+        serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
+    pub fn rebase_merge_request(
+        &self,
+        project_id: &str,
+        iid: u64,
+    ) -> Result<serde_json::Value, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/rebase",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+        let resp = self.execute_write("PUT", &url, None)?;
+        if resp.trim().is_empty() {
+            Ok(serde_json::json!({ "rebase_in_progress": true }))
+        } else {
+            serde_json::from_str(&resp).map_err(|e| GitLabError::Parse(e.to_string()))
+        }
     }
 }
 

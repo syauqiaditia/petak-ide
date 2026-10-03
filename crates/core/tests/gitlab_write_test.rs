@@ -5,7 +5,7 @@ use petak_core::exec::{git, SystemExec};
 use petak_core::git::ops::checkout_mr;
 use petak_core::gitlab::client::{translate_gitlab_error, GitLabClient, GitLabError};
 use petak_core::gitlab::model::{
-    evaluate_merge_status, DiffRefs, InlinePositionParams, MergeRequestParams,
+    evaluate_merge_status, CreateMrParams, DiffRefs, InlinePositionParams, MergeRequestParams,
 };
 use std::fs;
 use std::path::Path;
@@ -85,6 +85,67 @@ fn test_write_endpoints_mock_success() {
         .cancel_merge_when_pipeline_succeeds("1234", 1)
         .expect("cancel MWPS failed");
     assert_eq!(cancel_res.iid, 1);
+
+    // 9. Create MR
+    let create_params = CreateMrParams {
+        source_branch: "feature/login".to_string(),
+        target_branch: "main".to_string(),
+        title: "Feature: Add user login".to_string(),
+        description: Some("Implements authentication".to_string()),
+        assignee_ids: Some(vec![101]),
+        reviewer_ids: Some(vec![202]),
+        remove_source_branch: Some(true),
+    };
+    let created_mr = client
+        .create_merge_request("1234", &create_params)
+        .expect("create MR failed");
+    assert_eq!(created_mr.source_branch, "feature/login");
+    assert_eq!(created_mr.target_branch, "main");
+    assert_eq!(created_mr.title, "Feature: Add user login");
+
+    // 10. Rebase MR
+    let rebase_res = client
+        .rebase_merge_request("1234", 1)
+        .expect("rebase MR failed");
+    assert_eq!(rebase_res["rebase_in_progress"], true);
+}
+
+#[test]
+fn test_create_mr_validation() {
+    let client = GitLabClient::new("http://localhost:1".to_string(), Some("token".to_string()));
+
+    let empty_source = CreateMrParams {
+        source_branch: "".to_string(),
+        target_branch: "main".to_string(),
+        title: "Test".to_string(),
+        ..Default::default()
+    };
+    assert!(matches!(
+        client.create_merge_request("123", &empty_source),
+        Err(GitLabError::Validation(_))
+    ));
+
+    let empty_target = CreateMrParams {
+        source_branch: "feature".to_string(),
+        target_branch: "".to_string(),
+        title: "Test".to_string(),
+        ..Default::default()
+    };
+    assert!(matches!(
+        client.create_merge_request("123", &empty_target),
+        Err(GitLabError::Validation(_))
+    ));
+
+    let empty_title = CreateMrParams {
+        source_branch: "feature".to_string(),
+        target_branch: "main".to_string(),
+        title: "   ".to_string(),
+        ..Default::default()
+    };
+    assert!(matches!(
+        client.create_merge_request("123", &empty_title),
+        Err(GitLabError::Validation(_))
+    ));
 }
 
 #[test]

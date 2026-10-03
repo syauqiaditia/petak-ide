@@ -1658,6 +1658,7 @@ fn ensure_device_watcher(app: &tauri::AppHandle, state: &RunState) {
 #[tauri::command]
 pub async fn toolchain_detect(root: String) -> Result<petak_core::run::Toolchain, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        petak_core::toolchain::invalidate_effective_path();
         let exec = petak_core::exec::SystemExec;
         Ok(petak_core::run::detect(std::path::Path::new(&root), &exec))
     })
@@ -1672,7 +1673,9 @@ pub async fn toolchain_get_config() -> Result<petak_core::toolchain::ToolchainCo
 
 #[tauri::command]
 pub async fn toolchain_save_config(config: petak_core::toolchain::ToolchainConfig) -> Result<(), String> {
-    petak_core::toolchain::save_config(&config).map_err(|e| e.to_string())
+    petak_core::toolchain::save_config(&config).map_err(|e| e.to_string())?;
+    petak_core::toolchain::invalidate_effective_path();
+    Ok(())
 }
 
 #[tauri::command]
