@@ -7,6 +7,7 @@
   import StatusBar from './shell/StatusBar.svelte';
   import Editor from './features/editor/Editor.svelte';
   import { tabsManager } from './features/editor/tabs.svelte';
+  import { isImageFile } from './features/editor/imageUtils';
   import { diagnosticsStore } from './features/editor/lsp/diagnostics.svelte';
   import type { EditorView } from '@codemirror/view';
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
@@ -245,7 +246,7 @@
       const existing = tabsManager.tabs.find((t) => t.path === filePath);
       const filename = filePath.split('/').filter(Boolean).pop() || '';
       if (!existing) {
-        const text = await api.readFile(filePath);
+        const text = isImageFile(filePath) ? '' : await api.readFile(filePath);
         tabsManager.openTab(filePath, filename, text);
       } else {
         tabsManager.setActive(filePath);
@@ -451,7 +452,7 @@
         tabsManager.setActive(entry.path);
         return;
       }
-      const text = await api.readFile(entry.path);
+      const text = isImageFile(entry.path) ? '' : await api.readFile(entry.path);
       tabsManager.openTab(entry.path, entry.name, text);
       statusText = `Opened ${entry.name}`;
     } catch (e) {

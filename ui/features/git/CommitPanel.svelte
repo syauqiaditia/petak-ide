@@ -11,7 +11,11 @@
     getCommitButtonLabel,
     canExecuteCommit,
     isEntryStaged,
+    isEntryUntracked,
     filterUnifiedChanges,
+    filterTrackedChanges,
+    filterUnversionedFiles,
+    formatGroupHeader,
     countCheckedEntries,
     getUnifiedStatusLetter,
     type FileContextAction,
@@ -22,6 +26,9 @@
   let isAmend = $state(false);
   let isCommitting = $state(false);
   let commitError = $state<string | null>(null);
+
+  let changesExpanded = $state(true);
+  let unversionedExpanded = $state(true);
 
   let contextMenuOpen = $state(
     typeof window !== 'undefined' && window.location.search.includes('ctx-menu')
@@ -65,6 +72,9 @@
   });
 
   let allChanges = $derived(filterUnifiedChanges(gitStore.status?.entries || []));
+  let trackedChanges = $derived(filterTrackedChanges(gitStore.status?.entries || []));
+  let unversionedFiles = $derived(filterUnversionedFiles(gitStore.status?.entries || []));
+
   let totalFiles = $derived(allChanges.length);
   let allFilePaths = $derived(allChanges.map((e) => e.path));
   let checkedCount = $derived(allChanges.filter((e) => gitStore.isPathChecked(e.path)).length);
@@ -73,6 +83,14 @@
 
   let allSelected = $derived(totalFiles > 0 && checkedCount === totalFiles);
   let partiallySelected = $derived(checkedCount > 0 && checkedCount < totalFiles);
+
+  let trackedCheckedCount = $derived(trackedChanges.filter((e) => gitStore.isPathChecked(e.path)).length);
+  let trackedAllSelected = $derived(trackedChanges.length > 0 && trackedCheckedCount === trackedChanges.length);
+  let trackedPartiallySelected = $derived(trackedCheckedCount > 0 && trackedCheckedCount < trackedChanges.length);
+
+  let unversionedCheckedCount = $derived(unversionedFiles.filter((e) => gitStore.isPathChecked(e.path)).length);
+  let unversionedAllSelected = $derived(unversionedFiles.length > 0 && unversionedCheckedCount === unversionedFiles.length);
+  let unversionedPartiallySelected = $derived(unversionedCheckedCount > 0 && unversionedCheckedCount < unversionedFiles.length);
 
   let canCommit = $derived(
     canExecuteCommit(checkedCount, commitMessage, isAmend, isCommitting)
@@ -84,6 +102,16 @@
   function handleToggleSelectAll() {
     const shouldCheckAll = checkedCount !== totalFiles;
     gitStore.setAllPathsChecked(allFilePaths, shouldCheckAll);
+  }
+
+  function handleToggleTrackedAll() {
+    const shouldCheck = trackedCheckedCount !== trackedChanges.length;
+    gitStore.setAllPathsChecked(trackedChanges.map((e) => e.path), shouldCheck);
+  }
+
+  function handleToggleUnversionedAll() {
+    const shouldCheck = unversionedCheckedCount !== unversionedFiles.length;
+    gitStore.setAllPathsChecked(unversionedFiles.map((e) => e.path), shouldCheck);
   }
 
   function handleToggleFile(entry: GitStatusEntry, e: MouseEvent) {
@@ -117,6 +145,9 @@
     contextMenuOpen = false;
 
     switch (actionId) {
+      case 'add_to_vcs':
+        await gitStore.stageFiles([path]);
+        break;
       case 'rollback':
         await gitStore.rollback([path]);
         break;
@@ -250,64 +281,143 @@
     </div>
   {/if}
 
-  <!-- Single Unified Changes List (Feature C) -->
+  <!-- Grouped Changes List (Changes & Unversioned Files ala Android Studio) -->
   <div class="files-container" oncontextmenu={handleEmptyAreaContextMenu}>
+    <!-- Tracked Changes Group -->
     <div class="group-section">
       <div class="group-header">
-        <label class="group-header-label">
-          <input
-            type="checkbox"
-            class="file-checkbox"
-            checked={allSelected}
-            indeterminate={partiallySelected}
-            disabled={totalFiles === 0}
-            onchange={handleToggleSelectAll}
-            title={allSelected ? "Deselect All" : "Select All"}
-          />
-          <span class="group-title">CHANGES ({totalFiles})</span>
-        </label>
+        <div class="group-header-left">
+          <button
+            type="button"
+            class="collapse-btn"
+            onclick={() => (changesExpanded = !changesExpanded)}
+            aria-label="Toggle Changes"
+          >
+            <span class="chevron" class:expanded={changesExpanded}>▶</span>
+          </button>
+          <label class="group-header-label">
+            <input
+              type="checkbox"
+              class="file-checkbox"
+              checked={trackedAllSelected}
+              indeterminate={trackedPartiallySelected}
+              disabled={trackedChanges.length === 0}
+              onchange={handleToggleTrackedAll}
+              title={trackedAllSelected ? "Deselect Changes" : "Select Changes"}
+            />
+            <span class="group-title">{formatGroupHeader('Changes', trackedChanges.length)}</span>
+          </label>
+        </div>
       </div>
 
-      <div class="group-list">
-        {#if totalFiles === 0}
-          <div class="empty-hint">No changes</div>
-        {:else}
-          {#each allChanges as entry (entry.path)}
-            {@const isChecked = gitStore.isPathChecked(entry.path)}
-            {@const { char, color } = getUnifiedStatusLetter(entry)}
-            {@const { name, dir } = formatPath(entry.path)}
-            {@const isSelected = gitStore.selectedFile?.path === entry.path}
-            <div
-              class="file-row"
-              class:selected={isSelected}
-              class:conflicted={entry.conflicted}
-              onclick={() => gitStore.selectFile(entry.path, isChecked ? 'staged' : 'worktree')}
-              oncontextmenu={(e) => handleRowContextMenu(e, entry, isChecked)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => {
-                if (e.key === 'Enter') gitStore.selectFile(entry.path, isChecked ? 'staged' : 'worktree');
-              }}
+      {#if changesExpanded}
+        <div class="group-list">
+          {#if trackedChanges.length === 0}
+            <div class="empty-hint">No changes</div>
+          {:else}
+            {#each trackedChanges as entry (entry.path)}
+              {@const isChecked = gitStore.isPathChecked(entry.path)}
+              {@const { char, color } = getUnifiedStatusLetter(entry)}
+              {@const { name, dir } = formatPath(entry.path)}
+              {@const isSelected = gitStore.selectedFile?.path === entry.path}
+              <div
+                class="file-row"
+                class:selected={isSelected}
+                class:conflicted={entry.conflicted}
+                onclick={() => gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree')}
+                oncontextmenu={(e) => handleRowContextMenu(e, entry, isEntryStaged(entry))}
+                role="button"
+                tabindex="0"
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree');
+                }}
+              >
+                <input
+                  type="checkbox"
+                  class="file-checkbox"
+                  checked={isChecked}
+                  title={isChecked ? "Uncheck to exclude from commit" : "Check to include in commit"}
+                  onclick={(e) => handleToggleFile(entry, e)}
+                />
+                <span class="status-badge" style="color: {color};">{char}</span>
+                <span class="file-name" title={entry.path}>{name}</span>
+                {#if entry.conflicted}
+                  <span class="conflict-tag">conflict</span>
+                {:else if dir}
+                  <span class="file-dir">{dir}</span>
+                {/if}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Unversioned Files Group -->
+    {#if unversionedFiles.length > 0}
+      <div class="group-section unversioned-section">
+        <div class="group-header">
+          <div class="group-header-left">
+            <button
+              type="button"
+              class="collapse-btn"
+              onclick={() => (unversionedExpanded = !unversionedExpanded)}
+              aria-label="Toggle Unversioned Files"
             >
+              <span class="chevron" class:expanded={unversionedExpanded}>▶</span>
+            </button>
+            <label class="group-header-label">
               <input
                 type="checkbox"
                 class="file-checkbox"
-                checked={isChecked}
-                title={isChecked ? "Uncheck to exclude from commit" : "Check to include in commit"}
-                onclick={(e) => handleToggleFile(entry, e)}
+                checked={unversionedAllSelected}
+                indeterminate={unversionedPartiallySelected}
+                disabled={unversionedFiles.length === 0}
+                onchange={handleToggleUnversionedAll}
+                title={unversionedAllSelected ? "Deselect Unversioned Files" : "Select Unversioned Files"}
               />
-              <span class="status-badge" style="color: {color};">{char}</span>
-              <span class="file-name" title={entry.path}>{name}</span>
-              {#if entry.conflicted}
-                <span class="conflict-tag">conflict</span>
-              {:else if dir}
-                <span class="file-dir">{dir}</span>
-              {/if}
-            </div>
-          {/each}
+              <span class="group-title">{formatGroupHeader('Unversioned Files', unversionedFiles.length)}</span>
+            </label>
+          </div>
+        </div>
+
+        {#if unversionedExpanded}
+          <div class="group-list">
+            {#each unversionedFiles as entry (entry.path)}
+              {@const isChecked = gitStore.isPathChecked(entry.path)}
+              {@const { char, color } = getUnifiedStatusLetter(entry)}
+              {@const { name, dir } = formatPath(entry.path)}
+              {@const isSelected = gitStore.selectedFile?.path === entry.path}
+              <div
+                class="file-row"
+                class:selected={isSelected}
+                class:conflicted={entry.conflicted}
+                onclick={() => gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree')}
+                oncontextmenu={(e) => handleRowContextMenu(e, entry, isEntryStaged(entry))}
+                role="button"
+                tabindex="0"
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree');
+                }}
+              >
+                <input
+                  type="checkbox"
+                  class="file-checkbox"
+                  checked={isChecked}
+                  title={isChecked ? "Uncheck to exclude from commit" : "Check to include in commit"}
+                  onclick={(e) => handleToggleFile(entry, e)}
+                />
+                <span class="status-badge" style="color: {color};">{char}</span>
+                <span class="file-name" title={entry.path}>{name}</span>
+                {#if dir}
+                  <span class="file-dir">{dir}</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
         {/if}
       </div>
-    </div>
+    {/if}
   </div>
 
   <!-- Commit Box at Bottom -->
@@ -543,6 +653,37 @@
     justify-content: space-between;
     padding: 0 12px;
     background: #16171a;
+  }
+
+  .group-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .collapse-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8b8f98;
+    font-size: 8px;
+    line-height: 1;
+    transition: color 0.1s;
+  }
+  .collapse-btn:hover {
+    color: #bcbec4;
+  }
+
+  .chevron {
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+  .chevron.expanded {
+    transform: rotate(90deg);
   }
 
   .group-title {

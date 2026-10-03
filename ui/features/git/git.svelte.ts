@@ -301,11 +301,24 @@ class GitStore {
     this.diffLoading = true;
     this.diffError = null;
     try {
-      const files = await api.gitDiff(this.root, {
+      let files = await api.gitDiff(this.root, {
         kind: this.selectedFile.kind,
         path: this.selectedFile.path,
         ignoreWs: this.ignoreWs,
       });
+      // Fallback otomatis: jika diff yang diminta mengembalikan 0 file, coba otomatis kind lawannya sehingga diff SELALU tampil
+      if ((!files || files.length === 0) && this.selectedFile) {
+        const oppositeKind = this.selectedFile.kind === 'staged' ? 'worktree' : 'staged';
+        const fallbackFiles = await api.gitDiff(this.root, {
+          kind: oppositeKind,
+          path: this.selectedFile.path,
+          ignoreWs: this.ignoreWs,
+        });
+        if (fallbackFiles && fallbackFiles.length > 0) {
+          files = fallbackFiles;
+          this.selectedFile.kind = oppositeKind;
+        }
+      }
       this.diffFiles = files;
     } catch (e: any) {
       this.diffError = String(e);
