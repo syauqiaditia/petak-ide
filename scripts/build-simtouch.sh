@@ -16,6 +16,13 @@ if [ "$(uname)" = "Darwin" ]; then
     -fno-objc-arc -O2 \
     "$SRC" -o "$TARGET"
   echo "[build-simtouch] Done: $TARGET"
+  # Copy beside resources
+  mkdir -p "$ROOT_DIR/crates/app/resources"
+  cp "$TARGET" "$ROOT_DIR/crates/app/resources/simtouch" 2>/dev/null || true
+  if [ -d "/Applications/Petak.app/Contents/Resources" ]; then
+    cp "$TARGET" /Applications/Petak.app/Contents/Resources/simtouch 2>/dev/null || true
+    codesign -f -s - -i "id.petak.desktop" --requirement '=designated => identifier "id.petak.desktop"' /Applications/Petak.app/Contents/Resources/simtouch 2>/dev/null || true
+  fi
 else
   echo "Warning: clang build failed or not supported on Linux host (requires macOS host with Xcode frameworks)"
 fi
@@ -35,6 +42,12 @@ if [ -f "$SWIFT_SRC" ]; then
       -target arm64-apple-macos14.0 \
       "$SWIFT_SRC" -o "$SWIFT_TARGET"
     echo "[build-simtouch] Done: $SWIFT_TARGET"
+    mkdir -p "$ROOT_DIR/crates/app/resources"
+    cp "$SWIFT_TARGET" "$ROOT_DIR/crates/app/resources/petak_ios_capture" 2>/dev/null || true
+    if [ -d "/Applications/Petak.app/Contents/Resources" ]; then
+      cp "$SWIFT_TARGET" /Applications/Petak.app/Contents/Resources/petak_ios_capture 2>/dev/null || true
+      codesign -f -s - -i "id.petak.desktop" --requirement '=designated => identifier "id.petak.desktop"' /Applications/Petak.app/Contents/Resources/petak_ios_capture 2>/dev/null || true
+    fi
   else
     echo "Warning: swiftc build failed or not supported on Linux host"
   fi
