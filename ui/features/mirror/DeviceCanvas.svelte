@@ -45,10 +45,11 @@
           // Detect iOS Simulator window capture that includes macOS window titlebar & outer bezel
           const isIosSim =
             !mirrorStore.isViewOnly &&
-            mirrorStore.selectedDevice?.platform === 'ios' &&
-            rawW >= 300 &&
-            rawH >= 600 &&
-            rawH > rawW * 1.8;
+            (mirrorStore.selectedDevice?.platform === 'ios' ||
+             mirrorStore.selectedDevice?.kind === 'emulator' ||
+             mirrorStore.serial?.includes('-') ||
+             (rawW === 456 && rawH === 972) ||
+             (rawW >= 350 && rawH >= 700 && rawH > rawW * 1.8 && rawW <= 550));
 
           let sx = 0, sy = 0, sw = rawW, sh = rawH;
           let targetW = rawW, targetH = rawH;

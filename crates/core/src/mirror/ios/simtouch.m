@@ -20,6 +20,9 @@
 #import <string.h>
 #import <unistd.h>
 #import <sys/time.h>
+#import <IOKit/IOKitLib.h>
+#import <mach/mach_time.h>
+#import <malloc/malloc.h>
 
 #pragma mark - SimulatorKit & CoreSimulator Definitions
 
@@ -75,6 +78,23 @@ typedef void *(*IndigoHIDMessageForHIDArbitraryFn)(
 );
 
 typedef void *(*IndigoHIDServiceFn)(void);
+
+typedef CFTypeRef (*CreateDigitizerFn)(
+    CFAllocatorRef, uint64_t, uint32_t,
+    uint32_t, uint32_t, uint32_t, uint32_t,
+    double, double, double, double, double,
+    boolean_t, boolean_t, uint32_t
+);
+
+typedef CFTypeRef (*CreateFingerFn)(
+    CFAllocatorRef, uint64_t,
+    uint32_t, uint32_t, uint32_t,
+    double, double, double, double, double,
+    boolean_t, boolean_t, uint32_t
+);
+
+typedef void (*AppendEventFn)(CFTypeRef, CFTypeRef, uint32_t);
+typedef void *(*TrackpadWrapFn)(CFTypeRef);
 
 #pragma mark - Helper Functions
 
@@ -223,8 +243,82 @@ static void sendIndigoMessageAsync(id client, void *message) {
     }];
 }
 
+static CreateDigitizerFn s_fnCreateDig = NULL;
+static CreateFingerFn s_fnCreateFin = NULL;
+static AppendEventFn s_fnAppend = NULL;
+static TrackpadWrapFn s_fnWrapTrackpad = NULL;
+static uint32_t s_touchIdentifier = 100;
+
+static void ensureDigitizerSymbols(void *simKitHandle) {
+    if (!s_fnCreateDig) {
+        s_fnCreateDig = (CreateDigitizerFn)dlsym(RTLD_DEFAULT, "IOHIDEventCreateDigitizerEvent");
+    }
+    if (!s_fnCreateFin) {
+        s_fnCreateFin = (CreateFingerFn)dlsym(RTLD_DEFAULT, "IOHIDEventCreateDigitizerFingerEvent");
+    }
+    if (!s_fnAppend) {
+        s_fnAppend = (AppendEventFn)dlsym(RTLD_DEFAULT, "IOHIDEventAppendEvent");
+    }
+    if (!s_fnWrapTrackpad && simKitHandle) {
+        s_fnWrapTrackpad = (TrackpadWrapFn)dlsym(simKitHandle, "IndigoHIDMessageForTrackpadEventFromHIDEventRef");
+    }
+}
+
+static void patchMessage(void *msg, uint32_t target) {
+    *(uint32_t *)((char *)msg + 0x6c) = target;
+    size_t sz = malloc_size(msg);
+    if (sz >= 0x110) {
+        *(uint32_t *)((char *)msg + 0x10c) = target;
+    }
+    *(uint8_t *)((char *)msg + 0x3a) = 0;
+    *(uint8_t *)((char *)msg + 0x3b) = 0;
+    if (sz >= 0xdc) {
+        *(uint8_t *)((char *)msg + 0xda) = 0;
+        *(uint8_t *)((char *)msg + 0xdb) = 0;
+    }
+}
+
+static void *makeDigitizerMessage(double normX, double normY, uint32_t identifier, int phase) {
+    if (!s_fnCreateDig || !s_fnCreateFin || !s_fnAppend || !s_fnWrapTrackpad) {
+        return NULL;
+    }
+    uint32_t mask = (phase == 2) ? 0x06 : 0x07;
+    boolean_t range = (phase != 2);
+    boolean_t touch = (phase != 2);
+    uint64_t now = mach_absolute_time();
+
+    CFTypeRef parent = s_fnCreateDig(
+        kCFAllocatorDefault, now, 2,
+        0, identifier, mask, 0,
+        normX, normY, 0.0,
+        0.0, 0.0,
+        range, touch, 0
+    );
+    if (!parent) return NULL;
+
+    CFTypeRef finger = s_fnCreateFin(
+        kCFAllocatorDefault, now,
+        0, identifier, mask,
+        normX, normY, 0.0,
+        0.0, 0.0,
+        range, touch, 0
+    );
+    if (finger) {
+        s_fnAppend(parent, finger, 0);
+        CFRelease(finger);
+    }
+
+    void *raw = s_fnWrapTrackpad(parent);
+    CFRelease(parent);
+    if (!raw) return NULL;
+
+    patchMessage(raw, 0x32);
+    return raw;
+}
+
 static void warmServices(id client, void *simKitHandle) {
     if (!simKitHandle) return;
+    ensureDigitizerSymbols(simKitHandle);
 
     IndigoHIDServiceFn fnCreatePointer = (IndigoHIDServiceFn)dlsym(simKitHandle, "IndigoHIDMessageToCreatePointerService");
     IndigoHIDServiceFn fnCreateMouse = (IndigoHIDServiceFn)dlsym(simKitHandle, "IndigoHIDMessageToCreateMouseService");
@@ -252,13 +346,25 @@ static void *buildMouseMessage(IndigoHIDMessageForMouseNSEventFn fnMouse,
                                uint32_t direction,
                                double width,
                                double height) {
+    if (!p1) return NULL;
+
+    // phase: 0 = down, 1 = move, 2 = up
+    int phase = (eventType == 2) ? 2 : (eventType == 6 ? 1 : 0);
+    if (phase == 0) {
+        s_touchIdentifier++;
+        if (s_touchIdentifier == 0) s_touchIdentifier = 100;
+    }
+
+    void *digMsg = makeDigitizerMessage(p1->x, p1->y, s_touchIdentifier, phase);
+    if (digMsg) return digMsg;
+
     void *msg = NULL;
     for (int retry = 0; retry < 5; retry++) {
-        // target 0x32 routes to the touch digitizer.
-        // SimulatorKit ARM64 fdiv.2d divides p1 coordinates by (unused1, width).
-        // Passing (1.0, 1.0, 1.0, 1.0) makes the division a no-op so normalized screen ratios (0.0..1.0) are preserved exactly.
-        msg = fnMouse(p1, p2, 0x32, eventType, direction, 1.0, 1.0, 1.0, 1.0);
-        if (msg) break;
+        // Fallback target 0x32
+        if (fnMouse) {
+            msg = fnMouse(p1, p2, 0x32, eventType, direction, 1.0, 1.0, 1.0, 1.0);
+            if (msg) break;
+        }
         usleep(5000);
     }
     return msg;
@@ -742,6 +848,7 @@ static int handleText(id client, void *simKitHandle, const char *str) {
 #pragma mark - Persistent Daemon Loop
 
 static int runDaemon(id client, void *simKitHandle) {
+    ensureDigitizerSymbols(simKitHandle);
     IndigoHIDMessageForMouseNSEventFn fnMouse =
         (IndigoHIDMessageForMouseNSEventFn)dlsym(simKitHandle, "IndigoHIDMessageForMouseNSEvent");
     IndigoHIDMessageForHIDArbitraryFn fnHIDArb =

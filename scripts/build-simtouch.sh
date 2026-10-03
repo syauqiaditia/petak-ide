@@ -8,7 +8,7 @@ mkdir -p "$OUT_DIR"
 TARGET="$OUT_DIR/simtouch"
 echo "[build-simtouch] Compiling simtouch.m -> $TARGET"
 if [ "$(uname)" = "Darwin" ]; then
-  clang -framework Foundation -framework CoreGraphics \
+  clang -framework Foundation -framework CoreGraphics -framework IOKit \
     -F/Library/Developer/PrivateFrameworks \
     -framework CoreSimulator \
     -rpath /Library/Developer/PrivateFrameworks \
