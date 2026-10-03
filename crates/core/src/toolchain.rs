@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
-use std::sync::OnceLock;
+use std::sync::RwLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -25,26 +25,42 @@ pub struct ToolchainConfig {
 }
 
 /// Global lazy cache for the effective PATH.
-static EFFECTIVE_PATH: OnceLock<String> = OnceLock::new();
+static EFFECTIVE_PATH: RwLock<Option<String>> = RwLock::new(None);
 
-/// Return the cached effective PATH, computing it lazily on the first call.
-pub fn effective_path() -> &'static str {
-    EFFECTIVE_PATH.get_or_init(|| {
-        let start = Instant::now();
-        let home = std::env::var_os("HOME").map(PathBuf::from);
-        let config = load_config();
-        let path = compute_effective_path_with(
-            home.as_deref(),
-            None,
-            Duration::from_secs(3),
-            Some(&config),
-        );
-        let elapsed = start.elapsed();
-        let dart = resolve_dart_in_path(&path, None, &config);
-        eprintln!("[toolchain] resolved effective PATH in {:?}: {}", elapsed, path);
-        eprintln!("[toolchain] selected dart binary: {:?}", dart);
-        path
-    })
+/// Invalidate cached effective PATH so next call forces a fresh scan.
+pub fn invalidate_effective_path() {
+    if let Ok(mut write) = EFFECTIVE_PATH.write() {
+        *write = None;
+    }
+}
+
+/// Return the cached effective PATH, computing it lazily if not yet initialized or if invalidated.
+pub fn effective_path() -> String {
+    if let Ok(read) = EFFECTIVE_PATH.read() {
+        if let Some(ref path) = *read {
+            return path.clone();
+        }
+    }
+
+    let start = Instant::now();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let config = load_config();
+    let path = compute_effective_path_with(
+        home.as_deref(),
+        None,
+        Duration::from_secs(3),
+        Some(&config),
+    );
+    let elapsed = start.elapsed();
+    let dart = resolve_dart_in_path(&path, None, &config);
+    eprintln!("[toolchain] resolved effective PATH in {:?}: {}", elapsed, path);
+    eprintln!("[toolchain] selected dart binary: {:?}", dart);
+
+    if let Ok(mut write) = EFFECTIVE_PATH.write() {
+        *write = Some(path.clone());
+    }
+
+    path
 }
 
 /// Return an effective PATH customized for a specific project root (e.g. project-local FVM).
@@ -67,7 +83,7 @@ pub fn effective_path_for_root(project_root: Option<&Path>) -> String {
         .map(|p| p.to_string_lossy().to_string())
         .collect();
 
-    for p in std::env::split_paths(base) {
+    for p in std::env::split_paths(&base) {
         parts.push(p.to_string_lossy().to_string());
     }
 
@@ -289,6 +305,116 @@ pub fn probe_shell_path(timeout: Duration) -> Option<String> {
     }
 }
 
+/// Check if the given PATH string contains only minimal system directories (/usr/bin, /bin, etc.)
+pub fn is_minimal_path(path: &str) -> bool {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    let parts: Vec<&str> = trimmed.split(':').filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() {
+        return true;
+    }
+    parts.iter().all(|p| {
+        *p == "/usr/bin" || *p == "/bin" || *p == "/usr/sbin" || *p == "/sbin"
+    })
+}
+
+/// Probe shell executables ($SHELL -l -c "which flutter; which dart; which java")
+pub fn probe_shell_which(timeout: Duration) -> Vec<PathBuf> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+        #[cfg(target_os = "macos")]
+        {
+            "/bin/zsh".to_string()
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            if Path::new("/bin/bash").exists() {
+                "/bin/bash".to_string()
+            } else {
+                "/bin/sh".to_string()
+            }
+        }
+    });
+
+    let mut cmd = Command::new(&shell);
+    cmd.args(["-l", "-c", "which flutter; which dart; which java"]);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::null());
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let stdout = match child.stdout.take() {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        let mut found = Vec::new();
+        for line in reader.lines().flatten() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() && trimmed.starts_with('/') {
+                let p = PathBuf::from(trimmed);
+                if p.is_file() {
+                    found.push(p);
+                }
+            }
+        }
+        let _ = tx.send(found);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(paths) => {
+            let _ = child.wait();
+            paths
+        }
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            Vec::new()
+        }
+    }
+}
+
+/// Collect standard macOS Java Virtual Machine directories into candidate dirs
+pub fn collect_mac_java_paths(home: Option<&Path>, dirs: &mut Vec<PathBuf>) {
+    let mut jvm_parents = vec![PathBuf::from("/Library/Java/JavaVirtualMachines")];
+    if let Some(h) = home {
+        jvm_parents.push(h.join("Library").join("Java").join("JavaVirtualMachines"));
+    }
+    for jvm_parent in jvm_parents {
+        if jvm_parent.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&jvm_parent) {
+                for entry in entries.flatten() {
+                    let bin = entry.path().join("Contents").join("Home").join("bin");
+                    if bin.is_dir() {
+                        dirs.push(bin);
+                    }
+                }
+            }
+        }
+    }
+    for brew_java in &[
+        "/opt/homebrew/opt/openjdk/bin",
+        "/opt/homebrew/opt/openjdk@21/bin",
+        "/opt/homebrew/opt/openjdk@17/bin",
+        "/opt/homebrew/opt/openjdk@11/bin",
+        "/usr/local/opt/openjdk/bin",
+        "/usr/local/opt/openjdk@17/bin",
+    ] {
+        let p = PathBuf::from(brew_java);
+        if p.is_dir() {
+            dirs.push(p);
+        }
+    }
+}
+
 /// Compute effective PATH deterministically, suitable for both production and unit tests.
 pub fn compute_effective_path_with(
     home: Option<&Path>,
@@ -399,6 +525,36 @@ pub fn compute_effective_path_with(
             }
         }
 
+        // ~/SDK/flutter/bin
+        let sdk_flutter = h.join("SDK").join("flutter").join("bin");
+        if sdk_flutter.exists() {
+            candidate_dirs.push(sdk_flutter.clone());
+            let dart_bin = sdk_flutter.join("cache").join("dart-sdk").join("bin");
+            if dart_bin.exists() {
+                candidate_dirs.push(dart_bin);
+            }
+        }
+
+        // ~/.flutter/bin
+        let dot_flutter = h.join(".flutter").join("bin");
+        if dot_flutter.exists() {
+            candidate_dirs.push(dot_flutter.clone());
+            let dart_bin = dot_flutter.join("cache").join("dart-sdk").join("bin");
+            if dart_bin.exists() {
+                candidate_dirs.push(dart_bin);
+            }
+        }
+
+        // ~/flutter/bin
+        let home_flutter = h.join("flutter").join("bin");
+        if home_flutter.exists() {
+            candidate_dirs.push(home_flutter.clone());
+            let dart_bin = home_flutter.join("cache").join("dart-sdk").join("bin");
+            if dart_bin.exists() {
+                candidate_dirs.push(dart_bin);
+            }
+        }
+
         // ~/development/flutter/bin
         let dev_flutter = h.join("development").join("flutter").join("bin");
         if dev_flutter.exists() {
@@ -452,10 +608,15 @@ pub fn compute_effective_path_with(
     // 6. Kotlin Language Server locations
     collect_kotlin_ls_paths(home, &mut candidate_dirs);
 
-    // 7. System & Homebrew locations
+    // 7. Java Virtual Machines standard macOS locations
+    collect_mac_java_paths(home, &mut candidate_dirs);
+
+    // 8. System & Homebrew locations
     for sys in &[
         "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
         "/usr/local/bin",
+        "/usr/local/sbin",
         "/usr/bin",
         "/bin",
         "/usr/sbin",
@@ -473,17 +634,27 @@ pub fn compute_effective_path_with(
         .map(|p| p.to_string_lossy().to_string())
         .collect();
 
-    // 8. Probe shell PATH
+    // 9. Probe shell PATH
     if let Some(shell_path) = probe_shell_path(shell_timeout) {
         for p in std::env::split_paths(&shell_path) {
             all_parts.push(p.to_string_lossy().to_string());
         }
     }
 
-    // 9. Current process PATH
-    if let Ok(curr_path) = std::env::var("PATH") {
+    // 10. Current process PATH
+    let curr_path = std::env::var("PATH").unwrap_or_default();
+    if !curr_path.is_empty() {
         for p in std::env::split_paths(&curr_path) {
             all_parts.push(p.to_string_lossy().to_string());
+        }
+    }
+
+    // 11. Fallback shell probe if GUI PATH is minimal (/usr/bin:/bin)
+    if is_minimal_path(&curr_path) {
+        for tool_path in probe_shell_which(shell_timeout) {
+            if let Some(parent) = tool_path.parent() {
+                all_parts.push(parent.to_string_lossy().to_string());
+            }
         }
     }
 
@@ -1033,12 +1204,33 @@ pub fn resolve_jdk_home() -> Option<PathBuf> {
         }
     }
 
-    // 3. Linux / generic candidates
+    // 3. Scan macOS JavaVirtualMachines
+    let mut jvm_parents = vec![PathBuf::from("/Library/Java/JavaVirtualMachines")];
+    if let Some(h) = std::env::var_os("HOME").map(PathBuf::from) {
+        jvm_parents.push(h.join("Library").join("Java").join("JavaVirtualMachines"));
+    }
+    for jvm_parent in jvm_parents {
+        if jvm_parent.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&jvm_parent) {
+                for entry in entries.flatten() {
+                    let home = entry.path().join("Contents").join("Home");
+                    if home.is_dir() {
+                        return Some(home);
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Linux / generic candidates / Homebrew
     for cand in &[
         "/usr/lib/jvm/java-17-openjdk-amd64",
         "/usr/lib/jvm/java-11-openjdk-amd64",
         "/usr/lib/jvm/default-java",
         "/usr/lib/jvm/java-21-openjdk-amd64",
+        "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home",
+        "/opt/homebrew/opt/openjdk",
+        "/usr/local/opt/openjdk",
     ] {
         let p = Path::new(cand);
         if p.is_dir() {
@@ -1580,5 +1772,55 @@ mod tests {
         // Verify resolve_dart_in_path selects flutter_3.35.7's dart
         let resolved_dart = resolve_dart_in_path(&path, None, &ToolchainConfig::default());
         assert_eq!(resolved_dart, Some(flutter_3_dart.join("dart")));
+    }
+
+    #[test]
+    fn test_is_minimal_path() {
+        assert!(is_minimal_path(""));
+        assert!(is_minimal_path("/usr/bin:/bin"));
+        assert!(is_minimal_path("/usr/bin:/bin:/usr/sbin:/sbin"));
+        assert!(!is_minimal_path("/usr/bin:/bin:/opt/homebrew/bin"));
+    }
+
+    #[test]
+    fn test_standard_mac_paths_detection() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // 1. ~/SDK/flutter/bin
+        let sdk_flutter_bin = tmp.path().join("SDK").join("flutter").join("bin");
+        std::fs::create_dir_all(&sdk_flutter_bin).unwrap();
+        std::fs::write(sdk_flutter_bin.join("flutter"), "#!/bin/sh\n").unwrap();
+
+        // 2. ~/.flutter/bin
+        let dot_flutter_bin = tmp.path().join(".flutter").join("bin");
+        std::fs::create_dir_all(&dot_flutter_bin).unwrap();
+        std::fs::write(dot_flutter_bin.join("flutter"), "#!/bin/sh\n").unwrap();
+
+        // 3. ~/flutter/bin
+        let home_flutter_bin = tmp.path().join("flutter").join("bin");
+        std::fs::create_dir_all(&home_flutter_bin).unwrap();
+        std::fs::write(home_flutter_bin.join("flutter"), "#!/bin/sh\n").unwrap();
+
+        let path = compute_effective_path_with(
+            Some(tmp.path()),
+            None,
+            Duration::from_millis(50),
+            None,
+        );
+
+        assert!(path.contains(&sdk_flutter_bin.to_string_lossy().to_string()));
+        assert!(path.contains(&dot_flutter_bin.to_string_lossy().to_string()));
+        assert!(path.contains(&home_flutter_bin.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn test_invalidate_effective_path() {
+        invalidate_effective_path();
+        let path1 = effective_path();
+        assert!(!path1.is_empty());
+
+        invalidate_effective_path();
+        let path2 = effective_path();
+        assert!(!path2.is_empty());
     }
 }

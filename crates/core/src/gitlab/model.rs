@@ -423,6 +423,24 @@ impl InlinePositionParams {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
+pub struct CreateMrParams {
+    #[serde(alias = "sourceBranch")]
+    pub source_branch: String,
+    #[serde(alias = "targetBranch")]
+    pub target_branch: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(alias = "assigneeIds", default)]
+    pub assignee_ids: Option<Vec<u64>>,
+    #[serde(alias = "reviewerIds", default)]
+    pub reviewer_ids: Option<Vec<u64>>,
+    #[serde(alias = "removeSourceBranch", default)]
+    pub remove_source_branch: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
 pub struct MergeRequestParams {
     pub sha: String,
     pub squash: Option<bool>,

@@ -374,6 +374,8 @@ pub fn run() {
             commands::mr_cancel_mwps,
             commands::mr_checkout,
             commands::mr_evaluate_merge_status,
+            commands::mr_create,
+            commands::mr_rebase,
             // Batch 5
             commands::lsp_restart,
             commands::devices_refresh,

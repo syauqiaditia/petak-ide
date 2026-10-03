@@ -3,7 +3,7 @@ use petak_core::git::model::DiffFile;
 use petak_core::git::ops::checkout_mr;
 use petak_core::gitlab::client::GitLabClient;
 use petak_core::gitlab::model::{
-    evaluate_merge_status, Discussion, GitLabUser, InlinePositionParams, JobInfo, MergeRequest,
+    evaluate_merge_status, CreateMrParams, Discussion, GitLabUser, InlinePositionParams, JobInfo, MergeRequest,
     MergeRequestParams, MergeStatusEvaluation, MrListQuery, Note, PaginatedList, PipelineInfo,
     TokenScopeMode,
 };
@@ -370,4 +370,44 @@ pub async fn mr_checkout(
 #[tauri::command]
 pub fn mr_evaluate_merge_status(status: Option<String>) -> MergeStatusEvaluation {
     evaluate_merge_status(status.as_deref())
+}
+
+#[tauri::command]
+pub async fn mr_create(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    params: petak_core::gitlab::model::CreateMrParams,
+) -> Result<MergeRequest, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .create_merge_request(&project_path, &params)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn mr_rebase(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+) -> Result<serde_json::Value, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .rebase_merge_request(&project_path, iid)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

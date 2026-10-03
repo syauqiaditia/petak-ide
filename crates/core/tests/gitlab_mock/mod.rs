@@ -502,6 +502,47 @@ fn handle_request(mut request: tiny_http::Request, fixtures_dir: &Path) {
         return;
     }
 
+    // Rebase MR: PUT /projects/:id/merge_requests/:iid/rebase
+    if path.ends_with("/rebase") && request.method() == &Method::Put {
+        let resp = Response::from_string("{\"rebase_in_progress\": true}")
+            .with_status_code(StatusCode(200))
+            .with_header(
+                Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+            );
+        let _ = request.respond(resp);
+        return;
+    }
+
+    // Create MR: POST /projects/:id/merge_requests
+    if path.ends_with("/merge_requests") && request.method() == &Method::Post {
+        let mut body_str = String::new();
+        let _ = request.as_reader().read_to_string(&mut body_str);
+
+        let parsed: serde_json::Value = serde_json::from_str(&body_str).unwrap_or(serde_json::json!({}));
+        let mut detail: serde_json::Value = serde_json::from_str(&read_fixture(fixtures_dir, "merge_request_detail_1.json")).unwrap();
+
+        if let Some(sb) = parsed.get("source_branch").and_then(|v| v.as_str()) {
+            detail["source_branch"] = serde_json::json!(sb);
+        }
+        if let Some(tb) = parsed.get("target_branch").and_then(|v| v.as_str()) {
+            detail["target_branch"] = serde_json::json!(tb);
+        }
+        if let Some(t) = parsed.get("title").and_then(|v| v.as_str()) {
+            detail["title"] = serde_json::json!(t);
+        }
+        if let Some(d) = parsed.get("description").and_then(|v| v.as_str()) {
+            detail["description"] = serde_json::json!(d);
+        }
+
+        let resp = Response::from_string(detail.to_string())
+            .with_status_code(StatusCode(201))
+            .with_header(
+                Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+            );
+        let _ = request.respond(resp);
+        return;
+    }
+
     // Merge request list: GET /projects/:id/merge_requests
     if path.ends_with("/merge_requests") {
         let page = query.get("page").map(|v| v.as_str()).unwrap_or("1");
