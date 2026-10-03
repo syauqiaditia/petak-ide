@@ -254,8 +254,10 @@ static void *buildMouseMessage(IndigoHIDMessageForMouseNSEventFn fnMouse,
                                double height) {
     void *msg = NULL;
     for (int retry = 0; retry < 5; retry++) {
-        // target 0x32 routes to the touch digitizer
-        msg = fnMouse(p1, p2, 0x32, eventType, direction, 1.0, 1.0, width, height);
+        // target 0x32 routes to the touch digitizer.
+        // SimulatorKit ARM64 fdiv.2d divides p1 coordinates by (unused1, width).
+        // Passing (1.0, 1.0, 1.0, 1.0) makes the division a no-op so normalized screen ratios (0.0..1.0) are preserved exactly.
+        msg = fnMouse(p1, p2, 0x32, eventType, direction, 1.0, 1.0, 1.0, 1.0);
         if (msg) break;
         usleep(5000);
     }
