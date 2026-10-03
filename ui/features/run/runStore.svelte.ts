@@ -424,6 +424,13 @@ class RunStore {
     }
   }
 
+  async saveConfigs(file: RunConfigFile) {
+    this.configs = file.configs;
+    if (file.selected) {
+      this.selectedConfigName = file.selected;
+    }
+  }
+
   selectDevice(id: string) {
     const prevId = this.selectedDeviceId;
     this.selectedDeviceId = id;

@@ -9,6 +9,9 @@
   import { isTitleBarInteractive } from './titleBarLogic';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
+  import RunConfigDialog from '../features/run/RunConfigDialog.svelte';
+
+  let isRunConfigModalOpen = $state(false);
 
   let branchPopupOpen = $derived(popupStore.isOpen('branch'));
   let branchSearch = $state('');
@@ -90,6 +93,7 @@
   let {
     projectName = 'petak',
     branchName = '',
+    showDashboard = false,
     onPickFolder,
     onSelectProject,
     onOpenDevicesPanel,
@@ -98,6 +102,7 @@
   } = $props<{
     projectName?: string;
     branchName?: string | null;
+    showDashboard?: boolean;
     onPickFolder?: () => void;
     onSelectProject?: (path: string) => void;
     onOpenDevicesPanel?: () => void;
@@ -177,6 +182,10 @@
   onclick={() => popupStore.closeAll()}
   onkeydown={(e) => {
     if (e.key === 'Escape') popupStore.handleEscape();
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+      e.preventDefault();
+      isRunConfigModalOpen = !isRunConfigModalOpen;
+    }
   }}
 />
 
@@ -213,8 +222,18 @@
       <div class="grid-cell"></div>
     </div>
     <span class="brand-text">Petak</span>
+    <span class="brand-version-badge">v0.8.0</span>
   </div>
 
+  {#if showDashboard}
+    <div class="spacer" data-tauri-drag-region></div>
+    {#if projectName && projectName !== 'petak' && projectName !== 'Petak'}
+      <button class="back-to-editor-btn" onclick={() => onOpenDashboard?.()} title="Kembali ke Workspace">
+        <span>← Kembali ke Editor ({projectName})</span>
+      </button>
+    {/if}
+    <div class="avatar" title="User: UQi">U</div>
+  {:else}
   <div class="divider"></div>
 
   <!-- Project selector with Recent Projects dropdown (B4 + F1) -->
@@ -354,7 +373,18 @@
 
   <!-- Run config & Device selector group -->
   <div class="run-config-group">
-    <RunConfigPicker />
+    <RunConfigPicker onOpenEditConfigs={() => (isRunConfigModalOpen = true)} />
+    <button
+      class="config-gear-btn"
+      onclick={() => (isRunConfigModalOpen = true)}
+      title="Edit Run Configurations… (⌘⇧E)"
+      aria-label="Edit Run Configurations"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
     <div class="group-divider"></div>
     <DevicePicker {onOpenDevicesPanel} />
   </div>
@@ -505,7 +535,14 @@
 
   <!-- User Avatar -->
   <div class="avatar" title="User: UQi">U</div>
+  {/if}
 </div>
+
+<RunConfigDialog
+  open={isRunConfigModalOpen}
+  root={runStore.root}
+  onClose={() => (isRunConfigModalOpen = false)}
+/>
 
 <style>
   .titlebar {
@@ -552,6 +589,49 @@
     font-weight: 600;
     letter-spacing: 0.2px;
     color: #e6e7ea;
+  }
+  .brand-version-badge {
+    font-size: 11px;
+    color: #8b8f98;
+    background: #1a1b1f;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .back-to-editor-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: #1c1d22;
+    border: 1px solid #26282d;
+    color: #6ea8ff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .back-to-editor-btn:hover {
+    background: #23252b;
+    border-color: #3574f0;
+    color: #8bb8ff;
+  }
+  .config-gear-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: none;
+    color: #8b8f98;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .config-gear-btn:hover {
+    background: #23252b;
+    color: #ffffff;
   }
   .divider {
     width: 1px;

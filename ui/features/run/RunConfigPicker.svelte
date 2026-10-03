@@ -2,6 +2,12 @@
   import { runStore } from './runStore.svelte';
   import { popupStore } from '../../shell/popupStore.svelte';
 
+  let {
+    onOpenEditConfigs,
+  } = $props<{
+    onOpenEditConfigs?: () => void;
+  }>();
+
   let open = $derived(popupStore.isOpen('runner'));
 
   function toggleOpen(e: MouseEvent) {
@@ -78,6 +84,21 @@
           </button>
         {/each}
       {/if}
+
+      <div class="menu-divider"></div>
+      <button
+        class="menu-item edit-config-item"
+        onclick={() => {
+          popupStore.close('runner');
+          onOpenEditConfigs?.();
+        }}
+      >
+        <span class="edit-icon">⚙️</span>
+        <div class="item-text">
+          <span class="item-title">Edit Configurations…</span>
+        </div>
+        <span class="shortcut-pill">⌘⇧E</span>
+      </button>
     </div>
   {/if}
 </div>
@@ -201,5 +222,25 @@
   .check-icon {
     margin-left: auto;
     flex-shrink: 0;
+  }
+  .menu-divider {
+    height: 1px;
+    background: #26282d;
+    margin: 4px 0;
+  }
+  .edit-config-item {
+    color: #bcbec4;
+  }
+  .edit-icon {
+    font-size: 13px;
+  }
+  .shortcut-pill {
+    font-size: 10px;
+    color: #8b8f98;
+    background: #202227;
+    border: 1px solid #2c2e34;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: inherit;
   }
 </style>

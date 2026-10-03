@@ -6,6 +6,12 @@
   import { api, type EmulatorStatusEvent } from '../../lib/api';
   import { groupDevices, type SnapshotEmulator, type SnapshotPhysical } from './deviceLogic';
   import PairDeviceModal from './PairDeviceModal.svelte';
+  import {
+    ANDROID_EMULATOR_SVG,
+    IOS_SIMULATOR_SVG,
+    DEVICE_USB_SVG,
+    DEVICE_WIFI_SVG,
+  } from '../../icons';
 
   let showPairModal = $state(false);
 
@@ -213,6 +219,7 @@
             }}
           >
             <div class="device-header">
+              <span class="device-type-svg">{@html ANDROID_EMULATOR_SVG}</span>
               <span class="status-dot" class:online={isRunning} class:booting={isBooting} class:failed={isFailed}></span>
               <span class="device-name" title={emu.name}>{emu.name}</span>
               {#if isSelected && isRunning}
@@ -341,6 +348,7 @@
             }}
           >
             <div class="device-header">
+              <span class="device-type-svg">{@html IOS_SIMULATOR_SVG}</span>
               <span class="status-dot" class:online={isRunning} class:booting={isBooting} class:failed={isFailed}></span>
               <span class="device-name" title={sim.name}>{sim.name}</span>
               {#if isSelected && isRunning}
@@ -434,6 +442,13 @@
             onkeydown={(e) => { if (e.key === 'Enter' && isConnected) runStore.selectDevice(phys.id); }}
           >
             <div class="device-header">
+              <span class="device-type-svg">
+                {#if phys.transport === 'wifi' || phys.connection === 'wifi'}
+                  {@html DEVICE_WIFI_SVG}
+                {:else}
+                  {@html DEVICE_USB_SVG}
+                {/if}
+              </span>
               <span class="status-dot" class:online={isConnected} class:booting={isPaired}></span>
               <span class="device-name" title={phys.name}>{phys.name}</span>
               {#if isSelected && isConnected}
@@ -692,6 +707,14 @@
     display: flex;
     align-items: center;
     gap: 7px;
+  }
+  .device-type-svg {
+    display: flex;
+    align-items: center;
+    width: 14px;
+    height: 14px;
+    color: #8b8f98;
+    flex-shrink: 0;
   }
   .device-name {
     font-size: 12px;

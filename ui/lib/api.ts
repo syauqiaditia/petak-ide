@@ -14,7 +14,9 @@ import type {
   InlinePositionParams,
   MergeRequestParams,
   MergeStatusEvaluation,
+  CreateMrParams,
 } from '../features/mr/types.ts';
+export type { CreateMrParams };
 import type {
   SlotSummary,
   SlotConfig,
@@ -1875,6 +1877,42 @@ export const api = {
 
   async mrEvaluateMergeStatus(status?: string): Promise<MergeStatusEvaluation> {
     return invoke<MergeStatusEvaluation>('mr_evaluate_merge_status', { status: status ?? null });
+  },
+
+  async mrCreate(params: CreateMrParams, root?: string): Promise<MergeRequest> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { DEMO_MERGE_REQUESTS, DEMO_CURRENT_USER } = await import('../features/mr/fixtures');
+      const newMr: MergeRequest = {
+        id: 9999,
+        iid: DEMO_MERGE_REQUESTS.length + 1,
+        projectId: 1,
+        title: params.title,
+        description: params.description || '',
+        state: 'opened',
+        targetBranch: params.targetBranch,
+        sourceBranch: params.sourceBranch,
+        author: DEMO_CURRENT_USER,
+        assignees: [],
+        reviewers: [],
+        draft: false,
+        workInProgress: false,
+        sha: 'abc1234',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        webUrl: 'https://code.istar.id/demo',
+        hasConflicts: false,
+        detailedMergeStatus: 'mergeable',
+      };
+      return newMr;
+    }
+    return invoke<MergeRequest>('mr_create', { root: root ?? null, params });
+  },
+
+  async mrRebase(iid: number, root?: string): Promise<any> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return { rebaseInProgress: true };
+    }
+    return invoke('mr_rebase', { root: root ?? null, iid });
   },
 
   // ── Agent Commands (Phase 5 Track A) ──────────────────────────────────────

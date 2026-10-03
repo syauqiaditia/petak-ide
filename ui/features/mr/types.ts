@@ -145,6 +145,16 @@ export interface MergeRequestParams {
   mergeCommitMessage?: string | null;
 }
 
+export interface CreateMrParams {
+  sourceBranch: string;
+  targetBranch: string;
+  title: string;
+  description?: string;
+  assigneeIds?: number[];
+  reviewerIds?: number[];
+  removeSourceBranch?: boolean;
+}
+
 export interface MergeStatusEvaluation {
   mergeable: boolean;
   canMwps: boolean;

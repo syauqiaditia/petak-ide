@@ -3,8 +3,10 @@
   import { mrStore } from './mr.svelte';
   import MrList from './MrList.svelte';
   import MrDetail from './MrDetail.svelte';
+  import MrCreateModal from './MrCreateModal.svelte';
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
+  let isCreateModalOpen = $state(false);
 
   onMount(() => {
     mrStore.init(folderPath);
@@ -36,6 +38,7 @@
     onSearchChange={(q) => (mrStore.searchQuery = q)}
     onRefresh={() => mrStore.loadList()}
     onEnableDemoMode={() => mrStore.enableDemoMode()}
+    onCreateMr={() => (isCreateModalOpen = true)}
   />
 
   <!-- Right Column: Detail -->
@@ -56,6 +59,7 @@
         onApprove={() => mrStore.selectedIid ? mrStore.approve(mrStore.selectedIid) : Promise.resolve()}
         onUnapprove={() => mrStore.selectedIid ? mrStore.unapprove(mrStore.selectedIid) : Promise.resolve()}
         onExecuteMerge={(params) => mrStore.selectedIid ? mrStore.merge(mrStore.selectedIid, params) : Promise.resolve()}
+        onRebase={() => mrStore.selectedIid ? mrStore.rebase(mrStore.selectedIid) : Promise.resolve()}
       />
     {:else}
       <div class="no-mr-selected">
@@ -68,6 +72,15 @@
     {/if}
   </div>
 </div>
+
+<MrCreateModal
+  open={isCreateModalOpen}
+  currentBranch="feat/phase4-run"
+  onClose={() => (isCreateModalOpen = false)}
+  onSubmit={async (params) => {
+    await mrStore.createMr(params);
+  }}
+/>
 
 <style>
   .mr-view-root {
