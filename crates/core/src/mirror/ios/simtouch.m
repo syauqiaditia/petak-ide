@@ -19,6 +19,7 @@
 #import <stdlib.h>
 #import <string.h>
 #import <unistd.h>
+#import <sys/time.h>
 
 #pragma mark - SimulatorKit & CoreSimulator Definitions
 
