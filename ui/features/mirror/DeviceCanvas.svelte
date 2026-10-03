@@ -39,15 +39,46 @@
             frame.close();
             return;
           }
-          const w = frame.displayWidth || frame.codedWidth || canvasEl.width;
-          const h = frame.displayHeight || frame.codedHeight || canvasEl.height;
-          if (canvasEl.width !== w || canvasEl.height !== h) {
-            canvasEl.width = w;
-            canvasEl.height = h;
-            mirrorStore.deviceWidth = w;
-            mirrorStore.deviceHeight = h;
+          const rawW = frame.displayWidth || frame.codedWidth || canvasEl.width;
+          const rawH = frame.displayHeight || frame.codedHeight || canvasEl.height;
+
+          // Detect iOS Simulator window capture that includes macOS window titlebar & outer bezel
+          const isIosSim =
+            !mirrorStore.isViewOnly &&
+            mirrorStore.selectedDevice?.platform === 'ios' &&
+            rawW >= 300 &&
+            rawH >= 600 &&
+            rawH > rawW * 1.8;
+
+          let sx = 0, sy = 0, sw = rawW, sh = rawH;
+          let targetW = rawW, targetH = rawH;
+
+          if (isIosSim) {
+            // Cut out macOS titlebar (54pt) + top bezel (25pt) = 79pt
+            // Cut out bottom bezel (19pt)
+            // Cut out left & right bezels (27pt each)
+            const leftInset = 27;
+            const topInset = 79;
+            const rightInset = 27;
+            const bottomInset = 19;
+
+            sx = leftInset;
+            sy = topInset;
+            sw = Math.max(10, rawW - (leftInset + rightInset));
+            sh = Math.max(10, rawH - (topInset + bottomInset));
+
+            targetW = sw;
+            targetH = sh;
           }
-          ctx.drawImage(frame, 0, 0, canvasEl.width, canvasEl.height);
+
+          if (canvasEl.width !== targetW || canvasEl.height !== targetH) {
+            canvasEl.width = targetW;
+            canvasEl.height = targetH;
+            mirrorStore.deviceWidth = targetW;
+            mirrorStore.deviceHeight = targetH;
+          }
+
+          ctx.drawImage(frame, sx, sy, sw, sh, 0, 0, targetW, targetH);
           frame.close();
           mirrorStore.recordFrameRendered();
         },

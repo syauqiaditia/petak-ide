@@ -91,14 +91,13 @@ static CGPoint normalizeWindowCoordinates(double x, double y, double w, double h
         return CGPointZero;
     }
 
-    // Detect if coordinates come from a captured macOS Simulator window with chrome & bezel.
-    // Standard macOS Simulator window has ~52-54pt titlebar, ~18-20pt top bezel (total ~72pt top),
-    // ~26pt bottom bezel (total ~98pt vertical chrome), and ~27pt left & right bezels (~54pt horizontal chrome).
-    if (w >= 300.0 && h >= 600.0 && h > w * 1.8) {
+    // Detect if coordinates come from raw macOS Simulator window with chrome (w >= 440).
+    // If frontend already cropped to pure screen (e.g. w ~ 402), this is skipped!
+    if (w >= 440.0 && h >= 900.0 && h > w * 1.8) {
         double leftInset = 27.0;
         double rightInset = 27.0;
-        double topInset = 72.0;
-        double bottomInset = 26.0;
+        double topInset = 79.0;
+        double bottomInset = 19.0;
 
         double activeW = w - (leftInset + rightInset);
         double activeH = h - (topInset + bottomInset);
