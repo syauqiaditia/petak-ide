@@ -62,6 +62,12 @@ pub fn read_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
     fs::read_to_string(path)
 }
 
+pub fn read_file_base64<P: AsRef<Path>>(path: P) -> io::Result<String> {
+    use base64::Engine;
+    let bytes = fs::read(path)?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 pub fn save_file<P: AsRef<Path>>(path: P, content: &str) -> io::Result<()> {
     save_file_bytes(path, content.as_bytes())
 }
@@ -259,5 +265,25 @@ mod tests {
 
         // Original file must still be intact
         assert_eq!(read_file(&file_path).unwrap(), original_content);
+    }
+
+    #[test]
+    fn test_read_file_base64() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_binary.bin");
+        let sample_bytes = vec![0x00, 0xFF, 0xFE, 0x80, 0xAA, 0x42, b'H', b'e', b'l', b'l', b'o'];
+        fs::write(&file_path, &sample_bytes).unwrap();
+
+        let encoded = read_file_base64(&file_path).unwrap();
+        use base64::Engine;
+        assert_eq!(
+            encoded,
+            base64::engine::general_purpose::STANDARD.encode(&sample_bytes)
+        );
+
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .unwrap();
+        assert_eq!(decoded, sample_bytes);
     }
 }

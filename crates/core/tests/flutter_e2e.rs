@@ -189,6 +189,7 @@ fn test_flutter_run_e2e_real_emulator() {
         target: Some("lib/main_dev.dart".to_string()),
         flavor: None,
         dart_defines: vec![],
+        additional_args: None,
         module: None,
         variant: None,
         application_id: None,
