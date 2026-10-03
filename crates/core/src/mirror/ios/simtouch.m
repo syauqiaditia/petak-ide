@@ -154,6 +154,21 @@ static BOOL sendIndigoMessage(id client, void *message) {
     return YES;
 }
 
+static dispatch_queue_t getSerialQueue(void) {
+    static dispatch_queue_t s_queue = NULL;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        s_queue = dispatch_queue_create("id.petak.simtouch.serial", DISPATCH_QUEUE_SERIAL);
+    });
+    return s_queue;
+}
+
+static uint64_t current_time_ms(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
+}
+
 static void sendIndigoMessageAsync(id client, void *message) {
     if (!message) return;
 
@@ -164,7 +179,7 @@ static void sendIndigoMessageAsync(id client, void *message) {
         return;
     }
 
-    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    dispatch_queue_t queue = getSerialQueue();
     [client sendWithMessage:message
                freeWhenDone:YES
             completionQueue:queue
@@ -694,6 +709,11 @@ static int runDaemon(id client, void *simKitHandle) {
     fprintf(stderr, "[simtouch] daemon ready\n");
     fflush(stderr);
 
+    uint64_t lastDownMs = 0;
+    BOOL isTouchDown = NO;
+    CGPoint lastPt = CGPointZero;
+    double lastW = 1.0, lastH = 1.0;
+
     char line[8192];
     while (fgets(line, sizeof(line), stdin)) {
         size_t len = strlen(line);
@@ -710,8 +730,19 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (h <= 0.0) h = 1.0;
                 if (fnMouse) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    // Deduplicate / synthesize UP if previous touch was left hanging
+                    if (isTouchDown) {
+                        void *upMsg = buildMouseMessage(fnMouse, &lastPt, NULL, 2, 2, lastW, lastH);
+                        if (upMsg) sendIndigoMessageAsync(client, upMsg);
+                        usleep(5000);
+                    }
                     void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
                     if (downMsg) sendIndigoMessageAsync(client, downMsg);
+                    isTouchDown = YES;
+                    lastDownMs = current_time_ms();
+                    lastPt = pt;
+                    lastW = w;
+                    lastH = h;
                 }
             }
         } else if (line[0] == 'm' && line[1] == ' ') {
@@ -719,10 +750,13 @@ static int runDaemon(id client, void *simKitHandle) {
             if (sscanf(line + 2, "%lf %lf %lf %lf", &x, &y, &w, &h) >= 4) {
                 if (w <= 0.0) w = 1.0;
                 if (h <= 0.0) h = 1.0;
-                if (fnMouse) {
+                if (fnMouse && isTouchDown) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *moveMsg = buildMouseMessage(fnMouse, &pt, NULL, 6, 0, w, h);
                     if (moveMsg) sendIndigoMessageAsync(client, moveMsg);
+                    lastPt = pt;
+                    lastW = w;
+                    lastH = h;
                 }
             }
         } else if (line[0] == 'u' && line[1] == ' ') {
@@ -732,6 +766,14 @@ static int runDaemon(id client, void *simKitHandle) {
                 if (h <= 0.0) h = 1.0;
                 if (fnMouse) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
+                    if (isTouchDown) {
+                        isTouchDown = NO;
+                        uint64_t elapsed = current_time_ms() - lastDownMs;
+                        // iOS UIKit requires at least 30ms contact duration to register a tap reliably
+                        if (elapsed < 35) {
+                            usleep((useconds_t)((35 - elapsed) * 1000));
+                        }
+                    }
                     void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
                     if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
@@ -745,7 +787,7 @@ static int runDaemon(id client, void *simKitHandle) {
                     CGPoint pt = CGPointMake(clamp01(x / w), clamp01(y / h));
                     void *downMsg = buildMouseMessage(fnMouse, &pt, NULL, 1, 1, w, h);
                     if (downMsg) sendIndigoMessageAsync(client, downMsg);
-                    usleep(5000);
+                    usleep(35000); // 35ms hold for guaranteed UIKit tap recognition
                     void *upMsg = buildMouseMessage(fnMouse, &pt, NULL, 2, 2, w, h);
                     if (upMsg) sendIndigoMessageAsync(client, upMsg);
                 }
