@@ -342,6 +342,30 @@
     }
   }
 
+  function getTabColor(tab: TabItem): string | null {
+    if (tab.dirty) return '#58a6ff';
+    if (!folderPath) return null;
+    let rel = tab.path;
+    if (tab.path.startsWith(folderPath + '/')) {
+      rel = tab.path.slice(folderPath.length + 1);
+    } else if (tab.path.startsWith(folderPath)) {
+      rel = tab.path.slice(folderPath.length).replace(/^\//, '');
+    }
+    const entry = gitStore.statusMap.get(rel);
+    if (!entry) return null;
+    if (entry.conflicted) return '#e8b45a';
+    if (entry.worktree === 'ignored' || entry.index === 'ignored') return '#606470';
+    if (entry.worktree === 'modified' || entry.index === 'modified') return '#58a6ff';
+    if (
+      entry.worktree === 'untracked' ||
+      entry.worktree === 'added' ||
+      entry.index === 'added'
+    )
+      return '#4ade80';
+    if (entry.worktree === 'deleted' || entry.index === 'deleted') return '#f07a74';
+    return null;
+  }
+
   function handleTabContextMenu(e: MouseEvent, tab: TabItem, idx: number) {
     e.preventDefault();
     e.stopPropagation();
@@ -928,10 +952,12 @@
   <div class="tabs-bar" oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); }}>
     {#each tabsManager.tabs as tab, idx (tab.path)}
       {@const isActive = tab.path === tabsManager.activePath}
+      {@const tabColor = getTabColor(tab)}
       <div
         class="tab"
         class:active={isActive}
         class:dirty={tab.dirty}
+        class:modified={tabColor === '#58a6ff'}
         onclick={() => tabsManager.setActive(tab.path)}
         oncontextmenu={(e) => handleTabContextMenu(e, tab, idx)}
         role="button"
@@ -940,7 +966,7 @@
           if (e.key === 'Enter') tabsManager.setActive(tab.path);
         }}
       >
-        <span class="tab-title">{tab.name}</span>
+        <span class="tab-title" style={tabColor ? `color: ${tabColor};` : ''}>{tab.name}</span>
         <button
           class="tab-close-btn"
           onclick={(e) => {
@@ -1234,8 +1260,8 @@
   .tab-dot {
     width: 6px;
     height: 6px;
-    border-radius: 3px;
-    background: #6ea8ff;
+    border-radius: 50%;
+    background: #58a6ff;
     display: inline-block;
   }
   .tab-x {

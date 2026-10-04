@@ -171,21 +171,22 @@
     return result;
   }
 
-  function getFileGitColor(absPath: string): string | null {
+  function getFileGitColor(absPath: string): string {
     const rel = getRelPath(absPath);
-    if (!rel) return null;
+    if (!rel) return '#d8d9dc';
     const entry = gitStore.statusMap.get(rel);
-    if (!entry) return null;
+    if (!entry) return '#d8d9dc';
     if (entry.conflicted) return '#e8b45a';
-    if (entry.worktree === 'modified' || entry.index === 'modified') return '#9cc3ff';
+    if (entry.worktree === 'ignored' || entry.index === 'ignored') return '#606470';
+    if (entry.worktree === 'modified' || entry.index === 'modified') return '#58a6ff';
     if (
       entry.worktree === 'untracked' ||
       entry.worktree === 'added' ||
       entry.index === 'added'
     )
-      return '#7fc98f';
+      return '#4ade80';
     if (entry.worktree === 'deleted' || entry.index === 'deleted') return '#f07a74';
-    return null;
+    return '#d8d9dc';
   }
 
   function isDirChanged(absPath: string): boolean {
@@ -1271,7 +1272,7 @@
                   {/if}
                 </div>
               {:else}
-                <span class="item-name" style={gitColor ? `color: ${gitColor};` : ''}>
+                <span class="item-name" style="color: {gitColor};">
                   {entry.name}
                 </span>
               {/if}

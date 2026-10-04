@@ -6,12 +6,40 @@
   import { popupStore } from './popupStore.svelte';
   import { getRunVisualAttrs } from '../features/run/runStateMachine';
   import { api, type RecentProject } from '../lib/api';
-  import { isTitleBarInteractive } from './titleBarLogic';
+  import { isTitleBarInteractive, MENU_CATEGORIES, type MenuEntry } from './titleBarLogic';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
   import RunConfigDialog from '../features/run/RunConfigDialog.svelte';
 
   let isRunConfigModalOpen = $state(false);
+  let openMenuCategory = $state<string | null>(null);
+
+  function toggleMenuCategory(e: MouseEvent, catId: string) {
+    e.stopPropagation();
+    openMenuCategory = openMenuCategory === catId ? null : catId;
+  }
+
+  function handleMenuAction(e: MouseEvent, item: MenuEntry) {
+    e.stopPropagation();
+    openMenuCategory = null;
+    if (item.id === 'open-folder') {
+      onPickFolder?.();
+    } else if (item.id === 'toggle-mirror') {
+      mirrorStore.toggle();
+    } else if (item.id === 'toggle-agents') {
+      panelStore.toggleRightPanel('agent');
+    } else if (item.id === 'start-debugging') {
+      handleDebugClick();
+    } else if (item.id === 'run-no-debug') {
+      handleRunClick();
+    } else if (item.id === 'hot-reload') {
+      runStore.reload(false);
+    } else if (item.id === 'hot-restart') {
+      runStore.reload(true);
+    } else if (item.id === 'stop') {
+      runStore.stopRun();
+    }
+  }
 
   let branchPopupOpen = $derived(popupStore.isOpen('branch'));
   let branchSearch = $state('');
@@ -179,9 +207,15 @@
 </script>
 
 <svelte:window
-  onclick={() => popupStore.closeAll()}
+  onclick={() => {
+    popupStore.closeAll();
+    openMenuCategory = null;
+  }}
   onkeydown={(e) => {
-    if (e.key === 'Escape') popupStore.handleEscape();
+    if (e.key === 'Escape') {
+      popupStore.handleEscape();
+      openMenuCategory = null;
+    }
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
       e.preventDefault();
       isRunConfigModalOpen = !isRunConfigModalOpen;
@@ -189,20 +223,76 @@
   }}
 />
 
-<div
-  class="titlebar"
-  data-tauri-drag-region
-  ondblclick={(e) => {
-    if (!isTitleBarInteractive(e.target as HTMLElement)) {
-      api.windowToggleMaximize();
-    }
-  }}
-  onmousedown={(e) => {
-    if (e.button === 0 && !isTitleBarInteractive(e.target as HTMLElement)) {
-      api.windowStartDragging();
-    }
-  }}
->
+<div class="titlebar-wrapper">
+  <!-- 12-Category Top Menu Bar (28px) -->
+  <nav class="menu-bar" id="ide-menu-bar" data-tauri-drag-region>
+    {#each MENU_CATEGORIES as cat (cat.id)}
+      <div class="menu-item-wrapper">
+        <button
+          type="button"
+          class="menu-item-btn"
+          class:open={openMenuCategory === cat.id}
+          onclick={(e) => toggleMenuCategory(e, cat.id)}
+          onmouseenter={() => {
+            if (openMenuCategory !== null) openMenuCategory = cat.id;
+          }}
+          aria-haspopup="true"
+          aria-expanded={openMenuCategory === cat.id}
+        >
+          {cat.label}
+        </button>
+
+        {#if openMenuCategory === cat.id}
+          <div
+            class="menu-dropdown show"
+            id="menu-{cat.id}"
+            role="menu"
+            tabindex="-1"
+            onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => e.stopPropagation()}
+          >
+            {#each cat.items as item, itemIdx (itemIdx)}
+              {#if item.isDivider}
+                <div class="dropdown-divider"></div>
+              {:else}
+                <div
+                  class="dropdown-row"
+                  role="menuitem"
+                  tabindex="0"
+                  onclick={(e) => handleMenuAction(e, item)}
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') handleMenuAction(e as any, item);
+                  }}
+                >
+                  <span class="row-left">{item.label}</span>
+                  {#if item.shortcut}
+                    <span class="row-shortcut">{item.shortcut}</span>
+                  {/if}
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/each}
+  </nav>
+
+  <!-- Cockpit TitleBar (38px) -->
+  <div
+    class="titlebar"
+    id="ide-titlebar"
+    data-tauri-drag-region
+    ondblclick={(e) => {
+      if (!isTitleBarInteractive(e.target as HTMLElement)) {
+        api.windowToggleMaximize();
+      }
+    }}
+    onmousedown={(e) => {
+      if (e.button === 0 && !isTitleBarInteractive(e.target as HTMLElement)) {
+        api.windowStartDragging();
+      }
+    }}
+  >
   <!-- macOS window control spacer -->
   <div class="traffic-lights-spacer" data-tauri-drag-region></div>
 
@@ -371,11 +461,11 @@
 
   <div class="spacer" data-tauri-drag-region></div>
 
-  <!-- Run config & Device selector group -->
-  <div class="run-config-group">
+  <!-- Unified Cockpit Controls (Center) -->
+  <div class="cockpit-center run-config-group">
     <RunConfigPicker onOpenEditConfigs={() => (isRunConfigModalOpen = true)} />
     <button
-      class="config-gear-btn"
+      class="config-gear-btn cockpit-btn"
       onclick={() => (isRunConfigModalOpen = true)}
       title="Edit Run Configurations… (⌘⇧E)"
       aria-label="Edit Run Configurations"
@@ -385,54 +475,29 @@
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
       </svg>
     </button>
-    <div class="group-divider"></div>
+    <div class="cockpit-sep group-divider"></div>
     <DevicePicker {onOpenDevicesPanel} />
-  </div>
+    <div class="cockpit-sep group-divider"></div>
 
-  <!-- Sync Gradle button -->
-  <button
-    class="action-btn"
-    class:spinning={runStore.isSyncing}
-    aria-label="Sync Gradle"
-    title={syncTooltip}
-    disabled={syncDisabled}
-    onclick={() => runStore.syncGradle()}
-  >
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
-    </svg>
-  </button>
+    <!-- Sync Gradle button -->
+    {#if isGradle}
+      <button
+        class="action-btn cockpit-btn"
+        class:spinning={runStore.isSyncing}
+        aria-label="Sync Gradle"
+        title={syncTooltip}
+        disabled={syncDisabled}
+        onclick={() => runStore.syncGradle()}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"></path>
+        </svg>
+      </button>
+    {/if}
 
-  <!-- Run / Reload controls (B3 Run State Machine) -->
-  {#if runAttrs.showHotReload}
-    <!-- When running: show Hot Reload + Hot Restart -->
+    <!-- Run button -->
     <button
-      class="action-btn reload-btn"
-      aria-label="Hot Reload"
-      title="Hot Reload (r)"
-      disabled={runStore.isReloading}
-      onclick={() => runStore.reload(false)}
-    >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-      </svg>
-    </button>
-
-    <button
-      class="action-btn restart-btn"
-      aria-label="Hot Restart"
-      title="Hot Restart (R)"
-      disabled={runStore.isReloading}
-      onclick={() => runStore.reload(true)}
-    >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-      </svg>
-    </button>
-  {:else}
-    <!-- When idle / starting / error: show Run button with state machine colors & spinner -->
-    <button
-      class="action-btn run-btn"
+      class="action-btn run-btn cockpit-btn run"
       class:starting={runStore.uiState === 'starting'}
       class:error={runStore.uiState === 'error'}
       class:idle={runStore.uiState === 'idle'}
@@ -440,7 +505,7 @@
       style:color={runAttrs.buttonColor}
       aria-label="Run"
       title={runTooltip}
-      disabled={runAttrs.runDisabled}
+      disabled={runDisabled}
       onclick={handleRunClick}
     >
       {#if runAttrs.icon === 'spinner'}
@@ -454,39 +519,67 @@
         </svg>
       {:else}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M7 5l12 7-12 7z"></path>
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
       {/if}
     </button>
-  {/if}
 
-  <!-- Debug / DevTools button -->
-  <button
-    class="action-btn debug-btn"
-    class:has-devtools={!!runStore.devtoolsUri}
-    aria-label="Debug"
-    title={debugTooltip}
-    disabled={runAttrs.debugDisabled}
-    onclick={handleDebugClick}
-  >
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="8" y="7" width="8" height="12" rx="4"></rect>
-      <path d="M12 7V4M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 18l3-2M19 18l-3-2"></path>
-    </svg>
-  </button>
+    <!-- Debug / DevTools button -->
+    <button
+      class="action-btn debug-btn cockpit-btn debug"
+      class:has-devtools={!!runStore.devtoolsUri}
+      aria-label="Debug"
+      title={debugTooltip}
+      disabled={runAttrs.debugDisabled}
+      onclick={handleDebugClick}
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="8" y="7" width="8" height="12" rx="4"></rect>
+        <path d="M12 7V4M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 18l3-2M19 18l-3-2"></path>
+      </svg>
+    </button>
 
-  <!-- Stop button -->
-  <button
-    class="action-btn stop-btn"
-    aria-label="Stop"
-    title={!runAttrs.stopDisabled ? `Stop (${runStore.selectedConfig?.name || 'app'})` : 'App tidak sedang berjalan'}
-    disabled={runAttrs.stopDisabled}
-    onclick={() => runStore.stopRun()}
-  >
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="5" y="5" width="14" height="14" rx="2"></rect>
-    </svg>
-  </button>
+    <!-- Hot Reload ⚡ -->
+    <button
+      class="action-btn reload-btn cockpit-btn reload"
+      aria-label="Hot Reload"
+      title="Hot Reload (r)"
+      disabled={!isRunning || runStore.isReloading}
+      onclick={() => runStore.reload(false)}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+      </svg>
+    </button>
+
+    <!-- Hot Restart ⟳ -->
+    <button
+      class="action-btn restart-btn cockpit-btn restart"
+      aria-label="Hot Restart"
+      title="Hot Restart (R)"
+      disabled={!isRunning || runStore.isReloading}
+      onclick={() => runStore.reload(true)}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+    </button>
+
+    <!-- Stop button -->
+    <button
+      class="action-btn stop-btn cockpit-btn stop"
+      aria-label="Stop"
+      title={!runAttrs.stopDisabled ? `Stop (${runStore.selectedConfig?.name || 'app'})` : 'App tidak sedang berjalan'}
+      disabled={runAttrs.stopDisabled}
+      onclick={() => runStore.stopRun()}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+      </svg>
+    </button>
+  </div>
 
   <div class="divider"></div>
 
@@ -524,7 +617,14 @@
   <div class="spacer" data-tauri-drag-region></div>
 
   <!-- Search -->
-  <button class="search-btn">
+  <button
+    class="search-btn search-everywhere-btn"
+    title="Search everywhere (Shift Shift)"
+    onclick={() => {
+      const evt = new KeyboardEvent('keydown', { key: 'Shift', bubbles: true });
+      window.dispatchEvent(evt);
+    }}
+  >
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
       <circle cx="11" cy="11" r="6"></circle>
       <path d="M20 20l-4.5-4.5"></path>
@@ -537,6 +637,7 @@
   <div class="avatar" title="User: UQi">U</div>
   {/if}
 </div>
+</div>
 
 <RunConfigDialog
   open={isRunConfigModalOpen}
@@ -545,15 +646,116 @@
 />
 
 <style>
+  .titlebar-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    flex-shrink: 0;
+  }
+  .menu-bar {
+    height: 28px;
+    background: var(--p-bg-base, #0c0d10);
+    border-bottom: 1px solid var(--border-default, #1e2027);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    position: relative;
+    flex-shrink: 0;
+    z-index: 500;
+  }
+  .menu-item-wrapper {
+    position: relative;
+  }
+  .menu-item-btn {
+    padding: 3px 8px;
+    font-size: 12px;
+    color: var(--text-muted, #8b8f98);
+    border-radius: 4px;
+    transition: all 0.12s ease;
+    position: relative;
+    user-select: none;
+    cursor: pointer;
+  }
+  .menu-item-btn:hover,
+  .menu-item-btn.open {
+    color: var(--text, #d8d9dc);
+    background: var(--p-bg-hover, #22242c);
+  }
+  .menu-dropdown {
+    display: none;
+    position: absolute;
+    top: 26px;
+    left: 0;
+    background: var(--p-bg-elevated, #1c1e24);
+    border: 1px solid var(--border-default, #1e2027);
+    border-radius: 6px;
+    box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+    padding: 4px;
+    min-width: 230px;
+    z-index: 600;
+  }
+  .menu-dropdown.show {
+    display: flex;
+    flex-direction: column;
+  }
+  .dropdown-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text, #d8d9dc);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .dropdown-row:hover {
+    background: #3b82f6;
+    color: white;
+  }
+  .dropdown-row:hover .row-shortcut {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .row-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .row-shortcut {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted, #8b8f98);
+  }
+  .dropdown-divider {
+    height: 1px;
+    background: var(--border-subtle, rgba(255, 255, 255, 0.06));
+    margin: 4px 6px;
+  }
+  .cockpit-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border-subtle, rgba(255, 255, 255, 0.08));
+    margin: 0 2px;
+  }
+  .cockpit-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+  }
+  .cockpit-center {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
   .titlebar {
-    height: 46px;
+    height: 38px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 0 12px 0 12px;
-    background: #111215;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #121317);
+    border-bottom: 1px solid var(--border-default, #1e2027);
     user-select: none;
     -webkit-user-select: none;
   }
