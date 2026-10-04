@@ -205,7 +205,11 @@ export function isTitleBarInteractive(target: HTMLElement | null): boolean {
         curr.classList.contains('cockpit-btn') ||
         curr.classList.contains('cockpit-select') ||
         curr.classList.contains('search-everywhere-btn') ||
-        curr.classList.contains('search-btn')
+        curr.classList.contains('search-btn') ||
+        curr.classList.contains('agents-toggle-btn') ||
+        curr.classList.contains('mirror-toggle-btn') ||
+        curr.classList.contains('settings-toggle-btn') ||
+        curr.classList.contains('titlebar-action-btn')
       ) {
         return true;
       }

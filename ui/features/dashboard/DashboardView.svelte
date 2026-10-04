@@ -40,7 +40,7 @@
 
   const i18n = {
     id: {
-      version: 'v0.7.0 (Beta)',
+      version: 'v0.8.0',
       heroSub: 'Native Flutter & Mobile Engineering IDE Ringan & Cepat',
       actOpen: 'Buka Folder…',
       actOpenDesc: 'Buka workspace Flutter atau native dari disk',
@@ -85,7 +85,7 @@
       close: 'Tutup',
     },
     en: {
-      version: 'v0.7.0 (Beta)',
+      version: 'v0.8.0',
       heroSub: 'Fast, lightweight native Flutter & mobile engineering IDE',
       actOpen: 'Open Folder…',
       actOpenDesc: 'Open an existing Flutter, Android, or mobile workspace from disk',
@@ -887,16 +887,16 @@
 
 <style>
   :global(:root) {
-    --bg-app: #141518;
-    --bg-card: #18191d;
-    --bg-card-hover: #1f2127;
-    --bg-elevated: #23252c;
-    --border-subtle: #23252a;
-    --border: #282a32;
-    --border-strong: #383b46;
-    --text-main: #f0f1f4;
-    --text-muted: #8b8f98;
-    --text-dim: #656974;
+    --bg-app: var(--p-bg-base, #0c0d10);
+    --bg-card: var(--p-bg-surface, #121317);
+    --bg-card-hover: var(--p-bg-hover, #22242c);
+    --bg-elevated: var(--p-bg-elevated, #1c1e24);
+    --border-subtle: var(--border-subtle, rgba(255, 255, 255, 0.06));
+    --border: var(--border-default, #1e2027);
+    --border-strong: #2f323c;
+    --text-main: var(--text, #d8d9dc);
+    --text-muted: var(--text-muted, #8b8f98);
+    --text-dim: #606470;
     --accent: #6ea8ff;
     --accent-hover: #5092f6;
     --accent-bg: rgba(110, 168, 255, 0.12);
@@ -969,8 +969,8 @@
   .column-left {
     width: 370px;
     flex-shrink: 0;
-    background: #131418;
-    border-right: 1px solid var(--border);
+    background: var(--p-bg-base, #0c0d10);
+    border-right: 1px solid var(--border-default, #1e2027);
     display: flex;
     flex-direction: column;
     padding: 28px 24px;
