@@ -356,6 +356,10 @@ pub fn run() {
             commands::agent_reject_proposal,
             commands::agent_accept_hunk,
             commands::agent_get_usage,
+            commands::agent_get_quota_report,
+            commands::agent_list_project_memory,
+            commands::agent_read_project_memory,
+            commands::agent_save_project_memory,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,
