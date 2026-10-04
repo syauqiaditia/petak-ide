@@ -26,7 +26,11 @@ import type {
   PendingPermissionRequest,
   Proposal,
   UsageReport,
+  ProviderQuotaInfo,
+  LlmQuotaReport,
+  MemoryItem,
 } from '../features/agents/types.ts';
+export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2088,5 +2092,77 @@ export const api = {
       return DEMO_USAGE_REPORTS[slotId] || { reported: false, displayText: 'tidak melapor' };
     }
     return invoke<UsageReport>('agent_get_usage', { slotId });
+  },
+
+  // ── 9Router Quota & Project Memory (Phase 5) ─────────────────────────────
+  async agentGetQuotaReport(): Promise<LlmQuotaReport> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return {
+        proxyOnline: false,
+        dbFound: false,
+        todayDate: new Date().toISOString().slice(0, 10),
+        todayRequests: 0,
+        todayPromptTokens: 0,
+        todayCompletionTokens: 0,
+        todayCost: 0,
+        providers: [],
+        statusMessage: 'Database kuota 9Router tidak ditemukan di ~/.9router/db/data.sqlite',
+      };
+    }
+    return invoke<LlmQuotaReport>('agent_get_quota_report');
+  },
+
+  async agentListProjectMemory(): Promise<MemoryItem[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockMemoryStore.list();
+    }
+    return invoke<MemoryItem[]>('agent_list_project_memory');
+  },
+
+  async agentReadProjectMemory(filename: string): Promise<string> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockMemoryStore.read(filename);
+    }
+    return invoke<string>('agent_read_project_memory', { filename });
+  },
+
+  async agentSaveProjectMemory(filename: string, content: string): Promise<void> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      mockMemoryStore.save(filename, content);
+      return;
+    }
+    return invoke('agent_save_project_memory', { filename, content });
+  },
+};
+
+const mockMemoryStore = {
+  items: [
+    { filename: 'lessons.md', title: 'Lessons Learned', size: 142, updatedAt: 1727800000000 },
+    { filename: 'decisions.md', title: 'Architecture Decisions', size: 285, updatedAt: 1727850000000 },
+    { filename: 'rules.md', title: 'Coding Rules', size: 95, updatedAt: 1727900000000 },
+  ] as MemoryItem[],
+  contents: {
+    'lessons.md': '# Lessons Learned\n\n- Selalu jalankan npm test dan npm run check sebelum commit.\n- Minimalkan diff (prinsip Ponytail).',
+    'decisions.md': '# Architecture Decisions\n\n- Petak Fase 5 menggunakan ACP via stdio.\n- Live quota probe 9Router SQLite tanpa data palsu.',
+    'rules.md': '# Coding Rules\n\n- Dilarang membuat angka fiktif jika DB tidak ada.\n- Sanitasi filename markdown.',
+  } as Record<string, string>,
+  list(): MemoryItem[] {
+    return [...this.items];
+  },
+  read(filename: string): string {
+    return this.contents[filename] ?? '';
+  },
+  save(filename: string, content: string): void {
+    this.contents[filename] = content;
+    const existing = this.items.find((item) => item.filename === filename);
+    const size = new TextEncoder().encode(content).length;
+    const updatedAt = Date.now();
+    if (existing) {
+      existing.size = size;
+      existing.updatedAt = updatedAt;
+    } else {
+      const title = filename.replace(/\.md$/i, '').replace(/[-_]/g, ' ');
+      this.items.push({ filename, title, size, updatedAt });
+    }
   },
 };

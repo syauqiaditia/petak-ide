@@ -172,3 +172,34 @@ export type SlotEvent =
   | { Reaped: { slot_id: string } }
   | { PermissionRequested: { slot_id: string; request_id: string; tool_call: any } }
   | { ProposalCreated: { slot_id: string; proposal_id: string; path: string } };
+
+// ── 9Router Quota & Project Memory Types (Phase 5) ─────────────────────────
+
+export interface ProviderQuotaInfo {
+  id: string;
+  provider: string;
+  name?: string;
+  isActive: boolean;
+  lastError?: string;
+  rateLimitedUntil?: string;
+}
+
+export interface LlmQuotaReport {
+  proxyOnline: boolean;
+  dbFound: boolean;
+  todayDate: string;
+  todayRequests: number;
+  todayPromptTokens: number;
+  todayCompletionTokens: number;
+  todayCost: number;
+  providers: ProviderQuotaInfo[];
+  statusMessage: string;
+}
+
+export interface MemoryItem {
+  filename: string;
+  title: string;
+  size: number;
+  updatedAt: number;
+}
+

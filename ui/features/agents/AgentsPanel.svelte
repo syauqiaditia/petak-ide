@@ -5,6 +5,8 @@
   import AgentTabs from './AgentTabs.svelte';
   import AgentChat from './AgentChat.svelte';
   import ProposedEdits from './ProposedEdits.svelte';
+  import QuotaUsageView from './QuotaUsageView.svelte';
+  import MemoryView from './MemoryView.svelte';
   import TeamEditor from './TeamEditor.svelte';
   import FixWithAgentModal from './FixWithAgentModal.svelte';
 
@@ -14,7 +16,7 @@
     onClose?: () => void;
   }>();
 
-  let activeSubTab = $state<'chat' | 'diff'>('chat');
+  let activeSubTab = $state<'chat' | 'diff' | 'quota' | 'memory'>('chat');
   let panelWidth = $state(390);
   let isResizing = $state(false);
 
@@ -64,7 +66,7 @@
       <span class="header-title">AI Agents</span>
     </div>
 
-    <!-- Sub-tab switcher: Chat vs Proposed Edits -->
+    <!-- Sub-tab switcher: Chat vs Proposed Edits vs Quota vs Memory -->
     <div class="subtabs-bar">
       <button
         class="subtab-btn"
@@ -83,6 +85,20 @@
           <span class="proposals-count-pill">{pendingProposalCount}</span>
         {/if}
       </button>
+      <button
+        class="subtab-btn"
+        class:active={activeSubTab === 'quota'}
+        onclick={() => (activeSubTab = 'quota')}
+      >
+        Quota & Usage
+      </button>
+      <button
+        class="subtab-btn"
+        class:active={activeSubTab === 'memory'}
+        onclick={() => (activeSubTab = 'memory')}
+      >
+        Memory
+      </button>
     </div>
 
     <div class="header-actions">
@@ -92,32 +108,40 @@
     </div>
   </div>
 
-  <!-- Slot Navigation Tabs & Discipline Toggles -->
-  <AgentTabs />
+  {#if activeSubTab === 'chat' || activeSubTab === 'diff'}
+    <!-- Slot Navigation Tabs & Discipline Toggles -->
+    <AgentTabs />
 
-  <!-- Honest Limitations Banner (Sticky) -->
-  <div class="limitations-banner" role="note">
-    <span class="banner-icon">ℹ️</span>
-    <span class="banner-text">
-      Catatan: Edit via tool internal agen tidak dapat dicegat. Petak otomatis membuat snapshot Local History sebelum sesi berjalan untuk rollback.
-    </span>
-  </div>
+    <!-- Honest Limitations Banner (Sticky) -->
+    <div class="limitations-banner" role="note">
+      <span class="banner-icon">ℹ️</span>
+      <span class="banner-text">
+        Catatan: Edit via tool internal agen tidak dapat dicegat. Petak otomatis membuat snapshot Local History sebelum sesi berjalan untuk rollback.
+      </span>
+    </div>
+  {/if}
 
   <!-- Main View Area -->
   <div class="panel-view-area">
     {#if activeSubTab === 'chat'}
       <AgentChat />
-    {:else}
+    {:else if activeSubTab === 'diff'}
       <ProposedEdits />
+    {:else if activeSubTab === 'quota'}
+      <QuotaUsageView />
+    {:else if activeSubTab === 'memory'}
+      <MemoryView />
     {/if}
   </div>
 
-  <!-- Honest Usage Meter Footer (24px) -->
-  <div class="usage-meter-footer">
-    <span class="usage-text" class:unreported={!usageInfo.isReported}>
-      {usageInfo.text}
-    </span>
-  </div>
+  {#if activeSubTab === 'chat' || activeSubTab === 'diff'}
+    <!-- Honest Usage Meter Footer (24px) -->
+    <div class="usage-meter-footer">
+      <span class="usage-text" class:unreported={!usageInfo.isReported}>
+        {usageInfo.text}
+      </span>
+    </div>
+  {/if}
 
   <!-- Full Access Warning Modal -->
   {#if agentsStore.isFullAccessWarningOpen}
@@ -182,8 +206,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 38px;
-    padding: 0 10px;
+    gap: 6px;
+    min-height: 38px;
+    height: auto;
+    padding: 4px 8px;
     background: #111215;
     border-bottom: 1px solid #1f2126;
     flex-shrink: 0;
@@ -192,14 +218,15 @@
   .header-left {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 13px;
+    gap: 5px;
+    font-size: 12.5px;
     font-weight: 600;
     color: #e6edf3;
+    flex-shrink: 0;
   }
 
   .header-icon {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .subtabs-bar {
@@ -208,20 +235,30 @@
     border: 1px solid #282a33;
     border-radius: 5px;
     padding: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    max-width: 100%;
+    gap: 2px;
+  }
+
+  .subtabs-bar::-webkit-scrollbar {
+    display: none;
   }
 
   .subtab-btn {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     background: transparent;
     border: none;
     border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 11px;
+    padding: 2px 6px;
+    font-size: 10.5px;
     font-weight: 500;
     color: #8b949e;
     cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
     transition: all 0.12s;
   }
 

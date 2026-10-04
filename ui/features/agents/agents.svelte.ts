@@ -13,6 +13,9 @@ import type {
   PermissionMode,
   FixWithAgentDraft,
   SlotEvent,
+  ProviderQuotaInfo,
+  LlmQuotaReport,
+  MemoryItem,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -44,6 +47,18 @@ class AgentsStore {
   hermesDetection = $state<HermesDetectionResult | null>(null);
   teamConfig = $state<TeamConfig | null>(null);
   usageReports = $state<Record<string, UsageReport>>({});
+
+  quotaReport = $state<LlmQuotaReport | null>(null);
+  isQuotaLoading = $state(false);
+  quotaError = $state<string | null>(null);
+
+  memoryItems = $state<MemoryItem[]>([]);
+  selectedMemoryFilename = $state<string | null>(null);
+  currentMemoryContent = $state<string>('');
+  isMemoryLoading = $state(false);
+  isMemorySaving = $state(false);
+  memorySaveSuccess = $state(false);
+  memoryError = $state<string | null>(null);
 
   isTeamEditorOpen = $state(false);
   isFixWithAgentOpen = $state(false);
@@ -100,6 +115,8 @@ class AgentsStore {
     await this.loadProposals();
     await this.loadPermissions();
     await this.detectHermes();
+    await this.loadQuotaReport();
+    await this.loadMemoryList();
 
     // Listen for agent-event from backend if inside Tauri
     if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
@@ -489,6 +506,79 @@ class AgentsStore {
 
   toggleCaveman() {
     this.isCavemanActive = !this.isCavemanActive;
+  }
+
+  // ── 9Router Quota & Project Memory Actions ──────────────────────────────
+  async loadQuotaReport(force = false) {
+    if (this.isQuotaLoading && !force) return;
+    this.isQuotaLoading = true;
+    this.quotaError = null;
+    try {
+      this.quotaReport = await api.agentGetQuotaReport();
+    } catch (err: any) {
+      this.quotaError = err?.message || String(err);
+    } finally {
+      this.isQuotaLoading = false;
+    }
+  }
+
+  async loadMemoryList() {
+    this.isMemoryLoading = true;
+    this.memoryError = null;
+    try {
+      this.memoryItems = await api.agentListProjectMemory();
+      if (!this.selectedMemoryFilename && this.memoryItems.length > 0) {
+        await this.selectMemory(this.memoryItems[0].filename);
+      }
+    } catch (err: any) {
+      this.memoryError = err?.message || String(err);
+    } finally {
+      this.isMemoryLoading = false;
+    }
+  }
+
+  async selectMemory(filename: string) {
+    this.selectedMemoryFilename = filename;
+    this.memoryError = null;
+    this.memorySaveSuccess = false;
+    try {
+      this.currentMemoryContent = await api.agentReadProjectMemory(filename);
+    } catch (err: any) {
+      this.memoryError = err?.message || String(err);
+    }
+  }
+
+  async saveCurrentMemory(filename: string, content: string) {
+    this.isMemorySaving = true;
+    this.memoryError = null;
+    this.memorySaveSuccess = false;
+    try {
+      await api.agentSaveProjectMemory(filename, content);
+      this.currentMemoryContent = content;
+      this.memorySaveSuccess = true;
+      this.memoryItems = await api.agentListProjectMemory();
+      setTimeout(() => {
+        this.memorySaveSuccess = false;
+      }, 3000);
+    } catch (err: any) {
+      this.memoryError = err?.message || String(err);
+    } finally {
+      this.isMemorySaving = false;
+    }
+  }
+
+  async createNewMemory(filename: string, content = '') {
+    this.isMemorySaving = true;
+    this.memoryError = null;
+    try {
+      await api.agentSaveProjectMemory(filename, content);
+      await this.loadMemoryList();
+      await this.selectMemory(filename);
+    } catch (err: any) {
+      this.memoryError = err?.message || String(err);
+    } finally {
+      this.isMemorySaving = false;
+    }
   }
 }
 
