@@ -14,39 +14,64 @@ pub struct MemoryItem {
 }
 
 pub fn resolve_memory_dir(project_root: Option<&Path>) -> PathBuf {
-    // 1. If project has .petak/team.json with obsidian_vault_path, resolve to obsidian vault
+    // 1. If {project_root}/.petak/memory exists (even as a symlink), prioritize it!
     if let Some(root) = project_root {
+        let petak_mem = root.join(".petak").join("memory");
+        if petak_mem.exists() {
+            return petak_mem;
+        }
+    }
+
+    // 2. Check Obsidian vault configuration or auto-detect standard vault paths
+    let vault_candidate = if let Some(root) = project_root {
         let (team, _) = super::team::load_team(Some(root));
-        if let Some(ref vault_str) = team.obsidian_vault_path {
-            let vault_path = PathBuf::from(vault_str);
-            if vault_path.is_dir() {
-                let project_name = root
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("default");
-                let mem_dir = vault_path.join("Projects").join(project_name).join("Memory");
-                let _ = std::fs::create_dir_all(&mem_dir);
-                return mem_dir;
+        team.obsidian_vault_path.map(PathBuf::from)
+    } else {
+        None
+    };
+
+    let vault_path = vault_candidate
+        .or_else(|| {
+            let (g_team, _) = super::team::load_team(None);
+            g_team.obsidian_vault_path.map(PathBuf::from)
+        })
+        .or_else(|| {
+            let candidates = [
+                dirs::home_dir().map(|h| h.join("Documents/Coding/UQi/vault")),
+                dirs::home_dir().map(|h| h.join("vault")),
+                dirs::home_dir().map(|h| h.join("Documents/vault")),
+            ];
+            for c in candidates.into_iter().flatten() {
+                if c.is_dir() {
+                    return Some(c);
+                }
+            }
+            None
+        });
+
+    if let (Some(vault), Some(root)) = (vault_path, project_root) {
+        let p_name = root.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let candidates = if p_name.contains("jatim") || p_name.contains("jconnect") {
+            vec!["JConnect", "jatim-ist-mb-flutter", p_name]
+        } else if p_name.contains("petak") {
+            vec!["Petak", "petak", p_name]
+        } else {
+            vec![p_name]
+        };
+
+        for cand in candidates {
+            let p_dir = vault.join("Projects").join(cand);
+            if p_dir.is_dir() {
+                let mem_sub = p_dir.join("Memory");
+                if mem_sub.is_dir() {
+                    return mem_sub;
+                }
+                return p_dir;
             }
         }
     }
 
-    // 2. Global fallback in ~/.config/petak/team.json
-    let (g_team, _) = super::team::load_team(None);
-    if let Some(ref vault_str) = g_team.obsidian_vault_path {
-        let vault_path = PathBuf::from(vault_str);
-        if vault_path.is_dir() {
-            let project_name = project_root
-                .and_then(|r| r.file_name())
-                .and_then(|s| s.to_str())
-                .unwrap_or("Global");
-            let mem_dir = vault_path.join("Projects").join(project_name).join("Memory");
-            let _ = std::fs::create_dir_all(&mem_dir);
-            return mem_dir;
-        }
-    }
-
-    // 3. Fallback to {project_root}/.petak/memory
+    // 3. Fallback to default .petak/memory
     if let Some(root) = project_root {
         root.join(".petak").join("memory")
     } else if let Some(home) = dirs::home_dir() {
