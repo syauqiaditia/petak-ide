@@ -20,6 +20,10 @@ pub struct ToolchainConfig {
     pub bottom_panel_height: Option<u32>,
     #[serde(rename = "gitlab_url", alias = "gitlabUrl", default)]
     pub gitlab_url: Option<String>,
+    #[serde(default)]
+    pub theme: Option<String>,
+    #[serde(default)]
+    pub variant: Option<String>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
@@ -1822,5 +1826,33 @@ mod tests {
         invalidate_effective_path();
         let path2 = effective_path();
         assert!(!path2.is_empty());
+    }
+
+    #[test]
+    fn test_theme_variant_persistence() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_file = tmp.path().join("config.json");
+
+        // Write config with theme and variant
+        let cfg = ToolchainConfig {
+            theme: Some("dracula".to_string()),
+            variant: Some("dark".to_string()),
+            ..Default::default()
+        };
+        let content = serde_json::to_string_pretty(&cfg).unwrap();
+        std::fs::write(&config_file, &content).unwrap();
+
+        // Read back and verify
+        let loaded: ToolchainConfig =
+            serde_json::from_str(&std::fs::read_to_string(&config_file).unwrap()).unwrap();
+        assert_eq!(loaded.theme.as_deref(), Some("dracula"));
+        assert_eq!(loaded.variant.as_deref(), Some("dark"));
+
+        // Verify default (None) when not present
+        std::fs::write(&config_file, "{}").unwrap();
+        let loaded2: ToolchainConfig =
+            serde_json::from_str(&std::fs::read_to_string(&config_file).unwrap()).unwrap();
+        assert_eq!(loaded2.theme, None);
+        assert_eq!(loaded2.variant, None);
     }
 }
