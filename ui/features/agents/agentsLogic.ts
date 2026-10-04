@@ -231,3 +231,51 @@ export function isValidSlotTransition(current: SlotStatus, next: SlotStatus): bo
       return true;
   }
 }
+
+/**
+ * Formats token count with thousand separators (e.g. 12,738,477).
+ */
+export function formatTokens(count: number | null | undefined): string {
+  if (count === null || count === undefined || isNaN(count)) return '0';
+  return count.toLocaleString('en-US');
+}
+
+/**
+ * Formats USD cost, e.g. $0.0000 or $12.3456.
+ */
+export function formatCostUsd(cost: number | null | undefined): string {
+  if (cost === null || cost === undefined || isNaN(cost)) return '$0.0000';
+  return `$${cost.toFixed(4)}`;
+}
+
+/**
+ * Sanitizes markdown filename for project memory:
+ * strips path traversal ('..', '/', '\'), ensures .md extension.
+ */
+export function sanitizeMemoryFilename(name: string): string {
+  if (!name) return 'note.md';
+  let clean = name.replace(/[/\\]/g, '').replace(/\.\.+/g, '').trim();
+  if (!clean.endsWith('.md')) {
+    clean += '.md';
+  }
+  return clean;
+}
+
+/**
+ * Formats memory file size.
+ */
+export function formatMemorySize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Formats timestamp to human readable date string.
+ */
+export function formatMemoryTime(timestamp: number): string {
+  if (!timestamp) return '-';
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
