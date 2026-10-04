@@ -3781,6 +3781,13 @@ pub fn accounts_clear() -> Result<(), String> {
     petak_core::accounts::accounts_clear()
 }
 
+#[tauri::command]
+pub async fn accounts_check_token_status() -> Result<petak_core::accounts::TokenStatus, String> {
+    tauri::async_runtime::spawn_blocking(petak_core::accounts::accounts_check_token_status)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 // ──────────── Batch 11 Wi-Fi Pairing ────────────
 
 #[tauri::command]
