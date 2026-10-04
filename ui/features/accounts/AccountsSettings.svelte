@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import { AccountsManager } from './accountsLogic';
+  import { calcPatDaysLeft, patNeedsWarning } from './accountsExpiryLogic';
 
   const manager = new AccountsManager();
 
@@ -10,6 +11,12 @@
   let hasToken = $state(false);
   let statusMsg = $state<string | null>(null);
   let statusKind = $state<'idle' | 'success' | 'error' | 'testing'>('idle');
+  let connectedUser = $state<string | null>(null);
+  // ponytail: scopes and expiry will come from future backend API
+  // for now, display area ready, values set after test connection
+  let tokenScopes = $state<string[]>([]);
+  let tokenExpiresAt = $state<string | null>(null);
+  let expiryInfo = $derived(calcPatDaysLeft(tokenExpiresAt));
 
   onMount(async () => {
     await manager.load(api);
@@ -22,9 +29,12 @@
     manager.inputToken = token;
     statusKind = 'testing';
     statusMsg = 'Menguji koneksi…';
-    await manager.test(api);
+    const result = await manager.test(api);
     statusKind = manager.statusKind;
     statusMsg = manager.statusMessage;
+    if (result.ok && result.user) {
+      connectedUser = result.user;
+    }
   }
 
   async function handleSave() {
@@ -106,6 +116,43 @@
       </button>
     {/if}
   </div>
+
+  {#if connectedUser || (tokenScopes.length > 0) || tokenExpiresAt}
+    <div class="token-details">
+      <div class="card-title">TOKEN DETAILS</div>
+      {#if connectedUser}
+        <div class="token-detail-row">
+          <span class="detail-label">User:</span>
+          <span class="detail-value">@{connectedUser}</span>
+        </div>
+      {/if}
+      {#if tokenScopes.length > 0}
+        <div class="token-detail-row">
+          <span class="detail-label">Scopes:</span>
+          <div class="scope-badges">
+            {#each tokenScopes as scope}
+              <span class="scope-badge">{scope}</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+      {#if tokenExpiresAt}
+        <div class="token-detail-row">
+          <span class="detail-label">Expires:</span>
+          <span class="detail-value">
+            {tokenExpiresAt}
+            {#if expiryInfo.expired}
+              <span class="expiry-badge expired">Expired</span>
+            {:else if expiryInfo.daysLeft !== null && expiryInfo.daysLeft <= 14}
+              <span class="expiry-badge warning">⚠️ {expiryInfo.daysLeft}d left</span>
+            {:else if expiryInfo.daysLeft !== null}
+              <span class="expiry-badge ok">{expiryInfo.daysLeft}d left</span>
+            {/if}
+          </span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -234,6 +281,63 @@
   }
   .btn-clear:hover:not(:disabled) {
     border-color: #f07a74;
+    color: #f07a74;
+  }
+  .token-details {
+    margin-top: 12px;
+    padding: 12px;
+    background: #15161b;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .token-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .detail-label {
+    color: #8b8f98;
+    min-width: 60px;
+  }
+  .detail-value {
+    color: #d8d9dc;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .scope-badges {
+    display: flex;
+    gap: 4px;
+  }
+  .scope-badge {
+    padding: 2px 6px;
+    background: #1f2a3d;
+    border: 1px solid #364966;
+    border-radius: 4px;
+    color: #9cc3ff;
+    font-family: monospace;
+    font-size: 10.5px;
+  }
+  .expiry-badge {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+  .expiry-badge.ok {
+    background: #1b2e22;
+    color: #7fc98f;
+  }
+  .expiry-badge.warning {
+    background: #2e2717;
+    color: #e8b45a;
+  }
+  .expiry-badge.expired {
+    background: #331d1d;
     color: #f07a74;
   }
 </style>

@@ -1,3 +1,48 @@
+// ponytail: lazy import — only call api when actually changing, not on init
+let apiModule: any = null;
+async function getApi() {
+  if (!apiModule) {
+    apiModule = await import('../../lib/api');
+  }
+  return apiModule.api;
+}
+
+/** Persist variant/theme to backend config.json via toolchainSaveConfig. */
+async function persistToBackend(field: 'variant' | 'theme', value: string) {
+  try {
+    const a = await getApi();
+    const cfg = await a.toolchainGetConfig();
+    (cfg as any)[field] = value;
+    await a.toolchainSaveConfig(cfg);
+  } catch { /* backend unavailable (tests, SSR) — localStorage still works */ }
+}
+
+/** On init, sync variant/theme from backend config if localStorage is empty. */
+async function syncFromBackendIfEmpty() {
+  try {
+    const a = await getApi();
+    const cfg = await a.toolchainGetConfig();
+    if (typeof localStorage !== 'undefined') {
+      if (!localStorage.getItem('petak.variant') && (cfg as any).variant) {
+        const v = (cfg as any).variant;
+        if (v === 'a' || v === 'b') {
+          settingsStore.variant = v;
+          localStorage.setItem('petak.variant', v);
+          settingsStore['applyVariant'](v);
+        }
+      }
+      if (!localStorage.getItem('petak.theme') && (cfg as any).theme) {
+        const t = (cfg as any).theme;
+        if (t === 'dark' || t === 'light') {
+          settingsStore.theme = t;
+          localStorage.setItem('petak.theme', t);
+          settingsStore['applyTheme'](t);
+        }
+      }
+    }
+  } catch { /* ignore */ }
+}
+
 class SettingsStore {
   isOpen = $state(false);
   activeCategory = $state<
@@ -42,6 +87,7 @@ class SettingsStore {
       localStorage.setItem('petak.variant', newVariant);
     }
     this.applyVariant(newVariant);
+    persistToBackend('variant', newVariant);
   }
 
   private applyVariant(v: 'a' | 'b') {
@@ -76,6 +122,7 @@ class SettingsStore {
       localStorage.setItem('petak.theme', newTheme);
     }
     this.applyTheme(newTheme);
+    persistToBackend('theme', newTheme);
   }
 
   private applyTheme(t: 'dark' | 'light') {
@@ -122,3 +169,8 @@ class SettingsStore {
 }
 
 export const settingsStore = new SettingsStore();
+
+// Sync from backend config on startup if localStorage is empty
+if (typeof window !== 'undefined') {
+  syncFromBackendIfEmpty();
+}
