@@ -19,6 +19,8 @@ import type {
 } from './types';
 import {
   applyDisciplineDirectives,
+  extractLessonFromResponse,
+  formatLessonEntry,
   DEFAULT_ALLOWLIST,
   isCommandInAllowlist,
 } from './agentsLogic';
@@ -68,6 +70,7 @@ class AgentsStore {
 
   isPonytailActive = $state(true); // Default true (Ponytail rule)
   isCavemanActive = $state(false);
+  isSelfImproveActive = $state(true); // Default true (Self-improvement & auto-learning)
 
   isLoading = $state(false);
   isStreaming = $state(false);
@@ -238,10 +241,17 @@ class AgentsStore {
     if (!rawPrompt.trim() || !this.activeSlotId) return;
     const slotId = this.activeSlotId;
 
+    let memorySnippet = '';
+    if (this.isSelfImproveActive) {
+      memorySnippet = await this.getMemorySnippetForPrompt();
+    }
+
     const formattedPrompt = applyDisciplineDirectives(
       rawPrompt.trim(),
       this.isPonytailActive,
-      this.isCavemanActive
+      this.isCavemanActive,
+      this.isSelfImproveActive,
+      memorySnippet
     );
 
     const userMsg: ChatMessage = {
@@ -275,6 +285,16 @@ class AgentsStore {
         stop_reason: response.stopReason,
       };
       this.chatHistory[slotId] = [...this.chatHistory[slotId], agentMsg];
+
+      // Auto-learn reflection: if agent formulated a lesson, append to project memory
+      if (this.isSelfImproveActive && response.message) {
+        const extractedLesson = extractLessonFromResponse(response.message);
+        if (extractedLesson) {
+          this.appendLessonToMemory(extractedLesson, 'Auto-Improvement').catch((err) => {
+            console.warn('Auto-save lesson failed:', err);
+          });
+        }
+      }
 
       // Refresh proposals in case agent created diffs
       await this.loadProposals();
@@ -539,6 +559,51 @@ class AgentsStore {
 
   toggleCaveman() {
     this.isCavemanActive = !this.isCavemanActive;
+  }
+
+  toggleSelfImprove() {
+    this.isSelfImproveActive = !this.isSelfImproveActive;
+  }
+
+  async getMemorySnippetForPrompt(): Promise<string> {
+    try {
+      if (this.memoryItems.length === 0) {
+        this.memoryItems = await api.agentListProjectMemory();
+      }
+      const keyFiles = ['conventions.md', 'gotchas.md', 'rules.md', 'lessons.md'];
+      const targets = this.memoryItems
+        .filter((m) => keyFiles.includes(m.filename.toLowerCase()))
+        .slice(0, 3);
+      const chosen = targets.length > 0 ? targets : this.memoryItems.slice(0, 2);
+
+      const snippets: string[] = [];
+      for (const item of chosen) {
+        const text = await api.agentReadProjectMemory(item.filename);
+        if (text && text.trim()) {
+          snippets.push(`## ${item.filename}\n${text.trim().slice(0, 600)}`);
+        }
+      }
+      return snippets.join('\n\n');
+    } catch {
+      return '';
+    }
+  }
+
+  async appendLessonToMemory(lesson: string, topic?: string) {
+    try {
+      const entry = formatLessonEntry(lesson, topic);
+      let existing = '';
+      try {
+        existing = await api.agentReadProjectMemory('lessons.md');
+      } catch {
+        existing = '# Lessons Learned & Self-Improvement\n\nCatatan penting dan konvensi proyek yang dipelajari otomatis oleh agen.\n\n';
+      }
+      const updated = `${existing.trimEnd()}\n${entry}\n`;
+      await api.agentSaveProjectMemory('lessons.md', updated);
+      await this.loadMemoryList();
+    } catch (err: any) {
+      console.warn('Failed to append lesson to memory:', err);
+    }
   }
 
   // ── 9Router Quota & Project Memory Actions ──────────────────────────────

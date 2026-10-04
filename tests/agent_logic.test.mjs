@@ -9,6 +9,8 @@ import {
   truncateToolOutput,
   buildFixWithAgentDraft,
   applyDisciplineDirectives,
+  extractLessonFromResponse,
+  formatLessonEntry,
   isValidSlotTransition,
   DEFAULT_ALLOWLIST,
 } from '../ui/features/agents/agentsLogic.ts';
@@ -146,6 +148,30 @@ test('applyDisciplineDirectives: injects Ponytail and Caveman rules', () => {
 
   const neither = applyDisciplineDirectives(rawPrompt, false, false);
   assert.equal(neither, rawPrompt);
+
+  const withSelfImprove = applyDisciplineDirectives(
+    rawPrompt,
+    false,
+    false,
+    true,
+    '## conventions.md\nAlways use BLoC context.read'
+  );
+  assert.match(withSelfImprove, /SELF-IMPROVE/);
+  assert.match(withSelfImprove, /PROJECT MEMORY & OBSIDIAN CONVENTIONS/);
+  assert.match(withSelfImprove, /Always use BLoC context\.read/);
+});
+
+test('self-improvement: extractLessonFromResponse and formatLessonEntry', () => {
+  const sampleResp = 'Berikut perbaikannya.\n\nPelajaran: Jangan gunakan static state pada widget.\nKode sudah diuji.';
+  const lesson = extractLessonFromResponse(sampleResp);
+  assert.equal(lesson, 'Jangan gunakan static state pada widget.');
+
+  const noLesson = extractLessonFromResponse('Perbaikan selesai tanpa catatan khusus.');
+  assert.equal(noLesson, null);
+
+  const entry = formatLessonEntry('Gunakan BLoC builder', 'Architecture');
+  assert.match(entry, /Architecture/);
+  assert.match(entry, /Gunakan BLoC builder/);
 });
 
 test('isValidSlotTransition: checks state machine validity', () => {

@@ -182,12 +182,15 @@ export function buildFixWithAgentDraft(input: {
 }
 
 /**
- * Adds Ponytail and Caveman discipline directives to prompts.
+ * Adds Ponytail, Caveman, and Self-Improve discipline directives to prompts,
+ * optionally injecting relevant project memory context from Obsidian.
  */
 export function applyDisciplineDirectives(
   prompt: string,
   isPonytail: boolean,
-  isCaveman: boolean
+  isCaveman: boolean,
+  isSelfImprove: boolean = false,
+  memoryContext: string = ''
 ): string {
   const directives: string[] = [];
 
@@ -201,8 +204,43 @@ export function applyDisciplineDirectives(
     directives.push('[DISCIPLINE: CAVEMAN — terse responses, direct answers, eliminate filler prose]');
   }
 
+  if (isSelfImprove) {
+    directives.push(
+      '[DISCIPLINE: SELF-IMPROVE — Always consult project memory and conventions. When discovering a new bug fix pattern, user preference, or codebase quirk, formulate a concise lesson and propose saving it to project memory via lessons.md]'
+    );
+  }
+
+  if (memoryContext && memoryContext.trim()) {
+    directives.push(`[PROJECT MEMORY & OBSIDIAN CONVENTIONS]\n${memoryContext.trim()}`);
+  }
+
   if (directives.length === 0) return prompt;
-  return `${directives.join('\n')}\n\n${prompt}`;
+  return `${directives.join('\n\n')}\n\n${prompt}`;
+}
+
+/**
+ * Extracts lesson / self-improvement insights from an agent's response text.
+ */
+export function extractLessonFromResponse(text: string): string | null {
+  if (!text) return null;
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(?:pelajaran|lesson(?: learned)?|catatan|rule|kesimpulan):\s*(.+)/i);
+    if (match && match[1].trim()) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Formats a lesson entry with ISO date stamp.
+ */
+export function formatLessonEntry(lesson: string, topic?: string): string {
+  const date = new Date().toISOString().slice(0, 10);
+  const prefix = topic ? `**[${date} — ${topic}]**` : `**[${date}]**`;
+  return `- ${prefix} ${lesson.trim()}`;
 }
 
 /**

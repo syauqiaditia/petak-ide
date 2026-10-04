@@ -288,6 +288,16 @@
         >
           <span>Caveman: {agentsStore.isCavemanActive ? 'ON' : 'OFF'}</span>
         </button>
+
+        <button
+          type="button"
+          class="context-pill self-improve"
+          class:active={agentsStore.isSelfImproveActive}
+          onclick={() => agentsStore.toggleSelfImprove()}
+          title="Self-Improve: Injeksi memory Obsidian & auto-catat lessons learned"
+        >
+          <span>Self-Improve: {agentsStore.isSelfImproveActive ? 'ON' : 'OFF'}</span>
+        </button>
       </div>
 
       <div class="pills-right">
@@ -630,9 +640,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   .pills-left::-webkit-scrollbar {
@@ -699,6 +707,18 @@
     color: #fde047;
     border-color: rgba(250, 204, 21, 0.4);
     background: rgba(250, 204, 21, 0.15);
+    font-weight: 600;
+  }
+
+  .context-pill.self-improve {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .context-pill.self-improve.active {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.4);
+    background: rgba(52, 211, 153, 0.15);
     font-weight: 600;
   }
 

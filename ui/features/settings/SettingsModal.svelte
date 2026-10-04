@@ -1137,6 +1137,19 @@
                     onchange={() => agentsStore.toggleCaveman()}
                   />
                 </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-meta">
+                    <span class="setting-label">Self-Improve & Auto-Reflection (Default ON)</span>
+                    <span class="setting-hint">Otomatis menyuntikkan memory Obsidian ke konteks agen dan mencatat aturan/pelajaran baru ke <code>lessons.md</code>.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    class="toggle-checkbox"
+                    checked={agentsStore.isSelfImproveActive}
+                    onchange={() => agentsStore.toggleSelfImprove()}
+                  />
+                </div>
               </div>
             </div>
           </div>
