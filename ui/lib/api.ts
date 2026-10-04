@@ -2133,6 +2133,14 @@ export const api = {
     }
     return invoke('agent_save_project_memory', { filename, content });
   },
+
+  async agentOpenInObsidian(filename?: string | null): Promise<void> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      console.log('Mock open in obsidian:', filename);
+      return;
+    }
+    return invoke('agent_open_in_obsidian', { filename: filename || null });
+  },
 };
 
 const mockMemoryStore = {

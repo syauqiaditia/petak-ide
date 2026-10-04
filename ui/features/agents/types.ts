@@ -76,6 +76,7 @@ export interface SlotSummary {
 export interface TeamConfig {
   version: number;
   slots: SlotConfig[];
+  obsidianVaultPath?: string | null;
 }
 
 export interface KanbanBadge {

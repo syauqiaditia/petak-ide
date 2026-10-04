@@ -315,3 +315,42 @@ pub async fn agent_save_project_memory(
     .await
     .map_err(|e| e.to_string())?
 }
+
+#[tauri::command]
+pub async fn agent_open_in_obsidian(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    filename: Option<String>,
+) -> Result<(), String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    let mem_dir = petak_core::agent::resolve_memory_dir(root.as_deref());
+    let target = if let Some(f) = filename {
+        mem_dir.join(f)
+    } else {
+        mem_dir
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", target.to_string_lossy().as_ref()])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

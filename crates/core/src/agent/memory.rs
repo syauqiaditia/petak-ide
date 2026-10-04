@@ -14,6 +14,39 @@ pub struct MemoryItem {
 }
 
 pub fn resolve_memory_dir(project_root: Option<&Path>) -> PathBuf {
+    // 1. If project has .petak/team.json with obsidian_vault_path, resolve to obsidian vault
+    if let Some(root) = project_root {
+        let (team, _) = super::team::load_team(Some(root));
+        if let Some(ref vault_str) = team.obsidian_vault_path {
+            let vault_path = PathBuf::from(vault_str);
+            if vault_path.is_dir() {
+                let project_name = root
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("default");
+                let mem_dir = vault_path.join("Projects").join(project_name).join("Memory");
+                let _ = std::fs::create_dir_all(&mem_dir);
+                return mem_dir;
+            }
+        }
+    }
+
+    // 2. Global fallback in ~/.config/petak/team.json
+    let (g_team, _) = super::team::load_team(None);
+    if let Some(ref vault_str) = g_team.obsidian_vault_path {
+        let vault_path = PathBuf::from(vault_str);
+        if vault_path.is_dir() {
+            let project_name = project_root
+                .and_then(|r| r.file_name())
+                .and_then(|s| s.to_str())
+                .unwrap_or("Global");
+            let mem_dir = vault_path.join("Projects").join(project_name).join("Memory");
+            let _ = std::fs::create_dir_all(&mem_dir);
+            return mem_dir;
+        }
+    }
+
+    // 3. Fallback to {project_root}/.petak/memory
     if let Some(root) = project_root {
         root.join(".petak").join("memory")
     } else if let Some(home) = dirs::home_dir() {

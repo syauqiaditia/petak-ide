@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 pub struct TeamConfig {
     pub version: u32,
     pub slots: Vec<SlotConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub obsidian_vault_path: Option<String>,
 }
 
 impl Default for TeamConfig {
@@ -13,6 +15,7 @@ impl Default for TeamConfig {
         Self {
             version: 1,
             slots: Vec::new(),
+            obsidian_vault_path: None,
         }
     }
 }
@@ -116,6 +119,7 @@ mod tests {
         let team = TeamConfig {
             version: 1,
             slots: vec![slot.clone()],
+            obsidian_vault_path: None,
         };
 
         let saved_path = save_team(Some(root), &team).unwrap();

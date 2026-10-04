@@ -4387,6 +4387,42 @@
                   </div>
                 </div>
 
+                <!-- Section 2.5: Integrasi Obsidian Vault (Memory Proyek) -->
+                <div class="settings-group" style="padding: 10px 14px; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-default);">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <div>
+                      <div style="font-weight: 600; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                        <span>📓 Integrasi Obsidian Vault (Memory & Catatan)</span>
+                        <span class="keycap" style="background: rgba(16, 185, 129, 0.15); color: #34d399;">● Terhubung ke Obsidian</span>
+                      </div>
+                      <span class="setting-hint">Hubungkan memory agen dengan vault Obsidian. Catatan (.md) otomatis tersimpan ke folder vault Anda.</span>
+                    </div>
+                    <button class="action-btn" onclick="document.getElementById('demo-obsidian-input').value = '/Users/uqi/Documents/Coding/UQi/vault'; alert('Vault terdeteksi!');" style="font-size: 11px;">
+                      🔍 Deteksi Otomatis Vault
+                    </button>
+                  </div>
+
+                  <div style="margin-top: 8px;">
+                    <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Path Direktori Vault Obsidian:</label>
+                    <div style="display: flex; gap: 8px;">
+                      <input
+                        type="text"
+                        id="demo-obsidian-input"
+                        class="setting-select-box"
+                        style="width: 100%; font-family: var(--font-mono);"
+                        value="/Users/uqi/Documents/Coding/UQi/vault"
+                      />
+                      <button class="pill-btn active" style="white-space: nowrap; padding: 6px 16px;" onclick="alert('Path Obsidian Vault berhasil disimpan ke .petak/team.json!')">
+                        Simpan Path Vault
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style="margin-top: 10px; padding: 8px 12px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: var(--radius-sm); font-size: 11px; color: var(--text-secondary); line-height: 1.5;">
+                    💡 <strong>Cara Kerja Memory Obsidian:</strong> Catatan proyek disimpan sebagai berkas <code>.md</code> asli di <code>vault/Projects/jatim-ist-mb-flutter/Memory/</code>. Setiap catatan yang ditulis bot Petak atau Anda di Obsidian langsung tersinkron dan bisa dibuka dengan tombol <strong>"🔗 Buka di Obsidian"</strong>.
+                  </div>
+                </div>
+
                 <!-- Section 3: 9Router Quota & Token Tracker -->
                 <div class="settings-group" style="padding: 10px 14px; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-default);">
                   <div style="display: flex; align-items: center; justify-content: space-between;">

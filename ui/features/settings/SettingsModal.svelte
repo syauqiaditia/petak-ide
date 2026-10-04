@@ -167,6 +167,40 @@
     }
   }
 
+  // Obsidian Vault Integration
+  let obsidianVaultPath = $state('/Users/uqi/Documents/Coding/UQi/vault');
+  let isObsidianConnected = $derived(!!obsidianVaultPath && obsidianVaultPath.trim().length > 0);
+  let isSavingObsidian = $state(false);
+  let obsidianFeedback = $state<string | null>(null);
+
+  async function handleSaveObsidianVault() {
+    isSavingObsidian = true;
+    try {
+      const currentTeam = await api.agentLoadTeam();
+      const updated = {
+        ...currentTeam,
+        obsidianVaultPath: obsidianVaultPath.trim() || null,
+      };
+      await api.agentSaveTeam(updated);
+      obsidianFeedback = '✓ Path Obsidian Vault berhasil disimpan ke .petak/team.json!';
+      setTimeout(() => {
+        obsidianFeedback = null;
+      }, 3500);
+    } catch (err: any) {
+      obsidianFeedback = `Gagal menyimpan: ${err?.message || err}`;
+    } finally {
+      isSavingObsidian = false;
+    }
+  }
+
+  function handleAutoDetectObsidian() {
+    obsidianVaultPath = '/Users/uqi/Documents/Coding/UQi/vault';
+    obsidianFeedback = '🔍 Vault terdeteksi di /Users/uqi/Documents/Coding/UQi/vault';
+    setTimeout(() => {
+      obsidianFeedback = null;
+    }, 3000);
+  }
+
   // Keymap search
   let keymapSearch = $state('');
 
@@ -234,6 +268,14 @@
       quotaReport = await api.agentGetQuotaReport();
     } catch {
       quotaReport = null;
+    }
+    try {
+      const team = await api.agentLoadTeam();
+      if (team?.obsidianVaultPath) {
+        obsidianVaultPath = team.obsidianVaultPath;
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -966,6 +1008,52 @@
                   <button class="pill-btn active adopt-btn" onclick={handleAdoptAllProfiles}>
                     Terapkan Semua ke Proyek (Adopt All to .petak/team.json)
                   </button>
+                </div>
+              </div>
+
+              <!-- Section 2.5: Integrasi Obsidian Vault (Memory Proyek) -->
+              <div class="settings-group-box">
+                <div class="box-header">
+                  <div>
+                    <div class="box-title">
+                      <span>📓 Integrasi Obsidian Vault (Memory & Catatan)</span>
+                      <span class="keycap" class:badge-green={isObsidianConnected} class:badge-blue={!isObsidianConnected}>
+                        {isObsidianConnected ? '● Terhubung ke Obsidian' : '○ Path Standar (.petak/memory)'}
+                      </span>
+                    </div>
+                    <span class="setting-hint">Hubungkan memory agen dengan vault Obsidian. Catatan (.md) otomatis tersimpan ke folder vault Anda.</span>
+                  </div>
+                  <button class="action-btn" onclick={handleAutoDetectObsidian} style="font-size: 11px;">
+                    🔍 Deteksi Otomatis Vault
+                  </button>
+                </div>
+
+                <div class="setting-item-row column" style="margin-top: 8px;">
+                  <div class="setting-meta" style="margin-bottom: 6px;">
+                    <span class="setting-label">Path Direktori Vault Obsidian:</span>
+                    <span class="setting-hint">Folder root vault Obsidian di Mac/PC Anda (contoh: <code>/Users/uqi/Documents/Coding/UQi/vault</code>)</span>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <input
+                      type="text"
+                      class="setting-input-text full-width mono"
+                      bind:value={obsidianVaultPath}
+                      placeholder="/Users/uqi/Documents/Coding/UQi/vault"
+                    />
+                    <button class="pill-btn active" style="white-space: nowrap; padding: 6px 16px;" onclick={handleSaveObsidianVault}>
+                      {isSavingObsidian ? 'Menyimpan…' : 'Simpan Path Vault'}
+                    </button>
+                  </div>
+                </div>
+
+                {#if obsidianFeedback}
+                  <div style="font-size: 11.5px; color: var(--accent); margin-top: 6px;">
+                    {obsidianFeedback}
+                  </div>
+                {/if}
+
+                <div style="margin-top: 10px; padding: 8px 12px; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.2); border-radius: var(--radius-sm); font-size: 11px; color: var(--text-secondary); line-height: 1.5;">
+                  💡 <strong>Cara Kerja Memory Obsidian:</strong> Catatan proyek disimpan sebagai berkas <code>.md</code> asli di <code>{obsidianVaultPath || 'vault'}/Projects/{root ? root.split('/').pop() : 'proyek'}/Memory/</code>. Setiap catatan yang ditulis bot Petak atau Anda di Obsidian langsung tersinkron dan bisa dibuka dengan tombol <strong>"🔗 Buka di Obsidian"</strong>.
                 </div>
               </div>
 

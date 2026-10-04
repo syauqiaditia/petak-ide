@@ -186,10 +186,19 @@
             {/if}
 
             <button
+              class="action-btn"
+              style="display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 4px 10px; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); color: #c4b5fd; border-radius: var(--radius-sm);"
+              onclick={() => api.agentOpenInObsidian(selectedFilename)}
+              title="Buka berkas catatan ini langsung di aplikasi Obsidian"
+            >
+              <span>🔗 Buka di Obsidian</span>
+            </button>
+
+            <button
               class="save-btn"
               onclick={handleSave}
               disabled={isSaving || !isDirty}
-              title="Simpan perubahan ke disk (.petak/memory/)"
+              title="Simpan perubahan ke disk"
             >
               {#if isSaving}
                 Menyimpan...

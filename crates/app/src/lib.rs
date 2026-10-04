@@ -341,6 +341,7 @@ pub fn run() {
             commands::agent_list_project_memory,
             commands::agent_read_project_memory,
             commands::agent_save_project_memory,
+            commands::agent_open_in_obsidian,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,
