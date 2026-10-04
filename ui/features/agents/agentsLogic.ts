@@ -288,36 +288,43 @@ export interface ModelPreset {
   recommended?: boolean;
 }
 
+export interface AgentPlatform {
+  id: string;
+  name: string;
+  badge: string;
+  desc: string;
+}
+
+export const AGENT_PLATFORMS: AgentPlatform[] = [
+  { id: 'antigravity', name: 'Antigravity (via 9Router)', badge: '🚀 Antigravity', desc: 'Google Gemini & Claude Opus via 9Router proxy' },
+  { id: 'claude-code', name: 'Claude Code CLI', badge: '🟣 Claude Code', desc: 'Anthropic Standalone CLI via ACP' },
+  { id: 'codex', name: 'OpenAI Codex / GPT', badge: '🟢 Codex', desc: 'OpenAI Autonomous Agent via ACP' },
+  { id: 'hermes', name: 'Hermes Agent', badge: '🤖 Hermes', desc: 'Daemon profil lokal Hermes' },
+  { id: 'ollama', name: 'Local Ollama', badge: '🦙 Ollama', desc: 'Model offline tanpa internet' },
+  { id: 'custom', name: 'Custom ACP Command', badge: '⚙️ Custom', desc: 'Perintah terminal bebas via stdio ACP' },
+];
+
 export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
-  anthropic: [
-    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
-    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
-    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity / Deep Thinking' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
-  ],
-  gemini: [
-    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Rekomendasi Hermes', recommended: true },
+  antigravity: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Cepat, Hemat & Cerdas', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity — Deep Reasoning & Arsitektur', recommended: true },
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship' },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Standar Cepat & Akurat' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Reasoning Kuat & Multimodal' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Super Cepat & Hemat Kuota' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', desc: 'Generasi Baru Cepat' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', desc: 'Konteks Panjang 2M Token' },
   ],
-  openai: [
+  'claude-code': [
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship (Rekomendasi)', recommended: true },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+  ],
+  codex: [
     { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
     { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
     { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
     { id: 'o1-mini', name: 'o1-mini', desc: 'Reasoning Ringan' },
-  ],
-  ollama: [
-    { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', desc: 'Coding Lokal Terbaik', recommended: true },
-    { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', desc: 'Cepat & Akurat (Mac 16GB)' },
-    { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng (Mac 8GB)' },
-    { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
-    { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
-    { id: 'llama3.3:70b', name: 'Llama 3.3 70B', desc: 'Model Besar Serbaguna' },
-    { id: 'llama3.1:8b', name: 'Llama 3.1 8B', desc: 'Lokal Cepat Standar' },
   ],
   hermes: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Profile Default', recommended: true },
@@ -325,23 +332,58 @@ export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
     { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', desc: 'Hermes Cloud' },
     { id: 'openai/gpt-4o', name: 'OpenAI GPT-4o', desc: 'Hermes Cloud' },
   ],
+  ollama: [
+    { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', desc: 'Coding Lokal Terbaik (16GB)', recommended: true },
+    { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', desc: 'Cepat & Akurat (Mac 16GB)' },
+    { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng untuk Mac 8GB' },
+    { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
+    { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
+    { id: 'llama3.3:70b', name: 'Llama 3.3 70B', desc: 'Model Besar Serbaguna' },
+    { id: 'llama3.1:8b', name: 'Llama 3.1 8B', desc: 'Lokal Cepat Standar' },
+  ],
+  custom: [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
+  ],
+  // Compatibility aliases
+  anthropic: [
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
+  ],
+  gemini: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Rekomendasi Hermes', recommended: true },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Reasoning Kuat & Multimodal' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Super Cepat & Hemat Kuota' },
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
+    { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+  ],
 };
 
-export const ALL_PRESET_MODELS: ModelPreset[] = Object.values(PROVIDER_MODELS).flat();
+export const ALL_PRESET_MODELS: ModelPreset[] = [
+  ...PROVIDER_MODELS.antigravity,
+  ...PROVIDER_MODELS['claude-code'],
+  ...PROVIDER_MODELS.codex,
+  ...PROVIDER_MODELS.hermes,
+  ...PROVIDER_MODELS.ollama,
+].filter((m, idx, self) => self.findIndex((x) => x.id === m.id) === idx);
 
 export function getModelsForProvider(provider: string): ModelPreset[] {
-  return PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
+  return PROVIDER_MODELS[provider] || PROVIDER_MODELS.antigravity;
 }
 
 export function detectProviderFromModel(modelId: string): string {
-  if (!modelId) return 'anthropic';
+  if (!modelId) return 'antigravity';
   const m = modelId.toLowerCase();
-  if (m.includes('claude') || m.includes('anthropic')) return 'anthropic';
-  if (m.includes('gemini')) return 'gemini';
-  if (m.includes('gpt') || m.startsWith('o1') || m.startsWith('o3')) return 'openai';
+  if (m.startsWith('ag/')) return 'antigravity';
+  if (m.includes('claude')) return 'claude-code';
+  if (m.includes('gemini')) return 'antigravity';
+  if (m.includes('gpt') || m.startsWith('o1') || m.startsWith('o3')) return 'codex';
   if (m.includes('qwen') || m.includes('deepseek') || m.includes('llama') || m.includes('ollama')) return 'ollama';
   if (m.includes('hermes')) return 'hermes';
-  return 'anthropic';
+  return 'antigravity';
 }
 
 export function getModelDisplayName(modelId: string): string {

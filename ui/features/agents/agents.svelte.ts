@@ -495,6 +495,28 @@ class AgentsStore {
     }
   }
 
+  async addSlot(slot: SlotConfig) {
+    try {
+      await api.agentAddSlot(slot);
+      await this.loadSlots();
+      this.selectSlot(slot.id);
+    } catch (e: any) {
+      this.error = `Gagal menambahkan slot: ${e?.message || e}`;
+    }
+  }
+
+  async removeSlot(slotId: string) {
+    try {
+      await api.agentRemoveSlot(slotId);
+      await this.loadSlots();
+      if (this.activeSlotId === slotId) {
+        this.activeSlotId = this.slots[0]?.id || null;
+      }
+    } catch (e: any) {
+      this.error = `Gagal menghapus slot: ${e?.message || e}`;
+    }
+  }
+
   openFixWithAgent(draft: FixWithAgentDraft) {
     this.fixWithAgentDraft = draft;
     if (draft.slotId) {

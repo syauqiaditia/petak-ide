@@ -122,6 +122,51 @@
     }
   }
 
+  // Manual Bot Addition
+  let isAddBotFormOpen = $state(false);
+  let newBotLabel = $state('Senior Coder 2');
+  let newBotIcon = $state('⚡');
+  let newBotPlatform = $state('antigravity');
+  let newBotModel = $state('ag/gemini-3.8-flash-high');
+  let newBotPermission = $state<PermissionMode>('ask');
+  let isAddingBot = $state(false);
+
+  async function handleAddBotSubmit() {
+    if (!newBotLabel.trim()) return;
+    isAddingBot = true;
+    try {
+      const newSlot = {
+        id: `slot-${Date.now().toString(36)}`,
+        label: `${newBotIcon} ${newBotLabel.trim()}`,
+        kind: newBotPlatform === 'hermes' ? 'hermes' : newBotPlatform === 'claude-code' ? 'claude-code' : 'acp-custom',
+        command: newBotPlatform === 'claude-code' ? 'npx @agentclientprotocol/claude-agent-acp' : null,
+        hermesProfile: newBotPlatform === 'hermes' ? newBotLabel.toLowerCase() : null,
+        model: newBotModel,
+        fallbackModel: 'gemini-2.5-pro',
+        permission: newBotPermission,
+        cwd: 'project',
+      };
+      await agentsStore.addSlot(newSlot);
+      isAddBotFormOpen = false;
+      newBotLabel = '';
+      selectedConfigSlotId = newSlot.id;
+    } finally {
+      isAddingBot = false;
+    }
+  }
+
+  function handleSelectSlotToEdit(slotId: string) {
+    selectedConfigSlotId = slotId;
+    const el = document.getElementById('sec-agents');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  async function handleRemoveBot(slotId: string) {
+    if (confirm('Hapus bot ini dari tim proyek?')) {
+      await agentsStore.removeSlot(slotId);
+    }
+  }
+
   // Keymap search
   let keymapSearch = $state('');
 
@@ -641,13 +686,14 @@
 
                 <div class="model-config-grid">
                   <div>
-                    <label class="field-label" for="provider-select">Penyedia Model (Provider):</label>
+                    <label class="field-label" for="provider-select">Platform / Ekosistem Agen:</label>
                     <select id="provider-select" class="setting-select-box full-width" bind:value={activeProvider} onchange={handleProviderChange}>
-                      <option value="anthropic">Anthropic Claude (via Antigravity / 9Router)</option>
-                      <option value="gemini">Google Gemini (Gemini 2.5 Pro / Flash)</option>
-                      <option value="openai">OpenAI GPT (GPT-4o / o3-mini)</option>
-                      <option value="ollama">Local Ollama (Qwen 2.5 Coder 32B)</option>
-                      <option value="hermes">Hermes Agent CLI (Lokal Daemon)</option>
+                      <option value="antigravity">🚀 Antigravity (Google Gemini & Claude Opus via 9Router)</option>
+                      <option value="claude-code">🟣 Claude Code CLI (Anthropic Claude ACP)</option>
+                      <option value="codex">🟢 OpenAI Codex / GPT (GPT-4o / o3-mini)</option>
+                      <option value="hermes">🤖 Hermes Agent Daemon (Profil Lokal)</option>
+                      <option value="ollama">🦙 Local Ollama (Qwen 2.5 Coder / Offline)</option>
+                      <option value="custom">⚙️ Custom ACP Command / External</option>
                     </select>
                   </div>
 
@@ -746,6 +792,140 @@
                       <span class="tier-tag">3° Local:</span> ollama:qwen2.5-coder:32b
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <!-- Section 1.5: Tim Bot Proyek (.petak/team.json) & Tambah Bot Manual -->
+              <div class="settings-group-box">
+                <div class="box-header">
+                  <div>
+                    <div class="box-title">
+                      <span>🤖 Tim Bot Proyek (.petak/team.json)</span>
+                      <span class="keycap badge-blue">{agentsStore.slots.length} Bot Aktif</span>
+                    </div>
+                    <span class="setting-hint">Daftar bot yang bertugas di proyek ini. Anda bebas menambah bot baru, mengubah model, atau menghapus bot.</span>
+                  </div>
+                  <button class="pill-btn active" style="padding: 6px 14px;" onclick={() => (isAddBotFormOpen = !isAddBotFormOpen)}>
+                    {isAddBotFormOpen ? '✕ Tutup Form' : '+ Tambah Bot Manual'}
+                  </button>
+                </div>
+
+                <!-- Form Tambah Bot Baru (Manual) -->
+                {#if isAddBotFormOpen}
+                  <div class="add-bot-form-box" style="margin-bottom: 16px; padding: 14px; background: var(--p-bg-surface, #121317); border: 1px solid var(--border-focus, #3b82f6); border-radius: var(--radius-md, 6px);">
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                      <span>➕ Konfigurasi Bot Baru</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 90px 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                      <div>
+                        <label class="field-label" for="new-bot-icon">Ikon:</label>
+                        <select id="new-bot-icon" class="setting-select-box full-width" bind:value={newBotIcon}>
+                          <option value="⚡">⚡ Coder</option>
+                          <option value="🧠">🧠 Techlead</option>
+                          <option value="👑">👑 Manager</option>
+                          <option value="🔍">🔍 Reviewer</option>
+                          <option value="🎨">🎨 Designer</option>
+                          <option value="🛡️">🛡️ Security</option>
+                          <option value="📝">📝 Docs</option>
+                          <option value="🤖">🤖 Bot</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label class="field-label" for="new-bot-label">Nama / Peran Bot:</label>
+                        <input
+                          id="new-bot-label"
+                          type="text"
+                          class="setting-select-box full-width"
+                          bind:value={newBotLabel}
+                          placeholder="e.g. Senior Coder 2 / Security Auditor"
+                        />
+                      </div>
+
+                      <div>
+                        <label class="field-label" for="new-bot-platform">Platform Agen:</label>
+                        <select
+                          id="new-bot-platform"
+                          class="setting-select-box full-width"
+                          bind:value={newBotPlatform}
+                          onchange={() => {
+                            const list = getModelsForProvider(newBotPlatform);
+                            newBotModel = list.find((m) => m.recommended)?.id || list[0].id;
+                          }}
+                        >
+                          <option value="antigravity">🚀 Antigravity (9Router)</option>
+                          <option value="claude-code">🟣 Claude Code CLI</option>
+                          <option value="codex">🟢 OpenAI Codex / GPT</option>
+                          <option value="hermes">🤖 Hermes Agent</option>
+                          <option value="ollama">🦙 Local Ollama</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end;">
+                      <div>
+                        <label class="field-label" for="new-bot-model">Model Pilihan:</label>
+                        <select id="new-bot-model" class="setting-select-box full-width" bind:value={newBotModel}>
+                          {#each getModelsForProvider(newBotPlatform) as m}
+                            <option value={m.id}>{m.name} ({m.id}) {m.recommended ? '★' : ''}</option>
+                          {/each}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label class="field-label" for="new-bot-perm">Mode Izin Awal:</label>
+                        <select id="new-bot-perm" class="setting-select-box full-width" bind:value={newBotPermission}>
+                          <option value="read">Read-Only (Hanya Baca)</option>
+                          <option value="ask">Ask (Tanya Sebelum Ubah)</option>
+                          <option value="auto">Auto-Safe (Otomatis Run Safe)</option>
+                          <option value="full">Full Access (Otonom)</option>
+                        </select>
+                      </div>
+
+                      <div style="display: flex; gap: 6px;">
+                        <button class="pill-btn active" style="padding: 6px 16px;" onclick={handleAddBotSubmit} disabled={isAddingBot || !newBotLabel.trim()}>
+                          {isAddingBot ? 'Menyimpan...' : '✓ Simpan ke Tim'}
+                        </button>
+                        <button class="pill-btn" style="padding: 6px 12px;" onclick={() => (isAddBotFormOpen = false)}>
+                          Batal
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Grid Daftar Bot Tim Aktif -->
+                <div class="team-slots-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px;">
+                  {#each agentsStore.slots as slot}
+                    <div class="hermes-profile-card" style="display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--border-default);">
+                      <div>
+                        <div class="hermes-card-top" style="margin-bottom: 6px;">
+                          <span class="hermes-card-title">{slot.label}</span>
+                          <span class="status-tag ready">
+                            {slot.config?.permission || 'ask'}
+                          </span>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                          Platform: <strong style="color: var(--text-secondary);">{slot.kind}</strong>
+                        </div>
+                        <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                          {slot.config?.model || 'auto'}
+                        </div>
+                      </div>
+
+                      <div style="display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+                        <button class="action-btn" style="font-size: 11px; padding: 2px 8px;" onclick={() => handleSelectSlotToEdit(slot.id)}>
+                          ⚙️ Edit / Ganti Model
+                        </button>
+                        {#if agentsStore.slots.length > 1}
+                          <button class="action-btn danger" style="font-size: 11px; padding: 2px 8px; color: #ef4444;" onclick={() => handleRemoveBot(slot.id)}>
+                            🗑️ Hapus
+                          </button>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
                 </div>
               </div>
 

@@ -4107,43 +4107,46 @@
 
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                     <div>
-                      <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Penyedia Model (Provider):</label>
+                      <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Platform / Ekosistem Agen:</label>
                       <select class="setting-select-box" style="width: 100%;">
-                        <option selected>Anthropic Claude (via Antigravity / 9Router)</option>
-                        <option>Google Gemini (Gemini 2.5 Pro / Flash)</option>
-                        <option>OpenAI GPT (GPT-4o / o3-mini)</option>
-                        <option>Local Ollama (Qwen 2.5 Coder 32B)</option>
-                        <option>Hermes Agent CLI (Lokal Daemon)</option>
+                        <option selected>🚀 Antigravity (Google Gemini & Claude Opus via 9Router)</option>
+                        <option>🟣 Claude Code CLI (Anthropic Claude ACP)</option>
+                        <option>🟢 OpenAI Codex / GPT (GPT-4o / o3-mini)</option>
+                        <option>🤖 Hermes Agent Daemon (Profil Lokal)</option>
+                        <option>🦙 Local Ollama (Qwen 2.5 Coder / Offline)</option>
+                        <option>⚙️ Custom ACP Command / External</option>
                       </select>
                     </div>
 
                     <div>
                       <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Model ID (Pilih dari Dropdown):</label>
                       <select class="setting-select-box" id="demo-model-select" style="width: 100%; font-family: var(--font-mono);" onchange="document.getElementById('demo-model-hint').innerText = this.options[this.selectedIndex].dataset.desc || '';">
-                        <optgroup label="Anthropic Claude">
-                          <option value="claude-3-7-sonnet" data-desc="Hybrid Reasoning & Coding Flagship" selected>Claude 3.7 Sonnet (claude-3-7-sonnet) ★ Rekomendasi</option>
-                          <option value="claude-3-5-sonnet-20241022" data-desc="Coding Utama Cepat & Akurat">Claude 3.5 Sonnet v2 (claude-3-5-sonnet-20241022)</option>
-                          <option value="claude-3-5-haiku-20241022" data-desc="Sangat Cepat & Hemat Token">Claude 3.5 Haiku (claude-3-5-haiku-20241022)</option>
-                          <option value="ag/claude-opus-4-6-thinking" data-desc="via Antigravity / Deep Thinking">Claude Opus 4.6 Thinking (ag/claude-opus-4-6-thinking)</option>
-                        </optgroup>
-                        <optgroup label="Google Gemini">
-                          <option value="ag/gemini-3.8-flash-high" data-desc="via Antigravity — Rekomendasi Hermes">Gemini 3.8 Flash High (ag/gemini-3.8-flash-high) ★ Rekomendasi</option>
+                        <optgroup label="🚀 Antigravity (via 9Router)">
+                          <option value="ag/gemini-3.8-flash-high" data-desc="via Antigravity — Cepat, Hemat & Cerdas" selected>Gemini 3.8 Flash High (ag/gemini-3.8-flash-high) ★ Rekomendasi</option>
+                          <option value="ag/claude-opus-4-6-thinking" data-desc="via Antigravity — Deep Reasoning & Arsitektur">Claude Opus 4.6 Thinking (ag/claude-opus-4-6-thinking) ★ Rekomendasi</option>
+                          <option value="claude-3-7-sonnet" data-desc="Hybrid Reasoning & Coding Flagship">Claude 3.7 Sonnet (claude-3-7-sonnet)</option>
+                          <option value="claude-3-5-sonnet-20241022" data-desc="Coding Standar Cepat & Akurat">Claude 3.5 Sonnet v2 (claude-3-5-sonnet-20241022)</option>
                           <option value="gemini-2.5-pro" data-desc="Reasoning Kuat & Multimodal">Gemini 2.5 Pro (gemini-2.5-pro)</option>
                           <option value="gemini-2.5-flash" data-desc="Super Cepat & Hemat Kuota">Gemini 2.5 Flash (gemini-2.5-flash)</option>
                         </optgroup>
-                        <optgroup label="OpenAI GPT">
+                        <optgroup label="🟣 Claude Code CLI">
+                          <option value="claude-3-7-sonnet" data-desc="Hybrid Reasoning & Coding Flagship">Claude 3.7 Sonnet (claude-3-7-sonnet) ★ Rekomendasi</option>
+                          <option value="claude-3-5-sonnet-20241022" data-desc="Coding Utama Cepat & Akurat">Claude 3.5 Sonnet v2 (claude-3-5-sonnet-20241022)</option>
+                          <option value="claude-3-5-haiku-20241022" data-desc="Sangat Cepat & Hemat Token">Claude 3.5 Haiku (claude-3-5-haiku-20241022)</option>
+                        </optgroup>
+                        <optgroup label="🟢 OpenAI Codex / GPT">
                           <option value="gpt-4o" data-desc="Multimodal Omnimodel Flagship">GPT-4o (gpt-4o) ★ Rekomendasi</option>
                           <option value="gpt-4o-mini" data-desc="Hemat Token & Kencang">GPT-4o Mini (gpt-4o-mini)</option>
                           <option value="o3-mini" data-desc="STEM & Coding Reasoning">o3-mini (o3-mini)</option>
                         </optgroup>
-                        <optgroup label="Local Ollama">
+                        <optgroup label="🦙 Local Ollama">
                           <option value="qwen2.5-coder:32b" data-desc="Coding Lokal Terbaik">Qwen 2.5 Coder 32B (qwen2.5-coder:32b) ★ Rekomendasi</option>
                           <option value="qwen2.5-coder:14b" data-desc="Cepat & Akurat untuk Mac 16GB">Qwen 2.5 Coder 14B (qwen2.5-coder:14b)</option>
                           <option value="qwen2.5-coder:7b" data-desc="Enteng untuk Mac 8GB">Qwen 2.5 Coder 7B (qwen2.5-coder:7b)</option>
                         </optgroup>
                         <option value="custom">✏️ Ketik Manual (Custom Model ID)...</option>
                       </select>
-                      <span id="demo-model-hint" style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">ℹ️ Hybrid Reasoning & Coding Flagship</span>
+                      <span id="demo-model-hint" style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">ℹ️ via Antigravity — Cepat, Hemat & Cerdas</span>
                     </div>
 
                     <div>
@@ -4172,7 +4175,7 @@
                     <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px;">Fallback Model Chain:</label>
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <div class="fallback-chain-pill" style="border-color: var(--accent); color: var(--text-primary);">
-                        <span style="color: var(--accent); font-weight: 700;">1° Primary:</span> claude-3-7-sonnet
+                        <span style="color: var(--accent); font-weight: 700;">1° Primary:</span> ag/gemini-3.8-flash-high
                       </div>
                       <span style="color: var(--text-muted);">➔</span>
                       <div class="fallback-chain-pill">
@@ -4181,6 +4184,132 @@
                       <span style="color: var(--text-muted);">➔</span>
                       <div class="fallback-chain-pill">
                         <span style="color: #f59e0b; font-weight: 700;">3° Local:</span> ollama:qwen2.5-coder:32b
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section 1.5: Tim Bot Proyek & Tambah Bot Manual -->
+                <div class="settings-group" style="padding: 10px 14px; border-radius: var(--radius-md); background: var(--bg-surface); border: 1px solid var(--border-default);">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <div>
+                      <div style="font-weight: 600; font-size: 13.5px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                        <span>🤖 Tim Bot Proyek (.petak/team.json)</span>
+                        <span class="keycap" style="background: rgba(88, 166, 255, 0.15); color: #58a6ff;">4 Bot Aktif</span>
+                      </div>
+                      <span class="setting-hint">Daftar bot aktif di workspace ini. Anda bebas menambah bot baru secara manual, mengganti model, atau menghapus bot.</span>
+                    </div>
+                    <button class="action-btn" style="background: var(--accent); color: white; border-color: var(--accent); font-weight: 500;" onclick="const f = document.getElementById('demo-add-bot-form'); f.style.display = f.style.display === 'none' ? 'block' : 'none';">
+                      + Tambah Bot Manual
+                    </button>
+                  </div>
+
+                  <!-- Inline Add Bot Form -->
+                  <div id="demo-add-bot-form" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--bg-elevated); border: 1px solid var(--border-focus); border-radius: var(--radius-sm);">
+                    <div style="font-weight: 600; font-size: 12.5px; margin-bottom: 8px; color: var(--text-primary);">➕ Konfigurasi Bot Baru</div>
+                    <div style="display: grid; grid-template-columns: 80px 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                      <div>
+                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 2px;">Ikon:</label>
+                        <select class="setting-select-box" style="width: 100%;">
+                          <option>⚡ Coder</option>
+                          <option>🧠 Techlead</option>
+                          <option>👑 Manager</option>
+                          <option>🔍 Reviewer</option>
+                          <option>🛡️ Security</option>
+                          <option>📝 Docs</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 2px;">Nama Bot:</label>
+                        <input type="text" class="setting-select-box" value="Senior Coder 2" style="width: 100%;">
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 2px;">Platform Agen:</label>
+                        <select class="setting-select-box" style="width: 100%;">
+                          <option>🚀 Antigravity (9Router)</option>
+                          <option>🟣 Claude Code CLI</option>
+                          <option>🟢 OpenAI Codex</option>
+                          <option>🤖 Hermes Agent</option>
+                          <option>🦙 Local Ollama</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end; margin-bottom: 4px;">
+                      <div>
+                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 2px;">Model Pilihan:</label>
+                        <select class="setting-select-box" style="width: 100%;">
+                          <option>Gemini 3.8 Flash High (ag/gemini-3.8-flash-high) ★</option>
+                          <option>Claude Opus 4.6 Thinking (ag/claude-opus-4-6-thinking)</option>
+                          <option>Claude 3.7 Sonnet (claude-3-7-sonnet)</option>
+                          <option>GPT-4o (gpt-4o)</option>
+                          <option>Qwen 2.5 Coder 32B (qwen2.5-coder:32b)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 2px;">Mode Izin Awal:</label>
+                        <select class="setting-select-box" style="width: 100%;">
+                          <option>Ask (Tanya Sebelum Eksekusi) — Default</option>
+                          <option>Auto-Safe (Otomatis Jalankan Safe Tools)</option>
+                          <option>Read-Only (Hanya Baca Proyek)</option>
+                          <option>Full Access (Otonom Penuh)</option>
+                        </select>
+                      </div>
+                      <div style="display: flex; justify-content: flex-end; gap: 6px;">
+                        <button class="action-btn" onclick="document.getElementById('demo-add-bot-form').style.display='none';">Batal</button>
+                        <button class="action-btn" style="background: var(--accent); color: white;" onclick="alert('Bot Senior Coder 2 berhasil ditambahkan ke tim!'); document.getElementById('demo-add-bot-form').style.display='none';">✓ Simpan ke Tim</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Project Bot Slots Grid -->
+                  <div class="hermes-profiles-grid">
+                    <div class="hermes-profile-card">
+                      <div class="hermes-card-top">
+                        <span class="hermes-card-title">👑 Manager</span>
+                        <span class="keycap" style="color: #34d399;">Ask Mode</span>
+                      </div>
+                      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Platform: <strong>Hermes Agent</strong></div>
+                      <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); margin-top: 2px;">ag/gemini-3.8-flash-high</div>
+                      <div style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 6px;">
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px;">⚙️ Edit</button>
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px; color: #ef4444;" onclick="alert('Hapus bot Manager?')">🗑️ Hapus</button>
+                      </div>
+                    </div>
+                    <div class="hermes-profile-card">
+                      <div class="hermes-card-top">
+                        <span class="hermes-card-title">🧠 Techlead</span>
+                        <span class="keycap" style="color: #34d399;">Ask Mode</span>
+                      </div>
+                      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Platform: <strong>Antigravity</strong></div>
+                      <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); margin-top: 2px;">ag/claude-opus-4-6-thinking</div>
+                      <div style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 6px;">
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px;">⚙️ Edit</button>
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px; color: #ef4444;" onclick="alert('Hapus bot Techlead?')">🗑️ Hapus</button>
+                      </div>
+                    </div>
+                    <div class="hermes-profile-card">
+                      <div class="hermes-card-top">
+                        <span class="hermes-card-title">⚡ Senior</span>
+                        <span class="keycap" style="color: #34d399;">Auto-Safe</span>
+                      </div>
+                      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Platform: <strong>Claude Code</strong></div>
+                      <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); margin-top: 2px;">claude-3-7-sonnet</div>
+                      <div style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 6px;">
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px;">⚙️ Edit</button>
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px; color: #ef4444;" onclick="alert('Hapus bot Senior?')">🗑️ Hapus</button>
+                      </div>
+                    </div>
+                    <div class="hermes-profile-card">
+                      <div class="hermes-card-top">
+                        <span class="hermes-card-title">🔍 Reviewer</span>
+                        <span class="keycap" style="color: #34d399;">Read Mode</span>
+                      </div>
+                      <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Platform: <strong>Antigravity</strong></div>
+                      <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); margin-top: 2px;">ag/gemini-3.8-flash-high</div>
+                      <div style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 6px;">
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px;">⚙️ Edit</button>
+                        <button class="action-btn" style="font-size: 10.5px; padding: 2px 6px; color: #ef4444;" onclick="alert('Hapus bot Reviewer?')">🗑️ Hapus</button>
                       </div>
                     </div>
                   </div>
@@ -5036,12 +5165,17 @@ Ensure null-safety check or fallback string is applied cleanly using ponytail di
         const dock = params.get('dock');
         const bot = params.get('bot');
         const variant = params.get('variant');
+        const addBot = params.get('addbot');
 
         if (variant) setVariant(variant);
         if (screen) setScreen(screen);
         if (cat) switchSettingsCategory(cat);
         if (dock) switchDockTab(dock);
         if (bot) switchHermesBot(bot);
+        if (addBot) {
+          const f = document.getElementById('demo-add-bot-form');
+          if (f) f.style.display = 'block';
+        }
       } catch (err) {
         console.warn('URL params parsing error:', err);
       }
