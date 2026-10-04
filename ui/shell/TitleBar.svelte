@@ -1,45 +1,97 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { runStore } from '../features/run/runStore.svelte';
   import { mirrorStore } from '../features/mirror/mirrorStore.svelte';
   import { gitStore } from '../features/git/git.svelte';
   import { panelStore } from './panelStore.svelte';
   import { popupStore } from './popupStore.svelte';
+  import { settingsStore } from '../features/settings/settingsStore.svelte';
   import { getRunVisualAttrs } from '../features/run/runStateMachine';
   import { api, type RecentProject } from '../lib/api';
-  import { isTitleBarInteractive, MENU_CATEGORIES, type MenuEntry } from './titleBarLogic';
+  import { isTitleBarInteractive } from './titleBarLogic';
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
   import RunConfigDialog from '../features/run/RunConfigDialog.svelte';
 
   let isRunConfigModalOpen = $state(false);
-  let openMenuCategory = $state<string | null>(null);
+  let unlistenMenuAction: UnlistenFn | null = null;
 
-  function toggleMenuCategory(e: MouseEvent, catId: string) {
-    e.stopPropagation();
-    openMenuCategory = openMenuCategory === catId ? null : catId;
-  }
+  onMount(async () => {
+    try {
+      unlistenMenuAction = await listen<string | { action?: string; id?: string }>('menu-action', (event) => {
+        const action = typeof event.payload === 'string'
+          ? event.payload
+          : event.payload?.action || event.payload?.id;
 
-  function handleMenuAction(e: MouseEvent, item: MenuEntry) {
-    e.stopPropagation();
-    openMenuCategory = null;
-    if (item.id === 'open-folder') {
-      onPickFolder?.();
-    } else if (item.id === 'toggle-mirror') {
-      mirrorStore.toggle();
-    } else if (item.id === 'toggle-agents') {
-      panelStore.toggleRightPanel('agent');
-    } else if (item.id === 'start-debugging') {
-      handleDebugClick();
-    } else if (item.id === 'run-no-debug') {
-      handleRunClick();
-    } else if (item.id === 'hot-reload') {
-      runStore.reload(false);
-    } else if (item.id === 'hot-restart') {
-      runStore.reload(true);
-    } else if (item.id === 'stop') {
-      runStore.stopRun();
+        if (!action) return;
+
+        switch (action) {
+          case 'open_folder':
+          case 'open-folder':
+            onPickFolder?.();
+            break;
+          case 'save_file':
+          case 'save-file':
+          case 'save':
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true }));
+            break;
+          case 'hot_reload':
+          case 'hot-reload':
+            runStore.reload(false);
+            break;
+          case 'hot_restart':
+          case 'hot-restart':
+            runStore.reload(true);
+            break;
+          case 'stop_run':
+          case 'stop-run':
+          case 'stop':
+            runStore.stopRun();
+            break;
+          case 'start_debugging':
+          case 'start-debugging':
+          case 'debug':
+            handleDebugClick();
+            break;
+          case 'run':
+          case 'run_no_debug':
+          case 'run-no-debug':
+            handleRunClick();
+            break;
+          case 'search_everywhere':
+          case 'search-everywhere':
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+            window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+            window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+            break;
+          case 'toggle_agents':
+          case 'toggle-agents':
+            panelStore.toggleRightPanel('agent');
+            break;
+          case 'toggle_mirror':
+          case 'toggle-mirror':
+            mirrorStore.toggle();
+            break;
+          case 'settings':
+          case 'open_settings':
+          case 'open-settings':
+            settingsStore.open();
+            break;
+        }
+      });
+    } catch {
+      // In web or test environment where Tauri event listener is not available
     }
-  }
+  });
+
+  onDestroy(() => {
+    if (unlistenMenuAction) {
+      unlistenMenuAction();
+      unlistenMenuAction = null;
+    }
+  });
 
   let branchPopupOpen = $derived(popupStore.isOpen('branch'));
   let branchSearch = $state('');
@@ -209,12 +261,10 @@
 <svelte:window
   onclick={() => {
     popupStore.closeAll();
-    openMenuCategory = null;
   }}
   onkeydown={(e) => {
     if (e.key === 'Escape') {
       popupStore.handleEscape();
-      openMenuCategory = null;
     }
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
       e.preventDefault();
@@ -223,76 +273,22 @@
   }}
 />
 
-<div class="titlebar-wrapper">
-  <!-- 12-Category Top Menu Bar (28px) -->
-  <nav class="menu-bar" id="ide-menu-bar" data-tauri-drag-region>
-    {#each MENU_CATEGORIES as cat (cat.id)}
-      <div class="menu-item-wrapper">
-        <button
-          type="button"
-          class="menu-item-btn"
-          class:open={openMenuCategory === cat.id}
-          onclick={(e) => toggleMenuCategory(e, cat.id)}
-          onmouseenter={() => {
-            if (openMenuCategory !== null) openMenuCategory = cat.id;
-          }}
-          aria-haspopup="true"
-          aria-expanded={openMenuCategory === cat.id}
-        >
-          {cat.label}
-        </button>
-
-        {#if openMenuCategory === cat.id}
-          <div
-            class="menu-dropdown show"
-            id="menu-{cat.id}"
-            role="menu"
-            tabindex="-1"
-            onclick={(e) => e.stopPropagation()}
-            onkeydown={(e) => e.stopPropagation()}
-          >
-            {#each cat.items as item, itemIdx (itemIdx)}
-              {#if item.isDivider}
-                <div class="dropdown-divider"></div>
-              {:else}
-                <div
-                  class="dropdown-row"
-                  role="menuitem"
-                  tabindex="0"
-                  onclick={(e) => handleMenuAction(e, item)}
-                  onkeydown={(e) => {
-                    if (e.key === 'Enter') handleMenuAction(e as any, item);
-                  }}
-                >
-                  <span class="row-left">{item.label}</span>
-                  {#if item.shortcut}
-                    <span class="row-shortcut">{item.shortcut}</span>
-                  {/if}
-                </div>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </nav>
-
-  <!-- Cockpit TitleBar (38px) -->
-  <div
-    class="titlebar"
-    id="ide-titlebar"
-    data-tauri-drag-region
-    ondblclick={(e) => {
-      if (!isTitleBarInteractive(e.target as HTMLElement)) {
-        api.windowToggleMaximize();
-      }
-    }}
-    onmousedown={(e) => {
-      if (e.button === 0 && !isTitleBarInteractive(e.target as HTMLElement)) {
-        api.windowStartDragging();
-      }
-    }}
-  >
+<!-- Cockpit TitleBar (38px) -->
+<div
+  class="titlebar"
+  id="ide-titlebar"
+  data-tauri-drag-region
+  ondblclick={(e) => {
+    if (!isTitleBarInteractive(e.target as HTMLElement)) {
+      api.windowToggleMaximize();
+    }
+  }}
+  onmousedown={(e) => {
+    if (e.button === 0 && !isTitleBarInteractive(e.target as HTMLElement)) {
+      api.windowStartDragging();
+    }
+  }}
+>
   <!-- macOS window control spacer -->
   <div class="traffic-lights-spacer" data-tauri-drag-region></div>
 
@@ -581,62 +577,81 @@
     </button>
   </div>
 
-  <div class="divider"></div>
-
-  <!-- Device Mirror Toggle Button (B1) -->
-  <button
-    class="mirror-toggle-btn"
-    class:active={panelStore.isRightOpen('mirror')}
-    aria-label="Toggle Device Mirror"
-    title={isDevicePaired ? 'Device belum terhubung (status: Paired)' : 'Toggle Device Mirror (⌘⇧D)'}
-    disabled={isDevicePaired}
-    onclick={() => mirrorStore.toggle()}
-  >
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <rect x="5" y="2" width="14" height="20" rx="3"></rect>
-      <path d="M10 18h4"></path>
-    </svg>
-    <span>Mirror</span>
-  </button>
-
-  <!-- Manage Devices & Emulators Button (Bug 6) -->
-  <button
-    class="devices-toggle-btn"
-    class:active={panelStore.isRightOpen('devices')}
-    aria-label="Manage Devices & Emulators"
-    title="Manage Devices & Emulators"
-    onclick={() => panelStore.toggleRightPanel('devices')}
-  >
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-      <rect x="7" y="3" width="10" height="18" rx="2"></rect>
-      <path d="M11 18h2"></path>
-    </svg>
-    <span>Devices</span>
-  </button>
-
   <div class="spacer" data-tauri-drag-region></div>
 
-  <!-- Search -->
-  <button
-    class="search-btn search-everywhere-btn"
-    title="Search everywhere (Shift Shift)"
-    onclick={() => {
-      const evt = new KeyboardEvent('keydown', { key: 'Shift', bubbles: true });
-      window.dispatchEvent(evt);
-    }}
-  >
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <circle cx="11" cy="11" r="6"></circle>
-      <path d="M20 20l-4.5-4.5"></path>
-    </svg>
-    <span>Search everywhere</span>
-    <span class="search-shortcut">⇧⇧</span>
-  </button>
+  <!-- Right Cockpit Controls -->
+  <div class="cockpit-right">
+    <!-- Search Everywhere (⇧⇧) -->
+    <button
+      class="search-btn search-everywhere-btn"
+      title="Search everywhere (Shift Shift)"
+      onclick={() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', bubbles: true }));
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="11" cy="11" r="6"></circle>
+        <path d="M20 20l-4.5-4.5"></path>
+      </svg>
+      <span>Search everywhere</span>
+      <span class="search-shortcut">⇧⇧</span>
+    </button>
 
-  <!-- User Avatar -->
-  <div class="avatar" title="User: UQi">U</div>
+    <!-- Toggle AI Agents (⌘6) -->
+    <button
+      class="titlebar-action-btn agents-toggle-btn"
+      class:active={panelStore.isRightOpen('agent')}
+      aria-label="Toggle AI Agents"
+      title="Toggle AI Agents (⌘6)"
+      onclick={() => panelStore.toggleRightPanel('agent')}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+        <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
+      </svg>
+      <span>Agents</span>
+      <span class="action-shortcut">⌘6</span>
+    </button>
+
+    <!-- Toggle Device Mirror (⇧⌘D) -->
+    <button
+      class="titlebar-action-btn mirror-toggle-btn"
+      class:active={panelStore.isRightOpen('mirror')}
+      aria-label="Toggle Device Mirror"
+      title={isDevicePaired ? 'Device belum terhubung (status: Paired)' : 'Toggle Device Mirror (⇧⌘D)'}
+      disabled={isDevicePaired}
+      onclick={() => mirrorStore.toggle()}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="5" y="2" width="14" height="20" rx="3"></rect>
+        <path d="M10 18h4"></path>
+      </svg>
+      <span>Mirror</span>
+      <span class="action-shortcut">⇧⌘D</span>
+    </button>
+
+    <!-- Toggle Settings (⌘,) -->
+    <button
+      class="titlebar-action-btn settings-toggle-btn"
+      class:active={settingsStore.isOpen}
+      aria-label="Settings"
+      title="Settings (⌘,)"
+      onclick={() => settingsStore.open()}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <span>Settings</span>
+      <span class="action-shortcut">⌘,</span>
+    </button>
+
+    <!-- User Avatar -->
+    <div class="avatar" title="User: UQi">U</div>
+  </div>
   {/if}
-</div>
 </div>
 
 <RunConfigDialog
@@ -646,90 +661,6 @@
 />
 
 <style>
-  .titlebar-wrapper {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    flex-shrink: 0;
-  }
-  .menu-bar {
-    height: 28px;
-    background: var(--p-bg-base, #0c0d10);
-    border-bottom: 1px solid var(--border-default, #1e2027);
-    display: flex;
-    align-items: center;
-    padding: 0 10px;
-    position: relative;
-    flex-shrink: 0;
-    z-index: 500;
-  }
-  .menu-item-wrapper {
-    position: relative;
-  }
-  .menu-item-btn {
-    padding: 3px 8px;
-    font-size: 12px;
-    color: var(--text-muted, #8b8f98);
-    border-radius: 4px;
-    transition: all 0.12s ease;
-    position: relative;
-    user-select: none;
-    cursor: pointer;
-  }
-  .menu-item-btn:hover,
-  .menu-item-btn.open {
-    color: var(--text, #d8d9dc);
-    background: var(--p-bg-hover, #22242c);
-  }
-  .menu-dropdown {
-    display: none;
-    position: absolute;
-    top: 26px;
-    left: 0;
-    background: var(--p-bg-elevated, #1c1e24);
-    border: 1px solid var(--border-default, #1e2027);
-    border-radius: 6px;
-    box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
-    padding: 4px;
-    min-width: 230px;
-    z-index: 600;
-  }
-  .menu-dropdown.show {
-    display: flex;
-    flex-direction: column;
-  }
-  .dropdown-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 5px 10px;
-    font-size: 12px;
-    color: var(--text, #d8d9dc);
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .dropdown-row:hover {
-    background: #3b82f6;
-    color: white;
-  }
-  .dropdown-row:hover .row-shortcut {
-    color: rgba(255, 255, 255, 0.85);
-  }
-  .row-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .row-shortcut {
-    font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted, #8b8f98);
-  }
-  .dropdown-divider {
-    height: 1px;
-    background: var(--border-subtle, rgba(255, 255, 255, 0.06));
-    margin: 4px 6px;
-  }
   .cockpit-sep {
     width: 1px;
     height: 16px;
@@ -760,7 +691,7 @@
     -webkit-user-select: none;
   }
   .traffic-lights-spacer {
-    width: 68px;
+    width: 80px;
     height: 100%;
     flex-shrink: 0;
   }
@@ -1181,53 +1112,43 @@
   .stop-btn:disabled:hover {
     background: transparent;
   }
-  .mirror-toggle-btn {
+  .cockpit-right {
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+  .titlebar-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     height: 30px;
     padding: 0 9px;
     border-radius: 7px;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 500;
     color: #8b8f98;
     background: transparent;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.12s ease;
   }
-  .mirror-toggle-btn:hover {
+  .titlebar-action-btn:hover {
     color: #d8d9dc;
     background: #1e2025;
   }
-  .mirror-toggle-btn.active {
+  .titlebar-action-btn.active {
     background: #1f2a3d;
     border-color: #2a3d5e;
     color: #6ea8ff;
   }
-  .devices-toggle-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 9px;
-    border-radius: 7px;
-    font-size: 11px;
-    font-weight: 500;
-    color: #8b8f98;
-    background: transparent;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: all 0.15s;
+  .titlebar-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
-  .devices-toggle-btn:hover {
-    color: #d8d9dc;
-    background: #1e2025;
-  }
-  .devices-toggle-btn.active {
-    background: #1f2a3d;
-    border-color: #2a3d5e;
-    color: #6ea8ff;
+  .action-shortcut {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    opacity: 0.65;
   }
   .spinning svg {
     animation: spin 1s linear infinite;

@@ -257,20 +257,24 @@ test('b26 UI 4: 12-Category Menu Bar structure and shortcuts in titleBarLogic', 
 });
 
 // =============================================================================
-// Suite 5: TitleBar Integration & Cockpit Controls
+// Suite 5: Clean Cockpit TitleBar (38px) & Controls
 // =============================================================================
-test('b26 UI 5: TitleBar has 12-category menu bar and unified cockpit controls', () => {
+test('b26 UI 5: Clean Cockpit TitleBar (38px) without in-window menu bar', () => {
   const titleBarPath = path.resolve(uiRoot, 'shell/TitleBar.svelte');
   const titleBarCode = fs.readFileSync(titleBarPath, 'utf-8');
 
-  // Top Menu bar exists with 28px height class and ID
-  assert.ok(titleBarCode.includes('id="ide-menu-bar"'));
-  assert.ok(titleBarCode.includes('class="menu-bar"'));
-  assert.ok(titleBarCode.includes('class="menu-item-btn"'));
-  assert.ok(titleBarCode.includes('class="menu-dropdown'));
+  // In-window menu bar removed (now native macOS menu bar)
+  assert.ok(!titleBarCode.includes('id="ide-menu-bar"'), 'In-window menu bar #ide-menu-bar must be removed');
+  assert.ok(!titleBarCode.includes('class="menu-bar"'), 'Menu bar class must be removed');
+  assert.ok(!titleBarCode.includes('class="menu-dropdown"'), 'Floating dropdowns must be removed');
+
+  // Tauri menu-action event listener registered
+  assert.ok(titleBarCode.includes('menu-action'), 'Must register listener for Tauri menu-action event');
 
   // Cockpit TitleBar exists with ID and controls
   assert.ok(titleBarCode.includes('id="ide-titlebar"'));
+  assert.ok(titleBarCode.includes('height: 38px'));
+  assert.ok(titleBarCode.includes('traffic-lights-spacer'));
   assert.ok(titleBarCode.includes('class="cockpit-center'));
   assert.ok(titleBarCode.includes('RunConfigPicker'));
   assert.ok(titleBarCode.includes('DevicePicker'));
@@ -287,6 +291,11 @@ test('b26 UI 5: TitleBar has 12-category menu bar and unified cockpit controls',
   assert.ok(titleBarCode.includes('Search everywhere'));
   assert.ok(titleBarCode.includes('⇧⇧'));
 
+  // Right toggle buttons (Agents, Mirror, Settings)
+  assert.ok(titleBarCode.includes('agents-toggle-btn'));
+  assert.ok(titleBarCode.includes('mirror-toggle-btn'));
+  assert.ok(titleBarCode.includes('settings-toggle-btn'));
+
   // Interactive exclusion tests
   function createMockNode(tagName, classList = [], role = null, parent = null) {
     const classes = new Set(classList);
@@ -301,15 +310,18 @@ test('b26 UI 5: TitleBar has 12-category menu bar and unified cockpit controls',
   }
 
   const titlebar = createMockNode('div', ['titlebar'], null, null);
-  const menuBtn = createMockNode('button', ['menu-item-btn'], null, titlebar);
-  assert.equal(isTitleBarInteractive(menuBtn), true);
-
-  const dropdownRow = createMockNode('div', ['dropdown-row'], null, titlebar);
-  assert.equal(isTitleBarInteractive(dropdownRow), true);
-
   const cockpitBtn = createMockNode('button', ['cockpit-btn'], null, titlebar);
   assert.equal(isTitleBarInteractive(cockpitBtn), true);
 
   const searchEverywhere = createMockNode('button', ['search-everywhere-btn'], null, titlebar);
   assert.equal(isTitleBarInteractive(searchEverywhere), true);
+
+  const agentsBtn = createMockNode('button', ['agents-toggle-btn'], null, titlebar);
+  assert.equal(isTitleBarInteractive(agentsBtn), true);
+
+  const mirrorBtn = createMockNode('button', ['mirror-toggle-btn'], null, titlebar);
+  assert.equal(isTitleBarInteractive(mirrorBtn), true);
+
+  const settingsBtn = createMockNode('button', ['settings-toggle-btn'], null, titlebar);
+  assert.equal(isTitleBarInteractive(settingsBtn), true);
 });
