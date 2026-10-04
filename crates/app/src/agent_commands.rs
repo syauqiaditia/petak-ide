@@ -1,6 +1,6 @@
 use petak_core::agent::{
-    HermesDetectionResult, PendingPermissionRequest, PromptResponse, Proposal, SlotConfig,
-    SlotManager, SlotSummary, TeamConfig, UsageReport,
+    HermesDetectionResult, LlmQuotaReport, MemoryItem, PendingPermissionRequest, PromptResponse,
+    Proposal, SlotConfig, SlotManager, SlotSummary, TeamConfig, UsageReport,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -185,7 +185,10 @@ pub async fn agent_respond_permission(
     request_id: String,
     allow: bool,
 ) -> Result<(), String> {
-    state.manager.permission_manager().respond(&request_id, allow)
+    state
+        .manager
+        .permission_manager()
+        .respond(&request_id, allow)
 }
 
 // ── Proposal buffer ────────────────────────────────────────────────────────
@@ -222,7 +225,10 @@ pub async fn agent_reject_proposal(
     state: tauri::State<'_, AgentState>,
     proposal_id: String,
 ) -> Result<(), String> {
-    state.manager.proposal_buffer().reject_proposal(&proposal_id)
+    state
+        .manager
+        .proposal_buffer()
+        .reject_proposal(&proposal_id)
 }
 
 #[tauri::command]
@@ -250,4 +256,62 @@ pub async fn agent_get_usage(
     slot_id: String,
 ) -> Result<UsageReport, String> {
     state.manager.get_slot_usage(&slot_id)
+}
+
+// ── Quota & Usage Probe ───────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_quota_report() -> Result<LlmQuotaReport, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(petak_core::agent::probe_llm_quota()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// ── Project Memory & Self-Improvement ───────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_list_project_memory(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<MemoryItem>, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::list_project_memory(root.as_deref()).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_read_project_memory(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    filename: String,
+) -> Result<String, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::read_project_memory(root.as_deref(), &filename)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_save_project_memory(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    filename: String,
+    content: String,
+) -> Result<(), String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::save_project_memory(root.as_deref(), &filename, &content)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
