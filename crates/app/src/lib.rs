@@ -1,8 +1,8 @@
 mod agent_commands;
 mod commands;
+mod menu;
 
 use std::sync::Mutex;
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -40,6 +40,14 @@ pub fn run() {
                 if let Some(agent_state) = window.try_state::<commands::AgentState>() {
                     agent_state.manager.shutdown_all();
                 }
+            }
+        })
+        .on_menu_event(|app_handle, event| {
+            let item_id = event.id().as_ref();
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.emit("menu-action", item_id);
+            } else {
+                let _ = app_handle.emit("menu-action", item_id);
             }
         })
         .setup(|app| {
@@ -127,34 +135,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 let app_handle = app.handle();
-                let menu = MenuBuilder::new(app_handle)
-                    .items(&[
-                        &SubmenuBuilder::new(app_handle, "Petak")
-                            .about(None)
-                            .separator()
-                            .services()
-                            .separator()
-                            .hide()
-                            .hide_others()
-                            .show_all()
-                            .separator()
-                            .quit()
-                            .build()?,
-                        &SubmenuBuilder::new(app_handle, "File").build()?,
-                        &SubmenuBuilder::new(app_handle, "Edit")
-                            .undo()
-                            .redo()
-                            .separator()
-                            .cut()
-                            .copy()
-                            .paste()
-                            .select_all()
-                            .build()?,
-                        &SubmenuBuilder::new(app_handle, "Window")
-                            .minimize()
-                            .build()?,
-                    ])
-                    .build()?;
+                let menu = menu::build_app_menu(app_handle)?;
                 app.set_menu(menu)?;
             }
             Ok(())
