@@ -1,12 +1,17 @@
 class SettingsStore {
   isOpen = $state(false);
   activeCategory = $state<
-    'general' | 'editor' | 'toolchains' | 'git' | 'accounts' | 'agents' | 'devices' | 'keymap' | 'about'
+    'general' | 'editor' | 'keymap' | 'agents' | 'toolchains' | 'git' | 'accounts' | 'devices' | 'appearance' | 'about'
   >('general');
   theme = $state<'dark' | 'light'>(
     typeof localStorage !== 'undefined' && localStorage.getItem('petak.theme') === 'light'
       ? 'light'
       : 'dark'
+  );
+  variant = $state<'a' | 'b'>(
+    typeof localStorage !== 'undefined' && localStorage.getItem('petak.variant') === 'b'
+      ? 'b'
+      : 'a'
   );
   reopenLastProjectOnLaunch = $state<boolean>(
     typeof localStorage !== 'undefined'
@@ -23,6 +28,31 @@ class SettingsStore {
     this.applyTheme(this.theme);
     if (typeof document !== 'undefined') {
       document.documentElement.lang = this.language;
+      if (document.body) {
+        this.applyVariant(this.variant);
+      } else if (typeof window !== 'undefined') {
+        window.addEventListener('DOMContentLoaded', () => this.applyVariant(this.variant));
+      }
+    }
+  }
+
+  setVariant(newVariant: 'a' | 'b') {
+    this.variant = newVariant;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('petak.variant', newVariant);
+    }
+    this.applyVariant(newVariant);
+  }
+
+  private applyVariant(v: 'a' | 'b') {
+    if (typeof document !== 'undefined' && document.body) {
+      if (v === 'b') {
+        document.body.classList.remove('variant-a');
+        document.body.classList.add('variant-b');
+      } else {
+        document.body.classList.remove('variant-b');
+        document.body.classList.add('variant-a');
+      }
     }
   }
 
@@ -71,12 +101,13 @@ class SettingsStore {
     category?:
       | 'general'
       | 'editor'
+      | 'keymap'
+      | 'agents'
       | 'toolchains'
       | 'git'
       | 'accounts'
-      | 'agents'
       | 'devices'
-      | 'keymap'
+      | 'appearance'
       | 'about'
   ) {
     if (category) {
