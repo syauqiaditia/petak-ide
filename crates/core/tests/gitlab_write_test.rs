@@ -399,10 +399,13 @@ fn test_cache_invalidation_after_write() {
 fn test_checkout_mr_in_dummy_repo() {
     let exec = SystemExec;
 
-    // Use a temp directory on HDD /mnt/storage
-    let base_tmp = Path::new("/mnt/storage/uqi-cache/tmp");
-    let _ = fs::create_dir_all(base_tmp);
-    let temp_dir = tempfile::tempdir_in(base_tmp).expect("create temp dir");
+    // Use a temp directory on HDD /mnt/storage if available, else system temp
+    let hdd_tmp = Path::new("/mnt/storage/uqi-cache/tmp");
+    let temp_dir = if hdd_tmp.exists() || fs::create_dir_all(hdd_tmp).is_ok() {
+        tempfile::tempdir_in(hdd_tmp).unwrap_or_else(|_| tempfile::tempdir().unwrap())
+    } else {
+        tempfile::tempdir().unwrap()
+    };
     let temp_path = temp_dir.path();
 
     let remote_dir = temp_path.join("remote.git");
