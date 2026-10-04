@@ -2,17 +2,23 @@
   import { onMount, tick } from 'svelte';
   import { agentsStore } from './agents.svelte';
   import { truncateToolOutput } from './agentsLogic';
-  import type { ChatMessage, PendingPermissionRequest } from './types';
+  import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
 
   let promptText = $state('');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let messagesContainerEl: HTMLDivElement | null = $state(null);
   let expandedToolOutputs = $state<Record<string, boolean>>({});
 
+  let isContextPickerOpen = $state(false);
+  let attachedContextLabel = $state<string | null>(null);
+
   let activeSlot = $derived(agentsStore.activeSlot);
   let messages = $derived(agentsStore.activeMessages);
   let pendingPerm = $derived(agentsStore.activePendingPermission);
   let isBusy = $derived(agentsStore.isStreaming || activeSlot?.status === 'busy');
+  let activePermission = $derived<PermissionMode>(
+    ((activeSlot?.config?.permission as PermissionMode) || 'ask')
+  );
 
   $effect(() => {
     // Scroll to bottom on new messages or streaming changes
@@ -39,6 +45,7 @@
     if (!promptText.trim() || isBusy) return;
     const text = promptText;
     promptText = '';
+    attachedContextLabel = null;
     await agentsStore.sendPrompt(text);
     textareaEl?.focus();
   }
@@ -50,6 +57,32 @@
   function applyQuickPrompt(prompt: string) {
     promptText = prompt;
     handleSubmit();
+  }
+
+  function handleToggleContextPicker() {
+    isContextPickerOpen = !isContextPickerOpen;
+  }
+
+  function selectContext(type: 'file' | 'git' | 'status') {
+    isContextPickerOpen = false;
+    if (type === 'file') {
+      attachedContextLabel = 'File';
+      promptText = (promptText ? promptText + ' ' : '') + '@file:lib/main.dart ';
+    } else if (type === 'git') {
+      attachedContextLabel = 'Git';
+      promptText = (promptText ? promptText + ' ' : '') + '@git:diff ';
+    } else {
+      attachedContextLabel = 'Tree';
+      promptText = (promptText ? promptText + ' ' : '') + '@context:project ';
+    }
+    textareaEl?.focus();
+  }
+
+  function handlePermissionChange(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    if (!activeSlot) return;
+    const mode = select.value as PermissionMode;
+    agentsStore.setPermissionMode(activeSlot.id, mode);
   }
 </script>
 
@@ -171,28 +204,109 @@
     {/if}
   </div>
 
-  <!-- Input Prompt Bar -->
-  <div class="chat-input-bar">
-    <div class="input-wrap">
+  <!-- Floating Context Composer with Interactive Context Pills -->
+  <div class="agent-composer-container">
+    {#if isContextPickerOpen}
+      <div class="context-picker-popup">
+        <div class="context-picker-title">Pilih Konteks (@Context):</div>
+        <button type="button" class="context-option-btn" onclick={() => selectContext('file')}>
+          📄 Berkas Editor Aktif
+        </button>
+        <button type="button" class="context-option-btn" onclick={() => selectContext('git')}>
+          🔀 Git Staging & Diffs
+        </button>
+        <button type="button" class="context-option-btn" onclick={() => selectContext('status')}>
+          📊 Hierarki Proyek & Status
+        </button>
+      </div>
+    {/if}
+
+    <div class="composer-textarea-wrap">
       <textarea
         bind:this={textareaEl}
         bind:value={promptText}
         onkeydown={handleKeydown}
-        placeholder="Tanya atau instruksikan agen... (Enter untuk kirim, Shift+Enter untuk baris baru)"
+        class="composer-textarea"
+        placeholder="Tanyakan sesuatu atau berikan tugas perbaikan kode… (Enter kirim, Shift+Enter baris baru)"
         disabled={isBusy}
         rows="2"
       ></textarea>
     </div>
-    <div class="input-actions">
-      {#if isBusy}
-        <button class="action-btn cancel-btn" onclick={() => agentsStore.cancelActivePrompt()} title="Batalkan prompt aktif">
-          ■ Batalkan
+
+    <!-- Context Pills Row: @Context, Permission, Ponytail, Caveman -->
+    <div class="composer-pills-row">
+      <div class="pills-left">
+        <!-- @Context Pill -->
+        <button
+          type="button"
+          class="context-pill context-picker-pill"
+          class:active={attachedContextLabel !== null}
+          onclick={handleToggleContextPicker}
+          title="Lampirkan konteks Berkas & Git"
+        >
+          <span class="pill-at">@</span>
+          <span class="pill-label">{attachedContextLabel ? `Context (${attachedContextLabel})` : 'Context'}</span>
         </button>
-      {:else}
-        <button class="action-btn send-btn" onclick={handleSubmit} disabled={!promptText.trim()} title="Kirim instruksi">
-          Kirim ➤
+
+        <!-- Permission Pill (Read, Ask, Auto, Full) -->
+        <div class="permission-pill-wrap">
+          <select
+            class="permission-pill-select"
+            class:perm-read={activePermission === 'read'}
+            class:perm-ask={activePermission === 'ask'}
+            class:perm-auto={activePermission === 'auto'}
+            class:perm-full={activePermission === 'full'}
+            value={activePermission}
+            onchange={handlePermissionChange}
+            aria-label="Permission Pill"
+            title="Tingkat izin eksekusi aksi agen: Read, Ask, Auto, Full"
+          >
+            <option value="read">Read</option>
+            <option value="ask">Ask</option>
+            <option value="auto">Auto</option>
+            <option value="full">Full</option>
+          </select>
+        </div>
+
+        <!-- Discipline Pills: Ponytail: ON/OFF and Caveman: ON/OFF -->
+        <button
+          type="button"
+          class="context-pill ponytail"
+          class:active={agentsStore.isPonytailActive}
+          onclick={() => agentsStore.togglePonytail()}
+          title="Disiplin Ponytail: Solusi minimalis, reuse code, diff terpendek"
+        >
+          <span>Ponytail: {agentsStore.isPonytailActive ? 'ON' : 'OFF'}</span>
         </button>
-      {/if}
+
+        <button
+          type="button"
+          class="context-pill caveman"
+          class:active={agentsStore.isCavemanActive}
+          onclick={() => agentsStore.toggleCaveman()}
+          title="Disiplin Caveman: Komunikasi teknis lugas tanpa basa-basi"
+        >
+          <span>Caveman: {agentsStore.isCavemanActive ? 'ON' : 'OFF'}</span>
+        </button>
+      </div>
+
+      <div class="pills-right">
+        {#if isBusy}
+          <button type="button" class="cancel-prompt-btn" onclick={() => agentsStore.cancelActivePrompt()} title="Batalkan prompt aktif">
+            ■
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="send-prompt-btn"
+            onclick={handleSubmit}
+            disabled={!promptText.trim()}
+            title="Kirim instruksi ke agen"
+          >
+            ➤
+          </button>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
@@ -254,26 +368,27 @@
   }
 
   .quick-prompt-btn {
-    text-align: left;
-    background: #1a1c22;
-    border: 1px solid #26282d;
+    background: #18191f;
+    border: 1px solid #282a33;
     border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 11px;
+    padding: 8px 10px;
     color: #c9cdd4;
+    font-size: 11.5px;
+    text-align: left;
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
+    transition: all 0.12s;
   }
 
   .quick-prompt-btn:hover {
-    background: #232730;
-    border-color: #3b4252;
-    color: #6ea8ff;
+    background: #20232c;
+    border-color: #3b82f6;
+    color: #f1f2f4;
   }
 
   .message-row {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
   }
 
   .message-row.user-row {
@@ -281,33 +396,30 @@
   }
 
   .message-bubble {
-    max-width: 90%;
-    padding: 8px 12px;
+    max-width: 88%;
     border-radius: 8px;
+    padding: 8px 12px;
     font-size: 12px;
     line-height: 1.45;
-    word-break: break-word;
   }
 
   .user-bubble {
-    background: #1c2b42;
-    border: 1px solid #2c3e60;
-    color: #e6edf3;
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #f8fafc;
   }
 
   .agent-bubble {
-    background: #18191f;
-    border: 1px solid #282a33;
-    color: #c9cdd4;
+    background: #16181d;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    color: #e2e8f0;
   }
 
   .system-bubble {
-    background: #1e1e24;
-    border: 1px dashed #3a3b45;
-    color: #8b949e;
-    font-size: 11px;
-    width: 100%;
-    max-width: 100%;
+    background: #1c1917;
+    border: 1px solid #44403c;
+    color: #d6d3d1;
+    font-style: italic;
   }
 
   .message-role-label {
@@ -317,23 +429,20 @@
     margin-bottom: 4px;
   }
 
-  .user-bubble .message-role-label {
-    color: #79c0ff;
-  }
-
   .typing-indicator {
+    color: #3b82f6;
+    font-weight: normal;
     font-style: italic;
-    color: #7fc98f;
-    margin-left: 4px;
   }
 
   .cursor-blink {
-    animation: blink 1s step-start infinite;
-    color: #6ea8ff;
+    animation: blink 1s infinite;
+    color: #3b82f6;
   }
 
   @keyframes blink {
-    50% { opacity: 0; }
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
   }
 
   .tool-calls-list {
@@ -344,9 +453,9 @@
   }
 
   .tool-call-card {
-    background: #121316;
-    border: 1px solid #23252b;
-    border-radius: 4px;
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 5px;
     padding: 6px 8px;
     font-size: 11px;
   }
@@ -355,109 +464,102 @@
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-
-  .tool-name {
+    color: #f59e0b;
     font-weight: 600;
-    color: #e8b45a;
   }
 
   .tool-arg {
-    color: #8b949e;
+    color: #94a3b8;
     font-family: monospace;
     font-size: 10px;
   }
 
   .tool-output {
     margin-top: 4px;
-    background: #0d0e11;
-    padding: 4px 6px;
-    border-radius: 3px;
   }
 
   .tool-output pre {
     margin: 0;
+    background: #090a0c;
+    border-radius: 3px;
+    padding: 4px 6px;
     font-family: monospace;
     font-size: 10px;
-    color: #8b949e;
+    color: #94a3b8;
+    overflow-x: auto;
     white-space: pre-wrap;
+    word-break: break-all;
   }
 
   .expand-tool-btn {
+    margin-top: 3px;
     background: transparent;
     border: none;
-    color: #6ea8ff;
+    color: #3b82f6;
     font-size: 10px;
-    padding: 2px 0 0 0;
     cursor: pointer;
+    padding: 0;
   }
 
-  /* Permission Request Card */
+  /* Permission Card in-chat */
   .perm-card-container {
-    width: 100%;
+    margin: 8px 0;
   }
 
   .perm-card {
-    background: #231e15;
-    border: 1px solid #4a3d22;
+    background: #231b15;
+    border: 1px solid #78350f;
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .perm-header {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 6px;
-  }
-
-  .perm-icon {
-    font-size: 14px;
-  }
-
-  .perm-title {
-    font-size: 12px;
+    color: #f59e0b;
     font-weight: 600;
-    color: #e8b45a;
+    font-size: 12px;
   }
 
   .perm-content {
     font-size: 11px;
-    color: #c9cdd4;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 10px;
+    color: #e2e8f0;
   }
 
   .perm-row {
     display: flex;
     align-items: center;
     gap: 6px;
+    margin: 2px 0;
   }
 
   .perm-label {
-    color: #8b949e;
+    color: #94a3b8;
   }
 
   .perm-code {
-    background: #141518;
-    padding: 2px 6px;
-    border-radius: 4px;
+    background: #18191f;
+    padding: 2px 5px;
+    border-radius: 3px;
     font-family: monospace;
-    color: #79c0ff;
+    color: #60a5fa;
   }
 
   .perm-reason {
     font-style: italic;
-    color: #8b949e;
-    font-size: 11px;
+    color: #cbd5e1;
+    margin-top: 4px;
   }
 
   .perm-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    margin-top: 6px;
   }
 
   .perm-btn {
@@ -467,82 +569,256 @@
     font-weight: 600;
     cursor: pointer;
     border: none;
-    transition: opacity 0.12s;
   }
 
   .perm-btn.reject {
-    background: #3d1a1c;
-    color: #f07a74;
-    border: 1px solid #d9534f;
+    background: #3f1819;
+    color: #f87171;
+    border: 1px solid #991b1b;
   }
 
   .perm-btn.approve {
-    background: #233428;
-    color: #7fc98f;
-    border: 1px solid #35573d;
+    background: #143522;
+    color: #4ade80;
+    border: 1px solid #166534;
   }
 
-  .perm-btn:hover {
-    opacity: 0.85;
-  }
-
-  /* Chat Input Bar */
-  .chat-input-bar {
-    border-top: 1px solid #26282d;
-    background: #111215;
-    padding: 8px 10px;
+  /* Floating Context Composer */
+  .agent-composer-container {
+    position: relative;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: #121317;
     display: flex;
     flex-direction: column;
-    gap: 6px;
     flex-shrink: 0;
   }
 
-  .input-wrap textarea {
+  .composer-textarea-wrap {
+    padding: 6px 8px 0;
+  }
+
+  .composer-textarea {
     width: 100%;
-    background: #18191f;
-    border: 1px solid #282a33;
-    border-radius: 6px;
-    padding: 6px 8px;
+    background: transparent;
+    border: none;
     color: #e6edf3;
     font-size: 12px;
     font-family: inherit;
     resize: none;
     outline: none;
     box-sizing: border-box;
+    min-height: 48px;
+    line-height: 1.4;
   }
 
-  .input-wrap textarea:focus {
-    border-color: #6ea8ff;
+  .composer-textarea::placeholder {
+    color: #6e7681;
   }
 
-  .input-actions {
+  .composer-pills-row {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: rgba(0, 0, 0, 0.22);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    gap: 6px;
+    min-height: 32px;
   }
 
-  .action-btn {
-    padding: 5px 12px;
+  .pills-left {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+
+  .pills-left::-webkit-scrollbar {
+    display: none;
+  }
+
+  .context-pill {
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 2px 7px;
     border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
+    background: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #9da1ad;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.12s;
+  }
+
+  .context-pill:hover {
+    background: #22242c;
+    color: #f1f2f4;
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  .context-pill.context-picker-pill {
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.25);
+  }
+
+  .context-pill.context-picker-pill.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+    font-weight: 600;
+  }
+
+  .pill-at {
+    color: #3b82f6;
+    font-weight: 700;
+  }
+
+  .context-pill.ponytail {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .context-pill.ponytail.active {
+    color: #d8b4fe;
+    border-color: rgba(192, 132, 252, 0.4);
+    background: rgba(192, 132, 252, 0.15);
+    font-weight: 600;
+  }
+
+  .context-pill.caveman {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .context-pill.caveman.active {
+    color: #fde047;
+    border-color: rgba(250, 204, 21, 0.4);
+    background: rgba(250, 204, 21, 0.15);
+    font-weight: 600;
+  }
+
+  .permission-pill-wrap {
+    display: inline-flex;
+  }
+
+  .permission-pill-select {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #9da1ad;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .permission-pill-select.perm-read {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+
+  .permission-pill-select.perm-ask {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+  }
+
+  .permission-pill-select.perm-auto {
+    color: #a78bfa;
+    border-color: rgba(167, 139, 250, 0.3);
+  }
+
+  .permission-pill-select.perm-full {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.4);
+    background: rgba(248, 113, 113, 0.1);
+  }
+
+  .pills-right {
+    display: flex;
+    align-items: center;
+  }
+
+  .send-prompt-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: #3b82f6;
+    color: white;
     border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.12s;
   }
 
-  .send-btn {
-    background: #1f4277;
-    color: #79c0ff;
-    border: 1px solid #2d5a9e;
+  .send-prompt-btn:hover {
+    background: #2563eb;
   }
 
-  .send-btn:disabled {
-    opacity: 0.4;
+  .send-prompt-btn:disabled {
+    opacity: 0.35;
     cursor: not-allowed;
+    background: #1e293b;
   }
 
-  .cancel-btn {
-    background: #3d1a1c;
-    color: #f07a74;
-    border: 1px solid #d9534f;
+  .cancel-prompt-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .context-picker-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 8px;
+    background: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+    z-index: 20;
+    min-width: 180px;
+  }
+
+  .context-picker-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #8b949e;
+    margin-bottom: 2px;
+    padding: 0 4px;
+  }
+
+  .context-option-btn {
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: #e6edf3;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .context-option-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 </style>

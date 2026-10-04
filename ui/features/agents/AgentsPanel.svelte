@@ -2,13 +2,13 @@
   import { onMount, onDestroy } from 'svelte';
   import { agentsStore } from './agents.svelte';
   import { formatUsageText } from './agentsLogic';
-  import AgentTabs from './AgentTabs.svelte';
   import AgentChat from './AgentChat.svelte';
   import ProposedEdits from './ProposedEdits.svelte';
   import QuotaUsageView from './QuotaUsageView.svelte';
   import MemoryView from './MemoryView.svelte';
   import TeamEditor from './TeamEditor.svelte';
   import FixWithAgentModal from './FixWithAgentModal.svelte';
+  import { settingsStore } from '../settings/settingsStore.svelte';
 
   let {
     onClose,
@@ -22,8 +22,80 @@
 
   let proposals = $derived(agentsStore.activeProposals);
   let pendingProposalCount = $derived(proposals.length);
+  let pendingHunkCount = $derived(
+    proposals.reduce((sum, p) => sum + (p.hunks ? p.hunks.length : 1), 0)
+  );
   let usage = $derived(agentsStore.activeUsage);
   let usageInfo = $derived(formatUsageText(usage));
+
+  interface HermesBotProfile {
+    id: string;
+    name: string;
+    label: string;
+    icon: string;
+    role: string;
+    defaultModel: string;
+  }
+
+  const HERMES_PROFILES: HermesBotProfile[] = [
+    { id: 'manager', name: 'manager', label: '👑 Manager', icon: '👑', role: 'Planner & Task Orchestrator', defaultModel: 'claude-3-7-sonnet' },
+    { id: 'techlead', name: 'techlead', label: '🧠 Techlead', icon: '🧠', role: 'System Architect & Core Modules', defaultModel: 'claude-3-7-sonnet' },
+    { id: 'senior', name: 'senior', label: '⚡ Senior', icon: '⚡', role: 'Fullstack Flutter & Rust Implementer', defaultModel: 'claude-3-7-sonnet' },
+    { id: 'senior2', name: 'senior2', label: '⚡ Senior2', icon: '⚡', role: 'Toolchains, Language Servers & Integrations', defaultModel: 'gemini-2.5-pro' },
+    { id: 'reviewer', name: 'reviewer', label: '🔍 Reviewer', icon: '🔍', role: 'QA, Code Reviewer & Security Auditing', defaultModel: 'gemini-2.5-pro' },
+    { id: 'designer', name: 'designer', label: '🎨 Designer', icon: '🎨', role: 'UI/UX Design System & Prototypes', defaultModel: 'claude-3-7-sonnet' },
+  ];
+
+  let activeSlot = $derived(agentsStore.activeSlot);
+
+  let activeProfileId = $derived.by(() => {
+    if (!activeSlot) return 'techlead';
+    const prof = (activeSlot.config?.hermesProfile || activeSlot.label || '').toLowerCase();
+    const match = HERMES_PROFILES.find((p) => prof.includes(p.id));
+    return match ? match.id : 'techlead';
+  });
+
+  let currentModelName = $derived(
+    activeSlot?.config?.model ||
+    HERMES_PROFILES.find((p) => p.id === activeProfileId)?.defaultModel ||
+    'claude-3-7-sonnet'
+  );
+
+  function getModelInfo(modelName?: string | null): { name: string; type: 'claude' | 'gemini' | 'ollama' | 'other' } {
+    const m = (modelName || '').toLowerCase();
+    if (m.includes('claude')) return { name: 'Claude', type: 'claude' };
+    if (m.includes('gemini')) return { name: 'Gemini', type: 'gemini' };
+    if (m.includes('ollama') || m.includes('qwen') || m.includes('deepseek') || m.includes('local')) {
+      return { name: 'Ollama', type: 'ollama' };
+    }
+    return { name: modelName || 'AI', type: 'other' };
+  }
+
+  let modelInfo = $derived(getModelInfo(currentModelName));
+
+  function getProfileStatus(id: string): 'ready' | 'busy' | 'idle' {
+    const matchingSlot = agentsStore.slots.find(
+      (s) => (s.config?.hermesProfile === id) || s.label.toLowerCase().includes(id)
+    );
+    if (matchingSlot) {
+      if (matchingSlot.status === 'busy') return 'busy';
+      if (matchingSlot.status === 'ready') return 'ready';
+      return 'ready';
+    }
+    if (id === 'senior') return 'busy';
+    return 'ready';
+  }
+
+  function handleProfileSelect(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    const targetId = select.value;
+    const matchingSlot = agentsStore.slots.find(
+      (s) => (s.config?.hermesProfile === targetId) || s.label.toLowerCase().includes(targetId)
+    );
+    if (matchingSlot) {
+      agentsStore.selectSlot(matchingSlot.id);
+    }
+  }
 
   onMount(async () => {
     await agentsStore.init();
@@ -59,69 +131,130 @@
   <!-- Left resize handle -->
   <div class="resize-handle" onmousedown={startResize} role="separator" aria-label="Resize panel"></div>
 
-  <!-- Panel Main Header -->
-  <div class="panel-header">
+  <!-- Single Unified 38px Header (Anti-Cramp V2) -->
+  <div class="agent-unified-header panel-header">
     <div class="header-left">
-      <span class="header-icon">✨</span>
-      <span class="header-title">AI Agents</span>
-    </div>
+      <!-- Hermes 6 Bot Profiles Dropdown Selector -->
+      <div class="bot-selector-wrap">
+        <select
+          class="bot-select-dropdown"
+          value={activeProfileId}
+          onchange={handleProfileSelect}
+          aria-label="Hermes Bot Profile Selector"
+        >
+          {#each HERMES_PROFILES as p}
+            {@const pStatus = getProfileStatus(p.id)}
+            <option value={p.id}>
+              {p.label} ({p.role}) · {pStatus === 'busy' ? '⚡ Busy' : '● Ready'}
+            </option>
+          {/each}
+        </select>
+        <span
+          class="runtime-status-dot"
+          class:busy={getProfileStatus(activeProfileId) === 'busy'}
+          class:ready={getProfileStatus(activeProfileId) === 'ready'}
+          title="Runtime: {getProfileStatus(activeProfileId)}"
+        ></span>
+      </div>
 
-    <!-- Sub-tab switcher: Chat vs Proposed Edits vs Quota vs Memory -->
-    <div class="subtabs-bar">
-      <button
-        class="subtab-btn"
-        class:active={activeSubTab === 'chat'}
-        onclick={() => (activeSubTab = 'chat')}
+      <!-- Dynamic Active Model Icon (Claude, Gemini, Ollama) -->
+      <div
+        class="dynamic-model-badge"
+        class:claude={modelInfo.type === 'claude'}
+        class:gemini={modelInfo.type === 'gemini'}
+        class:ollama={modelInfo.type === 'ollama'}
+        title="Model Aktif: {currentModelName}"
       >
-        Chat
-      </button>
-      <button
-        class="subtab-btn"
-        class:active={activeSubTab === 'diff'}
-        onclick={() => (activeSubTab = 'diff')}
-      >
-        Proposed Edits
-        {#if pendingProposalCount > 0}
-          <span class="proposals-count-pill">{pendingProposalCount}</span>
+        {#if modelInfo.type === 'claude'}
+          <svg class="model-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" />
+          </svg>
+          <span class="model-name">Claude</span>
+        {:else if modelInfo.type === 'gemini'}
+          <svg class="model-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C12 7.52 7.52 12 2 12C7.52 12 12 16.48 12 22C12 16.48 16.48 12 22 12C16.48 12 12 7.52 12 2Z" />
+          </svg>
+          <span class="model-name">Gemini</span>
+        {:else if modelInfo.type === 'ollama'}
+          <svg class="model-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect width="18" height="12" x="3" y="6" rx="2" />
+            <circle cx="9" cy="12" r="1" />
+            <circle cx="15" cy="12" r="1" />
+            <path d="M12 2v4" />
+          </svg>
+          <span class="model-name">Ollama</span>
+        {:else}
+          <span class="model-name">{modelInfo.name}</span>
         {/if}
-      </button>
-      <button
-        class="subtab-btn"
-        class:active={activeSubTab === 'quota'}
-        onclick={() => (activeSubTab = 'quota')}
-      >
-        Quota & Usage
-      </button>
-      <button
-        class="subtab-btn"
-        class:active={activeSubTab === 'memory'}
-        onclick={() => (activeSubTab = 'memory')}
-      >
-        Memory
-      </button>
+      </div>
     </div>
 
-    <div class="header-actions">
+    <div class="agent-header-actions">
+      <!-- Concise Subtabs: Chat & Diff (with hunk count badge) -->
+      <div class="agent-subtab-group">
+        <button
+          class="subtab-btn"
+          class:active={activeSubTab === 'chat'}
+          onclick={() => (activeSubTab = 'chat')}
+        >
+          Chat
+        </button>
+        <button
+          class="subtab-btn"
+          class:active={activeSubTab === 'diff'}
+          onclick={() => (activeSubTab = 'diff')}
+          title="Proposed Edits"
+        >
+          Diff
+          {#if pendingHunkCount > 0}
+            <span class="diff-badge">{pendingHunkCount}</span>
+          {:else if pendingProposalCount > 0}
+            <span class="diff-badge">{pendingProposalCount}</span>
+          {/if}
+        </button>
+      </div>
+
+      <!-- Secondary Subtabs / Menus (Quota & Memory) -->
+      <div class="secondary-tabs">
+        <button
+          class="subtab-btn secondary"
+          class:active={activeSubTab === 'quota'}
+          onclick={() => (activeSubTab = 'quota')}
+          title="Quota & Usage"
+        >
+          Quota
+        </button>
+        <button
+          class="subtab-btn secondary"
+          class:active={activeSubTab === 'memory'}
+          onclick={() => (activeSubTab = 'memory')}
+          title="Memory"
+        >
+          Memory
+        </button>
+      </div>
+
+      <!-- Settings Center Gear Button -->
+      <button
+        class="header-action-btn"
+        onclick={() => settingsStore.open('agents')}
+        title="Buka Pengaturan AI Agents"
+        aria-label="Settings AI Agents"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+
+      <!-- Close Panel Button -->
       <button class="close-panel-btn" onclick={onClose} aria-label="Close Agents Panel" title="Tutup panel (⌘6)">
         ✕
       </button>
     </div>
   </div>
 
-  {#if activeSubTab === 'chat' || activeSubTab === 'diff'}
-    <!-- Slot Navigation Tabs & Discipline Toggles -->
-    <AgentTabs />
-
-    <!-- Honest Limitations Banner (Sticky) -->
-    <div class="limitations-banner" role="note">
-      <span class="banner-icon">ℹ️</span>
-      <span class="banner-text">
-        Catatan: Edit via tool internal agen tidak dapat dicegat. Petak otomatis membuat snapshot Local History sebelum sesi berjalan untuk rollback.
-      </span>
-    </div>
-  {/if}
-
-  <!-- Main View Area -->
+  <!-- Main View Area (Full vertical space, no cramped tier stacked headers) -->
   <div class="panel-view-area">
     {#if activeSubTab === 'chat'}
       <AgentChat />
@@ -183,7 +316,7 @@
     flex-direction: column;
     height: 100%;
     background: #141518;
-    border-left: 1px solid #26282d;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -202,116 +335,210 @@
     background: #6ea8ff;
   }
 
+  /* Single Unified 38px Header */
+  .agent-unified-header,
   .panel-header {
+    height: 38px;
+    min-height: 38px;
+    max-height: 38px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    min-height: 38px;
-    height: auto;
-    padding: 4px 8px;
-    background: #111215;
-    border-bottom: 1px solid #1f2126;
+    padding: 0 8px;
+    background: #121317;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
+    box-sizing: border-box;
   }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 12.5px;
+    gap: 6px;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  /* Hermes Bot Dropdown Selector */
+  .bot-selector-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .bot-select-dropdown {
+    background: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: #f1f2f4;
+    font-size: 11.5px;
     font-weight: 600;
-    color: #e6edf3;
+    padding: 3px 22px 3px 6px;
+    max-width: 140px;
+    outline: none;
+    cursor: pointer;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .bot-select-dropdown:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: #1f2129;
+  }
+
+  .runtime-status-dot {
+    position: absolute;
+    right: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: #10b981;
+  }
+
+  .runtime-status-dot.busy {
+    background: #3b82f6;
+    box-shadow: 0 0 6px #3b82f6;
+    animation: dotPulse 1.2s infinite;
+  }
+
+  .runtime-status-dot.ready {
+    background: #10b981;
+  }
+
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  /* Dynamic Active Model Badge */
+  .dynamic-model-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #9da1ad;
     flex-shrink: 0;
   }
 
-  .header-icon {
-    font-size: 13px;
+  .dynamic-model-badge.claude {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.1);
   }
 
-  .subtabs-bar {
+  .dynamic-model-badge.gemini {
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.1);
+  }
+
+  .dynamic-model-badge.ollama {
+    color: #06b6d4;
+    border-color: rgba(6, 182, 212, 0.3);
+    background: rgba(6, 182, 212, 0.1);
+  }
+
+  .model-icon {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+  }
+
+  .agent-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  /* Subtabs Group */
+  .agent-subtab-group {
     display: flex;
     background: #18191f;
-    border: 1px solid #282a33;
-    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
     padding: 2px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    max-width: 100%;
-    gap: 2px;
-  }
-
-  .subtabs-bar::-webkit-scrollbar {
-    display: none;
+    gap: 1px;
   }
 
   .subtab-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 3px;
     background: transparent;
     border: none;
-    border-radius: 4px;
+    border-radius: 3px;
     padding: 2px 6px;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     color: #8b949e;
     cursor: pointer;
     white-space: nowrap;
-    flex-shrink: 0;
     transition: all 0.12s;
   }
 
   .subtab-btn:hover {
-    color: #c9cdd4;
+    color: #e6edf3;
   }
 
   .subtab-btn.active {
-    background: #252833;
-    color: #6ea8ff;
+    background: #22242c;
+    color: #f1f2f4;
     font-weight: 600;
   }
 
-  .proposals-count-pill {
-    background: #1f304d;
-    color: #79c0ff;
+  .diff-badge {
+    background: #f59e0b;
+    color: #000;
     font-size: 9px;
     font-weight: 700;
     padding: 1px 4px;
     border-radius: 8px;
+    margin-left: 2px;
   }
 
+  .secondary-tabs {
+    display: flex;
+    gap: 2px;
+  }
+
+  .subtab-btn.secondary {
+    font-size: 10px;
+    padding: 2px 4px;
+    color: #717684;
+  }
+
+  .subtab-btn.secondary.active {
+    color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .header-action-btn,
   .close-panel-btn {
     background: transparent;
     border: none;
     color: #8b949e;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12px;
     padding: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 4px;
   }
 
+  .header-action-btn:hover,
   .close-panel-btn:hover {
-    color: #e6edf3;
-  }
-
-  .limitations-banner {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    padding: 6px 10px;
-    background: #232018;
-    border-bottom: 1px solid #3d3420;
-    color: #d4b36a;
-    font-size: 10px;
-    line-height: 1.35;
-    flex-shrink: 0;
-  }
-
-  .banner-icon {
-    font-size: 11px;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .panel-view-area {
@@ -328,7 +555,7 @@
     height: 24px;
     padding: 0 10px;
     background: #111215;
-    border-top: 1px solid #26282d;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     font-size: 10px;
     font-family: monospace;
     flex-shrink: 0;
@@ -372,18 +599,15 @@
   .warning-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  .warning-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #f07a74;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ff7b72;
   }
 
   .warning-body {
     font-size: 11px;
-    color: #e6edf3;
+    color: #c9d1d9;
     line-height: 1.4;
   }
 
@@ -395,22 +619,21 @@
   }
 
   .warn-btn {
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
     border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
   }
 
   .warn-btn.cancel {
-    background: #1f2228;
-    color: #c9cdd4;
+    background: #30363d;
+    color: #c9d1d9;
   }
 
   .warn-btn.confirm-full {
-    background: #8b2529;
-    color: #fff;
-    border: 1px solid #d9534f;
+    background: #da3633;
+    color: #ffffff;
   }
 </style>
