@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { diagnosticsStore } from '../features/editor/lsp/diagnostics.svelte';
   import { gitStore } from '../features/git/git.svelte.ts';
   import { runStore } from '../features/run/runStore.svelte';
@@ -7,6 +8,8 @@
   import { formatAppState } from '../features/run/logic';
   import { api } from '../lib/api';
   import { editorSettings } from '../features/editor/editorSettings.svelte';
+  import { settingsStore } from '../features/settings/settingsStore.svelte';
+  import { calcPatDaysLeft, patNeedsWarning, formatPatIndicator } from '../features/accounts/accountsExpiryLogic';
 
   let {
     branchName = '',
@@ -53,6 +56,27 @@
 
   let isInstallingKls = $state(false);
   let klsProgressText = $state('');
+
+  // GitLab PAT expiry indicator
+  let gitlabUser = $state<string | null>(null);
+  let gitlabHasToken = $state(false);
+  let patDaysLeft = $state<number | null>(null);
+  let patExpired = $state(false);
+
+  onMount(async () => {
+    try {
+      const info = await api.accountsGet();
+      gitlabHasToken = !!info.hasToken;
+      if (info.hasToken) {
+        try {
+          const testResult = await api.accountsTest();
+          if (testResult.ok && testResult.user) {
+            gitlabUser = testResult.user;
+          }
+        } catch { /* token test failed, still show configured */ }
+      }
+    } catch { /* ignore */ }
+  });
 
   async function handleInstallKls() {
     if (isInstallingKls) return;
@@ -214,6 +238,29 @@
   {/if}
   {#if isBench}
     <span class="bench-badge">⚡ BENCH RUNNING</span>
+  {/if}
+
+  {#if gitlabHasToken}
+    <span
+      class="gitlab-indicator"
+      class:gitlab-warning={patNeedsWarning(patDaysLeft, patExpired)}
+      onclick={() => settingsStore.open('accounts')}
+      role="button"
+      tabindex="0"
+      onkeydown={(e) => { if (e.key === 'Enter') settingsStore.open('accounts'); }}
+      title={gitlabUser ? `GitLab: @${gitlabUser}` : 'GitLab account configured'}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"></path>
+      </svg>
+      {#if patNeedsWarning(patDaysLeft, patExpired)}
+        <span>{formatPatIndicator(patDaysLeft, patExpired)}</span>
+      {:else if gitlabUser}
+        <span>@{gitlabUser}</span>
+      {:else}
+        <span>GitLab</span>
+      {/if}
+    </span>
   {/if}
 
   <div class="spacer"></div>
@@ -485,5 +532,28 @@
     border-radius: 3px;
     font-size: 10px;
     font-weight: 600;
+  }
+  .gitlab-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #8b8f98;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    transition: background 0.15s;
+  }
+  .gitlab-indicator:hover {
+    background: #1e2025;
+    color: #d8d9dc;
+  }
+  .gitlab-indicator.gitlab-warning {
+    color: #e8b45a;
+    background: #2e2717;
+  }
+  .gitlab-indicator.gitlab-warning:hover {
+    background: #3a3019;
+    color: #f5c76a;
   }
 </style>

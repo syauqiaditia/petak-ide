@@ -40,7 +40,7 @@
 
   const i18n = {
     id: {
-      version: 'v0.8.0',
+      version: 'v0.8.1',
       heroSub: 'Native Flutter & Mobile Engineering IDE Ringan & Cepat',
       actOpen: 'Buka Folder…',
       actOpenDesc: 'Buka workspace Flutter atau native dari disk',
@@ -85,7 +85,7 @@
       close: 'Tutup',
     },
     en: {
-      version: 'v0.8.0',
+      version: 'v0.8.1',
       heroSub: 'Fast, lightweight native Flutter & mobile engineering IDE',
       actOpen: 'Open Folder…',
       actOpenDesc: 'Open an existing Flutter, Android, or mobile workspace from disk',

@@ -15,6 +15,7 @@
     ALL_PRESET_MODELS,
   } from '../agents/agentsLogic';
   import AccountsSettings from '../accounts/AccountsSettings.svelte';
+  import { keymapStore, keyEventToShortcut, type ConflictInfo } from './keymapStore.svelte';
 
   let {
     root = '',
@@ -203,6 +204,9 @@
 
   // Keymap search
   let keymapSearch = $state('');
+  let recordingActionId = $state<string | null>(null);
+  let keymapConflict = $state<ConflictInfo | null>(null);
+  let pendingShortcut = $state<string | null>(null);
 
   let isId = $derived(settingsStore.language === 'id');
 
@@ -219,18 +223,45 @@
     { id: 'appearance', label: isId ? 'Tampilan Antarmuka' : 'Appearance', icon: 'appearance' },
   ]);
 
-  const KEYMAPS = [
-    { action: 'Search Everywhere', shortcut: 'Shift Shift', category: 'Navigasi' },
-    { action: 'Buka Berkas Cepat (Quick Open)', shortcut: '⌘P', category: 'Navigasi' },
-    { action: 'Flutter Hot Reload', shortcut: '⌘\\', category: 'Run' },
-    { action: 'Flutter Hot Restart', shortcut: '⇧⌘\\', category: 'Run' },
-    { action: 'Toggle AI Agents Panel', shortcut: '⌘6', category: 'View' },
-    { action: 'Toggle Device Mirror', shortcut: '⇧⌘D', category: 'View' },
-    { action: 'GitLab Merge Requests', shortcut: '⌘5', category: 'Git' },
-    { action: 'Buka Pengaturan (Settings)', shortcut: '⌘,', category: 'General' },
-    { action: 'Find & Replace in File', shortcut: '⌘F / ⌘R', category: 'Editor' },
-    { action: 'Fold / Unfold Code Block', shortcut: '⌥⌘- / ⌥⌘+', category: 'Editor' },
-  ];
+  function startRecording(actionId: string) {
+    recordingActionId = actionId;
+    keymapConflict = null;
+    pendingShortcut = null;
+  }
+
+  function cancelRecording() {
+    recordingActionId = null;
+    keymapConflict = null;
+    pendingShortcut = null;
+  }
+
+  function handleKeymapKeydown(e: KeyboardEvent) {
+    if (!recordingActionId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const combo = keyEventToShortcut(e);
+    if (!combo) return; // modifier-only press
+
+    pendingShortcut = combo;
+    const conflict = keymapStore.updateShortcut(recordingActionId, combo);
+    if (conflict) {
+      keymapConflict = conflict;
+      pendingShortcut = combo;
+    } else {
+      recordingActionId = null;
+      keymapConflict = null;
+      pendingShortcut = null;
+    }
+  }
+
+  function forceApplyShortcut() {
+    if (recordingActionId && pendingShortcut) {
+      keymapStore.forceUpdateShortcut(recordingActionId, pendingShortcut);
+    }
+    recordingActionId = null;
+    keymapConflict = null;
+    pendingShortcut = null;
+  }
 
   const HERMES_DETECTION_FALLBACK = [
     { name: 'manager', icon: '👑', role: 'Planner & Task Orchestrator', model: 'Claude 3.7 Sonnet', status: 'ready' },
@@ -397,12 +428,12 @@
 
   let filteredKeymaps = $derived(
     keymapSearch.trim()
-      ? KEYMAPS.filter((k) =>
+      ? keymapStore.keymaps.filter((k) =>
           k.action.toLowerCase().includes(keymapSearch.toLowerCase()) ||
           k.shortcut.toLowerCase().includes(keymapSearch.toLowerCase()) ||
           k.category.toLowerCase().includes(keymapSearch.toLowerCase())
         )
-      : KEYMAPS
+      : keymapStore.keymaps
   );
 
   let displayHermesProfiles = $derived(
@@ -668,21 +699,56 @@
                 class="keymap-search-input"
                 bind:value={keymapSearch}
               />
+              <button class="btn-reset-all" onclick={() => keymapStore.resetDefaults()}>
+                {isId ? 'Reset Semua' : 'Reset All'}
+              </button>
             </div>
+
+            {#if keymapConflict}
+              <div class="keymap-conflict-bar">
+                <span>⚠️ {isId ? 'Konflik: pintasan sudah dipakai oleh' : 'Conflict: shortcut already used by'} "{keymapConflict.conflictingAction}"</span>
+                <button class="btn-force" onclick={forceApplyShortcut}>{isId ? 'Ganti Paksa' : 'Override'}</button>
+                <button class="btn-cancel" onclick={cancelRecording}>{isId ? 'Batal' : 'Cancel'}</button>
+              </div>
+            {/if}
+
             <table class="keymap-table">
               <thead>
                 <tr>
                   <th>{isId ? 'Aksi' : 'Action'}</th>
                   <th>{isId ? 'Pintasan' : 'Shortcut'}</th>
                   <th>{isId ? 'Kategori' : 'Category'}</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {#each filteredKeymaps as k}
                   <tr>
                     <td>{k.action}</td>
-                    <td><span class="keycap">{k.shortcut}</span></td>
+                    <td>
+                      {#if recordingActionId === k.id}
+                        <!-- svelte-ignore a11y_autofocus -->
+                        <input
+                          class="keymap-record-input"
+                          placeholder={isId ? 'Tekan kombinasi tombol…' : 'Press key combo…'}
+                          onkeydown={handleKeymapKeydown}
+                          onblur={cancelRecording}
+                          autofocus
+                          readonly
+                          value={pendingShortcut || ''}
+                        />
+                      {:else}
+                        <button class="keycap keymap-edit-btn" onclick={() => startRecording(k.id)}>
+                          {k.shortcut}
+                        </button>
+                      {/if}
+                    </td>
                     <td><span class="category-badge">{k.category}</span></td>
+                    <td>
+                      {#if keymapStore.isCustomized(k.id)}
+                        <button class="btn-reset-single" onclick={() => keymapStore.resetSingle(k.id)} title={isId ? 'Reset ke bawaan' : 'Reset to default'}>↺</button>
+                      {/if}
+                    </td>
                   </tr>
                 {/each}
               </tbody>
@@ -1747,6 +1813,100 @@
     border-radius: 4px;
     font-size: 10.5px;
     color: #8b949e;
+  }
+
+  .keymap-edit-btn {
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .keymap-edit-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .keymap-record-input {
+    background: #1a2233;
+    border: 1.5px solid #3b82f6;
+    border-radius: 4px;
+    color: #93c5fd;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 3px 8px;
+    width: 140px;
+    outline: none;
+    animation: keymap-pulse 1s infinite;
+  }
+  @keyframes keymap-pulse {
+    0%, 100% { border-color: #3b82f6; }
+    50% { border-color: #60a5fa; }
+  }
+
+  .btn-reset-all {
+    padding: 4px 10px;
+    background: #1e1f25;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: #8b949e;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-reset-all:hover {
+    background: #2a2b33;
+    color: #d8d9dc;
+  }
+
+  .btn-reset-single {
+    background: transparent;
+    border: none;
+    color: #8b949e;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+  .btn-reset-single:hover {
+    color: #d8d9dc;
+    background: #1e1f25;
+  }
+
+  .keymap-conflict-bar {
+    background: #2e2717;
+    border: 1px solid #5a4a20;
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #e8b45a;
+    margin-bottom: 8px;
+  }
+  .btn-force {
+    padding: 3px 10px;
+    background: #5a4a20;
+    border: 1px solid #8a7030;
+    border-radius: 4px;
+    color: #fde68a;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .btn-force:hover {
+    background: #6a5a28;
+  }
+  .btn-cancel {
+    padding: 3px 10px;
+    background: #1e1f25;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: #8b949e;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .btn-cancel:hover {
+    background: #2a2b33;
+    color: #d8d9dc;
   }
 
   /* AI Agents & Disiplin Container */

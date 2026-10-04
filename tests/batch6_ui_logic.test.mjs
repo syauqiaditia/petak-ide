@@ -37,6 +37,7 @@ const STORE_DEFS = {
   renameStore: path.resolve(uiRoot, 'features/editor/lsp/rename.svelte.ts'),
   tabsManager: path.resolve(uiRoot, 'features/editor/tabs.svelte.ts'),
   settingsStore: path.resolve(uiRoot, 'features/settings/settingsStore.svelte.ts'),
+  keymapStore: path.resolve(uiRoot, 'features/settings/keymapStore.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {
