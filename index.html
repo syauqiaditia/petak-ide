@@ -6,14 +6,34 @@
     <title>Petak</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'" />
     <style>
-      :root {
-        --bg-titlebar: #111215;
-        --bg-panel: #141518;
-        --bg-app: #16171a;
-        --bg-editor: #1a1b1f;
-        --bg-raised: #23252b;
-        --border: #26282d;
-        --border-subtle: #2c2e34;
+      :root, body.variant-a {
+        /* Layer 0-3 Depth Tokens (Varian A: Cursor / Linear Modern) */
+        --p-bg-base: #0c0d10;
+        --p-bg-surface: #121317;
+        --p-bg-workspace: #15161b;
+        --p-bg-elevated: #1c1e24;
+        --p-bg-hover: #22242c;
+        --p-bg-active: #2a2d36;
+
+        --bg-base: var(--p-bg-base);
+        --bg-surface: var(--p-bg-surface);
+        --bg-workspace: var(--p-bg-workspace);
+        --bg-elevated: var(--p-bg-elevated);
+        --bg-hover: var(--p-bg-hover);
+        --bg-active: var(--p-bg-active);
+
+        /* Border Refinement (Anti Jail-Cell) */
+        --border-default: #1e2027;
+        --border-subtle: rgba(255, 255, 255, 0.06);
+        --border-focus: rgba(59, 130, 246, 0.5);
+
+        /* Legacy Aliases & System Colors */
+        --bg-titlebar: var(--p-bg-base);
+        --bg-panel: var(--p-bg-surface);
+        --bg-app: var(--p-bg-base);
+        --bg-editor: var(--p-bg-workspace);
+        --bg-raised: var(--p-bg-elevated);
+        --border: var(--border-default);
         --text: #d8d9dc;
         --text-muted: #8b8f98;
         --accent: #6ea8ff;
@@ -22,6 +42,35 @@
         --warning: #e8b45a;
         --danger: #f07a74;
       }
+
+      body.variant-b {
+        /* Layer 0-3 Depth Tokens (Varian B: Zed / Fleet Zen) */
+        --p-bg-base: #0a0b0d;
+        --p-bg-surface: #0f1013;
+        --p-bg-workspace: #141518;
+        --p-bg-elevated: #191a1e;
+        --p-bg-hover: #1f2025;
+        --p-bg-active: #26282e;
+
+        --bg-base: var(--p-bg-base);
+        --bg-surface: var(--p-bg-surface);
+        --bg-workspace: var(--p-bg-workspace);
+        --bg-elevated: var(--p-bg-elevated);
+        --bg-hover: var(--p-bg-hover);
+        --bg-active: var(--p-bg-active);
+
+        --border-default: #17181c;
+        --border-subtle: rgba(255, 255, 255, 0.035);
+        --border-focus: rgba(99, 102, 241, 0.45);
+
+        --bg-titlebar: var(--p-bg-base);
+        --bg-panel: var(--p-bg-surface);
+        --bg-app: var(--p-bg-base);
+        --bg-editor: var(--p-bg-workspace);
+        --bg-raised: var(--p-bg-elevated);
+        --border: var(--border-default);
+      }
+
       * {
         box-sizing: border-box;
       }
@@ -31,7 +80,7 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background: var(--bg-app);
+        background: var(--p-bg-base);
         color: var(--text);
         font-family: 'Geist', system-ui, -apple-system, sans-serif;
         font-size: 13px;
@@ -55,7 +104,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="variant-a">
     <div id="app"></div>
     <script type="module" src="/ui/main.ts"></script>
   </body>

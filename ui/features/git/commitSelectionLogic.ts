@@ -52,19 +52,21 @@ export function getUnifiedStatusLetter(entry: GitStatusEntry): { char: string; c
   const state = isStaged ? entry.index : entry.worktree;
   switch (state) {
     case 'modified':
-      return { char: 'M', color: '#9cc3ff' };
+      return { char: 'M', color: '#58a6ff' };
     case 'added':
-      return { char: 'A', color: '#7fc98f' };
+      return { char: 'A', color: '#4ade80' };
     case 'deleted':
       return { char: 'D', color: '#f07a74' };
     case 'renamed':
       return { char: 'R', color: '#6ea8ff' };
     case 'copied':
-      return { char: 'C', color: '#7fc98f' };
+      return { char: 'C', color: '#4ade80' };
     case 'untracked':
-      return { char: '?', color: '#7fc98f' };
+      return { char: '?', color: '#4ade80' };
+    case 'ignored':
+      return { char: '', color: '#606470' };
     default:
-      return { char: 'M', color: '#8b8f98' };
+      return { char: 'M', color: '#d8d9dc' };
   }
 }
 
