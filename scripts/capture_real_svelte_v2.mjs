@@ -65,6 +65,10 @@ server.listen(41888, '127.0.0.1', async () => {
       name: 'live-app-v2-agents-unified.png',
       url: 'http://127.0.0.1:41888/?preview=true&preview-agent=true',
     },
+    {
+      name: 'live-app-v2-settings-models.png',
+      url: 'http://127.0.0.1:41888/?preview=true&preview-settings=true',
+    },
   ];
 
   for (const t of targets) {

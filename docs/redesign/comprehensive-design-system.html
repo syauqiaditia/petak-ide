@@ -4118,8 +4118,32 @@
                     </div>
 
                     <div>
-                      <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Model ID:</label>
-                      <input type="text" class="setting-select-box" value="claude-3-7-sonnet" style="width: 100%; font-family: var(--font-mono);">
+                      <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Model ID (Pilih dari Dropdown):</label>
+                      <select class="setting-select-box" id="demo-model-select" style="width: 100%; font-family: var(--font-mono);" onchange="document.getElementById('demo-model-hint').innerText = this.options[this.selectedIndex].dataset.desc || '';">
+                        <optgroup label="Anthropic Claude">
+                          <option value="claude-3-7-sonnet" data-desc="Hybrid Reasoning & Coding Flagship" selected>Claude 3.7 Sonnet (claude-3-7-sonnet) ★ Rekomendasi</option>
+                          <option value="claude-3-5-sonnet-20241022" data-desc="Coding Utama Cepat & Akurat">Claude 3.5 Sonnet v2 (claude-3-5-sonnet-20241022)</option>
+                          <option value="claude-3-5-haiku-20241022" data-desc="Sangat Cepat & Hemat Token">Claude 3.5 Haiku (claude-3-5-haiku-20241022)</option>
+                          <option value="ag/claude-opus-4-6-thinking" data-desc="via Antigravity / Deep Thinking">Claude Opus 4.6 Thinking (ag/claude-opus-4-6-thinking)</option>
+                        </optgroup>
+                        <optgroup label="Google Gemini">
+                          <option value="ag/gemini-3.8-flash-high" data-desc="via Antigravity — Rekomendasi Hermes">Gemini 3.8 Flash High (ag/gemini-3.8-flash-high) ★ Rekomendasi</option>
+                          <option value="gemini-2.5-pro" data-desc="Reasoning Kuat & Multimodal">Gemini 2.5 Pro (gemini-2.5-pro)</option>
+                          <option value="gemini-2.5-flash" data-desc="Super Cepat & Hemat Kuota">Gemini 2.5 Flash (gemini-2.5-flash)</option>
+                        </optgroup>
+                        <optgroup label="OpenAI GPT">
+                          <option value="gpt-4o" data-desc="Multimodal Omnimodel Flagship">GPT-4o (gpt-4o) ★ Rekomendasi</option>
+                          <option value="gpt-4o-mini" data-desc="Hemat Token & Kencang">GPT-4o Mini (gpt-4o-mini)</option>
+                          <option value="o3-mini" data-desc="STEM & Coding Reasoning">o3-mini (o3-mini)</option>
+                        </optgroup>
+                        <optgroup label="Local Ollama">
+                          <option value="qwen2.5-coder:32b" data-desc="Coding Lokal Terbaik">Qwen 2.5 Coder 32B (qwen2.5-coder:32b) ★ Rekomendasi</option>
+                          <option value="qwen2.5-coder:14b" data-desc="Cepat & Akurat untuk Mac 16GB">Qwen 2.5 Coder 14B (qwen2.5-coder:14b)</option>
+                          <option value="qwen2.5-coder:7b" data-desc="Enteng untuk Mac 8GB">Qwen 2.5 Coder 7B (qwen2.5-coder:7b)</option>
+                        </optgroup>
+                        <option value="custom">✏️ Ketik Manual (Custom Model ID)...</option>
+                      </select>
+                      <span id="demo-model-hint" style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 4px;">ℹ️ Hybrid Reasoning & Coding Flagship</span>
                     </div>
 
                     <div>

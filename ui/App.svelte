@@ -1511,6 +1511,10 @@
         if (params.has('agent') || window.location.search.includes('preview-agent')) {
           isAgentPanelOpen = true;
         }
+
+        if (params.has('settings') || window.location.search.includes('preview-settings')) {
+          settingsStore.open('agents');
+        }
       }
     }, 50);
 
