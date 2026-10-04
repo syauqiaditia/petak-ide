@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { agentsStore } from './agents.svelte';
   import type { SlotConfig, HermesProfileInfo, PermissionMode, AgentKind } from './types';
+  import { ALL_PRESET_MODELS } from './agentsLogic';
 
   let localSlots = $state<SlotConfig[]>([]);
   let isSaving = $state(false);
@@ -175,12 +176,21 @@
 
                   <div class="field-group">
                     <label>Model</label>
-                    <input type="text" bind:value={slot.model} placeholder="e.g. claude-3-7-sonnet" />
+                    <select bind:value={slot.model}>
+                      {#each ALL_PRESET_MODELS as m}
+                        <option value={m.id}>{m.name} ({m.id})</option>
+                      {/each}
+                    </select>
                   </div>
 
                   <div class="field-group">
                     <label>Fallback</label>
-                    <input type="text" bind:value={slot.fallbackModel} placeholder="e.g. claude-3-5-sonnet" />
+                    <select bind:value={slot.fallbackModel}>
+                      <option value="">(Tanpa Fallback)</option>
+                      {#each ALL_PRESET_MODELS as m}
+                        <option value={m.id}>{m.name} ({m.id})</option>
+                      {/each}
+                    </select>
                   </div>
 
                   <div class="field-group">

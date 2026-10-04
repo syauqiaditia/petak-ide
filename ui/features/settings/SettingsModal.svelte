@@ -7,6 +7,13 @@
   import { api, type KotlinLsStatus, type KotlinLsProgress, type UnlistenFn } from '../../lib/api';
   import { agentsStore } from '../agents/agents.svelte';
   import type { PermissionMode, HermesDetectionResult, LlmQuotaReport } from '../agents/types';
+  import {
+    getModelsForProvider,
+    detectProviderFromModel,
+    getModelDescription,
+    PROVIDER_MODELS,
+    ALL_PRESET_MODELS,
+  } from '../agents/agentsLogic';
   import AccountsSettings from '../accounts/AccountsSettings.svelte';
 
   let {
@@ -35,14 +42,85 @@
 
   // AI Agents & Disiplin
   let selectedConfigSlotId = $state('s2');
-  let activeProvider = $state('anthropic');
-  let activeModelId = $state('claude-3-7-sonnet');
+  let activeProvider = $state('gemini');
+  let activeModelId = $state('ag/gemini-3.8-flash-high');
+  let activeFallbackModel = $state('gemini-2.5-pro');
   let activePermissionMode = $state<PermissionMode>('ask');
+  let isCustomModel = $state(false);
+  let customModelId = $state('');
   let adoptSuccessMessage = $state<string | null>(null);
   let hermesDetection = $state<HermesDetectionResult | null>(null);
   let quotaReport = $state<LlmQuotaReport | null>(null);
   let isQuotaLoading = $state(false);
   let isHermesLoading = $state(false);
+
+  let currentSlot = $derived(
+    agentsStore.slots.find((s) => s.id === selectedConfigSlotId) || agentsStore.slots[0]
+  );
+
+  $effect(() => {
+    if (currentSlot?.config) {
+      const model = currentSlot.config.model || 'ag/gemini-3.8-flash-high';
+      activeModelId = model;
+      activeProvider = detectProviderFromModel(model);
+      activePermissionMode = (currentSlot.config.permission as PermissionMode) || 'ask';
+      activeFallbackModel = currentSlot.config.fallbackModel || 'gemini-2.5-pro';
+
+      const providerModels = getModelsForProvider(activeProvider);
+      const isKnown = providerModels.some((m) => m.id === model);
+      isCustomModel = !isKnown;
+      if (!isKnown) {
+        customModelId = model;
+      }
+    }
+  });
+
+  function handleProviderChange() {
+    const models = getModelsForProvider(activeProvider);
+    const recommended = models.find((m) => m.recommended) || models[0];
+    if (recommended) {
+      activeModelId = recommended.id;
+      isCustomModel = false;
+      customModelId = '';
+      if (selectedConfigSlotId) {
+        agentsStore.updateSlotConfig(selectedConfigSlotId, {
+          model: activeModelId,
+          kind: activeProvider === 'hermes' ? 'hermes' : 'acp-custom',
+        });
+      }
+    }
+  }
+
+  function handleModelSelectChange(e: Event) {
+    const val = (e.target as HTMLSelectElement).value;
+    if (val === 'custom') {
+      isCustomModel = true;
+      if (!customModelId) customModelId = activeModelId;
+    } else {
+      isCustomModel = false;
+      activeModelId = val;
+      if (selectedConfigSlotId) {
+        agentsStore.updateSlotConfig(selectedConfigSlotId, { model: activeModelId });
+      }
+    }
+  }
+
+  function handleCustomModelInput(e: Event) {
+    const val = (e.target as HTMLInputElement).value;
+    customModelId = val;
+    activeModelId = val;
+    if (selectedConfigSlotId) {
+      agentsStore.updateSlotConfig(selectedConfigSlotId, { model: activeModelId });
+    }
+  }
+
+  function handleFallbackChange(e: Event) {
+    const val = (e.target as HTMLSelectElement).value;
+    activeFallbackModel = val;
+    if (selectedConfigSlotId) {
+      agentsStore.updateSlotConfig(selectedConfigSlotId, { fallbackModel: val });
+    }
+  }
 
   // Keymap search
   let keymapSearch = $state('');
@@ -564,7 +642,7 @@
                 <div class="model-config-grid">
                   <div>
                     <label class="field-label" for="provider-select">Penyedia Model (Provider):</label>
-                    <select id="provider-select" class="setting-select-box full-width" bind:value={activeProvider}>
+                    <select id="provider-select" class="setting-select-box full-width" bind:value={activeProvider} onchange={handleProviderChange}>
                       <option value="anthropic">Anthropic Claude (via Antigravity / 9Router)</option>
                       <option value="gemini">Google Gemini (Gemini 2.5 Pro / Flash)</option>
                       <option value="openai">OpenAI GPT (GPT-4o / o3-mini)</option>
@@ -574,8 +652,48 @@
                   </div>
 
                   <div>
-                    <label class="field-label" for="model-id-input">Model ID:</label>
-                    <input id="model-id-input" type="text" class="setting-select-box full-width mono" bind:value={activeModelId} />
+                    <label class="field-label" for="model-preset-select">Model ID (Pilih dari Daftar):</label>
+                    <select
+                      id="model-preset-select"
+                      class="setting-select-box full-width"
+                      value={isCustomModel ? 'custom' : activeModelId}
+                      onchange={handleModelSelectChange}
+                    >
+                      <optgroup label="Model {activeProvider.toUpperCase()}">
+                        {#each getModelsForProvider(activeProvider) as m}
+                          <option value={m.id}>
+                            {m.name} — {m.id} {m.recommended ? '★ (Rekomendasi)' : ''}
+                          </option>
+                        {/each}
+                      </optgroup>
+                      <optgroup label="Penyedia Lain (Cepat Ganti)">
+                        {#each ALL_PRESET_MODELS.filter((m) => !getModelsForProvider(activeProvider).some((pm) => pm.id === m.id)) as m}
+                          <option value={m.id}>
+                            {m.name} — {m.id}
+                          </option>
+                        {/each}
+                      </optgroup>
+                      <option value="custom">✏️ Ketik Manual (Custom Model ID)...</option>
+                    </select>
+
+                    {#if isCustomModel}
+                      <div style="margin-top: 6px;">
+                        <input
+                          id="model-id-input"
+                          type="text"
+                          class="setting-select-box full-width mono"
+                          bind:value={customModelId}
+                          oninput={handleCustomModelInput}
+                          placeholder="Ketik string model ID unik (mis. mistral/codestral-2501)..."
+                        />
+                      </div>
+                    {/if}
+
+                    {#if getModelDescription(activeModelId)}
+                      <span class="setting-hint" style="margin-top: 4px; display: block; color: var(--text-muted); font-size: 11px;">
+                        ℹ️ {getModelDescription(activeModelId)}
+                      </span>
+                    {/if}
                   </div>
 
                   <div>
@@ -599,14 +717,29 @@
 
                 <!-- Fallback Chain (3-Tier) -->
                 <div class="fallback-chain-section">
-                  <span class="field-label">Fallback Model Chain (3-Tier):</span>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span class="field-label" style="margin-bottom: 0;">Fallback Model Chain (3-Tier):</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span style="font-size: 11px; color: var(--text-muted);">Pilih 2° Fallback:</span>
+                      <select
+                        class="setting-select-box"
+                        style="font-size: 11px; padding: 2px 8px; height: 26px;"
+                        bind:value={activeFallbackModel}
+                        onchange={handleFallbackChange}
+                      >
+                        {#each ALL_PRESET_MODELS as m}
+                          <option value={m.id}>{m.name} ({m.id})</option>
+                        {/each}
+                      </select>
+                    </div>
+                  </div>
                   <div class="fallback-pills-row">
                     <div class="fallback-chain-pill primary">
                       <span class="tier-tag">1° Primary:</span> {activeModelId || 'claude-3-7-sonnet'}
                     </div>
                     <span class="tier-arrow">➔</span>
                     <div class="fallback-chain-pill secondary">
-                      <span class="tier-tag">2° Fallback:</span> gemini-2.5-pro
+                      <span class="tier-tag">2° Fallback:</span> {activeFallbackModel || 'gemini-2.5-pro'}
                     </div>
                     <span class="tier-arrow">➔</span>
                     <div class="fallback-chain-pill local">

@@ -279,3 +279,87 @@ export function formatMemoryTime(timestamp: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// ── Model Presets & Provider Catalogs ────────────────────────────────────────
+
+export interface ModelPreset {
+  id: string;
+  name: string;
+  desc: string;
+  recommended?: boolean;
+}
+
+export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
+  anthropic: [
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity / Deep Thinking' },
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+  ],
+  gemini: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Rekomendasi Hermes', recommended: true },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Reasoning Kuat & Multimodal' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Super Cepat & Hemat Kuota' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', desc: 'Generasi Baru Cepat' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', desc: 'Konteks Panjang 2M Token' },
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
+    { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+    { id: 'o1-mini', name: 'o1-mini', desc: 'Reasoning Ringan' },
+  ],
+  ollama: [
+    { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', desc: 'Coding Lokal Terbaik', recommended: true },
+    { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', desc: 'Cepat & Akurat (Mac 16GB)' },
+    { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng (Mac 8GB)' },
+    { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
+    { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
+    { id: 'llama3.3:70b', name: 'Llama 3.3 70B', desc: 'Model Besar Serbaguna' },
+    { id: 'llama3.1:8b', name: 'Llama 3.1 8B', desc: 'Lokal Cepat Standar' },
+  ],
+  hermes: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Profile Default', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus Thinking', desc: 'Hermes Profile Fallback' },
+    { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', desc: 'Hermes Cloud' },
+    { id: 'openai/gpt-4o', name: 'OpenAI GPT-4o', desc: 'Hermes Cloud' },
+  ],
+};
+
+export const ALL_PRESET_MODELS: ModelPreset[] = Object.values(PROVIDER_MODELS).flat();
+
+export function getModelsForProvider(provider: string): ModelPreset[] {
+  return PROVIDER_MODELS[provider] || PROVIDER_MODELS.anthropic;
+}
+
+export function detectProviderFromModel(modelId: string): string {
+  if (!modelId) return 'anthropic';
+  const m = modelId.toLowerCase();
+  if (m.includes('claude') || m.includes('anthropic')) return 'anthropic';
+  if (m.includes('gemini')) return 'gemini';
+  if (m.includes('gpt') || m.startsWith('o1') || m.startsWith('o3')) return 'openai';
+  if (m.includes('qwen') || m.includes('deepseek') || m.includes('llama') || m.includes('ollama')) return 'ollama';
+  if (m.includes('hermes')) return 'hermes';
+  return 'anthropic';
+}
+
+export function getModelDisplayName(modelId: string): string {
+  if (!modelId) return 'Pilih Model...';
+  for (const list of Object.values(PROVIDER_MODELS)) {
+    const found = list.find((m) => m.id === modelId);
+    if (found) return `${found.name} (${found.id})`;
+  }
+  return modelId;
+}
+
+export function getModelDescription(modelId: string): string {
+  if (!modelId) return '';
+  for (const list of Object.values(PROVIDER_MODELS)) {
+    const found = list.find((m) => m.id === modelId);
+    if (found?.desc) return found.desc;
+  }
+  return '';
+}
+
+

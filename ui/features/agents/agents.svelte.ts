@@ -484,6 +484,17 @@ class AgentsStore {
     }
   }
 
+  updateSlotConfig(slotId: string, partial: Partial<SlotConfig>) {
+    const idx = this.slots.findIndex((s) => s.id === slotId);
+    if (idx !== -1) {
+      const updatedConfig = { ...this.slots[idx].config, ...partial };
+      this.slots[idx] = { ...this.slots[idx], config: updatedConfig };
+      api.agentUpdateSlot(updatedConfig).catch((err) => {
+        console.warn('Update slot config failed:', err);
+      });
+    }
+  }
+
   openFixWithAgent(draft: FixWithAgentDraft) {
     this.fixWithAgentDraft = draft;
     if (draft.slotId) {
