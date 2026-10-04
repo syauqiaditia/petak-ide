@@ -474,6 +474,7 @@ fn test_team_json_apply_and_roundtrip() {
     let team = petak_core::agent::TeamConfig {
         version: 1,
         slots: vec![s1.clone(), s2.clone()],
+        obsidian_vault_path: None,
     };
 
     // Apply team
