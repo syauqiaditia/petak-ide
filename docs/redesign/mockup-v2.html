@@ -1,0 +1,2249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak IDE — Redesign Interactive Prototype (Varian A & B)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ==========================================================================
+       PETAK V2 DESIGN SYSTEM TOKENS
+       ========================================================================== */
+    :root {
+      /* Shared Color Palette */
+      --p-font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --p-font-mono: 'JetBrains Mono', monospace;
+
+      --p-blue-500: #3b82f6;
+      --p-blue-600: #2563eb;
+      --p-emerald-500: #10b981;
+      --p-emerald-600: #059669;
+      --p-amber-500: #f59e0b;
+      --p-rose-500: #ef4444;
+      --p-purple-500: #8b5cf6;
+      --p-indigo-500: #6366f1;
+
+      /* Animation easing */
+      --p-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* --------------------------------------------------------------------------
+       THEME: VARIAN A (Cursor / Minimalist Focus)
+       -------------------------------------------------------------------------- */
+    body.variant-a {
+      --bg-base: #0c0d10;
+      --bg-surface: #121317;
+      --bg-workspace: #16171b;
+      --bg-elevated: #1c1e24;
+      --bg-hover: #22242c;
+      --bg-active: #2a2d36;
+
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-default: #1e2027;
+      --border-focus: rgba(59, 130, 246, 0.5);
+
+      --text-primary: #f1f2f4;
+      --text-secondary: #9da1ad;
+      --text-muted: #646875;
+
+      --accent: var(--p-blue-500);
+      --accent-surface: rgba(59, 130, 246, 0.12);
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --radius-xl: 12px;
+
+      --shadow-floating: 0 12px 32px -4px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    /* --------------------------------------------------------------------------
+       THEME: VARIAN B (Zed / Fleet Zen Focus)
+       -------------------------------------------------------------------------- */
+    body.variant-b {
+      --bg-base: #0a0b0d;
+      --bg-surface: #0f1013;
+      --bg-workspace: #141518;
+      --bg-elevated: #191a1e;
+      --bg-hover: #1f2025;
+      --bg-active: #26282e;
+
+      --border-subtle: rgba(255, 255, 255, 0.035);
+      --border-default: #17181c;
+      --border-focus: rgba(99, 102, 241, 0.4);
+
+      --text-primary: #ededef;
+      --text-secondary: #8c909c;
+      --text-muted: #565964;
+
+      --accent: var(--p-indigo-500);
+      --accent-surface: rgba(99, 102, 241, 0.12);
+
+      --radius-sm: 3px;
+      --radius-md: 5px;
+      --radius-lg: 6px;
+      --radius-xl: 8px;
+
+      --shadow-floating: 0 8px 24px -2px rgba(0, 0, 0, 0.6);
+    }
+
+    /* ==========================================================================
+       GLOBAL BASE RESETS
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--p-font-ui);
+      font-size: 13px;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      user-select: none;
+      transition: background 0.25s var(--p-ease);
+    }
+
+    button {
+      font-family: inherit;
+      color: inherit;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+
+    input, textarea {
+      font-family: inherit;
+      color: inherit;
+      background: none;
+      border: none;
+      outline: none;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* ==========================================================================
+       DEMO CONTROLLER / SWITCHER TOP BAR (PREVIEW BANNER)
+       ========================================================================== */
+    #demo-controller-bar {
+      height: 38px;
+      background: #08090b;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 12px;
+      z-index: 100;
+      color: #9da1ad;
+    }
+
+    .controller-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: #f1f2f4;
+    }
+    .controller-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(59, 130, 246, 0.18);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .controller-segment-group {
+      display: flex;
+      align-items: center;
+      background: #14151a;
+      padding: 2px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      gap: 2px;
+    }
+    .controller-btn {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #8c909c;
+    }
+    .controller-btn:hover {
+      color: #f1f2f4;
+    }
+    .controller-btn.active {
+      background: #252832;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    .controller-notes {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      color: #646875;
+    }
+
+    /* ==========================================================================
+       APPLICATION ROOT LAYOUT
+       ========================================================================== */
+    #petak-app-root {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 38px);
+      width: 100vw;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    /* --------------------------------------------------------------------------
+       TOP SHELL: TITLEBAR
+       -------------------------------------------------------------------------- */
+    .petak-titlebar {
+      height: 42px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      gap: 10px;
+      flex-shrink: 0;
+      transition: all 0.2s var(--p-ease);
+    }
+
+    body.variant-b .petak-titlebar {
+      height: 34px;
+      padding: 0 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mac-window-dots {
+      display: flex;
+      gap: 6px;
+      margin-right: 4px;
+    }
+    .mac-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .dot-close { background: #ff5f56; }
+    .dot-min { background: #ffbd2e; }
+    .dot-max { background: #27c93f; }
+
+    .brand-logo-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      color: var(--text-primary);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+    }
+    .brand-icon {
+      width: 16px;
+      height: 16px;
+      background: var(--accent);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 10px;
+    }
+
+    .project-pill, .branch-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .project-pill:hover, .branch-pill:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .branch-pill code {
+      font-family: var(--p-font-mono);
+      font-size: 11px;
+      color: #60a5fa;
+    }
+
+    /* Titlebar Center Cockpit */
+    .titlebar-center {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .run-cockpit-group {
+      display: flex;
+      align-items: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 2px 4px;
+      gap: 3px;
+    }
+
+    .cockpit-select-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+    }
+    .cockpit-select-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .cockpit-divider {
+      width: 1px;
+      height: 16px;
+      background: var(--border-subtle);
+    }
+
+    .run-action-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--radius-sm);
+      color: #fff;
+    }
+    .run-action-btn.play {
+      background: var(--p-emerald-600);
+    }
+    .run-action-btn.play:hover {
+      background: var(--p-emerald-500);
+    }
+    .run-action-btn.reload {
+      color: var(--text-secondary);
+    }
+    .run-action-btn.reload:hover {
+      background: var(--bg-hover);
+      color: #f59e0b;
+    }
+    .run-action-btn.stop {
+      color: var(--text-secondary);
+    }
+    .run-action-btn.stop:hover {
+      background: var(--bg-hover);
+      color: #ef4444;
+    }
+
+    /* Titlebar Right */
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search-pill-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 12px;
+      width: 190px;
+      justify-content: space-between;
+    }
+    .search-pill-btn:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      color: var(--text-secondary);
+    }
+    .kbd-shortcut {
+      font-family: var(--p-font-mono);
+      font-size: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .dock-toggle-btn {
+      padding: 4px 8px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+      gap: 5px;
+    }
+    .dock-toggle-btn:hover, .dock-toggle-btn.active {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .dock-toggle-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* --------------------------------------------------------------------------
+       MAIN BODY (RAIL + SIDEBAR + WORKSPACE + RIGHT DOCK)
+       -------------------------------------------------------------------------- */
+    .petak-main-body {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    /* RAIL */
+    .petak-rail {
+      width: 44px;
+      background: var(--bg-base);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    body.variant-b .petak-rail {
+      width: 38px;
+      border-right: none;
+    }
+
+    .rail-tab-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      position: relative;
+    }
+    .rail-tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+    .rail-tab-btn.active {
+      color: var(--accent);
+      background: var(--accent-surface);
+    }
+    .rail-tab-btn.active::before {
+      content: '';
+      position: absolute;
+      left: -5px;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      border-radius: 0 2px 2px 0;
+      background: var(--accent);
+    }
+    .rail-spacer {
+      flex: 1;
+    }
+
+    /* FILE TREE SIDEBAR */
+    .petak-filetree-sidebar {
+      width: 230px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 0.2s var(--p-ease);
+    }
+    body.variant-b .petak-filetree-sidebar {
+      border-right: 1px solid rgba(255, 255, 255, 0.03);
+      background: var(--bg-surface);
+      width: 210px;
+    }
+
+    .filetree-header {
+      height: 34px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .filetree-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .filetree-act-btn {
+      color: var(--text-muted);
+    }
+    .filetree-act-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .filetree-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .tree-row {
+      display: flex;
+      align-items: center;
+      height: 27px;
+      padding-left: var(--indent, 12px);
+      padding-right: 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      gap: 6px;
+      transition: background 0.1s;
+    }
+    .tree-row:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .tree-row.active {
+      background: var(--bg-active);
+      color: #fff;
+      font-weight: 500;
+    }
+    body.variant-a .tree-row.active {
+      border-left: 2px solid var(--accent);
+    }
+    .tree-icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+    .tree-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .tree-git-tag {
+      font-family: var(--p-font-mono);
+      font-size: 10px;
+      color: #f59e0b;
+      margin-left: auto;
+    }
+
+    /* CENTER WORKSPACE */
+    .petak-center-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bg-workspace);
+      position: relative;
+    }
+
+    /* EDITOR TABS BAR */
+    .petak-editor-tabs {
+      height: 36px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: stretch;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    body.variant-b .petak-editor-tabs {
+      display: none; /* Zed tabless mode */
+    }
+
+    .editor-tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      border-right: 1px solid var(--border-subtle);
+      cursor: pointer;
+      position: relative;
+      background: transparent;
+      white-space: nowrap;
+    }
+    .editor-tab:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .editor-tab.active {
+      background: var(--bg-workspace);
+      color: #fff;
+      font-weight: 500;
+    }
+    .editor-tab.active::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+    }
+    .tab-close {
+      opacity: 0.5;
+      font-size: 12px;
+    }
+    .tab-close:hover {
+      opacity: 1;
+    }
+
+    /* BREADCRUMB BAR */
+    .editor-breadcrumbs {
+      height: 28px;
+      background: var(--bg-workspace);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    body.variant-b .editor-breadcrumbs {
+      height: 32px;
+      font-size: 12px;
+      background: var(--bg-workspace);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-secondary);
+    }
+    .crumb-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .crumb-item:hover {
+      color: var(--text-primary);
+    }
+    .crumb-sep {
+      color: var(--text-muted);
+      font-size: 10px;
+    }
+
+    /* CODE EDITOR AREA */
+    .editor-code-container {
+      flex: 1;
+      display: flex;
+      overflow: auto;
+      font-family: var(--p-font-mono);
+      font-size: 13px;
+      line-height: 23px;
+      padding: 12px 0;
+      background: var(--bg-workspace);
+    }
+    .line-numbers-col {
+      width: 48px;
+      color: var(--text-muted);
+      text-align: right;
+      padding-right: 14px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .code-lines-col {
+      flex: 1;
+      white-space: pre;
+      color: #d1d5db;
+    }
+
+    /* Dart Syntax Highlighting Tokens */
+    .kw { color: #f472b6; font-weight: 500; }
+    .fn { color: #60a5fa; }
+    .typ { color: #34d399; }
+    .str { color: #fde047; }
+    .cmt { color: #6b7280; font-style: italic; }
+    .prop { color: #a78bfa; }
+    .num { color: #fb923c; }
+
+    /* --------------------------------------------------------------------------
+       AI AGENTS PANEL (REDESIGNED RIGHT DOCK)
+       -------------------------------------------------------------------------- */
+    .petak-agents-panel {
+      width: 380px;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      position: relative;
+      transition: width 0.2s var(--p-ease);
+    }
+    body.variant-b .petak-agents-panel {
+      border-left: 1px solid rgba(255, 255, 255, 0.04);
+      background: var(--bg-surface);
+    }
+
+    /* SINGLE UNIFIED HEADER (38px) */
+    .agents-unified-header {
+      height: 38px;
+      padding: 0 10px 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .agent-picker-trigger {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 3px 8px;
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .agent-picker-trigger:hover {
+      background: var(--bg-hover);
+    }
+    .status-dot-pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--p-emerald-500);
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    }
+
+    .agents-header-tabs {
+      display: flex;
+      background: var(--bg-elevated);
+      padding: 2px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      gap: 2px;
+    }
+    .agent-htab-btn {
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .agent-htab-btn.active {
+      background: var(--bg-active);
+      color: #fff;
+      font-weight: 600;
+    }
+    .diff-badge-pill {
+      margin-left: 4px;
+      font-size: 10px;
+      background: var(--p-blue-500);
+      color: #fff;
+      padding: 0 5px;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+
+    .agents-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .agent-hact-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+    }
+    .agent-hact-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    /* AGENT CHAT VIEW AREA */
+    .agents-chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--bg-surface);
+      position: relative;
+    }
+
+    .chat-messages-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Message Bubbles */
+    .chat-msg-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 100%;
+    }
+    .chat-msg-row.user {
+      align-items: flex-end;
+    }
+    .chat-msg-row.agent {
+      align-items: flex-start;
+    }
+
+    .msg-author-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+    .msg-author-tag.agent-tag {
+      color: #60a5fa;
+    }
+
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: var(--radius-lg);
+      font-size: 12.5px;
+      line-height: 1.55;
+      max-width: 96%;
+      word-break: break-word;
+    }
+    .chat-msg-row.user .msg-bubble {
+      background: var(--accent);
+      color: #fff;
+      border-bottom-right-radius: 2px;
+    }
+    .chat-msg-row.agent .msg-bubble {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-bottom-left-radius: 2px;
+    }
+
+    /* Tool Call Card */
+    .tool-chip-card {
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: var(--radius-md);
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-subtle);
+      font-family: var(--p-font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .tool-chip-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #38bdf8;
+    }
+    .tool-chip-body {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+    }
+
+    /* Quick Suggestions */
+    .quick-prompts-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .qprompt-pill {
+      padding: 4px 9px;
+      border-radius: 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .qprompt-pill:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* FLOATING AGENT PROMPT COMPOSER */
+    .floating-composer-wrap {
+      padding: 10px 12px 12px 12px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+
+    .composer-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-xl);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: var(--shadow-floating);
+      transition: border-color 0.2s;
+    }
+    .composer-card:focus-within {
+      border-color: var(--border-focus);
+    }
+
+    .composer-textarea {
+      width: 100%;
+      min-height: 48px;
+      max-height: 120px;
+      resize: none;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: var(--text-primary);
+    }
+    .composer-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .composer-pills-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .pills-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .context-pill {
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10.5px;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .context-pill:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .context-pill.active {
+      background: var(--accent-surface);
+      color: #93c5fd;
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+    .context-pill.perm-ask {
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.25);
+    }
+    .context-pill.perm-full {
+      color: #f87171;
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+
+    .send-prompt-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .send-prompt-btn:hover {
+      filter: brightness(1.1);
+    }
+
+    /* PROPOSED EDITS VIEW IN AGENT PANEL */
+    .agents-diff-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--bg-surface);
+    }
+    .diff-summary-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+    }
+    .diff-summary-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .diff-bulk-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .diff-btn {
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .diff-btn.accept {
+      background: var(--p-emerald-600);
+      color: #fff;
+    }
+    .diff-btn.reject {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-secondary);
+    }
+
+    .hunk-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .hunk-card-header {
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .hunk-code-area {
+      font-family: var(--p-font-mono);
+      font-size: 11px;
+      line-height: 18px;
+      padding: 6px 0;
+      white-space: pre;
+    }
+    .diff-line {
+      padding: 0 10px;
+    }
+    .diff-line.del {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+    }
+    .diff-line.add {
+      background: rgba(16, 185, 129, 0.15);
+      color: #86efac;
+    }
+
+    /* --------------------------------------------------------------------------
+       GITLAB MERGE REQUEST (MR) VIEWER
+       -------------------------------------------------------------------------- */
+    .petak-mr-view {
+      flex: 1;
+      display: flex;
+      background: var(--bg-workspace);
+      overflow: hidden;
+    }
+
+    /* MR Left List Column */
+    .mr-list-pane {
+      width: 320px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .mr-list-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mr-list-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mr-pane-heading {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .mr-filter-pills {
+      display: flex;
+      gap: 4px;
+    }
+    .mr-fpill {
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .mr-fpill.active {
+      background: var(--bg-active);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .mr-cards-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .mr-card-item {
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      background: transparent;
+      border: 1px solid transparent;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .mr-card-item:hover {
+      background: var(--bg-hover);
+    }
+    .mr-card-item.selected {
+      background: var(--bg-elevated);
+      border-color: var(--border-subtle);
+    }
+    .mr-card-title {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+      line-height: 1.4;
+    }
+    .mr-card-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .state-badge {
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .state-badge.open {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+    }
+    .state-badge.merged {
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+    }
+
+    /* MR Right Detail Pane */
+    .mr-detail-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-workspace);
+    }
+    .mr-hero-header {
+      padding: 16px 24px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mr-hero-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .mr-hero-title-area {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .mr-hero-iid {
+      font-family: var(--p-font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .mr-hero-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.35;
+    }
+    .mr-hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .btn-approve-primary {
+      padding: 6px 14px;
+      border-radius: var(--radius-md);
+      background: var(--p-emerald-600);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      gap: 6px;
+    }
+    .btn-approve-primary:hover {
+      background: var(--p-emerald-500);
+    }
+    .btn-approve-primary.approved {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-ghost-secondary {
+      padding: 6px 12px;
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      font-size: 12px;
+      gap: 6px;
+    }
+    .btn-ghost-secondary:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .mr-hero-meta-bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+    }
+    .meta-user {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .user-avatar-sm {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #4b5563;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #fff;
+    }
+    .branch-flow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--p-font-mono);
+      font-size: 11px;
+    }
+    .b-tag {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #60a5fa;
+    }
+    .ci-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: #34d399;
+      font-weight: 500;
+    }
+
+    /* MR Detail Tabs */
+    .mr-detail-tabs-bar {
+      height: 36px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      padding: 0 24px;
+      gap: 20px;
+    }
+    .mr-dtab-btn {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      padding: 0 2px;
+    }
+    .mr-dtab-btn.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .mr-scrollable-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* --------------------------------------------------------------------------
+       STATUS BAR
+       -------------------------------------------------------------------------- */
+    .petak-statusbar {
+      height: 25px;
+      background: var(--bg-base);
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    body.variant-b .petak-statusbar {
+      height: 22px;
+      background: var(--bg-base);
+      border-top: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    .sb-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .sb-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .sb-item:hover {
+      color: var(--text-primary);
+    }
+
+    /* ==========================================================================
+       VARIAN B ZEN SPECIAL STYLES
+       ========================================================================== */
+    body.variant-b .zen-drawer-indicator {
+      display: inline-flex;
+      font-size: 10px;
+      font-family: var(--p-font-mono);
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+    }
+    body.variant-b .composer-card {
+      box-shadow: none;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--bg-workspace);
+    }
+    body.variant-b .tree-row {
+      font-family: var(--p-font-mono);
+      font-size: 11.5px;
+    }
+  </style>
+</head>
+<body class="variant-a">
+
+  <!-- ========================================================================
+       TOP DEMO CONTROLLER (SWITCHER PREVIEW)
+       ======================================================================== -->
+  <div id="demo-controller-bar">
+    <div class="controller-title">
+      <span>Petak Redesign Exploration</span>
+      <span class="controller-badge">PROTOTYPE V2</span>
+    </div>
+
+    <!-- Variant Switcher Toggle -->
+    <div class="controller-segment-group">
+      <button class="controller-btn active" id="btn-var-a" onclick="switchVariant('a')">
+        ✨ Varian A: Cursor / Minimalist
+      </button>
+      <button class="controller-btn" id="btn-var-b" onclick="switchVariant('b')">
+        ⚡ Varian B: Zed / Fleet Zen
+      </button>
+    </div>
+
+    <!-- View Switcher -->
+    <div class="controller-segment-group">
+      <button class="controller-btn active" id="btn-view-editor" onclick="switchMainView('editor')">
+        💻 Editor &amp; AI Agents
+      </button>
+      <button class="controller-btn" id="btn-view-mr" onclick="switchMainView('mr')">
+        🔀 GitLab MR Viewer
+      </button>
+    </div>
+
+    <div class="controller-notes">
+      <span>Dokumen Audit: <code>docs/redesign/references-and-audit.md</code></span>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       PETAK APPLICATION ROOT
+       ======================================================================== -->
+  <div id="petak-app-root">
+
+    <!-- 1. INTEGRATED TITLEBAR -->
+    <header class="petak-titlebar">
+      <div class="titlebar-left">
+        <div class="mac-window-dots">
+          <div class="mac-dot dot-close"></div>
+          <div class="mac-dot dot-min"></div>
+          <div class="mac-dot dot-max"></div>
+        </div>
+
+        <div class="brand-logo-pill">
+          <div class="brand-icon">P</div>
+          <span>Petak</span>
+        </div>
+
+        <div class="project-pill" title="Current Workspace">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h7l2 2h9v12H3z"></path></svg>
+          <span>jatim-ist-mb-flutter</span>
+        </div>
+
+        <div class="branch-pill" title="Git Branch: feat/biometric-auth">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+          <code>feat/biometric-auth</code>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+        </div>
+      </div>
+
+      <!-- Cockpit: Run / Reload / Device -->
+      <div class="titlebar-center">
+        <div class="run-cockpit-group">
+          <button class="cockpit-select-btn" title="Run Configuration">
+            <span>JConnect Dev</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="cockpit-divider"></div>
+          <button class="cockpit-select-btn" title="Target Device">
+            <span>Pixel 8 Pro (API 34)</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+          <div class="cockpit-divider"></div>
+          <button class="run-action-btn play" title="Run / Hot Reload" id="run-btn" onclick="toggleRunState()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7z"></path></svg>
+          </button>
+          <button class="run-action-btn reload" title="Hot Restart (R)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+          </button>
+          <button class="run-action-btn stop" title="Stop Run">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search & Right Dock Controls -->
+      <div class="titlebar-right">
+        <button class="search-pill-btn" title="Search Everywhere (Double Shift)">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+            <span>Search files, symbols...</span>
+          </div>
+          <span class="kbd-shortcut">⇧⇧</span>
+        </button>
+
+        <button class="dock-toggle-btn active" id="toggle-agent-dock-btn" onclick="toggleAgentPanel()" title="Toggle AI Agents Panel (⌘6)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg>
+          <span>Agents</span>
+        </button>
+
+        <button class="dock-toggle-btn" title="Toggle Device Mirror (⌘⇧D)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"></rect><path d="M10 18h4"></path></svg>
+          <span>Mirror</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- 2. MAIN BODY (RAIL + SIDEBAR + WORKSPACE + AGENT PANEL) -->
+    <main class="petak-main-body">
+
+      <!-- LEFT SLIM RAIL -->
+      <aside class="petak-rail">
+        <button class="rail-tab-btn active" id="rail-btn-project" onclick="switchMainView('editor')" title="Project Explorer (⌘1)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h7l2 2h9v12H3z"></path></svg>
+        </button>
+        <button class="rail-tab-btn" id="rail-btn-git" title="Source Control Git (⌘2)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+        </button>
+        <button class="rail-tab-btn" id="rail-btn-mr" onclick="switchMainView('mr')" title="GitLab Merge Requests (⌘5)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
+        </button>
+        <button class="rail-tab-btn" id="rail-btn-agents" onclick="toggleAgentPanel()" title="AI Agents Panel (⌘6)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg>
+        </button>
+
+        <div class="rail-spacer"></div>
+
+        <button class="rail-tab-btn" title="Settings / Toolchains (⌘,)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+      </aside>
+
+      <!-- FILE TREE EXPLORER -->
+      <aside class="petak-filetree-sidebar" id="petak-filetree">
+        <div class="filetree-header">
+          <span>PROJECT</span>
+          <div class="filetree-actions">
+            <button class="filetree-act-btn" title="New File">+</button>
+            <button class="filetree-act-btn" title="Refresh">↻</button>
+          </div>
+        </div>
+
+        <div class="filetree-list">
+          <div class="tree-row" style="--indent: 10px;">
+            <span class="tree-icon">▾</span>
+            <span class="tree-name" style="font-weight:600;">lib</span>
+          </div>
+          <div class="tree-row" style="--indent: 22px;">
+            <span class="tree-icon">▾</span>
+            <span class="tree-name">features</span>
+          </div>
+          <div class="tree-row" style="--indent: 34px;">
+            <span class="tree-icon">▾</span>
+            <span class="tree-name">auth</span>
+          </div>
+          <div class="tree-row active" style="--indent: 46px;">
+            <span class="tree-icon" style="color:#58a6ff;">◈</span>
+            <span class="tree-name" style="color:#58a6ff; font-weight: 500;">biometric_service.dart</span>
+          </div>
+          <div class="tree-row" style="--indent: 46px;">
+            <span class="tree-icon" style="color:var(--text-muted);">◈</span>
+            <span class="tree-name" style="color:var(--text-primary);">auth_controller.dart</span>
+          </div>
+          <div class="tree-row" style="--indent: 34px;">
+            <span class="tree-icon">▸</span>
+            <span class="tree-name">transfer</span>
+          </div>
+          <div class="tree-row" style="--indent: 22px;">
+            <span class="tree-icon" style="color:var(--text-muted);">◈</span>
+            <span class="tree-name" style="color:var(--text-primary);">main.dart</span>
+          </div>
+          <div class="tree-row" style="--indent: 10px;">
+            <span class="tree-icon" style="color:#58a6ff;">▤</span>
+            <span class="tree-name" style="color:#58a6ff; font-weight: 500;">pubspec.yaml</span>
+          </div>
+          <div class="tree-row" style="--indent: 10px;">
+            <span class="tree-icon" style="color:#4ade80;">+</span>
+            <span class="tree-name" style="color:#4ade80; font-weight: 500;">AGENTS.md</span>
+          </div>
+          <div class="tree-row" style="--indent: 10px;">
+            <span class="tree-icon">▸</span>
+            <span class="tree-name">android</span>
+          </div>
+          <div class="tree-row" style="--indent: 10px;">
+            <span class="tree-icon">▸</span>
+            <span class="tree-name">ios</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ====================================================================
+           VIEW CONTAINER: 1. EDITOR & AI PANEL
+           ==================================================================== -->
+      <section class="petak-center-workspace" id="view-editor-workspace">
+        <!-- Editor Tabs Bar (Hidden in Varian B Zen mode) -->
+        <div class="petak-editor-tabs">
+          <div class="editor-tab active">
+            <span style="color:#38bdf8;">◈</span>
+            <span>biometric_service.dart</span>
+            <span class="tab-close">✕</span>
+          </div>
+          <div class="editor-tab">
+            <span style="color:#38bdf8;">◈</span>
+            <span>auth_controller.dart</span>
+            <span class="tab-close">✕</span>
+          </div>
+          <div class="editor-tab">
+            <span style="color:#f59e0b;">▤</span>
+            <span>pubspec.yaml</span>
+            <span class="tab-close">✕</span>
+          </div>
+        </div>
+
+        <!-- Breadcrumbs Navigation -->
+        <div class="editor-breadcrumbs">
+          <span class="crumb-item">lib</span>
+          <span class="crumb-sep">/</span>
+          <span class="crumb-item">features</span>
+          <span class="crumb-sep">/</span>
+          <span class="crumb-item">auth</span>
+          <span class="crumb-sep">/</span>
+          <span class="crumb-item" style="color:var(--text-primary); font-weight:500;">biometric_service.dart</span>
+        </div>
+
+        <!-- Real Dart Code Content -->
+        <div class="editor-code-container">
+          <div class="line-numbers-col">
+            1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22
+          </div>
+          <div class="code-lines-col"><span class="kw">import</span> <span class="str">'package:flutter/services.dart'</span>;
+<span class="kw">import</span> <span class="str">'package:local_auth/local_auth.dart'</span>;
+<span class="kw">import</span> <span class="str">'package:jconnect_core/security.dart'</span>;
+
+<span class="cmt">/// Layanan Otentikasi Biometrik (Fingerprint & FaceID) Bank Jatim JConnect</span>
+<span class="kw">class</span> <span class="typ">BiometricAuthService</span> {
+  <span class="kw">final</span> <span class="typ">LocalAuthentication</span> _auth = <span class="typ">LocalAuthentication</span>();
+
+  <span class="typ">Future</span>&lt;<span class="typ">bool</span>&gt; <span class="fn">authenticateUser</span>({<span class="kw">required</span> <span class="typ">String</span> reason}) <span class="kw">async</span> {
+    <span class="kw">try</span> {
+      <span class="kw">final</span> isAvailable = <span class="kw">await</span> _auth.<span class="fn">canCheckBiometrics</span>;
+      <span class="kw">if</span> (!isAvailable) <span class="kw">return</span> <span class="kw">false</span>;
+
+      <span class="kw">return</span> <span class="kw">await</span> _auth.<span class="fn">authenticate</span>(
+        localizedReason: reason,
+        options: <span class="kw">const</span> <span class="typ">AuthenticationOptions</span>(
+          biometricOnly: <span class="kw">true</span>,
+          stickyAuth: <span class="kw">true</span>,
+        ),
+      );
+    } <span class="kw">on</span> <span class="typ">PlatformException</span> <span class="kw">catch</span> (e) {
+      <span class="typ">AppLogger</span>.<span class="fn">error</span>(<span class="str">'Biometric authentication failed: $e'</span>);
+      <span class="kw">return</span> <span class="kw">false</span>;
+    }
+  }
+}</div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEW CONTAINER: 2. GITLAB MERGE REQUEST VIEWER
+           ==================================================================== -->
+      <section class="petak-mr-view" id="view-mr-workspace" style="display: none;">
+        <!-- MR Left List -->
+        <div class="mr-list-pane">
+          <div class="mr-list-header">
+            <div class="mr-list-title-row">
+              <span class="mr-pane-heading">Merge Requests</span>
+              <button class="diff-btn accept" style="padding:2px 8px;">+ New MR</button>
+            </div>
+            <div class="mr-filter-pills">
+              <button class="mr-fpill active">Open (8)</button>
+              <button class="mr-fpill">Mine (2)</button>
+              <button class="mr-fpill">Assigned</button>
+              <button class="mr-fpill">Review</button>
+            </div>
+          </div>
+
+          <div class="mr-cards-list">
+            <div class="mr-card-item selected">
+              <div class="mr-card-title">!42 feat(auth): add biometric face id &amp; fingerprint login for JConnect</div>
+              <div class="mr-card-meta">
+                <span class="state-badge open">Open</span>
+                <span>by @uqi</span>
+                <span>· 2 jam lalu</span>
+              </div>
+            </div>
+
+            <div class="mr-card-item">
+              <div class="mr-card-title">!41 fix(qris): handle timeout on bsave proxy bridge during peak hours</div>
+              <div class="mr-card-meta">
+                <span class="state-badge open">Open</span>
+                <span>by @reza</span>
+                <span>· kemarin</span>
+              </div>
+            </div>
+
+            <div class="mr-card-item">
+              <div class="mr-card-title">!40 refactor(core): migrate IButton &amp; IAppBar tokens to V2 theme</div>
+              <div class="mr-card-meta">
+                <span class="state-badge merged">Merged</span>
+                <span>by @dimas</span>
+                <span>· 2 hari lalu</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MR Right Detail Pane -->
+        <div class="mr-detail-pane">
+          <div class="mr-hero-header">
+            <div class="mr-hero-top">
+              <div class="mr-hero-title-area">
+                <span class="mr-hero-iid">!42 · opened by Muhammad Aditia Syauqi</span>
+                <h1 class="mr-hero-title">feat(auth): add biometric face id &amp; fingerprint login for JConnect</h1>
+              </div>
+              <div class="mr-hero-actions">
+                <button class="btn-approve-primary" id="btn-mr-approve" onclick="toggleMrApprove()">
+                  <span>✓</span>
+                  <span id="mr-approve-label">Setujui MR (Approve)</span>
+                </button>
+                <button class="btn-ghost-secondary">Rebase</button>
+                <button class="btn-ghost-secondary">Checkout Branch</button>
+              </div>
+            </div>
+
+            <div class="mr-hero-meta-bar">
+              <div class="meta-user">
+                <div class="user-avatar-sm">U</div>
+                <span>UQi (syauqi.aditia)</span>
+              </div>
+              <div class="branch-flow">
+                <span class="b-tag">feat/biometric-auth</span>
+                <span>→</span>
+                <span class="b-tag" style="color:#9da1ad;">dev</span>
+              </div>
+              <div class="ci-pill">
+                <span>●</span>
+                <span>Pipeline #4829 passing</span>
+              </div>
+              <span style="color:var(--text-muted);">Updated 2 hours ago</span>
+            </div>
+          </div>
+
+          <!-- MR Tabs Bar -->
+          <div class="mr-detail-tabs-bar">
+            <button class="mr-dtab-btn active">Overview &amp; Discussion (3)</button>
+            <button class="mr-dtab-btn">Commits (4)</button>
+            <button class="mr-dtab-btn">Changes / Diff (2 files)</button>
+          </div>
+
+          <!-- MR Body / Discussion -->
+          <div class="mr-scrollable-content">
+            <div style="background:var(--bg-elevated); border:1px solid var(--border-subtle); padding:16px; border-radius:var(--radius-lg); line-height:1.6;">
+              <h3 style="margin-bottom:8px; font-size:14px;">Deskripsi Perubahan</h3>
+              <p style="color:var(--text-secondary); margin-bottom:10px;">
+                Implementasi modul biometric authentication menggunakan standard security bank jatim (AppScreenPrivacyService + FortiToken OTP fallback). Tidak ada dependency baru yang ditambahkan, seluruh komponen UI memanfaatkan token <code>Palette</code> dan <code>IButton</code> yang sudah ada.
+              </p>
+              <div style="display:flex; gap:12px; font-size:12px;">
+                <span style="color:#34d399;">+ 42 baris ditambahkan</span>
+                <span style="color:#f87171;">- 12 baris dihapus</span>
+              </div>
+            </div>
+
+            <!-- Diff Preview Block -->
+            <div class="hunk-card">
+              <div class="hunk-card-header">
+                <span style="font-weight:600;">lib/features/auth/biometric_service.dart</span>
+                <span style="color:#34d399;">+18 / -2</span>
+              </div>
+              <div class="hunk-code-area">
+<div class="diff-line del">- final bool authSuccess = false;</div>
+<div class="diff-line add">+ final isAvailable = await _auth.canCheckBiometrics;</div>
+<div class="diff-line add">+ if (!isAvailable) return false;</div>
+<div class="diff-line add">+ return await _auth.authenticate(localizedReason: reason);</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           3. REDESIGNED AI AGENTS PANEL (RIGHT DOCK)
+           ==================================================================== -->
+      <aside class="petak-agents-panel" id="petak-agent-dock">
+        <!-- SINGLE UNIFIED COMPACT HEADER (38px) -->
+        <div class="agents-unified-header">
+          <!-- Active Agent Picker Dropdown -->
+          <button class="agent-picker-trigger" title="Ganti slot agen aktif">
+            <span class="status-dot-pulse"></span>
+            <span>🤖 Hermes (Techlead)</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+          </button>
+
+          <!-- Chat vs Diff Switcher -->
+          <div class="agents-header-tabs">
+            <button class="agent-htab-btn active" id="btn-atab-chat" onclick="switchAgentSubTab('chat')">Chat</button>
+            <button class="agent-htab-btn" id="btn-atab-diff" onclick="switchAgentSubTab('diff')">
+              Diff <span class="diff-badge-pill" id="agent-diff-count">2</span>
+            </button>
+          </div>
+
+          <!-- Actions -->
+          <div class="agents-header-actions">
+            <button class="agent-hact-btn" title="Pengaturan Tim Agen (.petak/team.json)">⚙</button>
+            <button class="agent-hact-btn" onclick="toggleAgentPanel()" title="Tutup panel (⌘6)">✕</button>
+          </div>
+        </div>
+
+        <!-- SUBVIEW A: AGENT CHAT -->
+        <div class="agents-chat-container" id="agent-chat-view">
+          <div class="chat-messages-scroll" id="chat-messages-container">
+
+            <!-- Assistant Welcome Greeting -->
+            <div class="chat-msg-row agent">
+              <div class="msg-author-tag agent-tag">
+                <span>🤖 Hermes Agent</span>
+                <span style="font-size:10px; color:var(--text-muted);">Techlead · Ready</span>
+              </div>
+              <div class="msg-bubble">
+                Halo UQi! Saya siap membantu review kode atau otomatisasi refactor. Sesi ini dikonfigurasi dengan mode <strong>Ask</strong> dan disiplin <strong>Ponytail</strong> (minimal diff).
+                <div class="quick-prompts-row">
+                  <button class="qprompt-pill" onclick="sendQuickPrompt('Review perubahan git terkini dan cek potensi error biometric.')">
+                    🔍 Review biometric auth
+                  </button>
+                  <button class="qprompt-pill" onclick="sendQuickPrompt('Usulkan perbaikan minimal untuk handling timeout VPN.')">
+                    🛠️ Cek timeout handler
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- User Sample Message -->
+            <div class="chat-msg-row user">
+              <div class="msg-author-tag">Anda</div>
+              <div class="msg-bubble">
+                Bantu tambahkan pengecekan biometrik sebelum user masuk ke halaman transfer saldo.
+              </div>
+            </div>
+
+            <!-- Agent Sample Response with Tool Call -->
+            <div class="chat-msg-row agent">
+              <div class="msg-author-tag agent-tag">🤖 Hermes Agent</div>
+              <div class="msg-bubble">
+                Sudah saya analisis di <code>biometric_service.dart</code>. Perubahan telah disiapkan ke dalam <strong>Proposed Edits (2 hunks)</strong> untuk Anda tinjau.
+
+                <!-- Tool Call Card (Collapsible) -->
+                <div class="tool-chip-card" onclick="toggleToolDetails(this)">
+                  <div class="tool-chip-header">
+                    <span>⚡ search_files</span>
+                    <span style="color:var(--text-muted);">lib/features/auth/</span>
+                  </div>
+                  <div class="tool-chip-body">2 files matched: biometric_service.dart, auth_controller.dart</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- FLOATING AGENT PROMPT COMPOSER -->
+          <div class="floating-composer-wrap">
+            <div class="composer-card">
+              <textarea
+                class="composer-textarea"
+                id="composer-input"
+                placeholder="Tanyakan sesuatu atau berikan perintah pada Hermes..."
+                onkeydown="handleComposerKey(event)"
+              ></textarea>
+
+              <div class="composer-pills-bar">
+                <div class="pills-left">
+                  <!-- Context Files Pill -->
+                  <button class="context-pill" title="Tambahkan konteks berkas atau git diff">
+                    <span>@</span>
+                    <span>Context</span>
+                  </button>
+
+                  <!-- Permission Mode Pill (Popover Simulator) -->
+                  <button class="context-pill perm-ask" id="perm-pill" onclick="cyclePermissionMode()" title="Klik untuk mengubah mode izin eksekusi agen">
+                    <span>🛡️ Izin:</span>
+                    <span id="perm-mode-text">Ask</span>
+                  </button>
+
+                  <!-- Ponytail Discipline Toggle -->
+                  <button class="context-pill active" id="ponytail-pill" onclick="toggleDiscipline('ponytail')" title="Disiplin Ponytail: minimal diff, no over-engineering">
+                    <span>Ponytail</span>
+                  </button>
+
+                  <!-- Caveman Discipline Toggle -->
+                  <button class="context-pill" id="caveman-pill" onclick="toggleDiscipline('caveman')" title="Disiplin Caveman: jawaban singkat padat tanpa basa-basi">
+                    <span>Caveman</span>
+                  </button>
+                </div>
+
+                <button class="send-prompt-btn" onclick="submitComposerPrompt()" title="Kirim prompt (Enter)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBVIEW B: PROPOSED EDITS (DIFF REVIEW) -->
+        <div class="agents-diff-container" id="agent-diff-view" style="display: none;">
+          <div class="diff-summary-card">
+            <span class="diff-summary-text"><strong>2 usulan perubahan</strong> pending</span>
+            <div class="diff-bulk-actions">
+              <button class="diff-btn reject" onclick="rejectAllHunks()">Tolak Semua</button>
+              <button class="diff-btn accept" onclick="acceptAllHunks()">✓ Terima Semua</button>
+            </div>
+          </div>
+
+          <!-- Hunk 1 -->
+          <div class="hunk-card" id="hunk-card-1">
+            <div class="hunk-card-header">
+              <span>biometric_service.dart:12</span>
+              <div style="display:flex; gap:4px;">
+                <button class="diff-btn reject" onclick="rejectHunk(1)">Tolak</button>
+                <button class="diff-btn accept" onclick="acceptHunk(1)">✓ Terima</button>
+              </div>
+            </div>
+            <div class="hunk-code-area">
+<div class="diff-line del">- final isAvailable = false;</div>
+<div class="diff-line add">+ final isAvailable = await _auth.canCheckBiometrics;</div>
+            </div>
+          </div>
+
+          <!-- Hunk 2 -->
+          <div class="hunk-card" id="hunk-card-2">
+            <div class="hunk-card-header">
+              <span>biometric_service.dart:18</span>
+              <div style="display:flex; gap:4px;">
+                <button class="diff-btn reject" onclick="rejectHunk(2)">Tolak</button>
+                <button class="diff-btn accept" onclick="acceptHunk(2)">✓ Terima</button>
+              </div>
+            </div>
+            <div class="hunk-code-area">
+<div class="diff-line del">- return false;</div>
+<div class="diff-line add">+ return await _auth.authenticate(localizedReason: reason);</div>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+    </main>
+
+    <!-- 3. SLIM STATUS BAR -->
+    <footer class="petak-statusbar">
+      <div class="sb-section">
+        <div class="sb-item" title="Current Git Branch">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+          <span>feat/biometric-auth</span>
+        </div>
+        <div class="sb-item" title="LSP Dart Diagnostics">
+          <span style="color:#34d399;">✓</span>
+          <span>Dart LSP: 0 errors</span>
+        </div>
+        <div class="sb-item" title="GitLab API Scope">
+          <span style="color:#60a5fa;">●</span>
+          <span>GitLab: api (Full Access)</span>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-item" title="Hermes Agent Active Memory">
+          <span>Mem: 48MB (PID 2472)</span>
+        </div>
+        <div class="sb-item" title="Active Editor File Type">
+          <span>Dart 3.5.0</span>
+        </div>
+        <div class="sb-item" title="Cursor Line and Column">
+          <span>Ln 14, Col 28</span>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- ========================================================================
+       INTERACTIVE PROTOTYPE CONTROLLER LOGIC
+       ======================================================================== -->
+  <script>
+    // 1. Variant Switching (Varian A vs Varian B)
+    function switchVariant(variant) {
+      const body = document.body;
+      const btnA = document.getElementById('btn-var-a');
+      const btnB = document.getElementById('btn-var-b');
+
+      if (variant === 'a') {
+        body.className = 'variant-a';
+        btnA.classList.add('active');
+        btnB.classList.remove('active');
+      } else {
+        body.className = 'variant-b';
+        btnB.classList.add('active');
+        btnA.classList.remove('active');
+      }
+    }
+
+    // 2. Main View Switching (Editor & Agent vs GitLab MR)
+    function switchMainView(view) {
+      const editorWs = document.getElementById('view-editor-workspace');
+      const mrWs = document.getElementById('view-mr-workspace');
+      const filetree = document.getElementById('petak-filetree');
+      const agentDock = document.getElementById('petak-agent-dock');
+      const btnViewEd = document.getElementById('btn-view-editor');
+      const btnViewMr = document.getElementById('btn-view-mr');
+      const railProject = document.getElementById('rail-btn-project');
+      const railMr = document.getElementById('rail-btn-mr');
+
+      if (view === 'editor') {
+        editorWs.style.display = 'flex';
+        mrWs.style.display = 'none';
+        filetree.style.display = 'flex';
+        btnViewEd.classList.add('active');
+        btnViewMr.classList.remove('active');
+        railProject.classList.add('active');
+        railMr.classList.remove('active');
+      } else {
+        editorWs.style.display = 'none';
+        mrWs.style.display = 'flex';
+        filetree.style.display = 'none'; // Give full width to MR
+        btnViewMr.classList.add('active');
+        btnViewEd.classList.remove('active');
+        railMr.classList.add('active');
+        railProject.classList.remove('active');
+      }
+    }
+
+    // 3. Toggle Agent Dock Open / Close
+    function toggleAgentPanel() {
+      const dock = document.getElementById('petak-agent-dock');
+      const btn = document.getElementById('toggle-agent-dock-btn');
+      const railBtn = document.getElementById('rail-btn-agents');
+
+      if (dock.style.display === 'none') {
+        dock.style.display = 'flex';
+        btn.classList.add('active');
+        railBtn.classList.add('active');
+      } else {
+        dock.style.display = 'none';
+        btn.classList.remove('active');
+        railBtn.classList.remove('active');
+      }
+    }
+
+    // 4. Switch Agent Subtab (Chat vs Diff)
+    function switchAgentSubTab(tab) {
+      const chatView = document.getElementById('agent-chat-view');
+      const diffView = document.getElementById('agent-diff-view');
+      const btnChat = document.getElementById('btn-atab-chat');
+      const btnDiff = document.getElementById('btn-atab-diff');
+
+      if (tab === 'chat') {
+        chatView.style.display = 'flex';
+        diffView.style.display = 'none';
+        btnChat.classList.add('active');
+        btnDiff.classList.remove('active');
+      } else {
+        chatView.style.display = 'none';
+        diffView.style.display = 'flex';
+        btnDiff.classList.add('active');
+        btnChat.classList.remove('active');
+      }
+    }
+
+    // 5. Interactive Chat & Prompt Simulation
+    function handleComposerKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitComposerPrompt();
+      }
+    }
+
+    function sendQuickPrompt(text) {
+      const input = document.getElementById('composer-input');
+      input.value = text;
+      submitComposerPrompt();
+    }
+
+    function submitComposerPrompt() {
+      const input = document.getElementById('composer-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const container = document.getElementById('chat-messages-container');
+
+      // Add User Message Bubble
+      const userRow = document.createElement('div');
+      userRow.className = 'chat-msg-row user';
+      userRow.innerHTML = `
+        <div class="msg-author-tag">Anda</div>
+        <div class="msg-bubble">${escapeHtml(text)}</div>
+      `;
+      container.appendChild(userRow);
+      input.value = '';
+
+      container.scrollTop = container.scrollHeight;
+
+      // Simulated Agent Thinking & Response
+      setTimeout(() => {
+        const agentRow = document.createElement('div');
+        agentRow.className = 'chat-msg-row agent';
+        agentRow.innerHTML = `
+          <div class="msg-author-tag agent-tag">🤖 Hermes Agent</div>
+          <div class="msg-bubble">
+            Perintah dipahami. Sedang memproses usulan perubahan kode dengan batasan <em>Ponytail</em> (minimal modification).
+            <div class="tool-chip-card">
+              <div class="tool-chip-header">
+                <span>⚡ patch</span>
+                <span style="color:var(--text-muted);">lib/features/auth/biometric_service.dart</span>
+              </div>
+              <div class="tool-chip-body">Diff hunk berhasil dibuat dan menunggu persetujuan Anda.</div>
+            </div>
+          </div>
+        `;
+        container.appendChild(agentRow);
+        container.scrollTop = container.scrollHeight;
+
+        // Auto increment diff badge for fun
+        const badge = document.getElementById('agent-diff-count');
+        badge.textContent = '2';
+      }, 500);
+    }
+
+    // 6. Interactive Hunk Actions in Proposed Edits
+    let remainingHunks = 2;
+    function acceptHunk(id) {
+      const card = document.getElementById(`hunk-card-${id}`);
+      if (card) {
+        card.style.opacity = '0.4';
+        card.style.pointerEvents = 'none';
+        card.querySelector('.hunk-card-header').innerHTML += ' <span style="color:#34d399; font-weight:700;">✓ TERIMA</span>';
+        remainingHunks = Math.max(0, remainingHunks - 1);
+        updateDiffBadge();
+      }
+    }
+
+    function rejectHunk(id) {
+      const card = document.getElementById(`hunk-card-${id}`);
+      if (card) {
+        card.style.opacity = '0.4';
+        card.style.pointerEvents = 'none';
+        card.querySelector('.hunk-card-header').innerHTML += ' <span style="color:#ef4444; font-weight:700;">✕ DITOLAK</span>';
+        remainingHunks = Math.max(0, remainingHunks - 1);
+        updateDiffBadge();
+      }
+    }
+
+    function acceptAllHunks() {
+      acceptHunk(1);
+      acceptHunk(2);
+    }
+
+    function rejectAllHunks() {
+      rejectHunk(1);
+      rejectHunk(2);
+    }
+
+    function updateDiffBadge() {
+      const badge = document.getElementById('agent-diff-count');
+      badge.textContent = remainingHunks;
+      if (remainingHunks === 0) {
+        badge.style.background = '#6b7280';
+      }
+    }
+
+    // 7. Context Pills Toggles (Discipline & Permissions)
+    function toggleDiscipline(type) {
+      const pill = document.getElementById(`${type}-pill`);
+      pill.classList.toggle('active');
+    }
+
+    const permModes = ['Ask', 'Auto', 'Full ⚠️', 'Read'];
+    let permIdx = 0;
+    function cyclePermissionMode() {
+      permIdx = (permIdx + 1) % permModes.length;
+      const text = permModes[permIdx];
+      const pill = document.getElementById('perm-pill');
+      document.getElementById('perm-mode-text').textContent = text;
+
+      pill.className = 'context-pill';
+      if (text === 'Ask') pill.classList.add('perm-ask');
+      else if (text === 'Full ⚠️') pill.classList.add('perm-full');
+      else if (text === 'Auto') pill.classList.add('active');
+    }
+
+    // 8. GitLab MR Approve Action Toggle
+    let isApproved = false;
+    function toggleMrApprove() {
+      const btn = document.getElementById('btn-mr-approve');
+      const label = document.getElementById('mr-approve-label');
+      isApproved = !isApproved;
+
+      if (isApproved) {
+        btn.className = 'btn-approve-primary approved';
+        label.textContent = '✓ Disetujui (Approved)';
+      } else {
+        btn.className = 'btn-approve-primary';
+        label.textContent = 'Setujui MR (Approve)';
+      }
+    }
+
+    function toggleRunState() {
+      const btn = document.getElementById('run-btn');
+      if (btn.classList.contains('play')) {
+        btn.classList.remove('play');
+        btn.style.background = '#3b82f6';
+        btn.title = 'Running... (Click to reload)';
+      } else {
+        btn.classList.add('play');
+        btn.style.background = '';
+      }
+    }
+
+    function toggleToolDetails(card) {
+      const body = card.querySelector('.tool-chip-body');
+      body.style.display = body.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>
