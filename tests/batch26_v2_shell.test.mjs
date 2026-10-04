@@ -291,9 +291,10 @@ test('b26 UI 5: Clean Cockpit TitleBar (38px) without in-window menu bar', () =>
   assert.ok(titleBarCode.includes('Search everywhere'));
   assert.ok(titleBarCode.includes('⇧⇧'));
 
-  // Right toggle buttons (Agents, Mirror, Settings)
-  assert.ok(titleBarCode.includes('agents-toggle-btn'));
-  assert.ok(titleBarCode.includes('mirror-toggle-btn'));
+  // Right Activity Rail and Settings toggle button
+  const rightRailCode = fs.readFileSync('ui/shell/RightRail.svelte', 'utf8');
+  assert.ok(rightRailCode.includes('AI Agents'));
+  assert.ok(rightRailCode.includes('Device Mirror'));
   assert.ok(titleBarCode.includes('settings-toggle-btn'));
 
   // Interactive exclusion tests
