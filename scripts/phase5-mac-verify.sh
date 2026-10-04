@@ -19,7 +19,7 @@ echo "Host: $(hostname)"
 echo ""
 
 # 1. Environment & Pre-checks
-export PATH="${HOME}/SDK/flutter_3.35.7/bin:${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+export PATH="${HOME}/SDK/flutter_3.35.7/bin:${HOME}/.local/bin:${HOME}/.cargo/bin:/opt/homebrew/bin:${PATH}"
 export CARGO_TARGET_DIR="${TARGET_DIR}"
 cd "${REPO_DIR}"
 
@@ -95,24 +95,25 @@ fi
 # 9. In-App Execution & Screen Capture (if display available)
 echo ""
 echo "=== 9. Running In-App Real Execution & Screen Capture ==="
-pkill -x "petak-app" || true
-sleep 1
+if pgrep -x "petak-app" >/dev/null; then
+  echo "WARNING: petak-app is currently running (PID $(pgrep -x petak-app)). Skipping background test launch to avoid interrupting running session."
+else
+  export PETAK_TEST_P5=1
+  "${APP_PATH}/Contents/MacOS/petak-app" >/dev/null 2>&1 &
+  APP_PID=$!
 
-export PETAK_TEST_P5=1
-"${APP_PATH}/Contents/MacOS/petak-app" >/dev/null 2>&1 &
-APP_PID=$!
+  echo "Petak app running in background (PID: ${APP_PID}). Waiting for UI to stabilize..."
+  sleep 4
 
-echo "Petak app running in background (PID: ${APP_PID}). Waiting for UI to stabilize..."
-sleep 4
+  if [ -f "scripts/capture_petak.swift" ]; then
+    echo "Capturing Petak window to ${SCREEN_DIR}/mac-p5-real-app.png..."
+    swift scripts/capture_petak.swift "${SCREEN_DIR}/mac-p5-real-app.png" || echo "Warning: Screenshot capture failed (screen might be locked/headless)"
+  fi
 
-if [ -f "scripts/capture_petak.swift" ]; then
-  echo "Capturing Petak window to ${SCREEN_DIR}/mac-p5-real-app.png..."
-  swift scripts/capture_petak.swift "${SCREEN_DIR}/mac-p5-real-app.png" || echo "Warning: Screenshot capture failed (screen might be locked/headless)"
+  kill "${APP_PID}" 2>/dev/null || true
+  pkill -x "petak-app" || true
+  sleep 1
 fi
-
-kill "${APP_PID}" 2>/dev/null || true
-pkill -x "petak-app" || true
-sleep 1
 
 # 10. Install to /Applications/Petak.app
 echo ""

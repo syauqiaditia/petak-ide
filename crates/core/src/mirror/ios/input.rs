@@ -232,15 +232,7 @@ pub fn resolve_simtouch_path_internal(
         }
     }
 
-    // 2. Check home directory fallback (~/petak/target/release/simtouch)
-    if let Ok(home) = std::env::var("HOME") {
-        let home_target = PathBuf::from(home).join("petak/target/release/simtouch");
-        if home_target.is_file() {
-            return Some(home_target.canonicalize().unwrap_or(home_target));
-        }
-    }
-
-    // 3. Beside or inside target/release
+    // 2. Beside or inside target/release relative to manifest_dir
     let manifest = manifest_dir.unwrap_or(".");
     let target_release = Path::new(manifest).join("../../target/release/simtouch");
     if target_release.is_file() {
@@ -254,6 +246,14 @@ pub fn resolve_simtouch_path_internal(
     let rel_target = PathBuf::from("target/release/simtouch");
     if rel_target.is_file() {
         return Some(rel_target.canonicalize().unwrap_or(rel_target));
+    }
+
+    // 3. Check home directory fallback (~/petak/target/release/simtouch)
+    if let Ok(home) = std::env::var("HOME") {
+        let home_target = PathBuf::from(home).join("petak/target/release/simtouch");
+        if home_target.is_file() {
+            return Some(home_target.canonicalize().unwrap_or(home_target));
+        }
     }
 
     None
