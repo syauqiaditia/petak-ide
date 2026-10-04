@@ -929,6 +929,15 @@
       font-size: 12px;
       font-weight: 500;
       color: var(--text-primary);
+      max-width: 160px;
+    }
+
+    .project-pill-btn span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      max-width: 130px;
     }
 
     .project-pill-btn:hover {
@@ -1066,6 +1075,20 @@
       justify-content: space-between;
       padding: 8px 0;
       flex-shrink: 0;
+    }
+
+    /* Right Activity Rail (42px) ala Android Studio */
+    .ide-right-rail {
+      width: 42px;
+      background: var(--bg-base);
+      border-left: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      flex-shrink: 0;
+      z-index: 10;
     }
 
     .rail-group {
@@ -3811,8 +3834,50 @@
 
         </aside>
 
+        <!-- Project Memory Dock (Obsidian Vault Explorer) -->
+        <aside class="ide-agent-dock" id="right-memory-dock" style="display: none; width: 420px;">
+          <div class="agent-dock-header">
+            <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+              <span>📓 Project Memory (Obsidian Vault)</span>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button class="action-btn" style="font-size: 11px; padding: 2px 8px; color: #a78bfa;" onclick="alert('Membuka di aplikasi Obsidian Mac: obsidian://open?vault=vault&file=Projects/JConnect/journal.md')">
+                🔗 Buka di Obsidian
+              </button>
+              <button class="action-btn" onclick="switchRightDock(null)">✕</button>
+            </div>
+          </div>
+          <div style="display: flex; height: calc(100% - 42px);">
+            <!-- File list -->
+            <div style="width: 170px; border-right: 1px solid var(--border-subtle); overflow-y: auto; padding: 6px 4px;">
+              <div class="tree-row active" style="padding: 6px 8px; border-radius: 4px; margin-bottom: 2px; cursor: pointer;">
+                <span class="file-clean" style="font-size: 12px;">📝 journal.md</span>
+              </div>
+              <div class="tree-row" style="padding: 6px 8px; border-radius: 4px; margin-bottom: 2px; cursor: pointer;">
+                <span class="file-clean" style="font-size: 12px;">📝 conventions.md</span>
+              </div>
+              <div class="tree-row" style="padding: 6px 8px; border-radius: 4px; margin-bottom: 2px; cursor: pointer;">
+                <span class="file-clean" style="font-size: 12px;">📝 gotchas.md</span>
+              </div>
+              <div class="tree-row" style="padding: 6px 8px; border-radius: 4px; margin-bottom: 2px; cursor: pointer;">
+                <span class="file-clean" style="font-size: 12px;">📝 ekyc-v2.md</span>
+              </div>
+              <div class="tree-row" style="padding: 6px 8px; border-radius: 4px; margin-bottom: 2px; cursor: pointer;">
+                <span class="file-clean" style="font-size: 12px;">📝 networking.md</span>
+              </div>
+            </div>
+            <!-- Editor area -->
+            <div style="flex: 1; padding: 12px; overflow-y: auto; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--text-primary); background: var(--bg-surface);">
+              <h2 style="font-size: 14px; margin-bottom: 8px; color: #58a6ff;"># Journal & Notes JConnect</h2>
+              <p style="margin-bottom: 8px;">- 2026-09-25: Integrasi e-KYC v2 berjalan lancar.</p>
+              <p style="margin-bottom: 8px;">- 2026-10-04: Petak IDE V2 terhubung langsung ke Obsidian vault ini.</p>
+              <p>- Semua catatan disinkronkan real-time.</p>
+            </div>
+          </div>
+        </aside>
+
         <!-- Far Right Device Mirror (280px) -->
-        <aside class="ide-mirror-dock" id="right-mirror-dock">
+        <aside class="ide-mirror-dock" id="right-mirror-dock" style="display: none;">
           <div class="device-phone-frame">
             <div class="phone-notch"><div class="phone-camera"></div></div>
             <div class="phone-screen">
@@ -3865,6 +3930,29 @@
                 </button>
               </div>
             </div>
+          </div>
+        </aside>
+
+        <!-- Right Activity Rail (42px ala Android Studio) -->
+        <aside class="ide-right-rail">
+          <div class="rail-group">
+            <button class="rail-btn active" id="btn-right-rail-agent" title="AI Agents (⌘6)" onclick="switchRightDock('agent')">
+              <svg class="icon icon-18" viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg>
+            </button>
+            <button class="rail-btn" id="btn-right-rail-memory" title="Project Memory & Obsidian (⌘M)" onclick="switchRightDock('memory')">
+              <svg class="icon icon-18" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="10" x2="14" y2="10"></line></svg>
+            </button>
+            <button class="rail-btn" id="btn-right-rail-mirror" title="Device Mirror (⇧⌘D)" onclick="switchRightDock('mirror')">
+              <svg class="icon icon-18" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="3"></rect><path d="M10 18h4"></path></svg>
+            </button>
+            <button class="rail-btn" id="btn-right-rail-devices" title="Devices & Emulators (⌘D)" onclick="switchRightDock('devices')">
+              <svg class="icon icon-18" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="12" rx="2"></rect><path d="M12 16v4"></path></svg>
+            </button>
+          </div>
+          <div class="rail-group">
+            <button class="rail-btn" title="Pengaturan (⌘,)" onclick="setScreen('settings')">
+              <svg class="icon icon-18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
           </div>
         </aside>
 
@@ -4984,14 +5072,45 @@ Ensure null-safety check or fallback string is applied cleanly using ponytail di
       if (bd) bd.style.display = (bd.style.display === 'none') ? 'flex' : 'none';
     }
 
+    let currentRightDock = 'agent';
+    function switchRightDock(dock) {
+      const agentDock = document.getElementById('right-agent-dock');
+      const memoryDock = document.getElementById('right-memory-dock');
+      const mirrorDock = document.getElementById('right-mirror-dock');
+      const btnAgent = document.getElementById('btn-right-rail-agent');
+      const btnMemory = document.getElementById('btn-right-rail-memory');
+      const btnMirror = document.getElementById('btn-right-rail-mirror');
+      const btnDevices = document.getElementById('btn-right-rail-devices');
+
+      if (currentRightDock === dock) {
+        if (agentDock) agentDock.style.display = 'none';
+        if (memoryDock) memoryDock.style.display = 'none';
+        if (mirrorDock) mirrorDock.style.display = 'none';
+        if (btnAgent) btnAgent.classList.remove('active');
+        if (btnMemory) btnMemory.classList.remove('active');
+        if (btnMirror) btnMirror.classList.remove('active');
+        if (btnDevices) btnDevices.classList.remove('active');
+        currentRightDock = null;
+        return;
+      }
+
+      currentRightDock = dock;
+      if (agentDock) agentDock.style.display = (dock === 'agent') ? 'flex' : 'none';
+      if (memoryDock) memoryDock.style.display = (dock === 'memory') ? 'flex' : 'none';
+      if (mirrorDock) mirrorDock.style.display = (dock === 'mirror') ? 'block' : 'none';
+
+      if (btnAgent) btnAgent.classList.toggle('active', dock === 'agent');
+      if (btnMemory) btnMemory.classList.toggle('active', dock === 'memory');
+      if (btnMirror) btnMirror.classList.toggle('active', dock === 'mirror');
+      if (btnDevices) btnDevices.classList.toggle('active', dock === 'devices');
+    }
+
     function toggleAgentDock() {
-      const ad = document.getElementById('right-agent-dock');
-      if (ad) ad.style.display = (ad.style.display === 'none') ? 'flex' : 'none';
+      switchRightDock(currentRightDock === 'agent' ? null : 'agent');
     }
 
     function toggleMirrorDock() {
-      const md = document.getElementById('right-mirror-dock');
-      if (md) md.style.display = (md.style.display === 'none') ? 'flex' : 'none';
+      switchRightDock(currentRightDock === 'mirror' ? null : 'mirror');
     }
 
     // 5. Settings Category Switcher

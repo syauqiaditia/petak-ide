@@ -23,19 +23,31 @@
   import { settingsStore } from './features/settings/settingsStore.svelte';
   import SettingsModal from './features/settings/SettingsModal.svelte';
   import DashboardView from './features/dashboard/DashboardView.svelte';
+  import RightRail from './shell/RightRail.svelte';
+  import MemoryView from './features/agents/MemoryView.svelte';
 
   let GitViewComponent = $state<any>(null);
   let MrViewComponent = $state<any>(null);
   let DevicesPanelComponent = $state<any>(null);
   let DeviceMirrorPanelComponent = $state<any>(null);
   let AgentsPanelComponent = $state<any>(null);
-  let isAgentPanelOpen = $state<boolean>(
-    typeof window !== 'undefined' &&
-    (window.location.search.includes('agent=true') || window.location.search.includes('preview-agent'))
-  );
+
+  let isAgentPanelOpen = $derived(panelStore.activeRightPanel === 'agent');
 
   function toggleAgentsPanel() {
-    isAgentPanelOpen = !isAgentPanelOpen;
+    panelStore.toggleRightPanel('agent');
+  }
+
+  function toggleMemoryPanel() {
+    panelStore.toggleRightPanel('memory');
+  }
+
+  function toggleMirrorPanel() {
+    mirrorStore.toggle();
+  }
+
+  function toggleDevicesPanel() {
+    panelStore.toggleRightPanel('devices');
   }
 
   $effect(() => {
@@ -1649,48 +1661,57 @@
       {/if}
     </div>
 
-    <!-- Slot: Phase 5 Agent Panel (reserved, collapsible, immediately LEFT of Device Mirror) -->
-    {#if !showDashboard && isAgentPanelOpen}
-      {#if AgentsPanelComponent}
-        <AgentsPanelComponent onClose={() => (isAgentPanelOpen = false)} />
-      {:else}
-        <div class="agent-panel-slot">
-          <div class="agent-toolbar-top">
-            <span class="agent-title">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path>
-              </svg>
-              AI Agents
-            </span>
-            <span class="agent-badge">Loading...</span>
-            <button class="agent-close-btn" onclick={() => (isAgentPanelOpen = false)} aria-label="Close Agent Panel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12"></path>
-              </svg>
-            </button>
+    <!-- Right Tool Window Dock (Mutual Exclusivity: Agent OR Memory OR Mirror OR Devices) -->
+    {#if !showDashboard && panelStore.activeRightPanel}
+      <div class="right-panel-dock">
+        {#if panelStore.activeRightPanel === 'agent'}
+          {#if AgentsPanelComponent}
+            <AgentsPanelComponent onClose={() => panelStore.closeRightPanel()} />
+          {:else}
+            <div class="agent-panel-slot">
+              <div class="agent-toolbar-top">
+                <span class="agent-title">AI Agents</span>
+                <button class="agent-close-btn" onclick={() => panelStore.closeRightPanel()}>✕</button>
+              </div>
+            </div>
+          {/if}
+        {:else if panelStore.activeRightPanel === 'memory'}
+          <div class="right-memory-dock" style="width: 480px; display: flex; flex-direction: column; height: 100%; border-left: 1px solid #26282d; background: #121317; z-index: 5;">
+            <div style="height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #26282d; background: #16171b;">
+              <div style="font-weight: 600; font-size: 12.5px; color: #d8d9dc; display: flex; align-items: center; gap: 6px;">
+                <span>📓 Project Memory (Obsidian Vault)</span>
+              </div>
+              <button class="agent-close-btn" onclick={() => panelStore.closeRightPanel()} title="Tutup Panel Memory">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+              <MemoryView />
+            </div>
           </div>
-          <div class="agent-body-content">
-            <div class="agent-status-text">Memuat panel agen...</div>
+        {:else if panelStore.activeRightPanel === 'mirror' && DeviceMirrorPanelComponent}
+          <DeviceMirrorPanelComponent
+            onSelectDevice={() => panelStore.openRightPanel('devices')}
+            onOpenLogcat={openLogcat}
+            onClose={() => panelStore.closeRightPanel()}
+          />
+        {:else if panelStore.activeRightPanel === 'devices' && DevicesPanelComponent}
+          <div class="right-devices-panel">
+            <DevicesPanelComponent onClose={() => panelStore.closeRightPanel()} />
           </div>
-        </div>
-      {/if}
-    {:else}
-      <div class="agent-panel-slot-empty" style="display: none;" aria-hidden="true"></div>
+        {/if}
+      </div>
     {/if}
 
-    <!-- Outer Right Dock: Device Mirror Panel OR Devices Panel (single active right panel B1) -->
+    <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
     {#if !showDashboard}
-      {#if panelStore.activeRightPanel === 'mirror' && DeviceMirrorPanelComponent}
-        <DeviceMirrorPanelComponent
-          onSelectDevice={() => panelStore.openRightPanel('devices')}
-          onOpenLogcat={openLogcat}
-          onClose={() => panelStore.closeRightPanel()}
-        />
-      {:else if panelStore.activeRightPanel === 'devices' && DevicesPanelComponent}
-        <div class="right-devices-panel">
-          <DevicesPanelComponent onClose={() => panelStore.closeRightPanel()} />
-        </div>
-      {/if}
+      <RightRail
+        activeRight={panelStore.activeRightPanel}
+        onToggleAgent={toggleAgentsPanel}
+        onToggleMemory={toggleMemoryPanel}
+        onToggleMirror={toggleMirrorPanel}
+        onToggleDevices={toggleDevicesPanel}
+      />
     {/if}
   </div>
 

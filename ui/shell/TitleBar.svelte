@@ -788,6 +788,14 @@
     background: transparent;
     border: none;
     cursor: pointer;
+    max-width: 160px;
+  }
+  .project-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    max-width: 130px;
   }
   .project-btn:hover {
     background: #1e2025;
@@ -1131,6 +1139,22 @@
     border: 1px solid transparent;
     cursor: pointer;
     transition: all 0.12s ease;
+  }
+  @media (max-width: 1200px) {
+    .titlebar-action-btn span {
+      display: none;
+    }
+    .titlebar-action-btn {
+      padding: 0 7px;
+    }
+    .search-btn span:first-of-type {
+      display: none;
+    }
+    .search-btn {
+      width: auto;
+      min-width: 60px;
+      padding: 0 8px;
+    }
   }
   .titlebar-action-btn:hover {
     color: #d8d9dc;
