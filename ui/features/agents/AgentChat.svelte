@@ -5,6 +5,7 @@
   import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
+  import { skillsStore } from './skillsStore.svelte';
 
   let promptText = $state('');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
@@ -31,6 +32,7 @@
 
   onMount(() => {
     mcpStore.loadConfig();
+    skillsStore.loadSkills();
   });
 
   async function scrollToBottom() {
@@ -314,6 +316,29 @@
           title={`Model Context Protocol: ${mcpStore.activeCount} server aktif. Klik untuk buka pengaturan MCP.`}
         >
           <span>{formatMcpPillLabel(mcpStore.activeCount)}</span>
+        </button>
+
+        <!-- Custom Skills Context Pills -->
+        {#each skillsStore.skills.filter((s) => !s.isCore && s.name !== 'ponytail' && s.name !== 'caveman') as skill}
+          <button
+            type="button"
+            class="context-pill custom-skill"
+            class:active={skillsStore.activeCustomSkills.includes(skill.name)}
+            onclick={() => skillsStore.toggleSkill(skill.name)}
+            title={`Skill ${skill.name}: ${skill.description || 'Klik untuk aktifkan/nonaktifkan'}`}
+          >
+            <span>{skill.name}: {skillsStore.activeCustomSkills.includes(skill.name) ? 'ON' : 'OFF'}</span>
+          </button>
+        {/each}
+
+        <!-- Add Skill Pill -->
+        <button
+          type="button"
+          class="context-pill add-skill-pill"
+          onclick={() => settingsStore.open('agents')}
+          title="Kelola Skills di Settings"
+        >
+          <span>+ Skill</span>
         </button>
       </div>
 
@@ -749,6 +774,29 @@
     border-color: rgba(96, 165, 250, 0.4);
     background: rgba(96, 165, 250, 0.15);
     font-weight: 600;
+  }
+
+  .context-pill.custom-skill {
+    color: #8b949e;
+    border-color: rgba(245, 158, 11, 0.25);
+  }
+
+  .context-pill.custom-skill.active {
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.15);
+    font-weight: 600;
+  }
+
+  .context-pill.add-skill-pill {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.15);
+    border-style: dashed;
+  }
+
+  .context-pill.add-skill-pill:hover {
+    color: #a78bfa;
+    border-color: rgba(167, 139, 250, 0.4);
   }
 
   .permission-pill-wrap {

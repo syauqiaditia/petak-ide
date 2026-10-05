@@ -29,8 +29,10 @@ import type {
   ProviderQuotaInfo,
   LlmQuotaReport,
   MemoryItem,
+  SkillSummary,
+  Skill,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem };
+export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2252,6 +2254,34 @@ export const api = {
     }
     return invoke<Flow>('test_create_flow', { name, appId: appId || null, steps, root: root || null });
   },
+
+  async agentSkillsList(root?: string): Promise<SkillSummary[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSkillStore.list(root);
+    }
+    return invoke<SkillSummary[]>('agent_skills_list', { root: root || null });
+  },
+
+  async agentSkillGet(name: string, root?: string): Promise<Skill> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSkillStore.get(name, root);
+    }
+    return invoke<Skill>('agent_skill_get', { name, root: root || null });
+  },
+
+  async agentSkillSave(name: string, description: string, content: string, root?: string): Promise<Skill> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSkillStore.save(name, description, content, root);
+    }
+    return invoke<Skill>('agent_skill_save', { name, description, content, root: root || null });
+  },
+
+  async agentSkillDelete(name: string, root?: string): Promise<boolean> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSkillStore.delete(name, root);
+    }
+    return invoke<boolean>('agent_skill_delete', { name, root: root || null });
+  },
 };
 
 const mockFlowStore = {
@@ -2362,5 +2392,73 @@ const mockMemoryStore = {
       const title = filename.replace(/\.md$/i, '').replace(/[-_]/g, ' ');
       this.items.push({ filename, title, size, updatedAt });
     }
+  },
+};
+
+const mockSkillStore = {
+  skills: [
+    {
+      name: 'ponytail',
+      description: 'Forces the laziest solution that actually works, simplest, shortest, minimal.',
+      content: 'Forces the laziest solution that actually works, simplest, shortest, minimal diff.',
+      isCore: true,
+      scope: 'system',
+      path: '~/.hermes/skills/ponytail/SKILL.md',
+    },
+    {
+      name: 'caveman',
+      description: 'Terse technical communication, eliminates conversational filler.',
+      content: 'Terse technical communication, eliminates conversational filler and pleasantries.',
+      isCore: true,
+      scope: 'system',
+      path: '~/.hermes/skills/caveman/SKILL.md',
+    },
+  ] as Skill[],
+
+  list(_root?: string): SkillSummary[] {
+    return this.skills.map(({ name, description, isCore, scope, path }) => ({
+      name,
+      description,
+      isCore,
+      scope,
+      path,
+    }));
+  },
+
+  get(name: string, _root?: string): Skill {
+    const found = this.skills.find((s) => s.name === name);
+    if (!found) {
+      throw new Error(`Skill not found: ${name}`);
+    }
+    return JSON.parse(JSON.stringify(found));
+  },
+
+  save(name: string, description: string, content: string, _root?: string): Skill {
+    const existing = this.skills.find((s) => s.name === name);
+    if (existing) {
+      existing.description = description;
+      existing.content = content;
+      return JSON.parse(JSON.stringify(existing));
+    }
+    const newSkill: Skill = {
+      name,
+      description,
+      content,
+      isCore: false,
+      scope: 'project',
+      path: `.petak/skills/${name}/SKILL.md`,
+    };
+    this.skills.push(newSkill);
+    return JSON.parse(JSON.stringify(newSkill));
+  },
+
+  delete(name: string, _root?: string): boolean {
+    const idx = this.skills.findIndex((s) => s.name === name);
+    if (idx === -1) return false;
+    if (this.skills[idx].isCore || name === 'ponytail' || name === 'caveman') {
+      throw new Error(`Cannot delete core skill: ${name}`);
+    }
+    this.skills.splice(idx, 1);
+    return true;
   },
 };
