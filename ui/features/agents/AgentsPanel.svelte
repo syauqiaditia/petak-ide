@@ -39,12 +39,12 @@
 
   const HERMES_PROFILES: HermesBotProfile[] = [
     { id: 'default', name: 'default', label: '🤖 Petak Agent', icon: '🤖', role: 'Asisten Utama (Coding & Project)', defaultModel: 'ag/gemini-3.8-flash-high' },
-    { id: 'manager', name: 'manager', label: '👑 Manager', icon: '👑', role: 'Planner & Task Orchestrator', defaultModel: 'claude-3-7-sonnet' },
-    { id: 'techlead', name: 'techlead', label: '🧠 Techlead', icon: '🧠', role: 'System Architect & Core Modules', defaultModel: 'claude-3-7-sonnet' },
-    { id: 'senior', name: 'senior', label: '⚡ Senior', icon: '⚡', role: 'Fullstack Flutter & Rust Implementer', defaultModel: 'claude-3-7-sonnet' },
-    { id: 'senior2', name: 'senior2', label: '⚡ Senior2', icon: '⚡', role: 'Toolchains, Language Servers & Integrations', defaultModel: 'gemini-2.5-pro' },
-    { id: 'reviewer', name: 'reviewer', label: '🔍 Reviewer', icon: '🔍', role: 'QA, Code Reviewer & Security Auditing', defaultModel: 'gemini-2.5-pro' },
-    { id: 'designer', name: 'designer', label: '🎨 Designer', icon: '🎨', role: 'UI/UX Design System & Prototypes', defaultModel: 'claude-3-7-sonnet' },
+    { id: 'manager', name: 'manager', label: '👑 Manager', icon: '👑', role: 'Planner & Task Orchestrator', defaultModel: 'ag/gemini-3.8-flash-high' },
+    { id: 'techlead', name: 'techlead', label: '🧠 Techlead', icon: '🧠', role: 'System Architect & Core Modules', defaultModel: 'ag/gemini-3.8-flash-high' },
+    { id: 'senior', name: 'senior', label: '⚡ Senior', icon: '⚡', role: 'Fullstack Flutter & Rust Implementer', defaultModel: 'ag/gemini-3.8-flash-high' },
+    { id: 'senior2', name: 'senior2', label: '⚡ Senior2', icon: '⚡', role: 'Toolchains, Language Servers & Integrations', defaultModel: 'ag/gemini-3.8-flash-high' },
+    { id: 'reviewer', name: 'reviewer', label: '🔍 Reviewer', icon: '🔍', role: 'QA, Code Reviewer & Security Auditing', defaultModel: 'ag/gemini-3.8-flash-high' },
+    { id: 'designer', name: 'designer', label: '🎨 Designer', icon: '🎨', role: 'UI/UX Design System & Prototypes', defaultModel: 'ag/gemini-3.8-flash-high' },
   ];
 
   let activeSlot = $derived(agentsStore.activeSlot);

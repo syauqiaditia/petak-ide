@@ -340,12 +340,12 @@
   }
 
   const HERMES_DETECTION_FALLBACK = [
-    { name: 'manager', icon: '👑', role: 'Planner & Task Orchestrator', model: 'Claude 3.7 Sonnet', status: 'ready' },
-    { name: 'techlead', icon: '🧠', role: 'System Architect & Core Modules', model: 'Claude 3.7 Sonnet', status: 'ready' },
-    { name: 'senior', icon: '⚡', role: 'Fullstack Flutter & Rust Implementer', model: 'Claude 3.7 Sonnet', status: 'busy' },
-    { name: 'senior2', icon: '⚡', role: 'Toolchains, Language Servers & Integrations', model: 'Gemini 2.5 Pro', status: 'ready' },
-    { name: 'reviewer', icon: '🔍', role: 'QA, Code Reviewer & Security Auditing', model: 'Gemini 2.5 Pro', status: 'ready' },
-    { name: 'designer', icon: '🎨', role: 'UI/UX Design System & Prototypes', model: 'Claude 3.7 Sonnet', status: 'ready' },
+    { name: 'manager', icon: '👑', role: 'Planner & Task Orchestrator', model: 'Gemini 3.8 Flash High', status: 'ready' },
+    { name: 'techlead', icon: '🧠', role: 'System Architect & Core Modules', model: 'Gemini 3.8 Flash High', status: 'ready' },
+    { name: 'senior', icon: '⚡', role: 'Fullstack Flutter & Rust Implementer', model: 'Gemini 3.8 Flash High', status: 'busy' },
+    { name: 'senior2', icon: '⚡', role: 'Toolchains, Language Servers & Integrations', model: 'Gemini 3.8 Flash High', status: 'ready' },
+    { name: 'reviewer', icon: '🔍', role: 'QA, Code Reviewer & Security Auditing', model: 'Gemini 3.8 Flash High', status: 'ready' },
+    { name: 'designer', icon: '🎨', role: 'UI/UX Design System & Prototypes', model: 'Gemini 3.8 Flash High', status: 'ready' },
   ];
 
   onMount(() => {
