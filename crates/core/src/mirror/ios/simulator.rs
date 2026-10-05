@@ -360,10 +360,12 @@ pub fn resolve_swift_helper_path_internal(
         }
     }
 
-    // 3. Check binary in /tmp or standard cache
-    let bin_path = PathBuf::from("/mnt/storage/uqi-cache/bin/petak-ios-capture");
-    if bin_path.is_file() {
-        return bin_path;
+    // 3. Check data dir cache
+    if let Some(data) = dirs::data_dir() {
+        let bin_path = data.join("Petak").join("bin").join("petak-ios-capture");
+        if bin_path.is_file() {
+            return bin_path;
+        }
     }
 
     // Default to src_path

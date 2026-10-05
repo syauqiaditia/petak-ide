@@ -10,15 +10,15 @@ use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolchainConfig {
-    #[serde(alias = "flutterSdk", default)]
+    #[serde(rename = "flutterSdk", alias = "flutter_sdk", default)]
     pub flutter_sdk: Option<String>,
-    #[serde(alias = "androidSdk", default)]
+    #[serde(rename = "androidSdk", alias = "android_sdk", default)]
     pub android_sdk: Option<String>,
-    #[serde(alias = "kotlinLanguageServer", default)]
+    #[serde(rename = "kotlinLanguageServer", alias = "kotlin_language_server", default)]
     pub kotlin_language_server: Option<String>,
-    #[serde(rename = "bottom_panel_height", alias = "bottomPanelHeight", default)]
+    #[serde(rename = "bottomPanelHeight", alias = "bottom_panel_height", default)]
     pub bottom_panel_height: Option<u32>,
-    #[serde(rename = "gitlab_url", alias = "gitlabUrl", default)]
+    #[serde(rename = "gitlabUrl", alias = "gitlab_url", default)]
     pub gitlab_url: Option<String>,
     #[serde(default)]
     pub theme: Option<String>,
@@ -118,19 +118,9 @@ pub fn apply_env_for_root(cmd: &mut Command, root: Option<&Path>) {
 
     if let Ok(g) = std::env::var("GRADLE_USER_HOME") {
         cmd.env("GRADLE_USER_HOME", g);
-    } else {
-        let default_gradle = Path::new("/mnt/storage/uqi-cache/gradle");
-        if default_gradle.exists() {
-            cmd.env("GRADLE_USER_HOME", default_gradle);
-        }
     }
     if let Ok(p) = std::env::var("PUB_CACHE") {
         cmd.env("PUB_CACHE", p);
-    } else {
-        let default_pub = Path::new("/mnt/storage/uqi-cache/pub-cache");
-        if default_pub.exists() {
-            cmd.env("PUB_CACHE", default_pub);
-        }
     }
 }
 
@@ -593,16 +583,6 @@ pub fn compute_effective_path_with(
         }
     }
 
-    // Host storage locations (server Linux parity)
-    let server_flutter = Path::new("/mnt/storage/flutter-uqi/bin");
-    if server_flutter.exists() {
-        candidate_dirs.push(server_flutter.to_path_buf());
-        let dart = server_flutter.join("cache").join("dart-sdk").join("bin");
-        if dart.exists() {
-            candidate_dirs.push(dart);
-        }
-    }
-
     // 4. Android SDK locations
     collect_android_paths(home, cfg, &mut candidate_dirs);
 
@@ -737,7 +717,6 @@ fn collect_android_paths(home: Option<&Path>, cfg: &ToolchainConfig, dirs: &mut 
         candidate_roots.push(h.join("Library").join("Android").join("sdk"));
         candidate_roots.push(h.join("Android").join("Sdk"));
     }
-    candidate_roots.push(PathBuf::from("/mnt/storage/caches/android-sdk-uqi"));
 
     for root in candidate_roots {
         if root.exists() {
@@ -809,15 +788,6 @@ fn collect_kotlin_ls_paths(home: Option<&Path>, dirs: &mut Vec<PathBuf>) {
             if p.exists() {
                 dirs.push(p.clone());
             }
-        }
-    }
-
-    for p in &[
-        PathBuf::from("/mnt/storage/uqi-cache/lsp/server/bin"),
-        PathBuf::from("/mnt/storage/uqi-cache/lsp/server/server/bin"),
-    ] {
-        if p.exists() {
-            dirs.push(p.clone());
         }
     }
 
@@ -941,9 +911,16 @@ pub fn resolve_flutter(project_root: Option<&Path>) -> Option<PathBuf> {
 
     let config = load_config();
     if let Some(ref f_sdk) = config.flutter_sdk {
-        let p = Path::new(f_sdk).join("bin").join("flutter");
+        let sdk = Path::new(f_sdk);
+        // Accept both root dir (~/SDK/flutter_3.x) and bin dir (~/SDK/flutter_3.x/bin)
+        let p = sdk.join("bin").join("flutter");
         if p.is_file() {
             return Some(p);
+        }
+        // Maybe user saved the bin/ path directly
+        let p2 = sdk.join("flutter");
+        if p2.is_file() {
+            return Some(p2);
         }
     }
 
@@ -1057,13 +1034,13 @@ pub fn resolve_kotlin_ls() -> Option<PathBuf> {
         }
     }
 
-    // Check server cache / fallback directories
-    for s_dir in &[
-        Path::new("/mnt/storage/uqi-cache/lsp"),
-        Path::new("/mnt/storage/uqi-cache/lsp/server"),
-    ] {
-        if let Some(p) = resolve_kotlin_ls_in_dir(s_dir) {
-            return Some(p);
+    // Check HOME-relative cache directories
+    if let Some(home) = dirs::home_dir() {
+        for rel in &["lsp", ".local/share/kotlin-language-server"] {
+            let d = home.join(rel);
+            if let Some(p) = resolve_kotlin_ls_in_dir(&d) {
+                return Some(p);
+            }
         }
     }
 
@@ -1140,11 +1117,6 @@ pub fn resolve_android_home() -> Option<String> {
         return Some(linux.to_string_lossy().to_string());
     }
 
-    let server = Path::new("/mnt/storage/caches/android-sdk-uqi");
-    if server.exists() {
-        return Some(server.to_string_lossy().to_string());
-    }
-
     None
 }
 
@@ -1152,7 +1124,19 @@ pub fn resolve_android_home() -> Option<String> {
 pub fn resolve_flutter_root(project_root: Option<&Path>) -> Option<String> {
     let config = load_config();
     if let Some(ref f_sdk) = config.flutter_sdk {
-        if Path::new(f_sdk).exists() {
+        let p = Path::new(f_sdk);
+        // If user saved root dir (has bin/flutter inside)
+        if p.join("bin").join("flutter").is_file() {
+            return Some(f_sdk.clone());
+        }
+        // If user saved bin/ dir, go up one level
+        if p.join("flutter").is_file() {
+            if let Some(parent) = p.parent() {
+                return Some(parent.to_string_lossy().to_string());
+            }
+        }
+        // Fallback: if dir exists, use as-is
+        if p.exists() {
             return Some(f_sdk.clone());
         }
     }
@@ -1728,12 +1712,20 @@ mod tests {
         assert_eq!(cfg.flutter_sdk.as_deref(), Some("/path/to/flutter"));
 
         let serialized = serde_json::to_string(&cfg).unwrap();
-        assert!(serialized.contains("bottom_panel_height"));
+        // Now serializes as camelCase
+        assert!(serialized.contains("bottomPanelHeight"));
+        assert!(serialized.contains("flutterSdk"));
 
         // Test camelCase alias roundtrip
         let json_camel = r#"{"bottomPanelHeight": 320}"#;
         let cfg_camel: ToolchainConfig = serde_json::from_str(json_camel).unwrap();
         assert_eq!(cfg_camel.bottom_panel_height, Some(320));
+
+        // Test snake_case alias still works for deserialization
+        let json_snake = r#"{"flutter_sdk": "/x", "android_sdk": "/y"}"#;
+        let cfg_snake: ToolchainConfig = serde_json::from_str(json_snake).unwrap();
+        assert_eq!(cfg_snake.flutter_sdk.as_deref(), Some("/x"));
+        assert_eq!(cfg_snake.android_sdk.as_deref(), Some("/y"));
     }
 
     #[test]

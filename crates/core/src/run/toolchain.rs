@@ -98,6 +98,23 @@ fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Optio
                 candidate_cmds.push(p.to_string_lossy().to_string());
             }
         }
+        // Scan ~/SDK/flutter_* versioned directories
+        let sdk_dir = h.join("SDK");
+        if sdk_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&sdk_dir) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name();
+                    if let Some(n) = name.to_str() {
+                        if n.starts_with("flutter") {
+                            let f = entry.path().join("bin").join("flutter");
+                            if f.is_file() {
+                                candidate_cmds.push(f.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     for sys in &[
