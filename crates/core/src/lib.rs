@@ -25,3 +25,9 @@ pub use agent::mcp::{
     active_acp_servers, load_mcp_config, resolve_mcp_path, save_mcp_config, test_mcp_server,
     McpConfig, McpServerConfig, McpTestResult,
 };
+
+pub use run::flow;
+pub use run::flow::{
+    cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, save_flow, validate_flow_id,
+    Flow, FlowRunResult, FlowStep, FlowStepStatus, FlowStepStatusKind,
+};
