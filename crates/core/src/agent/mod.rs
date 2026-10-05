@@ -5,6 +5,7 @@ pub mod memory;
 pub mod perm;
 pub mod proposal;
 pub mod quota;
+pub mod skills;
 pub mod slot;
 pub mod team;
 pub mod usage;
@@ -34,6 +35,10 @@ pub use proposal::{apply_hunk_to_text, compute_hunks, Proposal, ProposalBuffer, 
 pub use quota::{
     check_proxy_online, default_quota_report, probe_llm_quota, probe_llm_quota_internal,
     LlmQuotaReport, ProviderQuotaInfo,
+};
+pub use skills::{
+    delete_skill, is_core_skill, list_skills, read_skill, save_skill, scaffold_skills_dir,
+    validate_skill_name, Skill, SkillMetadata, SkillSummary, CORE_SKILLS,
 };
 pub use slot::{
     ChatMessage, RingBuffer, Slot, SlotCapabilities, SlotConfig, SlotEvent, SlotManager,
