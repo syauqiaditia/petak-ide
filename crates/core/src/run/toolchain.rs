@@ -33,6 +33,13 @@ pub struct Toolchain {
 
 /// Detect installed developer tools and SDKs.
 pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
+    let dummy_root = PathBuf::from(".");
+    let root = if root.as_os_str().is_empty() {
+        &dummy_root
+    } else {
+        root
+    };
+
     let fvm = root.join(".fvmrc").exists() || root.join(".fvm/fvm_config.json").exists();
 
     // 1. Flutter & Dart
@@ -75,6 +82,40 @@ pub fn detect(root: &Path, exec: &dyn Exec) -> Toolchain {
     }
 }
 
+/// Parse the first JSON object from a string that may contain leading/trailing non-JSON text (e.g. Flutter analytics banners).
+fn parse_first_json_object(s: &str) -> Option<serde_json::Value> {
+    let start = s.find('{')?;
+    let mut depth = 0;
+    let mut in_string = false;
+    let mut escape = false;
+    for (i, ch) in s[start..].char_indices() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        if ch == '\\' && in_string {
+            escape = true;
+            continue;
+        }
+        if ch == '"' {
+            in_string = !in_string;
+            continue;
+        }
+        if !in_string {
+            if ch == '{' {
+                depth += 1;
+            } else if ch == '}' {
+                depth -= 1;
+                if depth == 0 {
+                    let json_slice = &s[start..start + i + 1];
+                    return serde_json::from_str(json_slice).ok();
+                }
+            }
+        }
+    }
+    None
+}
+
 fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Option<Tool>) {
     let mut candidate_cmds = Vec::new();
 
@@ -86,6 +127,31 @@ fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Optio
     // Standard macOS / user paths
     let home = std::env::var_os("HOME").map(PathBuf::from);
     if let Some(ref h) = home {
+        // Scan ~/SDK/flutter_* versioned directories sorted descending (newest first)
+        let sdk_dir = h.join("SDK");
+        if sdk_dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&sdk_dir) {
+                let mut versioned: Vec<(PathBuf, String)> = Vec::new();
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with("flutter") {
+                        versioned.push((entry.path(), name));
+                    }
+                }
+                versioned.sort_by(|a, b| {
+                    let key_a = crate::toolchain::parse_version_key(&a.1);
+                    let key_b = crate::toolchain::parse_version_key(&b.1);
+                    key_b.cmp(&key_a).then_with(|| b.1.cmp(&a.1))
+                });
+                for (path, _) in versioned {
+                    let f = path.join("bin").join("flutter");
+                    if f.is_file() {
+                        candidate_cmds.push(f.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+
         for sub in &[
             "SDK/flutter/bin/flutter",
             ".flutter/bin/flutter",
@@ -96,23 +162,6 @@ fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Optio
             let p = h.join(sub);
             if p.is_file() {
                 candidate_cmds.push(p.to_string_lossy().to_string());
-            }
-        }
-        // Scan ~/SDK/flutter_* versioned directories
-        let sdk_dir = h.join("SDK");
-        if sdk_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&sdk_dir) {
-                for entry in entries.flatten() {
-                    let name = entry.file_name();
-                    if let Some(n) = name.to_str() {
-                        if n.starts_with("flutter") {
-                            let f = entry.path().join("bin").join("flutter");
-                            if f.is_file() {
-                                candidate_cmds.push(f.to_string_lossy().to_string());
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -127,28 +176,97 @@ fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Optio
         }
     }
 
-    let mut output = None;
     for cmd in &candidate_cmds {
-        match exec.run(root, cmd, &["--version", "--machine"], &[], None) {
-            Ok(out) if out.status.success() => {
-                output = Some(out);
-                break;
-            }
-            _ => continue,
+        let Ok(out) = exec.run(root, cmd, &["--version", "--machine"], &[], None) else {
+            continue;
+        };
+        if !out.status.success() {
+            continue;
         }
+
+        let stdout_str = String::from_utf8_lossy(&out.stdout);
+        let v: serde_json::Value = match parse_first_json_object(&stdout_str)
+            .or_else(|| serde_json::from_slice(&out.stdout).ok())
+        {
+            Some(val) => val,
+            None => continue,
+        };
+
+        let flutter_version = v
+            .get("flutterVersion")
+            .or_else(|| v.get("frameworkVersion"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let dart_version = v
+            .get("dartSdkVersion")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let flutter_root = v
+            .get("flutterRoot")
+            .and_then(|v| v.as_str());
+
+        let flutter_path = flutter_root
+            .map(|r| format!("{}/bin/flutter", r))
+            .unwrap_or_else(|| cmd.clone());
+
+        let dart_path = flutter_root
+            .map(|r| format!("{}/bin/dart", r))
+            .unwrap_or_else(|| "dart".to_string());
+
+        let flutter_tool = Tool {
+            path: flutter_path,
+            version: flutter_version,
+        };
+
+        let dart_tool = Tool {
+            path: dart_path,
+            version: dart_version,
+        };
+
+        return (Some(flutter_tool), Some(dart_tool));
     }
 
     // Fallback: if GUI PATH minimal, probe shell which flutter
-    if output.is_none() {
-        let curr_path = std::env::var("PATH").unwrap_or_default();
-        if crate::toolchain::is_minimal_path(&curr_path) {
-            for probed in crate::toolchain::probe_shell_which(std::time::Duration::from_secs(3)) {
-                if probed.file_name().and_then(|n| n.to_str()) == Some("flutter") {
-                    let cmd = probed.to_string_lossy().to_string();
-                    if let Ok(out) = exec.run(root, &cmd, &["--version", "--machine"], &[], None) {
-                        if out.status.success() {
-                            output = Some(out);
-                            break;
+    let curr_path = std::env::var("PATH").unwrap_or_default();
+    if crate::toolchain::is_minimal_path(&curr_path) {
+        for probed in crate::toolchain::probe_shell_which(std::time::Duration::from_secs(3)) {
+            if probed.file_name().and_then(|n| n.to_str()) == Some("flutter") {
+                let cmd = probed.to_string_lossy().to_string();
+                if let Ok(out) = exec.run(root, &cmd, &["--version", "--machine"], &[], None) {
+                    if out.status.success() {
+                        let stdout_str = String::from_utf8_lossy(&out.stdout);
+                        if let Some(v) = parse_first_json_object(&stdout_str)
+                            .or_else(|| serde_json::from_slice(&out.stdout).ok())
+                        {
+                            let flutter_version = v
+                                .get("flutterVersion")
+                                .or_else(|| v.get("frameworkVersion"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+
+                            let dart_version = v
+                                .get("dartSdkVersion")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+
+                            let flutter_root = v
+                                .get("flutterRoot")
+                                .and_then(|v| v.as_str());
+
+                            let flutter_path = flutter_root
+                                .map(|r| format!("{}/bin/flutter", r))
+                                .unwrap_or_else(|| cmd.clone());
+
+                            let dart_path = flutter_root
+                                .map(|r| format!("{}/bin/dart", r))
+                                .unwrap_or_else(|| "dart".to_string());
+
+                            return (
+                                Some(Tool { path: flutter_path, version: flutter_version }),
+                                Some(Tool { path: dart_path, version: dart_version }),
+                            );
                         }
                     }
                 }
@@ -156,50 +274,7 @@ fn detect_flutter_and_dart(root: &Path, exec: &dyn Exec) -> (Option<Tool>, Optio
         }
     }
 
-    let output = match output {
-        Some(out) => out,
-        None => return (None, None),
-    };
-
-    let v: serde_json::Value = match serde_json::from_slice(&output.stdout) {
-        Ok(val) => val,
-        Err(_) => return (None, None),
-    };
-
-    let flutter_version = v
-        .get("flutterVersion")
-        .or_else(|| v.get("frameworkVersion"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let dart_version = v
-        .get("dartSdkVersion")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    let flutter_root = v
-        .get("flutterRoot")
-        .and_then(|v| v.as_str());
-
-    let flutter_path = flutter_root
-        .map(|r| format!("{}/bin/flutter", r))
-        .unwrap_or_else(|| "flutter".to_string());
-
-    let dart_path = flutter_root
-        .map(|r| format!("{}/bin/dart", r))
-        .unwrap_or_else(|| "dart".to_string());
-
-    let flutter_tool = Tool {
-        path: flutter_path,
-        version: flutter_version,
-    };
-
-    let dart_tool = Tool {
-        path: dart_path,
-        version: dart_version,
-    };
-
-    (Some(flutter_tool), Some(dart_tool))
+    (None, None)
 }
 
 fn detect_android(root: &Path, exec: &dyn Exec) -> (Option<String>, Option<Tool>, Option<Tool>) {
@@ -636,5 +711,47 @@ mod tests {
         // When neither jar nor executable exists
         let missing = detect_scrcpy_internal(Path::new("."), &fake, None, None);
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_parse_first_json_object_with_trailing_banner() {
+        let raw = r#"{"frameworkVersion":"2.10.5","dartSdkVersion":"2.16.2","flutterRoot":"/custom/flutter"}
+
+  ╔════════════════════════════════════════════════════════════════════════════╗
+  ║                 Welcome to Flutter! - https://flutter.dev                  ║
+  ╚════════════════════════════════════════════════════════════════════════════╝"#;
+        let val = parse_first_json_object(raw).expect("should parse JSON despite banner");
+        assert_eq!(val.get("frameworkVersion").and_then(|v| v.as_str()), Some("2.10.5"));
+        assert_eq!(val.get("dartSdkVersion").and_then(|v| v.as_str()), Some("2.16.2"));
+    }
+
+    #[test]
+    fn test_detect_with_empty_root_does_not_fail() {
+        let mut responses = HashMap::new();
+        responses.insert(
+            "flutter --version --machine".to_string(),
+            make_output(
+                0,
+                b"{\"flutterVersion\":\"3.35.7\",\"dartSdkVersion\":\"3.9.2\",\"flutterRoot\":\"/custom/flutter\"}\n\nWelcome banner",
+                b"",
+            ),
+        );
+        responses.insert(
+            "java -version".to_string(),
+            make_output(0, b"", b"openjdk version \"19.0.2\" 2023-01-17\n"),
+        );
+
+        let fake = FakeToolchainExec {
+            responses: Mutex::new(responses),
+        };
+
+        // When root is empty string, detect must not fail with ENOENT
+        let tc = detect(Path::new(""), &fake);
+        assert!(tc.flutter.is_some());
+        assert_eq!(tc.flutter.unwrap().version, Some("3.35.7".to_string()));
+        assert!(tc.dart.is_some());
+        assert_eq!(tc.dart.unwrap().version, Some("3.9.2".to_string()));
+        assert!(tc.java.is_some());
+        assert_eq!(tc.java.unwrap().version, Some("19.0.2".to_string()));
     }
 }

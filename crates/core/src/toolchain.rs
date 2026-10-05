@@ -823,7 +823,7 @@ fn dedup_and_join_paths(paths: &[String]) -> String {
 }
 
 /// Extract numeric version components from a directory or version name (e.g. "flutter_3.35.7" -> [3, 35, 7]).
-fn parse_version_key(name: &str) -> Vec<u64> {
+pub(crate) fn parse_version_key(name: &str) -> Vec<u64> {
     let mut nums = Vec::new();
     let mut current_num = None;
     for ch in name.chars() {

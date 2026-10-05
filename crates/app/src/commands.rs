@@ -1665,7 +1665,13 @@ pub async fn toolchain_detect(root: String) -> Result<petak_core::run::Toolchain
     tauri::async_runtime::spawn_blocking(move || {
         petak_core::toolchain::invalidate_effective_path();
         let exec = petak_core::exec::SystemExec;
-        Ok(petak_core::run::detect(std::path::Path::new(&root), &exec))
+        let root_trimmed = root.trim();
+        let root_path = if root_trimmed.is_empty() {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else {
+            std::path::PathBuf::from(root_trimmed)
+        };
+        Ok(petak_core::run::detect(&root_path, &exec))
     })
     .await
     .map_err(|e| e.to_string())?

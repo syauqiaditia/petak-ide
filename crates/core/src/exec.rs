@@ -190,7 +190,10 @@ impl Exec for SystemExec {
         use std::process::{Command, Stdio};
 
         let mut cmd = Command::new(program);
-        cmd.current_dir(cwd).args(args);
+        if !cwd.as_os_str().is_empty() && cwd.is_dir() {
+            cmd.current_dir(cwd);
+        }
+        cmd.args(args);
         crate::toolchain::apply_env(&mut cmd);
         for (k, v) in env {
             cmd.env(k, v);
