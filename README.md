@@ -175,7 +175,7 @@ Ensure the following base tools are installed on your build machine:
 
 ### 2. Clone the Repository
 ```bash
-git clone https://github.com/your-username/petak.git
+git clone https://github.com/syauqiaditia/petak-ide.git
 cd petak
 ```
 

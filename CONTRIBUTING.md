@@ -14,7 +14,7 @@ Thank you for your interest in contributing to **Petak IDE**! Petak is built wit
 ### 2. Quickstart
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/petak.git
+git clone https://github.com/syauqiaditia/petak-ide.git
 cd petak
 
 # Run the interactive onboarding wizard
