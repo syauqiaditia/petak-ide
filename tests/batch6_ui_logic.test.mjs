@@ -38,6 +38,7 @@ const STORE_DEFS = {
   tabsManager: path.resolve(uiRoot, 'features/editor/tabs.svelte.ts'),
   settingsStore: path.resolve(uiRoot, 'features/settings/settingsStore.svelte.ts'),
   keymapStore: path.resolve(uiRoot, 'features/settings/keymapStore.svelte.ts'),
+  mcpStore: path.resolve(uiRoot, 'features/settings/mcpStore.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {

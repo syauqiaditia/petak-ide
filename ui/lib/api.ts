@@ -467,6 +467,25 @@ export interface GradleDaemonPayload {
   running: boolean;
 }
 
+export interface McpServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  disabled?: boolean;
+  autoApprove?: string[];
+}
+
+export interface McpConfig {
+  mcpServers: Record<string, McpServerConfig>;
+}
+
+export interface McpTestResult {
+  ok: boolean;
+  latencyMs?: number;
+  serverInfo?: string;
+  error?: string;
+}
+
 import type {
   GitRepoStatus,
   GitDiffOpts,
@@ -2140,6 +2159,54 @@ export const api = {
       return;
     }
     return invoke('agent_open_in_obsidian', { filename: filename || null });
+  },
+
+  async agentMcpGetConfig(root?: string): Promise<McpConfig> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockMcpStore.getConfig(root);
+    }
+    return invoke<McpConfig>('agent_mcp_get_config', { root: root || null });
+  },
+
+  async agentMcpSaveConfig(config: McpConfig, root?: string): Promise<void> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      mockMcpStore.saveConfig(config, root);
+      return;
+    }
+    return invoke('agent_mcp_save_config', { root: root || null, config });
+  },
+
+  async agentMcpTestServer(command: string, args: string[], env: Record<string, string>): Promise<McpTestResult> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockMcpStore.testServer(command, args, env);
+    }
+    return invoke<McpTestResult>('agent_mcp_test_server', { command, args, env });
+  },
+};
+
+const mockMcpStore = {
+  config: {
+    mcpServers: {
+      filesystem: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+        env: {},
+        disabled: false,
+        autoApprove: ['read_file', 'list_directory'],
+      },
+    },
+  } as McpConfig,
+  getConfig(_root?: string): McpConfig {
+    return JSON.parse(JSON.stringify(this.config));
+  },
+  saveConfig(config: McpConfig, _root?: string): void {
+    this.config = JSON.parse(JSON.stringify(config || { mcpServers: {} }));
+  },
+  async testServer(command: string, _args: string[], _env: Record<string, string>): Promise<McpTestResult> {
+    if (!command || command.includes('fail') || command.includes('error')) {
+      return { ok: false, error: 'Failed to spawn MCP server process' };
+    }
+    return { ok: true, latencyMs: 14, serverInfo: 'Mock MCP Server v1.0.0' };
   },
 };
 

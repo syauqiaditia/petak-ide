@@ -3,6 +3,8 @@
   import { agentsStore } from './agents.svelte';
   import { truncateToolOutput } from './agentsLogic';
   import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
+  import { settingsStore } from '../settings/settingsStore.svelte';
+  import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
 
   let promptText = $state('');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
@@ -25,6 +27,10 @@
     if (messages.length || agentsStore.streamingContent) {
       scrollToBottom();
     }
+  });
+
+  onMount(() => {
+    mcpStore.loadConfig();
   });
 
   async function scrollToBottom() {
@@ -297,6 +303,17 @@
           title="Self-Improve: Injeksi memory Obsidian & auto-catat lessons learned"
         >
           <span>Self-Improve: {agentsStore.isSelfImproveActive ? 'ON' : 'OFF'}</span>
+        </button>
+
+        <!-- MCP Context Pill: MCP (N) or MCP (Off) -->
+        <button
+          type="button"
+          class="context-pill mcp"
+          class:active={mcpStore.activeCount > 0}
+          onclick={() => settingsStore.open('mcp')}
+          title={`Model Context Protocol: ${mcpStore.activeCount} server aktif. Klik untuk buka pengaturan MCP.`}
+        >
+          <span>{formatMcpPillLabel(mcpStore.activeCount)}</span>
         </button>
       </div>
 
@@ -719,6 +736,18 @@
     color: #34d399;
     border-color: rgba(52, 211, 153, 0.4);
     background: rgba(52, 211, 153, 0.15);
+    font-weight: 600;
+  }
+
+  .context-pill.mcp {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .context-pill.mcp.active {
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.4);
+    background: rgba(96, 165, 250, 0.15);
     font-weight: 600;
   }
 

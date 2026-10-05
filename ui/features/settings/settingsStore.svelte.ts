@@ -46,7 +46,7 @@ async function syncFromBackendIfEmpty() {
 class SettingsStore {
   isOpen = $state(false);
   activeCategory = $state<
-    'general' | 'editor' | 'keymap' | 'agents' | 'toolchains' | 'git' | 'accounts' | 'devices' | 'appearance' | 'about'
+    'general' | 'editor' | 'keymap' | 'agents' | 'toolchains' | 'git' | 'accounts' | 'devices' | 'appearance' | 'about' | 'mcp'
   >('general');
   theme = $state<'dark' | 'light'>(
     typeof localStorage !== 'undefined' && localStorage.getItem('petak.theme') === 'light'
@@ -156,6 +156,7 @@ class SettingsStore {
       | 'devices'
       | 'appearance'
       | 'about'
+      | 'mcp'
   ) {
     if (category) {
       this.activeCategory = category;
