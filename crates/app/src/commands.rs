@@ -3821,6 +3821,6 @@ pub async fn adb_find_pairing_service(service_name: String) -> Result<Option<(St
 
 pub use crate::agent_commands::*;
 #[path = "mr_commands.rs"] pub mod mr_commands; pub use mr_commands::*;
-#[path = "test_commands.rs"] pub mod test_commands; pub use test_commands::*;
+pub use crate::test_commands::*;
 
 use tauri::ipc::Response;
