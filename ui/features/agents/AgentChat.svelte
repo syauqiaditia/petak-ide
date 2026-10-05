@@ -22,6 +22,12 @@
   let isSkillPickerOpen = $state(false);
   let skillSearch = $state('');
 
+  let isMentionPopupOpen = $state(false);
+  let mentionQuery = $state('');
+  let mentionResults = $state<Array<{ name: string; path: string; isTab?: boolean }>>([]);
+  let mentionSelectedIndex = $state(0);
+  let mentionCursorStart = 0;
+
   let activeSlot = $derived(agentsStore.activeSlot);
   let messages = $derived(agentsStore.activeMessages);
   let pendingPerm = $derived(agentsStore.activePendingPermission);
@@ -49,7 +55,104 @@
     }
   }
 
+  async function handleTextareaInput(e: Event) {
+    const el = textareaEl;
+    if (!el) return;
+    const val = el.value;
+    const cursorPos = el.selectionStart;
+
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@([a-zA-Z0-9_\-\./]*)$/);
+
+    if (atMatch) {
+      const query = atMatch[1];
+      mentionQuery = query;
+      mentionCursorStart = cursorPos - atMatch[0].length;
+      mentionSelectedIndex = 0;
+
+      const qLower = query.toLowerCase();
+      const tabHits = tabsManager.tabs
+        .filter((t) => !query || t.name.toLowerCase().includes(qLower) || t.path.toLowerCase().includes(qLower))
+        .map((t) => ({ name: t.name, path: t.path, isTab: true }));
+
+      let fileHits: Array<{ name: string; path: string; isTab?: boolean }> = [];
+      if (query.trim()) {
+        try {
+          const hits = await api.findFiles(query.trim(), 8);
+          fileHits = hits
+            .filter((h: any) => !tabHits.some((t) => t.path === h.path))
+            .map((h: any) => ({
+              name: h.path.split('/').pop() || h.path,
+              path: h.path,
+              isTab: false,
+            }));
+        } catch {
+          // ignore
+        }
+      }
+
+      const combined = [...tabHits, ...fileHits].slice(0, 8);
+      if (combined.length > 0) {
+        mentionResults = combined;
+        isMentionPopupOpen = true;
+        return;
+      }
+    }
+
+    isMentionPopupOpen = false;
+    mentionResults = [];
+  }
+
+  function applyMention(item: { name: string; path: string }) {
+    if (!textareaEl) return;
+    const val = textareaEl.value;
+    const cursorPos = textareaEl.selectionStart;
+
+    const before = val.slice(0, mentionCursorStart);
+    const after = val.slice(cursorPos);
+    const insert = `@${item.path} `;
+
+    promptText = before + insert + after;
+    isMentionPopupOpen = false;
+    mentionResults = [];
+    attachedContextLabel = item.name;
+
+    tick().then(() => {
+      if (textareaEl) {
+        const nextPos = before.length + insert.length;
+        textareaEl.setSelectionRange(nextPos, nextPos);
+        textareaEl.focus();
+      }
+    });
+  }
+
   function handleKeydown(e: KeyboardEvent) {
+    if (isMentionPopupOpen && mentionResults.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        mentionSelectedIndex = (mentionSelectedIndex + 1) % mentionResults.length;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        mentionSelectedIndex = (mentionSelectedIndex - 1 + mentionResults.length) % mentionResults.length;
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = mentionResults[mentionSelectedIndex];
+        if (selected) {
+          applyMention(selected);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        isMentionPopupOpen = false;
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -177,6 +280,27 @@
             📖 Jelaskan fungsi berkas ini
           </button>
         </div>
+
+        {#if agentsStore.savedSessions.length > 0}
+          <div class="recent-chats-box">
+            <div class="recent-chats-header">
+              <span class="recent-chats-title">⏱️ Sesi Percakapan Terakhir ({agentsStore.savedSessions.length})</span>
+              <button type="button" class="recent-clear-btn" onclick={() => agentsStore.clearAllSessions()}>Hapus Semua</button>
+            </div>
+            <div class="recent-chats-scroll">
+              {#each agentsStore.savedSessions.slice(0, 6) as sess (sess.id)}
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <div class="recent-chat-row" role="button" tabindex="0" onclick={() => agentsStore.loadSession(sess)}>
+                  <div class="recent-chat-content">
+                    <span class="recent-chat-title">{sess.title}</span>
+                    <span class="recent-chat-meta">{sess.messageCount} pesan · {new Date((sess as any).updatedAt || sess.createdAt).toLocaleDateString('id-ID', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <button type="button" class="recent-del-btn" onclick={(e) => { e.stopPropagation(); agentsStore.deleteSession(sess.id); }} title="Hapus sesi">🗑️</button>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -365,13 +489,47 @@
       </div>
     {/if}
 
+    <!-- In-line @ Mention Autocomplete Popup -->
+    {#if isMentionPopupOpen && mentionResults.length > 0}
+      <div class="mention-autocomplete-popup" role="listbox">
+        <div class="mention-popup-header">
+          <span class="mention-popup-title">Pilih berkas untuk di-tag:</span>
+          <span class="mention-popup-hint">↑↓ pilih · ⏎ / Tab sisipkan · Esc</span>
+        </div>
+        <div class="mention-popup-list">
+          {#each mentionResults as item, idx}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <div
+              class="mention-item"
+              class:is-selected={idx === mentionSelectedIndex}
+              role="option"
+              aria-selected={idx === mentionSelectedIndex}
+              tabindex="-1"
+              onclick={() => applyMention(item)}
+              onmouseenter={() => (mentionSelectedIndex = idx)}
+            >
+              <span class="mention-item-icon">{item.isTab ? '📄' : '📁'}</span>
+              <div class="mention-item-text">
+                <span class="mention-item-name">{item.name}</span>
+                <span class="mention-item-path">{item.path}</span>
+              </div>
+              {#if item.isTab}
+                <span class="mention-tab-badge">tab aktif</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <div class="composer-textarea-wrap">
       <textarea
         bind:this={textareaEl}
         bind:value={promptText}
+        oninput={handleTextareaInput}
         onkeydown={handleKeydown}
         class="composer-textarea"
-        placeholder="Tanyakan sesuatu atau berikan tugas perbaikan kode… (Enter kirim, Shift+Enter baris baru)"
+        placeholder="Tanyakan sesuatu atau ketik @ untuk tag berkas… (Enter kirim, Shift+Enter baris baru)"
         disabled={isBusy}
         rows="2"
       ></textarea>
@@ -1539,5 +1697,199 @@
     height: 1px;
     background: rgba(255, 255, 255, 0.06);
     margin: 2px 0;
+  }
+
+  /* Recent Chats Box in Welcome View */
+  .recent-chats-box {
+    margin-top: 16px;
+    width: 100%;
+    max-width: 380px;
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .recent-chats-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .recent-chats-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .recent-clear-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  .recent-clear-btn:hover {
+    color: #ef4444;
+  }
+
+  .recent-chats-scroll {
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .recent-chat-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .recent-chat-row:hover {
+    background: #1e2028;
+  }
+
+  .recent-chat-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .recent-chat-title {
+    font-size: 11px;
+    color: #f1f2f4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+  }
+
+  .recent-chat-meta {
+    font-size: 9.5px;
+    color: #64748b;
+  }
+
+  .recent-del-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.5;
+    padding: 2px 4px;
+    transition: opacity 0.1s;
+  }
+
+  .recent-del-btn:hover {
+    opacity: 1;
+  }
+
+  /* In-line @ Mention Autocomplete Popup */
+  .mention-autocomplete-popup {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 8px;
+    right: 8px;
+    max-width: 360px;
+    background: #16181f;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 7px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mention-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: #121317;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .mention-popup-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .mention-popup-hint {
+    font-size: 9.5px;
+    color: #64748b;
+  }
+
+  .mention-popup-list {
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mention-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.08s;
+  }
+
+  .mention-item:hover,
+  .mention-item.is-selected {
+    background: #252834;
+  }
+
+  .mention-item-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .mention-item-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .mention-item-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #f1f2f4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mention-item-path {
+    font-size: 9.5px;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mention-tab-badge {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    flex-shrink: 0;
   }
 </style>

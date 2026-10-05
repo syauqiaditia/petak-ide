@@ -86,6 +86,33 @@
     }
   }
 
+  async function handleAskAgentAboutMr() {
+    const { agentsStore } = await import('../agents/agents.svelte');
+    const { panelStore } = await import('../../shell/panelStore.svelte');
+
+    const filesSummary = diffFiles.length > 0
+      ? `\nBerkas yang diubah (${diffFiles.length} file):\n` +
+        diffFiles.slice(0, 15).map((f: any) => `- ${f.path} (+${f.additions || 0} -${f.deletions || 0})`).join('\n') +
+        (diffFiles.length > 15 ? `\n...dan ${diffFiles.length - 15} file lainnya.` : '')
+      : '';
+
+    const mrSnippet = `Merge Request !${mrDetail.iid}: "${mrDetail.title}"
+Branch: ${mrDetail.sourceBranch} -> ${mrDetail.targetBranch}
+Author: ${mrDetail.author?.name || mrDetail.author?.username || 'GitLab User'}
+Status: ${mrDetail.state}
+Deskripsi:
+${mrDetail.description || '(Tanpa deskripsi)'}
+${filesSummary}`;
+
+    agentsStore.attachCodeReference({
+      path: `GitLab MR !${mrDetail.iid}`,
+      symbol: mrDetail.title,
+      codeSnippet: mrSnippet,
+    });
+
+    panelStore.openRightPanel('agent');
+  }
+
   let headPipe = $derived(mrDetail.headPipeline || (pipelines.length > 0 ? pipelines[0] : null));
 
   async function handleCheckout() {
@@ -140,6 +167,15 @@
       </div>
 
       <div class="title-right">
+        <button
+          class="btn-action btn-ask-agent"
+          onclick={handleAskAgentAboutMr}
+          title="Minta Petak Agent analisis dan review Merge Request ini"
+        >
+          <span class="btn-svg">🤖</span>
+          <span>Tanya Agent</span>
+        </button>
+
         {#if onApprove}
           <button
             class="btn-action btn-approve"
@@ -438,6 +474,18 @@
   .btn-action:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .btn-ask-agent {
+    background: rgba(59, 130, 246, 0.14);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #60a5fa;
+  }
+
+  .btn-ask-agent:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: #3b82f6;
+    color: #93c5fd;
   }
 
   .btn-approve {

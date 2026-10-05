@@ -238,6 +238,7 @@ export interface ChatSessionMeta {
   slotId: string;
   title: string;
   createdAt: number;
+  updatedAt?: number;
   messageCount: number;
   messages: ChatMessage[];
   modelId?: string | null;
