@@ -46,7 +46,7 @@ GITLAB_TOKEN=""
 # ------------------------------------------------------------------------------
 # 1. AI Provider Selection
 # ------------------------------------------------------------------------------
-echo -e "${BOLD}${YELLOW}[1/4] Konfigurasi AI Petak Agent${NC}"
+echo -e "${BOLD}${YELLOW}[1/5] Konfigurasi AI Petak Agent${NC}"
 echo -e "Petak IDE dilengkapi asisten AI terintegrasi untuk review kode, perbaikan build, dan pengujian."
 echo -e "Pilih provider AI yang ingin kamu gunakan:"
 echo -e "  ${BOLD}1)${NC} Google Gemini / Antigravity (${GREEN}Rekomendasi: Gemini 3.8 Flash High${NC})"
@@ -109,7 +109,7 @@ esac
 # ------------------------------------------------------------------------------
 # 2. Android Studio & Android SDK
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}${YELLOW}[2/4] Android Studio & Android SDK${NC}"
+echo -e "\n${BOLD}${YELLOW}[2/5] Android Studio & Android SDK${NC}"
 echo -e "Android SDK diperlukan untuk mendeteksi device, scrcpy mirroring, dan menjalankan emulator."
 echo -e "Apakah kamu sudah pernah menginstall Android Studio di komputer ini?"
 echo -e "  ${BOLD}1)${NC} Ya, sudah pernah install Android Studio"
@@ -242,9 +242,69 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Flutter SDK
+# 3. scrcpy (Hardware-Accelerated Device Mirroring)
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}${YELLOW}[3/4] Flutter SDK${NC}"
+echo -e "\n${BOLD}${YELLOW}[3/5] scrcpy (Hardware-Accelerated Device Mirroring)${NC}"
+echo -e "scrcpy digunakan Petak IDE untuk mirroring layar HP/emulator Android ke dalam editor (60 FPS, touch interaktif)."
+
+SCRCPY_BIN=""
+if command -v scrcpy >/dev/null 2>&1; then
+  SCRCPY_BIN="$(command -v scrcpy)"
+elif [[ -x "/opt/homebrew/bin/scrcpy" ]]; then
+  SCRCPY_BIN="/opt/homebrew/bin/scrcpy"
+elif [[ -x "/usr/local/bin/scrcpy" ]]; then
+  SCRCPY_BIN="/usr/local/bin/scrcpy"
+elif [[ -x "/usr/bin/scrcpy" ]]; then
+  SCRCPY_BIN="/usr/bin/scrcpy"
+fi
+
+if [[ -n "${SCRCPY_BIN}" ]]; then
+  SCRCPY_VER="$("${SCRCPY_BIN}" --version 2>&1 | head -n 1)"
+  echo -e "${GREEN}✓ scrcpy terdeteksi di: ${SCRCPY_BIN} (${SCRCPY_VER})${NC}"
+else
+  echo -e "${YELLOW}scrcpy belum terpasang di sistem kamu.${NC}"
+  echo -e "Pilih tindakan:"
+  echo -e "  ${BOLD}1)${NC} Install scrcpy sekarang via terminal (${GREEN}Rekomendasi${NC})"
+  echo -e "  ${BOLD}2)${NC} Lewati sementara"
+
+  read -rp "Pilihan kamu [1-2] (default: 1): " scrcpy_choice
+  scrcpy_choice="${scrcpy_choice:-1}"
+
+  if [[ "${scrcpy_choice}" == "1" ]]; then
+    echo -e "\nMemasang scrcpy..."
+    if [[ "${OS}" == "Darwin" ]]; then
+      if command -v brew >/dev/null 2>&1; then
+        brew install scrcpy
+      else
+        echo -e "${RED}Homebrew belum terpasang. Pasang Homebrew dari https://brew.sh lalu jalankan: brew install scrcpy${NC}"
+      fi
+    else
+      if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update -qq && sudo apt-get install -y scrcpy
+      elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y scrcpy
+      elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --noconfirm scrcpy
+      fi
+    fi
+
+    if command -v scrcpy >/dev/null 2>&1; then
+      echo -e "${GREEN}✓ scrcpy berhasil dipasang!${NC}"
+    else
+      echo -e "${RED}${BOLD}⚠️ PERINGATAN:${NC} scrcpy belum berhasil terpasang."
+      echo -e "${YELLOW}Jika scrcpy tidak diinstall, maka TIDAK DAPAT melakukan mirroring device Android di Petak IDE.${NC}"
+    fi
+  else
+    echo -e "\n${RED}${BOLD}⚠️ PERINGATAN:${NC} Kamu memilih melewati instalasi scrcpy."
+    echo -e "${YELLOW}Jika tidak diinstall, maka kamu TIDAK DAPAT melakukan mirroring device Android di Petak IDE.${NC}"
+    echo -e "${YELLOW}(Kamu bisa memasangnya kapan saja nanti dengan perintah: 'brew install scrcpy' di macOS atau 'sudo apt install scrcpy' di Linux).${NC}"
+  fi
+fi
+
+# ------------------------------------------------------------------------------
+# 4. Flutter SDK
+# ------------------------------------------------------------------------------
+echo -e "\n${BOLD}${YELLOW}[4/5] Flutter SDK${NC}"
 echo -e "Apakah kamu pengguna Flutter dan sudah menginstall Flutter SDK?"
 echo -e "  ${BOLD}1)${NC} Ya, Flutter sudah terinstall"
 echo -e "  ${BOLD}2)${NC} Belum, saya ingin install Flutter"
@@ -299,9 +359,9 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 4. GitLab Credential & Integration
+# 5. Integrasi GitLab & Merge Requests
 # ------------------------------------------------------------------------------
-echo -e "\n${BOLD}${YELLOW}[4/4] Integrasi GitLab & Merge Requests${NC}"
+echo -e "\n${BOLD}${YELLOW}[5/5] Integrasi GitLab & Merge Requests${NC}"
 echo -e "Petak IDE mendukung peninjauan Merge Request, diskusi inline, dan status pipeline GitLab."
 echo -e "Apakah kamu ingin menghubungkan akun GitLab sekarang?"
 echo -e "  ${BOLD}1)${NC} Sudah punya GitLab Personal Access Token (PAT)"
@@ -376,6 +436,7 @@ echo -e "Rangkuman:"
 echo -e "  - Platform:     ${OS}"
 echo -e "  - Config Path:  ${CONFIG_FILE}"
 echo -e "  - Android SDK:  ${ANDROID_SDK_PATH:-"(belum diatur)"}"
+echo -e "  - scrcpy:       $(command -v scrcpy >/dev/null 2>&1 && echo -e "${GREEN}Terpasang (${NC}$(scrcpy --version 2>&1 | head -n 1)${GREEN})${NC}" || echo -e "${RED}Tidak ada (Mirroring Android nonaktif)${NC}")"
 echo -e "  - Flutter SDK:  ${FLUTTER_SDK_PATH:-"(belum diatur)"}"
 echo -e "  - AI Model:     ${AI_MODEL}"
 echo -e "  - GitLab URL:   ${GITLAB_URL}"
