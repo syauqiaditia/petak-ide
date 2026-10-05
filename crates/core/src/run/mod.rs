@@ -1,6 +1,7 @@
 pub mod android;
 pub mod config;
 pub mod device;
+pub mod flow;
 pub mod flutter;
 pub mod ios;
 pub mod logs;
@@ -44,5 +45,9 @@ pub use pairing::{
     adb_connect, adb_find_connect_service, adb_find_pairing_service, adb_pair, find_adb,
     parse_connect_output, parse_mdns_connect_service, parse_mdns_services, parse_pair_output,
     PairResult,
+};
+pub use flow::{
+    cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, save_flow, validate_flow_id,
+    Flow, FlowRunResult, FlowStep, FlowStepStatus, FlowStepStatusKind,
 };
 pub use crate::exec::{Exec, SystemExec, SystemExec as ProcessExec};

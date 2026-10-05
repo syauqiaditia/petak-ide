@@ -1,6 +1,7 @@
 mod agent_commands;
 mod commands;
 mod menu;
+mod test_commands;
 
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -383,6 +384,11 @@ pub fn run() {
             commands::adb_connect,
             // Batch 12
             commands::adb_find_pairing_service,
+            // Automation & Testing
+            commands::test_list_flows,
+            commands::test_run_flow,
+            commands::test_cancel_flow,
+            commands::test_create_flow,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
