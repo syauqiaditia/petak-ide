@@ -492,11 +492,12 @@ impl AcpClient {
     pub fn session_new(
         &self,
         cwd: &str,
+        mcp_servers: &[serde_json::Value],
         timeout: Duration,
     ) -> Result<AcpSessionNewResult, AcpError> {
         let params = serde_json::json!({
             "cwd": cwd,
-            "mcpServers": []
+            "mcpServers": mcp_servers
         });
 
         let res = self.send_request("session/new", params, timeout)?;
