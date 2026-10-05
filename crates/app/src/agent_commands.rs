@@ -1,7 +1,7 @@
 use petak_core::agent::{
     HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult, MemoryItem,
-    PendingPermissionRequest, PromptResponse, Proposal, SlotConfig, SlotManager, SlotSummary,
-    TeamConfig, UsageReport,
+    PendingPermissionRequest, PromptResponse, Proposal, Skill, SkillSummary, SlotConfig,
+    SlotManager, SlotSummary, TeamConfig, UsageReport,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -413,6 +413,65 @@ pub async fn agent_mcp_test_server(
 ) -> Result<McpTestResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         petak_core::agent::test_mcp_server(&command, &args, &env)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Skills Management ─────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_skills_list(
+    app: tauri::AppHandle,
+    root: Option<String>,
+) -> Result<Vec<SkillSummary>, String> {
+    let effective_root = resolve_effective_root(&app, root);
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::list_skills(effective_root.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_skill_get(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    name: String,
+) -> Result<Skill, String> {
+    let effective_root = resolve_effective_root(&app, root);
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::read_skill(effective_root.as_deref(), &name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_skill_save(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    name: String,
+    description: String,
+    content: String,
+) -> Result<Skill, String> {
+    let effective_root = resolve_effective_root(&app, root);
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::save_skill(effective_root.as_deref(), &name, &description, &content)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_skill_delete(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    name: String,
+) -> Result<bool, String> {
+    let effective_root = resolve_effective_root(&app, root);
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::delete_skill(effective_root.as_deref(), &name)
     })
     .await
     .map_err(|e| e.to_string())?

@@ -346,6 +346,10 @@ pub fn run() {
             commands::agent_mcp_get_config,
             commands::agent_mcp_save_config,
             commands::agent_mcp_test_server,
+            commands::agent_skills_list,
+            commands::agent_skill_get,
+            commands::agent_skill_save,
+            commands::agent_skill_delete,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,

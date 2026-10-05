@@ -26,6 +26,12 @@ pub use agent::mcp::{
     McpConfig, McpServerConfig, McpTestResult,
 };
 
+pub use agent::skills;
+pub use agent::skills::{
+    delete_skill, is_core_skill, list_skills, read_skill, save_skill, scaffold_skills_dir,
+    validate_skill_name, Skill, SkillMetadata, SkillSummary, CORE_SKILLS,
+};
+
 pub use run::flow;
 pub use run::flow::{
     cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, save_flow, validate_flow_id,
