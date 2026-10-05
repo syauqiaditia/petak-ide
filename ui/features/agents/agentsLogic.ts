@@ -6,6 +6,7 @@ import type {
   SlotStatus,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
+import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
 
 export const DEFAULT_ALLOWLIST = [
   'flutter',
@@ -486,5 +487,173 @@ export function extractChunkText(update: any): string {
 
   return '';
 }
+
+/**
+ * Format inline markdown tokens: `code`, **bold**, *italic*, [label](url).
+ * Input string must be pre-escaped against XSS.
+ */
+export function formatChatInline(escapedText: string): string {
+  // Links: [label](url)
+  let out = escapedText.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_match, label, url) => {
+      const safeHref = escapeHtml(sanitizeUrl(url));
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="chat-link">${label}</a>`;
+    }
+  );
+
+  // Inline code: `code`
+  out = out.replace(/`([^`]+)`/g, (_match, code) => {
+    return `<code class="chat-inline-code">${code}</code>`;
+  });
+
+  // Bold: **text**
+  out = out.replace(/\*\*([^*]+)\*\*/g, (_match, bold) => {
+    return `<strong>${bold}</strong>`;
+  });
+
+  // Italic: *text*
+  out = out.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_match, italic) => {
+    return `<em>${italic}</em>`;
+  });
+
+  return out;
+}
+
+/**
+ * Renders raw agent/user markdown text into safe, beautifully formatted HTML for chat bubbles.
+ * Supports:
+ * - Fenced code blocks with language tag and syntax container
+ * - Headers (h1, h2, h3, h4)
+ * - Bold (**text**) and Italic (*text*)
+ * - Inline code (`code`)
+ * - Bullet lists (- item, * item)
+ * - Numbered lists (1. item)
+ * - Safe hyperlinks ([label](url))
+ * - Blockquotes (> quote)
+ * - Paragraphs with line break preservation (<br/>)
+ * All content is sanitized against XSS.
+ */
+export function renderChatMarkdown(raw: string | null | undefined): string {
+  if (!raw || !raw.trim()) return '';
+
+  const normalized = raw.replace(/\r\n/g, '\n');
+
+  // Split by fenced code blocks (```lang\n...```)
+  const blocks = normalized.split(/(```[\s\S]*?```)/g);
+  const htmlParts: string[] = [];
+
+  for (const block of blocks) {
+    if (!block) continue;
+
+    if (block.startsWith('```') && block.endsWith('```')) {
+      const inner = block.slice(3, -3);
+      const firstNl = inner.indexOf('\n');
+      let lang = '';
+      let codeText = inner;
+      if (firstNl !== -1) {
+        const potentialLang = inner.slice(0, firstNl).trim();
+        if (/^[a-zA-Z0-9_#-]+$/.test(potentialLang)) {
+          lang = potentialLang;
+          codeText = inner.slice(firstNl + 1);
+        }
+      }
+      codeText = codeText.replace(/^\n+|\n+$/g, '');
+      const escapedCode = escapeHtml(codeText);
+      const langHeader = lang ? `<div class="chat-code-header"><span class="chat-code-lang">${escapeHtml(lang)}</span></div>` : '';
+      const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : '';
+      htmlParts.push(
+        `<div class="chat-code-wrapper">${langHeader}<pre class="chat-code-block"><code${langClass}>${escapedCode}</code></pre></div>`
+      );
+    } else {
+      // Process lines of markdown
+      const lines = block.split('\n');
+      let currentListType: 'ul' | 'ol' | null = null;
+      let currentListItems: string[] = [];
+      let currentParaLines: string[] = [];
+
+      const flushList = () => {
+        if (currentListType && currentListItems.length > 0) {
+          const tag = currentListType;
+          htmlParts.push(`<${tag} class="chat-list chat-${tag}">${currentListItems.map((li) => `<li>${li}</li>`).join('')}</${tag}>`);
+          currentListType = null;
+          currentListItems = [];
+        }
+      };
+
+      const flushPara = () => {
+        if (currentParaLines.length > 0) {
+          const text = currentParaLines.join('<br/>').trim();
+          if (text) {
+            htmlParts.push(`<p class="chat-para">${text}</p>`);
+          }
+          currentParaLines = [];
+        }
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          flushList();
+          flushPara();
+          continue;
+        }
+
+        // Headers: # H1, ## H2, ### H3, #### H4
+        const headerMatch = line.match(/^(#{1,4})\s+(.+)$/);
+        if (headerMatch) {
+          flushList();
+          flushPara();
+          const level = headerMatch[1].length;
+          const text = formatChatInline(escapeHtml(headerMatch[2].trim()));
+          htmlParts.push(`<h${level} class="chat-heading chat-h${level}">${text}</h${level}>`);
+          continue;
+        }
+
+        // Bullet lists: - item, * item, + item
+        const bulletMatch = line.match(/^\s*[-*+]\s+(.*)$/);
+        if (bulletMatch) {
+          flushPara();
+          if (currentListType && currentListType !== 'ul') flushList();
+          currentListType = 'ul';
+          currentListItems.push(formatChatInline(escapeHtml((bulletMatch[1] || '').trim())));
+          continue;
+        }
+
+        // Numbered lists: 1. item
+        const numMatch = line.match(/^\s*\d+\.\s+(.*)$/);
+        if (numMatch) {
+          flushPara();
+          if (currentListType && currentListType !== 'ol') flushList();
+          currentListType = 'ol';
+          currentListItems.push(formatChatInline(escapeHtml((numMatch[1] || '').trim())));
+          continue;
+        }
+
+        // Blockquotes: > quote
+        const quoteMatch = line.match(/^>\s*(.+)$/);
+        if (quoteMatch) {
+          flushList();
+          flushPara();
+          const text = formatChatInline(escapeHtml(quoteMatch[1].trim()));
+          htmlParts.push(`<blockquote class="chat-quote">${text}</blockquote>`);
+          continue;
+        }
+
+        // Normal paragraph line
+        flushList();
+        currentParaLines.push(formatChatInline(escapeHtml(line)));
+      }
+
+      flushList();
+      flushPara();
+    }
+  }
+
+  return htmlParts.join('');
+}
+
 
 

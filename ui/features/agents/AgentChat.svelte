@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { truncateToolOutput, extractChunkText } from './agentsLogic';
+  import { truncateToolOutput, extractChunkText, renderChatMarkdown } from './agentsLogic';
   import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
@@ -132,7 +132,9 @@
           <div class="message-role-label">
             {msg.role === 'user' ? 'Anda' : msg.role === 'agent' ? (activeSlot?.label || 'Agent') : 'Sistem'}
           </div>
-          <div class="message-body">{typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || JSON.stringify(msg.content))}</div>
+          <div class="message-body chat-markdown">
+            {@html renderChatMarkdown(typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || JSON.stringify(msg.content)))}
+          </div>
 
           <!-- Tool calls if present -->
           {#if msg.toolCalls && msg.toolCalls.length > 0}
@@ -170,9 +172,41 @@
     {#if agentsStore.isStreaming}
       <div class="message-row agent-row">
         <div class="message-bubble agent-bubble">
-          <div class="message-role-label">{activeSlot?.label || 'Agent'} <span class="typing-indicator">sedang berpikir...</span></div>
-          <div class="message-body">
-            {agentsStore.streamingContent || 'Menyiapkan respons...'}
+          <div class="message-role-label">
+            {activeSlot?.label || 'Agent'}
+            {#if agentsStore.activeThought}
+              <span class="typing-thought">💭 {agentsStore.activeThought}</span>
+            {:else}
+              <span class="typing-indicator">sedang berpikir...</span>
+            {/if}
+          </div>
+
+          <!-- Active tool calls during streaming -->
+          {#if agentsStore.activeToolCalls.length > 0}
+            <div class="tool-calls-list live-tools">
+              {#each agentsStore.activeToolCalls as tool}
+                <div class="tool-call-card live">
+                  <div class="tool-call-header">
+                    <span class="tool-name">⚡ {tool.name}</span>
+                    {#if tool.status === 'completed'}
+                      <span class="tool-badge-completed">✓ Selesai</span>
+                    {:else if tool.status === 'failed'}
+                      <span class="tool-badge-failed">✕ Gagal</span>
+                    {:else}
+                      <span class="tool-badge-running">Berjalan...</span>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <div class="message-body chat-markdown">
+            {#if agentsStore.streamingContent}
+              {@html renderChatMarkdown(agentsStore.streamingContent)}
+            {:else}
+              <span class="status-placeholder">{agentsStore.activeToolCalls.length > 0 ? 'Menjalankan investigasi...' : 'Menyiapkan respons...'}</span>
+            {/if}
             <span class="cursor-blink">▌</span>
           </div>
         </div>
@@ -524,6 +558,146 @@
     font-weight: 600;
     color: #8b949e;
     margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .message-body {
+    word-break: break-word;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #e2e8f0;
+  }
+
+  .message-body :global(p) {
+    margin: 0 0 6px 0;
+  }
+
+  .message-body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .message-body :global(ul), .message-body :global(ol) {
+    margin: 4px 0 6px 0;
+    padding-left: 18px;
+  }
+
+  .message-body :global(li) {
+    margin-bottom: 2px;
+  }
+
+  .message-body :global(code) {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #38bdf8;
+  }
+
+  .message-body :global(.chat-code-wrapper) {
+    margin: 8px 0;
+    background: #0d0e12;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .message-body :global(.chat-code-header) {
+    display: flex;
+    justify-content: flex-end;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 2px 8px;
+  }
+
+  .message-body :global(.chat-code-lang) {
+    font-size: 10px;
+    color: #8b949e;
+    text-transform: lowercase;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  .message-body :global(pre.chat-code-block) {
+    margin: 0;
+    padding: 8px 10px;
+    background: transparent;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .message-body :global(pre.chat-code-block code) {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    color: #f1f2f4;
+  }
+
+  .message-body :global(strong) {
+    font-weight: 600;
+    color: #ffffff;
+  }
+
+  .message-body :global(em) {
+    font-style: italic;
+    color: #cbd5e1;
+  }
+
+  .message-body :global(.chat-heading) {
+    color: #ffffff;
+    font-weight: 700;
+    margin: 10px 0 4px 0;
+  }
+
+  .message-body :global(.chat-h1) { font-size: 14px; }
+  .message-body :global(.chat-h2) { font-size: 13px; }
+  .message-body :global(.chat-h3) { font-size: 12.5px; }
+  .message-body :global(.chat-h4) { font-size: 12px; }
+
+  .message-body :global(.chat-quote) {
+    margin: 6px 0;
+    padding-left: 8px;
+    border-left: 2px solid #3b82f6;
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  .message-body :global(.chat-link) {
+    color: #58a6ff;
+    text-decoration: underline;
+  }
+
+  .typing-thought {
+    color: #a78bfa;
+    font-size: 10.5px;
+    font-style: italic;
+    margin-left: 4px;
+  }
+
+  .tool-badge-completed {
+    font-size: 10px;
+    color: #4ade80;
+    margin-left: auto;
+  }
+
+  .tool-badge-failed {
+    font-size: 10px;
+    color: #f87171;
+    margin-left: auto;
+  }
+
+  .tool-badge-running {
+    font-size: 10px;
+    color: #38bdf8;
+    margin-left: auto;
+  }
+
+  .status-placeholder {
+    color: #8b949e;
+    font-style: italic;
   }
 
   .typing-indicator {

@@ -14,6 +14,7 @@ import {
   isValidSlotTransition,
   DEFAULT_ALLOWLIST,
   extractChunkText,
+  renderChatMarkdown,
 } from '../ui/features/agents/agentsLogic.ts';
 
 test('permission: read mode always denies modification/execution', () => {
@@ -258,5 +259,47 @@ test('extractChunkText: parses ACP session/update and text payloads safely', () 
   // 7. Nested content object
   assert.equal(extractChunkText({ content: { text: 'Nested text' } }), 'Nested text');
 });
+
+test('renderChatMarkdown: formats headings, lists, inline tokens, and code blocks safely', () => {
+  // Headings
+  const headingMd = '### Arsitektur Aplikasi\n\nPenjelasan singkat:';
+  const headingHtml = renderChatMarkdown(headingMd);
+  assert.match(headingHtml, /<h3 class="chat-heading chat-h3">Arsitektur Aplikasi<\/h3>/);
+  assert.match(headingHtml, /<p class="chat-para">Penjelasan singkat:<\/p>/);
+
+  // Bullet list
+  const listMd = '- Service layer\n- Core module\n- Application UI';
+  const listHtml = renderChatMarkdown(listMd);
+  assert.match(listHtml, /<ul class="chat-list chat-ul">/);
+  assert.match(listHtml, /<li>Service layer<\/li>/);
+  assert.match(listHtml, /<li>Core module<\/li>/);
+
+  // Numbered list
+  const numListMd = '1. Inisialisasi\n2. Konfigurasi\n3. Eksekusi';
+  const numListHtml = renderChatMarkdown(numListMd);
+  assert.match(numListHtml, /<ol class="chat-list chat-ol">/);
+  assert.match(numListHtml, /<li>Inisialisasi<\/li>/);
+
+  // Inline bold, code, link
+  const inlineMd = 'Gunakan **Riverpod** dan `lib/main.dart` dari [repo](https://example.com).';
+  const inlineHtml = renderChatMarkdown(inlineMd);
+  assert.match(inlineHtml, /<strong>Riverpod<\/strong>/);
+  assert.match(inlineHtml, /<code class="chat-inline-code">lib\/main\.dart<\/code>/);
+  assert.match(inlineHtml, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer" class="chat-link">repo<\/a>/);
+
+  // Fenced code block with language
+  const codeBlockMd = 'Contoh kode:\n\n```dart\nvoid main() {\n  runApp(const MyApp());\n}\n```';
+  const codeBlockHtml = renderChatMarkdown(codeBlockMd);
+  assert.match(codeBlockHtml, /<div class="chat-code-wrapper">/);
+  assert.match(codeBlockHtml, /<span class="chat-code-lang">dart<\/span>/);
+  assert.match(codeBlockHtml, /<code class="language-dart">void main\(\)/);
+
+  // XSS protection: raw script tags neutralized
+  const xssMd = '<script>alert("xss")</script>';
+  const xssHtml = renderChatMarkdown(xssMd);
+  assert.doesNotMatch(xssHtml, /<script>/);
+  assert.match(xssHtml, /&lt;script&gt;/);
+});
+
 
 

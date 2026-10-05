@@ -17,6 +17,7 @@ import type {
   LlmQuotaReport,
   MemoryItem,
   ChatSessionMeta,
+  ToolCallData,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -83,6 +84,8 @@ class AgentsStore {
   isLoading = $state(false);
   isStreaming = $state(false);
   streamingContent = $state('');
+  activeToolCalls = $state<ToolCallData[]>([]);
+  activeThought = $state<string>('');
   error = $state<string | null>(null);
 
   private unlistenEvent: UnlistenFn | null = null;
@@ -160,11 +163,66 @@ class AgentsStore {
       }
     } else if (event.Update) {
       const { slot_id, update } = event.Update;
-      // Handle streaming token update or usage update
-      const chunk = extractChunkText(update);
-      if (chunk) {
-        this.streamingContent += chunk;
+      if (!update) return;
+
+      const sessionUpdate = update.sessionUpdate;
+
+      if (sessionUpdate === 'agent_message_chunk') {
+        const text = extractChunkText(update.content !== undefined ? update.content : update);
+        if (text) {
+          this.streamingContent += text;
+        }
+      } else if (sessionUpdate === 'tool_call') {
+        const toolName = update.title || update.kind || 'tool';
+        const toolId = update.toolCallId || `tool-${Date.now()}`;
+        const newTool: ToolCallData = {
+          name: toolName,
+          status: 'running',
+          arguments: update.locations?.[0] ? { path: update.locations[0].path } : undefined,
+          output: '',
+        };
+        const existingIdx = this.activeToolCalls.findIndex((t: any) => t._id === toolId);
+        if (existingIdx !== -1) {
+          this.activeToolCalls[existingIdx] = { ...this.activeToolCalls[existingIdx], ...newTool };
+        } else {
+          (newTool as any)._id = toolId;
+          this.activeToolCalls = [...this.activeToolCalls, newTool];
+        }
+      } else if (sessionUpdate === 'tool_call_update') {
+        const toolId = update.toolCallId;
+        const outText = extractChunkText(update.content);
+        const status = update.status === 'completed' ? 'completed' : update.status === 'failed' ? 'failed' : 'running';
+        const existingIdx = this.activeToolCalls.findIndex((t: any) => t._id === toolId);
+        if (existingIdx !== -1) {
+          const current = this.activeToolCalls[existingIdx];
+          this.activeToolCalls[existingIdx] = {
+            ...current,
+            status,
+            output: outText || current.output,
+          };
+        } else {
+          this.activeToolCalls = [
+            ...this.activeToolCalls,
+            {
+              name: update.kind || 'tool',
+              status,
+              output: outText,
+            },
+          ];
+        }
+      } else if (sessionUpdate === 'agent_thought_chunk') {
+        const thought = extractChunkText(update.content);
+        if (thought) {
+          this.activeThought = thought.trim();
+        }
+      } else if (!sessionUpdate) {
+        // Fallback for non-sessionUpdate updates or plain text streaming
+        const text = extractChunkText(update);
+        if (text) {
+          this.streamingContent += text;
+        }
       }
+
       if (update && update.usage) {
         this.usageReports[slot_id] = {
           reported: true,
@@ -325,6 +383,8 @@ class AgentsStore {
 
     this.isStreaming = true;
     this.streamingContent = '';
+    this.activeToolCalls = [];
+    this.activeThought = '';
 
     try {
       const response = await api.agentPrompt(slotId, formattedPrompt);
@@ -337,6 +397,7 @@ class AgentsStore {
         role: 'agent',
         content: cleanContent || 'Aksi selesai.',
         stop_reason: response.stopReason,
+        toolCalls: this.activeToolCalls.length > 0 ? [...this.activeToolCalls] : undefined,
       };
       this.chatHistory[slotId] = [...this.chatHistory[slotId], agentMsg];
 
@@ -363,6 +424,8 @@ class AgentsStore {
     } finally {
       this.isStreaming = false;
       this.streamingContent = '';
+      this.activeToolCalls = [];
+      this.activeThought = '';
       if (idx !== -1) {
         this.slots[idx] = { ...this.slots[idx], status: 'ready' };
       }
@@ -375,6 +438,8 @@ class AgentsStore {
       await api.agentCancel(this.activeSlotId);
       this.isStreaming = false;
       this.streamingContent = '';
+      this.activeToolCalls = [];
+      this.activeThought = '';
       const idx = this.slots.findIndex((s) => s.id === this.activeSlotId);
       if (idx !== -1) {
         this.slots[idx] = { ...this.slots[idx], status: 'ready' };
