@@ -219,12 +219,111 @@ impl SlotManager {
         Self::new(project_root, DEFAULT_MAX_ACTIVE_SLOTS, DEFAULT_IDLE_TIMEOUT)
     }
 
+    pub fn ensure_default_slots(&self) {
+        let is_empty = {
+            let slots = self.slots.read().unwrap();
+            slots.is_empty()
+        };
+
+        if is_empty {
+            let (team, _) = self.load_team();
+            if !team.slots.is_empty() {
+                let _ = self.apply_team(&team);
+            } else {
+                let default_configs = vec![
+                    SlotConfig {
+                        id: "default".to_string(),
+                        label: "Petak Agent".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("default".to_string()),
+                        model: Some("ag/gemini-3.8-flash-high".to_string()),
+                        fallback_model: Some("gemini-2.5-pro".to_string()),
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                    SlotConfig {
+                        id: "manager".to_string(),
+                        label: "Manager".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("manager".to_string()),
+                        model: Some("claude-3-7-sonnet".to_string()),
+                        fallback_model: Some("gemini-2.5-pro".to_string()),
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                    SlotConfig {
+                        id: "techlead".to_string(),
+                        label: "Techlead".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("techlead".to_string()),
+                        model: Some("claude-3-7-sonnet".to_string()),
+                        fallback_model: Some("gemini-2.5-pro".to_string()),
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                    SlotConfig {
+                        id: "senior".to_string(),
+                        label: "Senior".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("senior".to_string()),
+                        model: Some("claude-3-7-sonnet".to_string()),
+                        fallback_model: Some("gemini-2.5-pro".to_string()),
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                    SlotConfig {
+                        id: "senior2".to_string(),
+                        label: "Senior2".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("senior2".to_string()),
+                        model: Some("gemini-2.5-pro".to_string()),
+                        fallback_model: None,
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                    SlotConfig {
+                        id: "reviewer".to_string(),
+                        label: "Reviewer".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("reviewer".to_string()),
+                        model: Some("gemini-2.5-pro".to_string()),
+                        fallback_model: None,
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                    SlotConfig {
+                        id: "designer".to_string(),
+                        label: "Designer".to_string(),
+                        kind: "hermes".to_string(),
+                        command: None,
+                        hermes_profile: Some("designer".to_string()),
+                        model: Some("claude-3-7-sonnet".to_string()),
+                        fallback_model: None,
+                        permission: "ask".to_string(),
+                        cwd: ".".to_string(),
+                    },
+                ];
+
+                for cfg in default_configs {
+                    let _ = self.add_slot(cfg);
+                }
+            }
+        }
+    }
+
     pub fn set_project_root(&self, root: Option<PathBuf>) {
         {
             let mut pr = self.project_root.lock().unwrap();
             *pr = root.clone();
         }
         self.proposal_buffer.set_project_root(root);
+        self.ensure_default_slots();
     }
 
     pub fn project_root(&self) -> Option<PathBuf> {
@@ -435,6 +534,35 @@ impl SlotManager {
     }
 
     pub fn start_slot(&self, slot_id: &str) -> Result<SlotSummary, String> {
+        // Auto-register slot if it doesn't exist yet
+        {
+            let slots = self.slots.read().unwrap();
+            if !slots.contains_key(slot_id) {
+                drop(slots);
+                let label = if slot_id == "default" {
+                    "Petak Agent".to_string()
+                } else {
+                    let mut chars = slot_id.chars();
+                    match chars.next() {
+                        None => String::new(),
+                        Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+                    }
+                };
+                let cfg = SlotConfig {
+                    id: slot_id.to_string(),
+                    label,
+                    kind: "hermes".to_string(),
+                    command: None,
+                    hermes_profile: Some(slot_id.to_string()),
+                    model: Some("ag/gemini-3.8-flash-high".to_string()),
+                    fallback_model: Some("gemini-2.5-pro".to_string()),
+                    permission: "ask".to_string(),
+                    cwd: ".".to_string(),
+                };
+                let _ = self.add_slot(cfg);
+            }
+        }
+
         {
             let slots = self.slots.read().unwrap();
             let slot = slots
@@ -903,22 +1031,29 @@ fn resolve_slot_command(config: &SlotConfig) -> (String, Vec<String>, HashMap<St
 
     match config.kind.as_str() {
         "hermes" => {
+            let hermes_bin = super::hermes::resolve_hermes(None)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "hermes".to_string());
             let mut args = Vec::new();
             if let Some(ref prof) = config.hermes_profile {
-                args.push("-p".to_string());
-                args.push(prof.clone());
+                if prof != "default" {
+                    args.push("-p".to_string());
+                    args.push(prof.clone());
+                }
 
                 if let Some(home) = std::env::var_os("HOME") {
                     let home_p = PathBuf::from(home);
                     let profile_dir = home_p.join(".hermes").join("profiles").join(prof);
-                    env.insert(
-                        "HERMES_HOME".to_string(),
-                        profile_dir.to_string_lossy().to_string(),
-                    );
+                    if profile_dir.exists() {
+                        env.insert(
+                            "HERMES_HOME".to_string(),
+                            profile_dir.to_string_lossy().to_string(),
+                        );
+                    }
                 }
             }
             args.push("acp".to_string());
-            ("hermes".to_string(), args, env)
+            (hermes_bin, args, env)
         }
         "claude-code" => {
             let args = vec!["@agentclientprotocol/claude-agent-acp".to_string()];

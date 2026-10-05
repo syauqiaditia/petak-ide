@@ -33,6 +33,7 @@ fn sync_project_root(app: &tauri::AppHandle, manager: &SlotManager) {
 pub async fn agent_list_slots(
     state: tauri::State<'_, AgentState>,
 ) -> Result<Vec<SlotSummary>, String> {
+    state.manager.ensure_default_slots();
     Ok(state.manager.list_slots())
 }
 
