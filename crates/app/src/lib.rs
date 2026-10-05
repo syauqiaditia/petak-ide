@@ -342,6 +342,9 @@ pub fn run() {
             commands::agent_read_project_memory,
             commands::agent_save_project_memory,
             commands::agent_open_in_obsidian,
+            commands::agent_mcp_get_config,
+            commands::agent_mcp_save_config,
+            commands::agent_mcp_test_server,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,

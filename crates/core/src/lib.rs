@@ -19,3 +19,9 @@ pub mod watch;
 
 pub use notify;
 pub use sha2;
+
+pub use agent::mcp;
+pub use agent::mcp::{
+    active_acp_servers, load_mcp_config, resolve_mcp_path, save_mcp_config, test_mcp_server,
+    McpConfig, McpServerConfig, McpTestResult,
+};

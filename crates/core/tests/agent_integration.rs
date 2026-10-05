@@ -297,7 +297,7 @@ fn test_hermes_acp_real_session_new_only() {
 
     // 2. Handshake session/new ONLY (no prompt, 0 cost)
     let sess_res = client
-        .session_new(&temp.path().to_string_lossy(), Duration::from_secs(15))
+        .session_new(&temp.path().to_string_lossy(), &[], Duration::from_secs(15))
         .expect("session/new real hermes acp");
 
     assert!(!sess_res.session_id.is_empty(), "sessionId must be valid");

@@ -667,7 +667,10 @@ impl SlotManager {
         let init_res = client.initialize(Duration::from_secs(15))?;
 
         // 2. Session/new handshake (timeout 15s)
-        let sess_res = client.session_new(&cwd_str, Duration::from_secs(15))?;
+        let mcp_servers = super::mcp::load_mcp_config(project_root)
+            .map(|cfg| super::mcp::active_acp_servers(&cfg))
+            .unwrap_or_default();
+        let sess_res = client.session_new(&cwd_str, &mcp_servers, Duration::from_secs(15))?;
 
         // Extract capabilities
         let mut caps = SlotCapabilities {

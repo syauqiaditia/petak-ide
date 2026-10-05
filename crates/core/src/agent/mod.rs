@@ -1,5 +1,6 @@
 pub mod acp;
 pub mod hermes;
+pub mod mcp;
 pub mod memory;
 pub mod perm;
 pub mod proposal;
@@ -16,6 +17,10 @@ pub use hermes::{
     check_hermes_acp, check_hermes_version, detect_hermes, fallback_read_profiles,
     parse_kanban_json, parse_kanban_text, parse_profile_list_table, resolve_hermes,
     HermesDetectionResult, HermesProfileInfo, KanbanBadge,
+};
+pub use mcp::{
+    active_acp_servers, load_mcp_config, resolve_mcp_path, save_mcp_config, test_mcp_server,
+    McpConfig, McpServerConfig, McpTestResult,
 };
 pub use memory::{
     extract_title, list_project_memory, read_project_memory, resolve_memory_dir,

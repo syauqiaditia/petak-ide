@@ -1,6 +1,7 @@
 use petak_core::agent::{
-    HermesDetectionResult, LlmQuotaReport, MemoryItem, PendingPermissionRequest, PromptResponse,
-    Proposal, SlotConfig, SlotManager, SlotSummary, TeamConfig, UsageReport,
+    HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult, MemoryItem,
+    PendingPermissionRequest, PromptResponse, Proposal, SlotConfig, SlotManager, SlotSummary,
+    TeamConfig, UsageReport,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -353,4 +354,66 @@ pub async fn agent_open_in_obsidian(
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+// ── Model Context Protocol (MCP) ──────────────────────────────────────────
+
+fn resolve_effective_root(
+    app: &tauri::AppHandle,
+    root: Option<String>,
+) -> Option<std::path::PathBuf> {
+    if let Some(r) = root {
+        let trimmed = r.trim();
+        if !trimmed.is_empty() {
+            return Some(std::path::PathBuf::from(trimmed));
+        }
+    }
+    if let Some(curr_root) = app.try_state::<crate::commands::CurrentProjectRoot>() {
+        if let Ok(guard) = curr_root.0.lock() {
+            if let Some(ref r) = *guard {
+                return Some(std::path::PathBuf::from(r));
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+pub async fn agent_mcp_get_config(
+    app: tauri::AppHandle,
+    root: Option<String>,
+) -> Result<McpConfig, String> {
+    let effective_root = resolve_effective_root(&app, root);
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::load_mcp_config(effective_root.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_mcp_save_config(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    config: McpConfig,
+) -> Result<(), String> {
+    let effective_root = resolve_effective_root(&app, root);
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::save_mcp_config(effective_root.as_deref(), &config)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_mcp_test_server(
+    command: String,
+    args: Vec<String>,
+    env: std::collections::HashMap<String, String>,
+) -> Result<McpTestResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::test_mcp_server(&command, &args, &env)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
