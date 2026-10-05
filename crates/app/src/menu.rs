@@ -88,6 +88,8 @@ pub fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Me
         .item(&MenuItemBuilder::with_id("hot_reload", "Flutter Hot Reload").accelerator("CmdOrCtrl+\\").build(app_handle)?)
         .item(&MenuItemBuilder::with_id("hot_restart", "Flutter Hot Restart").accelerator("Shift+CmdOrCtrl+\\").build(app_handle)?)
         .item(&MenuItemBuilder::with_id("stop_run", "Stop").accelerator("Shift+F5").build(app_handle)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id("run_test_scenario", "Run Test Scenario").accelerator("Shift+CmdOrCtrl+T").build(app_handle)?)
         .build()?;
 
     let git_menu = SubmenuBuilder::new(app_handle, "Git")
@@ -110,6 +112,8 @@ pub fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Me
         .maximize_with_text("Zoom")
         .separator()
         .bring_all_to_front()
+        .separator()
+        .item(&MenuItemBuilder::with_id("tool_window_tests", "Tests & Automation").accelerator("CmdOrCtrl+4").build(app_handle)?)
         .build()?;
 
     let help_menu = SubmenuBuilder::new(app_handle, "Help")

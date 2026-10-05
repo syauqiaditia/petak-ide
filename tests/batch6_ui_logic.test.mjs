@@ -39,6 +39,7 @@ const STORE_DEFS = {
   settingsStore: path.resolve(uiRoot, 'features/settings/settingsStore.svelte.ts'),
   keymapStore: path.resolve(uiRoot, 'features/settings/keymapStore.svelte.ts'),
   mcpStore: path.resolve(uiRoot, 'features/settings/mcpStore.svelte.ts'),
+  testStore: path.resolve(uiRoot, 'features/tests/testStore.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {

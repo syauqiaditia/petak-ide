@@ -98,6 +98,16 @@
     </svg>
   </button>
 
+  <button
+    class="rail-btn"
+    class:active={activeTab === 'tests'}
+    onclick={() => selectTab('tests')}
+    aria-label="Tests & Automation"
+    title="Tests & Automation (⌘4)"
+  >
+    <span class="rail-icon-emoji" style="font-size: 16px; line-height: 1;">🧪</span>
+  </button>
+
   <div class="spacer"></div>
 
   <!-- Tool Windows Quick Menu Button -->
@@ -133,6 +143,12 @@
           <span class="tw-name">Git Source Control</span>
           <span class="tw-kbd">⌘2</span>
         </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('tests'); }}>
+          <span class="tw-shortcut-badge">4</span>
+          <span class="tw-emoji">🧪</span>
+          <span class="tw-name">Tests & Automation</span>
+          <span class="tw-kbd">⌘4</span>
+        </button>
         <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('mr'); }}>
           <span class="tw-shortcut-badge">3</span>
           <span class="tw-emoji">🔀</span>
@@ -140,7 +156,7 @@
           <span class="tw-kbd">⌘5</span>
         </button>
         <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; handleAgentsClick(); }}>
-          <span class="tw-shortcut-badge">4</span>
+          <span class="tw-shortcut-badge">6</span>
           <span class="tw-emoji">✨</span>
           <span class="tw-name">AI Agents Panel</span>
           <span class="tw-kbd">⌘6</span>
@@ -165,7 +181,6 @@
           <span class="tw-shortcut-badge">R</span>
           <span class="tw-emoji">⚡</span>
           <span class="tw-name">Run / Build Output</span>
-          <span class="tw-kbd">⌘4</span>
         </button>
         <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; onOpenLogcat?.(); }}>
           <span class="tw-shortcut-badge">L</span>
