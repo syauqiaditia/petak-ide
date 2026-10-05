@@ -17,7 +17,7 @@
   }>();
 
   let activeSubTab = $state<'chat' | 'diff' | 'quota' | 'memory'>('chat');
-  let panelWidth = $state(390);
+  let panelWidth = $state(440);
   let isResizing = $state(false);
 
   let proposals = $derived(agentsStore.activeProposals);
@@ -464,10 +464,10 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     color: #f1f2f4;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
-    padding: 3px 22px 3px 6px;
-    max-width: 140px;
+    padding: 3px 20px 3px 5px;
+    max-width: 115px;
     outline: none;
     cursor: pointer;
     text-overflow: ellipsis;
