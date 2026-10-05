@@ -18,7 +18,7 @@ sha2 = "0.10"
 dirs = "5"
 tempfile = "3.8"
 base64 = "0.22"
-ureq = { version = "2.10", default-features = false, features = ["native-tls", "json"] }
+ureq = { version = "2.10", features = ["json"] }
 chrono = "0.4"
 serde_yaml = "0.9"
 
