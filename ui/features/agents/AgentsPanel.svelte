@@ -17,8 +17,14 @@
   }>();
 
   let activeSubTab = $state<'chat' | 'diff' | 'quota' | 'memory'>('chat');
-  let panelWidth = $state(440);
+  const SAVED_PANEL_WIDTH_KEY = 'petak_agent_panel_width';
+  let panelWidth = $state(
+    typeof localStorage !== 'undefined' && localStorage.getItem(SAVED_PANEL_WIDTH_KEY)
+      ? Math.max(340, Math.min(850, Number(localStorage.getItem(SAVED_PANEL_WIDTH_KEY)) || 460))
+      : 460
+  );
   let isResizing = $state(false);
+  let isMoreMenuOpen = $state(false);
 
   let proposals = $derived(agentsStore.activeProposals);
   let pendingProposalCount = $derived(proposals.length);
@@ -126,11 +132,17 @@
     const onMouseMove = (ev: MouseEvent) => {
       if (!isResizing) return;
       const delta = startX - ev.clientX;
-      panelWidth = Math.max(320, Math.min(500, startW + delta));
+      const maxW = typeof window !== 'undefined' ? Math.min(850, Math.floor(window.innerWidth * 0.65)) : 800;
+      panelWidth = Math.max(340, Math.min(maxW, startW + delta));
     };
 
     const onMouseUp = () => {
       isResizing = false;
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(SAVED_PANEL_WIDTH_KEY, String(panelWidth));
+        } catch (_) {}
+      }
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -244,62 +256,92 @@
     </div>
 
     <div class="agent-header-actions">
+      <!-- Back to Chat when on secondary views -->
+      {#if activeSubTab !== 'chat'}
+        <button
+          class="subtab-btn back-chat"
+          onclick={() => (activeSubTab = 'chat')}
+          title="Kembali ke Chat"
+        >
+          ← Chat
+        </button>
+      {/if}
+
       <!-- Concise Subtabs: Chat & Diff (with hunk count badge) -->
       <div class="agent-subtab-group">
-        <button
-          class="subtab-btn"
-          class:active={activeSubTab === 'chat'}
-          onclick={() => (activeSubTab = 'chat')}
-        >
-          Chat
-        </button>
-        <button
-          class="subtab-btn"
-          class:active={activeSubTab === 'diff'}
-          onclick={() => (activeSubTab = 'diff')}
-          title="Proposed Edits"
-        >
-          Diff
-          {#if pendingHunkCount > 0}
-            <span class="diff-badge">{pendingHunkCount}</span>
-          {:else if pendingProposalCount > 0}
-            <span class="diff-badge">{pendingProposalCount}</span>
-          {/if}
-        </button>
+        {#if activeSubTab === 'chat'}
+          <button
+            class="subtab-btn"
+            class:active={activeSubTab === 'chat'}
+            onclick={() => (activeSubTab = 'chat')}
+          >
+            Chat
+          </button>
+        {/if}
+        {#if pendingHunkCount > 0 || pendingProposalCount > 0 || activeSubTab === 'diff'}
+          <button
+            class="subtab-btn diff"
+            class:active={activeSubTab === 'diff'}
+            onclick={() => (activeSubTab = 'diff')}
+            title="Proposed Edits"
+          >
+            Diff
+            {#if pendingHunkCount > 0}
+              <span class="diff-badge">{pendingHunkCount}</span>
+            {:else if pendingProposalCount > 0}
+              <span class="diff-badge">{pendingProposalCount}</span>
+            {/if}
+          </button>
+        {/if}
       </div>
 
-      <!-- Secondary Subtabs / Menus (Quota & Memory) -->
-      <div class="secondary-tabs">
+      <!-- More Menu Dropdown: Quota, Memory, Settings -->
+      <div class="more-menu-wrap">
         <button
-          class="subtab-btn secondary"
-          class:active={activeSubTab === 'quota'}
-          onclick={() => (activeSubTab = 'quota')}
-          title="Quota & Usage"
+          class="header-action-btn more-btn"
+          class:active={isMoreMenuOpen || activeSubTab === 'quota' || activeSubTab === 'memory'}
+          onclick={() => (isMoreMenuOpen = !isMoreMenuOpen)}
+          title="Menu Lainnya (Quota, Memory, Settings)"
+          aria-label="More Options"
         >
-          Quota
+          ⋯
         </button>
-        <button
-          class="subtab-btn secondary"
-          class:active={activeSubTab === 'memory'}
-          onclick={() => (activeSubTab = 'memory')}
-          title="Memory"
-        >
-          Memory
-        </button>
-      </div>
 
-      <!-- Settings Center Gear Button -->
-      <button
-        class="header-action-btn"
-        onclick={() => settingsStore.open('agents')}
-        title="Buka Pengaturan AI Agents"
-        aria-label="Settings AI Agents"
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
+        {#if isMoreMenuOpen}
+          <div class="more-menu-backdrop" onclick={() => (isMoreMenuOpen = false)} role="presentation"></div>
+          <div class="more-menu-dropdown" role="menu" onclick={() => (isMoreMenuOpen = false)}>
+            <button
+              class="more-menu-item"
+              class:active={activeSubTab === 'quota'}
+              onclick={() => (activeSubTab = 'quota')}
+              role="menuitem"
+              title="Quota & Usage"
+            >
+              <span class="item-icon">📊</span>
+              <span>Quota & Usage</span>
+            </button>
+            <button
+              class="more-menu-item"
+              class:active={activeSubTab === 'memory'}
+              onclick={() => (activeSubTab = 'memory')}
+              role="menuitem"
+              title="Memory"
+            >
+              <span class="item-icon">📓</span>
+              <span>Memory</span>
+            </button>
+            <div class="more-menu-divider"></div>
+            <button
+              class="more-menu-item"
+              onclick={() => settingsStore.open('agents')}
+              role="menuitem"
+            >
+              <span class="item-icon">⚙️</span>
+              <span>Pengaturan AI Agents</span>
+            </button>
+          </div>
+        {/if}
+      </div>
 
       <!-- Close Panel Button -->
       <button class="close-panel-btn" onclick={onClose} aria-label="Close Agents Panel" title="Tutup panel (⌘6)">
@@ -807,20 +849,97 @@
     margin-left: 2px;
   }
 
-  .secondary-tabs {
+  .subtab-btn.back-chat {
+    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    font-weight: 600;
+  }
+
+  .subtab-btn.back-chat:hover {
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+  }
+
+  /* More Menu Dropdown */
+  .more-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .header-action-btn.more-btn {
+    font-size: 14px;
+    line-height: 1;
+    font-weight: 700;
+    padding: 2px 6px;
+    color: #8b949e;
+  }
+
+  .header-action-btn.more-btn:hover,
+  .header-action-btn.more-btn.active {
+    color: #f1f2f4;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .more-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+
+  .more-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 190px;
+    background: #181920;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+    padding: 4px;
+    z-index: 100;
     display: flex;
+    flex-direction: column;
     gap: 2px;
   }
 
-  .subtab-btn.secondary {
-    font-size: 10px;
-    padding: 2px 4px;
-    color: #717684;
+  .more-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #c9cdd4;
+    font-size: 11.5px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.1s;
+    width: 100%;
+    box-sizing: border-box;
   }
 
-  .subtab-btn.secondary.active {
-    color: #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+  .more-menu-item:hover {
+    background: #23252e;
+    color: #f1f2f4;
+  }
+
+  .more-menu-item.active {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    font-weight: 600;
+  }
+
+  .more-menu-item .item-icon {
+    font-size: 12px;
+  }
+
+  .more-menu-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 3px 0;
   }
 
   .header-action-btn,
