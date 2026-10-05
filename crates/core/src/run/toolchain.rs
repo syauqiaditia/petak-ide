@@ -671,6 +671,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires pre-installed mobile toolchain (server / local dev)"]
     fn test_detect_real_toolchain_on_server() {
         let exec = crate::exec::SystemExec;
         let root = Path::new(".");
