@@ -1,4 +1,0 @@
-F0.8 review re-run: swift node bench on server (x86_64)
-Command: node scripts/f02_node_bench.mjs ~/petak-bench swift
-{"metric":"f02_node_bench","runtime":"node v26.8.2","language":"swift","samples":200,"initial_parse_ms":100.04352900000004,"first_incremental_ms":2.598993000000007,"incremental":{"p50":1.7542160000000422,"p95":2.3298180000000457,"max":19.672901000000024},"incremental_excl_first":{"p50":1.7527989999999818,"p95":2.3287579999999934,"max":19.672901000000024},"query_viewport":{"p50":0.6288940000000025,"p95":1.2137050000000045,"max":4.605435999999997}}
-Compare vs F0.5 claim (median 3 runs): initial 112ms, incr p50 1.5ms — consistent (<20% diff), well under 16ms budget.

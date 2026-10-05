@@ -1,8 +1,0 @@
-F0.8 review re-run: fwcd kotlin-language-server on tiny fixture (Mac M2)
-Command: node /tmp/f06-kotlin-test.mjs ~/.local/kotlin-language-server/server/bin/kotlin-language-server -- ~/petak/spike/fixtures/kotlin ~/petak/spike/fixtures/kotlin/src/main/kotlin/Main.kt 300 fwcd-fixture-reverify
-=== fwcd-fixture-reverify ===
-initialized OK (1228ms)
-diagnostics! (1 items, 2189ms)
-  - Type mismatch: inferred type is String but Int was expected
-peakRSSMB: 299.4
-Compare vs F0.6 claim: init 946ms/diag 1878ms/RSS 210.4MB — same order of magnitude, correct error reproduced.

@@ -1,6 +1,0 @@
-F0.8 review re-run: swift node bench on Mac M2
-Command (ssh 100.100.1.1): node scripts/f02_node_bench.mjs ~/petak-bench swift
-{"metric":"f02_node_bench","runtime":"node v26.8.2","language":"swift","samples":200,"initial_parse_ms":71.14937499999996,"first_incremental_ms":1.458582999999976,"incremental":{"p50":0.6305830000000014,"p95":1.3113749999999982,"max":1.8357080000000678},"incremental_excl_first":{"p50":0.629709000000048,"p95":1.294916999999998,"max":1.8357080000000678},"query_viewport":{"p50":0.27020900000002257,"p95":0.7033329999999296,"max":5.153208999999947}}
-Compare vs F0.5 claim: initial 68ms, incr p50 0.86ms — consistent, under budget.
-wasm SHA-256 (server vs Mac): 3b8f26977e062bf7b76dc8a59a573f0c011a7271cc0f3a0144a0f34e18b6f38e (identical)
-f02_node_bench.mjs SHA-256 (server vs Mac): 0723a0ed5ec62fdc7f0dbf0dad8f208a87c2936dc8393569fec5fe9e55a29217 (identical)

@@ -1,5 +1,0 @@
---- Measuring Dart Language Server RAM ---
-Dart LS (PID 548761) RSS: 103.1 MB (105548 KB)
-
---- Measuring Kotlin Language Server RAM ---
-Kotlin LS (PID 548797) RSS: 607.0 MB (621604 KB)

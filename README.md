@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/redesign/screens/workspace-clean-rails.png" alt="Petak IDE Workspace" width="880" style="border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.4);" />
+  <img src="docs/screens/workspace.png" alt="Petak IDE Workspace" width="880" style="border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.4);" />
 </p>
 
 <p align="center">

@@ -1,5 +1,0 @@
---- Measuring Dart Language Server RAM ---
-Dart LS (PID 26532) RSS: 171.0 MB (175088 KB)
-
---- Measuring Kotlin Language Server RAM ---
-Kotlin LS not found at /mnt/storage/uqi-cache/lsp/server/bin/kotlin-language-server, skipped (set PETAK_KOTLIN_LS)

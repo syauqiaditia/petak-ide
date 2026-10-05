@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  build-tauri:
+  build-release:
     permissions:
       contents: write
     strategy:
@@ -14,9 +14,9 @@ jobs:
       matrix:
         include:
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
+            os_name: 'macos'
           - platform: 'ubuntu-22.04'
-            args: ''
+            os_name: 'linux'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -33,7 +33,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Install System Dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
@@ -45,14 +44,30 @@ jobs:
       - name: Install NPM Dependencies
         run: npm ci
 
-      - name: Build Tauri Application
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Production Application via Tauri
+        run: npm run tauri -- build
+
+      - name: Prepare Release Artifacts (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p release-artifacts
+          cp target/release/bundle/dmg/*.dmg release-artifacts/ 2>/dev/null || true
+          cd target/release/bundle/macos && zip -r ../../../../release-artifacts/Petak-macos-app.zip Petak.app
+
+      - name: Prepare Release Artifacts (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          mkdir -p release-artifacts
+          cp target/release/petak-app release-artifacts/petak-linux-x86_64 2>/dev/null || true
+          cp target/release/bundle/deb/*.deb release-artifacts/ 2>/dev/null || true
+          cp target/release/bundle/appimage/*.AppImage release-artifacts/ 2>/dev/null || true
+
+      - name: Publish Artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Petak IDE ${{ github.ref_name }}'
-          releaseBody: 'See CHANGELOG.md for details.'
-          releaseDraft: true
+          files: release-artifacts/*
+          draft: false
           prerelease: false
-          args: ${{ matrix.args }}
