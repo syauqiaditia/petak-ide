@@ -9,7 +9,9 @@
   let isCreateModalOpen = $state(false);
 
   onMount(() => {
-    mrStore.init(folderPath);
+    if (folderPath) {
+      mrStore.init(folderPath);
+    }
   });
 
   onDestroy(() => {
@@ -17,7 +19,7 @@
   });
 
   $effect(() => {
-    if (folderPath) {
+    if (folderPath && folderPath !== mrStore.currentFolderPath) {
       mrStore.init(folderPath);
     }
   });
@@ -36,7 +38,7 @@
     onSelectFilter={(f) => (mrStore.activeFilter = f)}
     onSelectMr={(iid) => mrStore.selectMr(iid)}
     onSearchChange={(q) => (mrStore.searchQuery = q)}
-    onRefresh={() => mrStore.loadList()}
+    onRefresh={() => mrStore.loadList(true)}
     onEnableDemoMode={() => mrStore.enableDemoMode()}
     onCreateMr={() => (isCreateModalOpen = true)}
   />

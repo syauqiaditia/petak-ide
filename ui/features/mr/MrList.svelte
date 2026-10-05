@@ -138,7 +138,7 @@
 
   <!-- MR Cards List -->
   <div class="list-body">
-    {#if tokenScope === 'none' && !isDemoMode}
+    {#if tokenScope === 'none' && !isDemoMode && mergeRequests.length === 0 && !isLoading}
       <!-- Empty state: Belum ada akun GitLab -->
       <div class="no-token-card">
         <div class="lock-icon">🔒</div>

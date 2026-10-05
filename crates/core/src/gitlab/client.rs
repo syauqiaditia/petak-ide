@@ -400,20 +400,17 @@ impl GitLabClient {
             return Err(GitLabError::Unauthorized("No GitLab token provided".to_string()));
         }
         let url = format!("{}/api/v4/personal_access_tokens/self", self.base_url);
-        match self.execute_get(&url, Some(Duration::from_secs(60)), false) {
-            Ok((body, _)) => {
-                let pat: PersonalAccessToken =
-                    serde_json::from_str(&body).map_err(|e| GitLabError::Parse(e.to_string()))?;
+        if let Ok((body, _)) = self.execute_get(&url, Some(Duration::from_secs(60)), false) {
+            if let Ok(pat) = serde_json::from_str::<PersonalAccessToken>(&body) {
                 return Ok(TokenScopeMode::from_scopes(&pat.scopes));
             }
-            Err(GitLabError::Unauthorized(msg)) => return Err(GitLabError::Unauthorized(msg)),
-            Err(_) => {}
         }
-        // Fallback: if /user works, token has valid read/api access
-        if self.get_current_user().is_ok() {
-            return Ok(TokenScopeMode::Full);
+        // Fallback: if /user works, token has valid API access (supports all GitLab versions)
+        match self.get_current_user() {
+            Ok(_) => Ok(TokenScopeMode::Full),
+            Err(GitLabError::Unauthorized(msg)) => Err(GitLabError::Unauthorized(msg)),
+            Err(e) => Err(e),
         }
-        Err(GitLabError::Unauthorized("Invalid or revoked GitLab token".to_string()))
     }
 
     pub fn get_personal_access_token(&self) -> Result<PersonalAccessToken, GitLabError> {

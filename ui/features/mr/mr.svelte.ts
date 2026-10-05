@@ -45,9 +45,16 @@ class MrStore {
   actionError = $state<string | null>(null);
   actionSuccess = $state<string | null>(null);
 
-  // Polling
+  // Polling & Cache
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private currentFolderPath = '';
+  public currentFolderPath = '';
+  private detailsCache = new Map<number, {
+    detail: MergeRequest;
+    diffFiles: GitDiffFile[];
+    discussions: Discussion[];
+    pipelines: PipelineInfo[];
+    timestamp: number;
+  }>();
 
   // Derived
   filteredList = $derived(
@@ -64,11 +71,24 @@ class MrStore {
   /**
    * Initialize or refresh the MR viewer.
    */
-  async init(folderPath: string = '') {
-    this.currentFolderPath = folderPath;
+  async init(folderPath: string = '', force: boolean = false) {
+    if (!folderPath && !this.currentFolderPath) return;
+    const targetFolder = folderPath || this.currentFolderPath;
+
+    if (!force && this.currentFolderPath === targetFolder && this.mergeRequests.length > 0) {
+      return; // Retain cached list to avoid network delay and UI flicker
+    }
+
+    if (this.currentFolderPath !== targetFolder) {
+      this.detailsCache.clear();
+      this.selectedIid = null;
+      this.selectedMrDetail = null;
+    }
+
+    this.currentFolderPath = targetFolder;
     await this.checkTokenScope();
     await this.loadCurrentUser();
-    await this.loadList();
+    await this.loadList(force);
   }
 
   /**
@@ -77,13 +97,15 @@ class MrStore {
   async checkTokenScope() {
     try {
       const scope = await api.mrGetTokenScope(this.currentFolderPath);
-      this.tokenScope = scope;
-      if (scope === 'none') {
-        // If no token, we remain in 'none' so empty state is displayed,
-        // unless demo mode was manually triggered.
+      if (scope && scope !== 'none') {
+        this.tokenScope = scope;
+      } else if (this.mergeRequests.length === 0) {
+        this.tokenScope = scope;
       }
     } catch {
-      this.tokenScope = 'none';
+      if (this.mergeRequests.length === 0) {
+        this.tokenScope = 'none';
+      }
     }
   }
 
@@ -95,14 +117,11 @@ class MrStore {
       this.currentUser = DEMO_CURRENT_USER;
       return;
     }
-    if (this.tokenScope === 'none') {
-      this.currentUser = null;
-      return;
-    }
+    if (this.currentUser) return; // Keep cached user profile
     try {
       this.currentUser = await api.mrCurrentUser(this.currentFolderPath);
     } catch {
-      this.currentUser = null;
+      // Keep existing user if previously resolved
     }
   }
 
@@ -120,15 +139,14 @@ class MrStore {
   }
 
   /**
-   * Load merge request list.
+   * Load merge request list (cached in memory, manual refresh).
    */
-  async loadList() {
+  async loadList(force: boolean = false) {
     if (this.isDemoMode) {
       this.mergeRequests = DEMO_MERGE_REQUESTS;
       return;
     }
-    if (this.tokenScope === 'none') {
-      this.mergeRequests = [];
+    if (this.tokenScope === 'none' && this.mergeRequests.length === 0) {
       return;
     }
 
@@ -137,14 +155,21 @@ class MrStore {
 
     try {
       const res = await api.mrList({ state: 'opened' }, this.currentFolderPath);
-      this.mergeRequests = res.items;
-      if (this.mergeRequests.length > 0 && !this.selectedIid) {
-        // Auto-select first item
-        this.selectMr(this.mergeRequests[0].iid);
+      if (res && res.items) {
+        this.mergeRequests = res.items;
+        if (this.tokenScope === 'none') {
+          this.tokenScope = 'full';
+        }
+      }
+      if (this.mergeRequests.length > 0 && (!this.selectedIid || force)) {
+        const targetIid = this.selectedIid && this.mergeRequests.some(m => m.iid === this.selectedIid)
+          ? this.selectedIid
+          : this.mergeRequests[0].iid;
+        this.selectMr(targetIid);
       }
     } catch (e: any) {
       this.actionError = e?.message || String(e);
-      this.mergeRequests = [];
+      // Retain existing list so UI never vanishes on network blip
     } finally {
       this.isLoadingList = false;
     }
@@ -152,11 +177,11 @@ class MrStore {
 
   /**
    * Select a merge request and load its full details, diffs, and discussions.
+   * Uses aggressive in-memory caching for instant 0ms switching.
    */
-  async selectMr(iid: number) {
+  async selectMr(iid: number, forceFresh: boolean = false) {
     this.selectedIid = iid;
     this.stopPipelinePolling();
-    this.isLoadingDetail = true;
     this.actionError = null;
 
     if (this.isDemoMode) {
@@ -170,11 +195,32 @@ class MrStore {
       return;
     }
 
+    // 1. Instant Cache Hit: Show immediately without waiting for network!
+    const cached = this.detailsCache.get(iid);
+    if (cached) {
+      this.selectedMrDetail = cached.detail;
+      this.diffFiles = cached.diffFiles;
+      this.discussions = cached.discussions;
+      this.pipelines = cached.pipelines;
+      this.isLoadingDetail = false;
+      if (!forceFresh && (Date.now() - cached.timestamp < 120_000)) {
+        this.checkAndStartPipelinePolling();
+        return; // Valid cache within 2 minutes: skip network completely
+      }
+    } else {
+      // Immediate preview from list card header while diffs fetch
+      const listItem = this.mergeRequests.find((m) => m.iid === iid);
+      if (listItem) {
+        this.selectedMrDetail = listItem;
+      }
+      this.isLoadingDetail = true;
+    }
+
     try {
       const [detail, diffs, disc, pipes] = await Promise.all([
         api.mrDetail(iid, this.currentFolderPath),
-        api.mrDiffs(iid, undefined, this.currentFolderPath),
-        api.mrDiscussions(iid, this.currentFolderPath),
+        api.mrDiffs(iid, undefined, this.currentFolderPath).catch(() => []),
+        api.mrDiscussions(iid, this.currentFolderPath).catch(() => []),
         api.mrPipelines(iid, this.currentFolderPath).catch(() => []),
       ]);
 
@@ -182,6 +228,14 @@ class MrStore {
       this.diffFiles = diffs;
       this.discussions = disc;
       this.pipelines = pipes;
+
+      this.detailsCache.set(iid, {
+        detail,
+        diffFiles: diffs,
+        discussions: disc,
+        pipelines: pipes,
+        timestamp: Date.now(),
+      });
 
       this.checkAndStartPipelinePolling();
     } catch (e: any) {
