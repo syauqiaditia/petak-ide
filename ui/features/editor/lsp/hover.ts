@@ -30,7 +30,7 @@ export const hoverTheme = EditorView.theme({
     padding: '0 !important',
     color: '#d4d6dc !important',
     fontSize: '12px !important',
-    maxWidth: '540px !important',
+    maxWidth: 'min(520px, calc(100vw - 460px), calc(100% - 24px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
     overflowX: 'hidden !important',
@@ -39,6 +39,41 @@ export const hoverTheme = EditorView.theme({
     zIndex: '250 !important',
     scrollbarWidth: 'thin !important',
     scrollbarColor: '#3c3f4a transparent !important',
+    boxSizing: 'border-box !important',
+  },
+  '.cm-lsp-hover-action-bar': {
+    display: 'flex !important',
+    alignItems: 'center !important',
+    justifyContent: 'space-between !important',
+    padding: '4px 10px !important',
+    backgroundColor: 'rgba(255, 255, 255, 0.04) !important',
+    borderBottom: '1px solid #252730 !important',
+    fontSize: '11px !important',
+    gap: '8px !important',
+  },
+  '.cm-lsp-hover-loc-badge': {
+    color: '#8b949e !important',
+    fontFamily: "'JetBrains Mono', monospace !important",
+    fontSize: '10.5px !important',
+  },
+  '.cm-lsp-hover-ask-btn': {
+    background: 'rgba(59, 130, 246, 0.12) !important',
+    border: '1px solid rgba(59, 130, 246, 0.35) !important',
+    borderRadius: '4px !important',
+    color: '#60a5fa !important',
+    padding: '2px 8px !important',
+    fontSize: '11px !important',
+    fontWeight: '500 !important',
+    cursor: 'pointer !important',
+    display: 'inline-flex !important',
+    alignItems: 'center !important',
+    gap: '4px !important',
+    transition: 'all 0.12s ease !important',
+  },
+  '.cm-lsp-hover-ask-btn:hover': {
+    background: 'rgba(59, 130, 246, 0.25) !important',
+    borderColor: '#3b82f6 !important',
+    color: '#93c5fd !important',
   },
   '.cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar': {
     width: '5px !important',
@@ -199,15 +234,84 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
             }
           }
 
+          const symbolText = doc.sliceString(from, to).trim() || 'symbol';
+          const lineNum = lspPos.line + 1;
+
           return {
             pos: from,
             end: to,
             above: true,
-            create() {
+            create(view: EditorView) {
               const dom = document.createElement('div');
               dom.className = 'cm-lsp-hover-tooltip';
+
+              // Header toolbar with location & "Tanya di Chat" action
+              const toolbar = document.createElement('div');
+              toolbar.className = 'cm-lsp-hover-action-bar';
+
+              const locBadge = document.createElement('span');
+              locBadge.className = 'cm-lsp-hover-loc-badge';
+              const fileName = path.split('/').pop() || path;
+              locBadge.textContent = `${fileName}:${lineNum}`;
+
+              const askBtn = document.createElement('button');
+              askBtn.type = 'button';
+              askBtn.className = 'cm-lsp-hover-ask-btn';
+              askBtn.innerHTML = `<span>💬 Tanya di Chat</span>`;
+              askBtn.title = `Kirim ${symbolText} (${fileName}:${lineNum}) ke Petak Agent`;
+              askBtn.onclick = async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                view.dispatch({ effects: closeHoverTooltips });
+
+                const { agentsStore } = await import('../../agents/agents.svelte');
+                const { panelStore } = await import('../../../shell/panelStore.svelte');
+
+                agentsStore.attachCodeReference({
+                  path,
+                  line: lineNum,
+                  symbol: symbolText,
+                  codeSnippet: text,
+                });
+                panelStore.openRightPanel('agent');
+              };
+
+              toolbar.appendChild(locBadge);
+              toolbar.appendChild(askBtn);
+              dom.appendChild(toolbar);
+
               dom.appendChild(renderMarkdownToDom(text));
-              return { dom };
+
+              function adjustPosition() {
+                if (!view.dom.isConnected || !dom.isConnected) return;
+                const editorRect = view.dom.getBoundingClientRect();
+                const domRect = dom.getBoundingClientRect();
+
+                // Dynamic max width to always stay inside visible editor area
+                const maxAllowedWidth = Math.max(260, editorRect.width - 24);
+                dom.style.maxWidth = `${maxAllowedWidth}px`;
+
+                // If right dock/panel causes tooltip to overflow right edge of visible editor
+                if (domRect.right > editorRect.right - 12) {
+                  const shift = domRect.right - (editorRect.right - 12);
+                  dom.style.transform = `translateX(-${Math.max(0, shift)}px)`;
+                } else if (domRect.left < editorRect.left + 12) {
+                  const shift = (editorRect.left + 12) - domRect.left;
+                  dom.style.transform = `translateX(${Math.max(0, shift)}px)`;
+                } else {
+                  dom.style.transform = 'none';
+                }
+              }
+
+              return {
+                dom,
+                mount() {
+                  requestAnimationFrame(adjustPosition);
+                },
+                positioned() {
+                  adjustPosition();
+                },
+              };
             },
           };
         } catch (e) {

@@ -18,25 +18,30 @@
   function onKeyDown(e: KeyboardEvent) {
     if (!codeActionState.active || codeActionState.actions.length === 0) return;
 
+    const totalCount = codeActionState.actions.length + 1;
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       e.stopPropagation();
       codeActionState.selectedIndex =
-        (codeActionState.selectedIndex + 1) % codeActionState.actions.length;
+        (codeActionState.selectedIndex + 1) % totalCount;
       scrollToSelected();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       e.stopPropagation();
       codeActionState.selectedIndex =
-        (codeActionState.selectedIndex - 1 + codeActionState.actions.length) %
-        codeActionState.actions.length;
+        (codeActionState.selectedIndex - 1 + totalCount) % totalCount;
       scrollToSelected();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      const current = codeActionState.actions[codeActionState.selectedIndex];
-      if (current) {
-        handleSelect(current);
+      if (codeActionState.selectedIndex === codeActionState.actions.length) {
+        handleAskAgent();
+      } else {
+        const current = codeActionState.actions[codeActionState.selectedIndex];
+        if (current) {
+          handleSelect(current);
+        }
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -61,6 +66,31 @@
     if (view && codeActionState.path) {
       applyCodeAction(action, view, codeActionState.path);
     }
+  }
+
+  async function handleAskAgent() {
+    const view = getView();
+    const filePath = codeActionState.path;
+    codeActionState.reset();
+    if (!view || !filePath) return;
+
+    const selection = view.state.selection.main;
+    const startLine = view.state.doc.lineAt(selection.from).number;
+    const endLine = view.state.doc.lineAt(selection.to).number;
+    const selectedText = !selection.empty
+      ? view.state.sliceDoc(selection.from, selection.to)
+      : view.state.doc.lineAt(selection.from).text;
+
+    const { agentsStore } = await import('../../agents/agents.svelte');
+    const { panelStore } = await import('../../../shell/panelStore.svelte');
+
+    agentsStore.attachCodeReference({
+      path: filePath,
+      line: startLine,
+      endLine: endLine !== startLine ? endLine : undefined,
+      codeSnippet: selectedText,
+    });
+    panelStore.openRightPanel('agent');
   }
 
   function onClickLightbulb(e: MouseEvent) {
@@ -153,6 +183,21 @@
           {/if}
         </div>
       {/each}
+
+      <div class="action-divider"></div>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <div
+        class="action-item agent-action-item"
+        class:is-selected={codeActionState.selectedIndex === codeActionState.actions.length}
+        onclick={handleAskAgent}
+        onmouseenter={() => (codeActionState.selectedIndex = codeActionState.actions.length)}
+        role="menuitem"
+        tabindex="-1"
+      >
+        <span class="action-icon">🤖</span>
+        <span class="action-title">Tanya / Perbaiki dengan Petak Agent</span>
+        <span class="category-badge agent-badge">AI ⌘L</span>
+      </div>
     </div>
   </div>
 {/if}
@@ -283,5 +328,18 @@
   .category-badge.refactor {
     background: #332b1a;
     color: #e8b45a;
+  }
+
+  .category-badge.agent-badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    font-weight: 600;
+  }
+
+  .action-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 4px 8px;
   }
 </style>

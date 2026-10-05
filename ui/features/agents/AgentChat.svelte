@@ -6,6 +6,8 @@
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
   import { skillsStore } from './skillsStore.svelte';
+  import { tabsManager } from '../editor/tabs.svelte';
+  import { api } from '../../lib/api';
 
   let promptText = $state('');
   let textareaEl: HTMLTextAreaElement | null = $state(null);
@@ -14,6 +16,9 @@
 
   let isContextPickerOpen = $state(false);
   let attachedContextLabel = $state<string | null>(null);
+  let fileSearchQuery = $state('');
+  let fileSearchResults = $state<string[]>([]);
+  let isSearchingFiles = $state(false);
   let isSkillPickerOpen = $state(false);
   let skillSearch = $state('');
 
@@ -73,12 +78,61 @@
     isContextPickerOpen = !isContextPickerOpen;
   }
 
-  function selectContext(type: 'file' | 'git' | 'status') {
+  async function handleFileSearch(q: string) {
+    fileSearchQuery = q;
+    if (!q.trim()) {
+      fileSearchResults = [];
+      return;
+    }
+    isSearchingFiles = true;
+    try {
+      const hits = await api.findFiles(q.trim(), 8);
+      fileSearchResults = hits.map((h: any) => h.path);
+    } catch {
+      fileSearchResults = [];
+    } finally {
+      isSearchingFiles = false;
+    }
+  }
+
+  function tagSpecificFile(filePath: string) {
     isContextPickerOpen = false;
-    if (type === 'file') {
-      attachedContextLabel = 'File';
-      promptText = (promptText ? promptText + ' ' : '') + '@file:lib/main.dart ';
-    } else if (type === 'git') {
+    fileSearchQuery = '';
+    fileSearchResults = [];
+    const fileName = filePath.split('/').pop() || filePath;
+    attachedContextLabel = fileName;
+    promptText = (promptText ? promptText + ' ' : '') + `@${filePath} `;
+    textareaEl?.focus();
+  }
+
+  function selectActiveTabContext() {
+    isContextPickerOpen = false;
+    if (!tabsManager.activeTab) return;
+    const path = tabsManager.activeTab.path;
+    const fileName = tabsManager.activeTab.name;
+
+    // Get current line if available from active editor view
+    let lineSuffix = '';
+    const view = (window as any).__PETAK_EDITOR_VIEW__;
+    if (view) {
+      try {
+        const sel = view.state.selection.main;
+        const startLine = view.state.doc.lineAt(sel.from).number;
+        const endLine = view.state.doc.lineAt(sel.to).number;
+        lineSuffix = startLine === endLine ? `:${startLine}` : `:${startLine}-${endLine}`;
+      } catch {
+        // ignore
+      }
+    }
+
+    attachedContextLabel = `${fileName}${lineSuffix}`;
+    promptText = (promptText ? promptText + ' ' : '') + `@${path}${lineSuffix} `;
+    textareaEl?.focus();
+  }
+
+  function selectContext(type: 'git' | 'status') {
+    isContextPickerOpen = false;
+    if (type === 'git') {
       attachedContextLabel = 'Git';
       promptText = (promptText ? promptText + ' ' : '') + '@git:diff ';
     } else {
@@ -255,16 +309,59 @@
   <div class="agent-composer-container">
     {#if isContextPickerOpen}
       <div class="context-picker-popup">
-        <div class="context-picker-title">Pilih Konteks (@Context):</div>
-        <button type="button" class="context-option-btn" onclick={() => selectContext('file')}>
-          📄 Berkas Editor Aktif
-        </button>
+        <div class="context-picker-header">
+          <span class="context-picker-title">Lampirkan Konteks (@Context):</span>
+          <button type="button" class="close-picker-btn" onclick={() => (isContextPickerOpen = false)}>✕</button>
+        </div>
+
+        {#if tabsManager.activeTab}
+          <button type="button" class="context-option-btn highlight" onclick={selectActiveTabContext}>
+            📄 Berkas Aktif: <strong>{tabsManager.activeTab.name}</strong>
+          </button>
+        {/if}
+
+        <div class="file-search-wrap">
+          <input
+            type="text"
+            class="context-file-search"
+            placeholder="Cari & tag berkas proyek..."
+            bind:value={fileSearchQuery}
+            oninput={(e) => handleFileSearch((e.target as HTMLInputElement).value)}
+          />
+        </div>
+
+        {#if fileSearchResults.length > 0}
+          <div class="file-search-list">
+            {#each fileSearchResults as fPath}
+              <button type="button" class="context-file-item" onclick={() => tagSpecificFile(fPath)}>
+                <span class="file-item-name">{fPath.split('/').pop()}</span>
+                <span class="file-item-path">{fPath}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="context-divider"></div>
+
         <button type="button" class="context-option-btn" onclick={() => selectContext('git')}>
-          🔀 Git Staging & Diffs
+          🔀 Git Staging & Diffs (@git:diff)
         </button>
         <button type="button" class="context-option-btn" onclick={() => selectContext('status')}>
-          📊 Hierarki Proyek & Status
+          📊 Hierarki Proyek & Status (@context:project)
         </button>
+      </div>
+    {/if}
+
+    {#if agentsStore.attachedReference}
+      <div class="attached-ref-chip">
+        <span class="ref-icon">📌</span>
+        <span class="ref-loc">
+          {agentsStore.attachedReference.path.split('/').pop()}{agentsStore.attachedReference.line ? `:${agentsStore.attachedReference.line}` : ''}
+        </span>
+        {#if agentsStore.attachedReference.symbol}
+          <span class="ref-sym">({agentsStore.attachedReference.symbol})</span>
+        {/if}
+        <button type="button" class="ref-close" onclick={() => agentsStore.clearAttachedReference()} title="Hapus referensi">✕</button>
       </div>
     {/if}
 
@@ -1293,5 +1390,154 @@
 
   .context-option-btn:hover {
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* Attached Reference Chip */
+  .attached-ref-chip {
+    margin: 4px 8px 0;
+    padding: 3px 8px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #38bdf8;
+    max-width: fit-content;
+  }
+
+  .ref-icon {
+    font-size: 11px;
+  }
+
+  .ref-loc {
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .ref-sym {
+    color: #94a3b8;
+    font-size: 10.5px;
+  }
+
+  .ref-close {
+    background: transparent;
+    border: none;
+    color: #38bdf8;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 0 2px;
+    margin-left: 4px;
+  }
+
+  .ref-close:hover {
+    color: #ffffff;
+  }
+
+  /* Context Picker Popup Enhanced */
+  .context-picker-popup {
+    position: absolute;
+    bottom: 100%;
+    left: 8px;
+    background: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+    z-index: 20;
+    min-width: 240px;
+    max-width: 320px;
+  }
+
+  .context-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 4px;
+  }
+
+  .context-picker-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #8b949e;
+  }
+
+  .context-option-btn.highlight {
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #93c5fd;
+  }
+
+  .context-option-btn.highlight:hover {
+    background: rgba(59, 130, 246, 0.22);
+  }
+
+  .file-search-wrap {
+    margin: 3px 0;
+  }
+
+  .context-file-search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 7px;
+    background: #101114;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: #f1f2f4;
+    font-size: 11px;
+    outline: none;
+  }
+
+  .context-file-search:focus {
+    border-color: #3b82f6;
+  }
+
+  .file-search-list {
+    max-height: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 3px;
+  }
+
+  .context-file-item {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    background: #131418;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    padding: 4px 6px;
+    cursor: pointer;
+  }
+
+  .context-file-item:hover {
+    background: #1e2027;
+    border-color: #3b82f6;
+  }
+
+  .file-item-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #e2e8f0;
+  }
+
+  .file-item-path {
+    font-size: 9.5px;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .context-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 2px 0;
   }
 </style>

@@ -692,6 +692,27 @@
   let editorContextMenuPos = $state({ x: 0, y: 0 });
   let editorContextMenuItems = $state<any[]>([]);
 
+  async function sendSelectionToAgent() {
+    if (!view || !currentSwappedPath) return;
+    const selection = view.state.selection.main;
+    const startLine = view.state.doc.lineAt(selection.from).number;
+    const endLine = view.state.doc.lineAt(selection.to).number;
+    const selectedText = !selection.empty
+      ? view.state.sliceDoc(selection.from, selection.to)
+      : view.state.doc.lineAt(selection.from).text;
+
+    const { agentsStore } = await import('../agents/agents.svelte');
+    const { panelStore } = await import('../../shell/panelStore.svelte');
+
+    agentsStore.attachCodeReference({
+      path: currentSwappedPath,
+      line: startLine,
+      endLine: endLine !== startLine ? endLine : undefined,
+      codeSnippet: selectedText,
+    });
+    panelStore.openRightPanel('agent');
+  }
+
   function handleEditorContextMenu(e: MouseEvent) {
     if (!view || !currentSwappedPath) return;
     e.preventDefault();
@@ -702,6 +723,12 @@
     const hasSelection = !selection.empty;
 
     editorContextMenuItems = [
+      {
+        label: hasSelection ? '💬 Tanya Petak Agent tentang Seleksi ini' : '💬 Tanya Petak Agent tentang Baris ini',
+        shortcut: '⌘L',
+        action: () => sendSelectionToAgent(),
+      },
+      { separator: true },
       {
         label: 'Format Document',
         shortcut: '⌥⌘L',
@@ -749,7 +776,11 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
+      e.preventDefault();
+      e.stopPropagation();
+      sendSelectionToAgent();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       e.stopPropagation();
       handleSave();

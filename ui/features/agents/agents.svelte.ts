@@ -18,6 +18,7 @@ import type {
   MemoryItem,
   ChatSessionMeta,
   ToolCallData,
+  CodeReference,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -86,7 +87,16 @@ class AgentsStore {
   streamingContent = $state('');
   activeToolCalls = $state<ToolCallData[]>([]);
   activeThought = $state<string>('');
+  attachedReference = $state<CodeReference | null>(null);
   error = $state<string | null>(null);
+
+  attachCodeReference(ref: CodeReference) {
+    this.attachedReference = ref;
+  }
+
+  clearAttachedReference() {
+    this.attachedReference = null;
+  }
 
   private unlistenEvent: UnlistenFn | null = null;
   private initialized = false;
@@ -354,8 +364,20 @@ class AgentsStore {
       console.warn('Failed to retrieve active skills for prompt:', err);
     }
 
+    let refPrefix = '';
+    if (this.attachedReference) {
+      const ref = this.attachedReference;
+      const loc = `${ref.path}${ref.line ? `:${ref.line}` : ''}${ref.endLine ? `-${ref.endLine}` : ''}`;
+      const sym = ref.symbol ? ` (${ref.symbol})` : '';
+      const snippet = ref.codeSnippet ? `\n\`\`\`\n${ref.codeSnippet.trim()}\n\`\`\`` : '';
+      refPrefix = `[REFERENSI KODE: ${loc}${sym}]${snippet}\n[/REFERENSI KODE]\n\n`;
+      this.clearAttachedReference();
+    }
+
+    const fullPromptText = `${refPrefix}${rawPrompt.trim()}`;
+
     const formattedPrompt = applyDisciplineDirectives(
-      rawPrompt.trim(),
+      fullPromptText,
       this.isPonytailActive,
       this.isCavemanActive,
       this.isSelfImproveActive,

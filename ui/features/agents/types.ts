@@ -43,6 +43,14 @@ export interface SlotCapabilities {
   last_usage?: any;
 }
 
+export interface CodeReference {
+  path: string;
+  line?: number;
+  endLine?: number;
+  symbol?: string;
+  codeSnippet?: string;
+}
+
 export interface ToolCallData {
   name: string;
   arguments?: any;
