@@ -51,6 +51,7 @@
         diffFiles={mrStore.diffFiles}
         discussions={mrStore.discussions}
         pipelines={mrStore.pipelines}
+        approvals={mrStore.approvals}
         tokenScope={mrStore.tokenScope}
         isMerging={mrStore.isMerging}
         onCheckoutBranch={(iid) => mrStore.checkoutMr(iid)}

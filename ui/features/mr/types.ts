@@ -70,6 +70,15 @@ export interface MergeRequest {
   mergeCommitSha?: string | null;
 }
 
+export interface MergeRequestApprovals {
+  approved: boolean;
+  approvalsRequired: number;
+  approvalsLeft: number;
+  userHasApproved: boolean;
+  userCanApprove: boolean;
+  approvedBy: { user: GitLabUser }[];
+}
+
 export interface NotePosition {
   baseSha?: string | null;
   startSha?: string | null;

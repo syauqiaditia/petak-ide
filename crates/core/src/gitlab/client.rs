@@ -620,6 +620,21 @@ impl GitLabClient {
         serde_json::from_str(&body).map_err(|e| GitLabError::Parse(e.to_string()))
     }
 
+    pub fn get_merge_request_approvals(
+        &self,
+        project_id: &str,
+        iid: u64,
+    ) -> Result<crate::gitlab::model::MergeRequestApprovals, GitLabError> {
+        let url = format!(
+            "{}/api/v4/projects/{}/merge_requests/{}/approvals",
+            self.base_url,
+            url_encode_path(project_id),
+            iid
+        );
+        let (body, _) = self.execute_get(&url, Some(Duration::from_secs(30)), false)?;
+        serde_json::from_str(&body).map_err(|e| GitLabError::Parse(e.to_string()))
+    }
+
     pub fn get_pipelines(
         &self,
         project_id: &str,

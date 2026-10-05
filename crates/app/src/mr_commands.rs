@@ -105,6 +105,26 @@ pub async fn mr_detail(
 }
 
 #[tauri::command]
+pub async fn mr_approvals(
+    app: tauri::AppHandle,
+    root: Option<String>,
+    iid: u64,
+) -> Result<petak_core::gitlab::model::MergeRequestApprovals, String> {
+    let resolved = resolve_root(&app, root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = SystemExec;
+        let repo_path = Path::new(&resolved);
+        let (client, project_path) =
+            GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
+        client
+            .get_merge_request_approvals(&project_path, iid)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn mr_pipelines(
     app: tauri::AppHandle,
     root: Option<String>,

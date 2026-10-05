@@ -88,6 +88,29 @@ pub struct MergeRequest {
     pub merge_commit_sha: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
+pub struct MergeRequestApprovals {
+    #[serde(default)]
+    pub approved: bool,
+    #[serde(default)]
+    pub approvals_required: u32,
+    #[serde(default)]
+    pub approvals_left: u32,
+    #[serde(default)]
+    pub user_has_approved: bool,
+    #[serde(default)]
+    pub user_can_approve: bool,
+    #[serde(default)]
+    pub approved_by: Vec<ApprovedByEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
+pub struct ApprovedByEntry {
+    pub user: GitLabUser,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all(deserialize = "snake_case", serialize = "camelCase"))]
 pub struct NotePosition {

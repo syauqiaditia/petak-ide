@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { MergeRequest, TokenScopeMode } from './types';
+  import type { MergeRequest, MergeRequestApprovals, TokenScopeMode } from './types';
   import { evaluateMrMergeStatus, SCOPE_DISABLED_TOOLTIP, validateMergeSha } from './mrLogic';
 
   let {
     mrDetail,
     tokenScope = 'none',
+    approvals = null,
     isMerging = false,
     onApprove,
     onUnapprove,
@@ -12,6 +13,7 @@
   } = $props<{
     mrDetail: MergeRequest;
     tokenScope: TokenScopeMode;
+    approvals?: MergeRequestApprovals | null;
     isMerging?: boolean;
     onApprove?: () => Promise<void>;
     onUnapprove?: () => Promise<void>;
@@ -82,14 +84,17 @@
     </div>
 
     {#if !isMerged && !isClosed}
+      {@const userApproved = approvals?.userHasApproved}
+      {@const canApprove = approvals ? (approvals.userCanApprove || approvals.userHasApproved) : true}
       <div class="action-buttons">
         <button
           class="btn-secondary"
-          disabled={!canWrite}
-          title={!canWrite ? SCOPE_DISABLED_TOOLTIP : 'Setujui MR ini'}
-          onclick={() => onApprove?.()}
+          class:approved={userApproved}
+          disabled={!canWrite || (!canApprove && !userApproved)}
+          title={!canWrite ? SCOPE_DISABLED_TOOLTIP : userApproved ? 'Batalkan persetujuan MR ini' : !canApprove ? 'Anda adalah author MR ini atau tidak memiliki hak approve' : 'Setujui MR ini'}
+          onclick={() => userApproved ? onUnapprove?.() : onApprove?.()}
         >
-          Approve
+          {userApproved ? '✓ Approved' : 'Approve'}
         </button>
 
         {#if evaluation.canMwps}
@@ -265,6 +270,13 @@
     background: #23252b;
     color: #c9cdd4;
     border: 1px solid #2c2e34;
+  }
+
+  .btn-secondary.approved {
+    background: rgba(46, 160, 67, 0.15);
+    color: #3fb950;
+    border-color: rgba(46, 160, 67, 0.4);
+    font-weight: 600;
   }
 
   .btn-secondary:hover:not(:disabled) {

@@ -355,6 +355,7 @@ pub fn run() {
             commands::mr_current_user,
             commands::mr_list,
             commands::mr_detail,
+            commands::mr_approvals,
             commands::mr_pipelines,
             commands::mr_pipeline_jobs,
             commands::mr_diffs,

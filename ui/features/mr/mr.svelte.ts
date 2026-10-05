@@ -5,6 +5,7 @@
 import { api } from '../../lib/api';
 import type {
   MergeRequest,
+  MergeRequestApprovals,
   Discussion,
   PipelineInfo,
   GitLabUser,
@@ -31,6 +32,7 @@ class MrStore {
   diffFiles = $state<GitDiffFile[]>([]);
   discussions = $state<Discussion[]>([]);
   pipelines = $state<PipelineInfo[]>([]);
+  approvals = $state<MergeRequestApprovals | null>(null);
 
   activeFilter = $state<MrFilter>('opened');
   searchQuery = $state<string>('');
@@ -53,6 +55,7 @@ class MrStore {
     diffFiles: GitDiffFile[];
     discussions: Discussion[];
     pipelines: PipelineInfo[];
+    approvals: MergeRequestApprovals | null;
     timestamp: number;
   }>();
 
@@ -202,6 +205,7 @@ class MrStore {
       this.diffFiles = cached.diffFiles;
       this.discussions = cached.discussions;
       this.pipelines = cached.pipelines;
+      this.approvals = cached.approvals;
       this.isLoadingDetail = false;
       if (!forceFresh && (Date.now() - cached.timestamp < 120_000)) {
         this.checkAndStartPipelinePolling();
@@ -213,27 +217,31 @@ class MrStore {
       if (listItem) {
         this.selectedMrDetail = listItem;
       }
+      this.approvals = null;
       this.isLoadingDetail = true;
     }
 
     try {
-      const [detail, diffs, disc, pipes] = await Promise.all([
+      const [detail, diffs, disc, pipes, apprv] = await Promise.all([
         api.mrDetail(iid, this.currentFolderPath),
         api.mrDiffs(iid, undefined, this.currentFolderPath).catch(() => []),
         api.mrDiscussions(iid, this.currentFolderPath).catch(() => []),
         api.mrPipelines(iid, this.currentFolderPath).catch(() => []),
+        api.mrApprovals(iid, this.currentFolderPath).catch(() => null),
       ]);
 
       this.selectedMrDetail = detail;
       this.diffFiles = diffs;
       this.discussions = disc;
       this.pipelines = pipes;
+      this.approvals = apprv;
 
       this.detailsCache.set(iid, {
         detail,
         diffFiles: diffs,
         discussions: disc,
         pipelines: pipes,
+        approvals: apprv,
         timestamp: Date.now(),
       });
 
@@ -384,6 +392,12 @@ class MrStore {
     try {
       await api.mrApprove(iid, sha, this.currentFolderPath);
       this.actionSuccess = 'Merge Request disetujui (Approved).';
+      const updatedApprovals = await api.mrApprovals(iid, this.currentFolderPath).catch(() => null);
+      if (updatedApprovals) {
+        this.approvals = updatedApprovals;
+        const c = this.detailsCache.get(iid);
+        if (c) c.approvals = updatedApprovals;
+      }
     } catch (e: any) {
       this.actionError = e?.message || String(e);
       throw e;
@@ -401,6 +415,12 @@ class MrStore {
     try {
       await api.mrUnapprove(iid, this.currentFolderPath);
       this.actionSuccess = 'Persetujuan Merge Request dibatalkan.';
+      const updatedApprovals = await api.mrApprovals(iid, this.currentFolderPath).catch(() => null);
+      if (updatedApprovals) {
+        this.approvals = updatedApprovals;
+        const c = this.detailsCache.get(iid);
+        if (c) c.approvals = updatedApprovals;
+      }
     } catch (e: any) {
       this.actionError = e?.message || String(e);
       throw e;

@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { MirrorStatus, InputEvent, MirrorInfo } from '../features/mirror/types.ts';
 import type {
   MergeRequest,
+  MergeRequestApprovals,
   GitLabUser,
   PipelineInfo,
   JobInfo,
@@ -1770,6 +1771,20 @@ export const api = {
       return found;
     }
     return invoke<MergeRequest>('mr_detail', { root: root ?? null, iid });
+  },
+
+  async mrApprovals(iid: number, root?: string): Promise<MergeRequestApprovals> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return {
+        approved: false,
+        approvalsRequired: 0,
+        approvalsLeft: 0,
+        userHasApproved: false,
+        userCanApprove: true,
+        approvedBy: [],
+      };
+    }
+    return invoke<MergeRequestApprovals>('mr_approvals', { root: root ?? null, iid });
   },
 
   async mrPipelines(iid: number, root?: string): Promise<PipelineInfo[]> {

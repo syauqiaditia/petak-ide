@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MergeRequest, Discussion, PipelineInfo, TokenScopeMode } from './types';
+  import type { MergeRequest, MergeRequestApprovals, Discussion, PipelineInfo, TokenScopeMode } from './types';
   import type { GitDiffFile } from '../git/types';
   import MrFiles from './MrFiles.svelte';
   import MrThread from './MrThread.svelte';
@@ -12,6 +12,7 @@
     diffFiles = [],
     discussions = [],
     pipelines = [],
+    approvals = null,
     tokenScope = 'none',
     isMerging = false,
     onCheckoutBranch,
@@ -28,6 +29,7 @@
     diffFiles: GitDiffFile[];
     discussions: Discussion[];
     pipelines: PipelineInfo[];
+    approvals?: MergeRequestApprovals | null;
     tokenScope: TokenScopeMode;
     isMerging?: boolean;
     onCheckoutBranch?: (iid: number, branch: string) => Promise<string>;
@@ -58,8 +60,9 @@
   async function handleApproveToggle() {
     if (isApproving) return;
     isApproving = true;
+    const userAlreadyApproved = approvals ? approvals.userHasApproved : isApproved;
     try {
-      if (isApproved) {
+      if (userAlreadyApproved) {
         if (onUnapprove) await onUnapprove();
         isApproved = false;
       } else {
@@ -177,15 +180,17 @@ ${filesSummary}`;
         </button>
 
         {#if onApprove}
+          {@const userApproved = approvals ? approvals.userHasApproved : isApproved}
+          {@const canApprove = approvals ? (approvals.userCanApprove || approvals.userHasApproved) : true}
           <button
             class="btn-action btn-approve"
-            class:approved={isApproved}
-            disabled={isApproving || tokenScope === 'none' || tokenScope === 'readOnly'}
+            class:approved={userApproved}
+            disabled={isApproving || tokenScope === 'none' || tokenScope === 'readOnly' || (!canApprove && !userApproved)}
             onclick={handleApproveToggle}
-            title={isApproved ? 'Batalkan persetujuan' : 'Setujui MR (Approve)'}
+            title={userApproved ? 'Batalkan persetujuan (Unapprove)' : !canApprove ? 'Anda adalah author MR ini atau tidak memiliki hak approve' : 'Setujui MR (Approve)'}
           >
             <span class="btn-svg">{@html MR_APPROVE_SVG}</span>
-            <span>{isApproved ? '✓ Disetujui' : 'Setujui'}</span>
+            <span>{userApproved ? '✓ Disetujui' : 'Setujui'}</span>
           </button>
         {/if}
 
@@ -368,6 +373,7 @@ ${filesSummary}`;
   <MrMergeBar
     {mrDetail}
     {tokenScope}
+    {approvals}
     {isMerging}
     {onApprove}
     {onUnapprove}
