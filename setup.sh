@@ -147,12 +147,98 @@ if [[ "${as_choice}" == "1" ]]; then
     ANDROID_SDK_PATH="${custom_as}"
   fi
 else
-  echo -e "\n${CYAN}Panduan Instalasi Android SDK:${NC}"
-  echo -e "1. Download Android Studio dari https://developer.android.com/studio"
-  echo -e "2. Buka Android Studio, selesaikan wizard awal (SDK otomatis terpasang di ~/Library/Android/sdk atau ~/Android/Sdk)."
-  echo -e "3. Alternatif minimalis (macOS via Homebrew):"
-  echo -e "   ${BOLD}brew install --cask android-commandlinetools scrcpy${NC}"
-  read -rp "Tekan Enter untuk melanjutkan (kamu bisa atur path nanti di Petak Settings)..."
+  echo -e "\n${CYAN}💡 Rekomendasi Petak IDE:${NC}"
+  echo -e "Petak IDE tidak mewajibkan Android Studio utuh (~2 GB+)."
+  echo -e "Cukup pasang paket esensial: ${BOLD}Android SDK CLI Tools, ADB, dan scrcpy (~150 MB)${NC} yang jauh lebih cepat & hemat memori."
+  echo ""
+  echo -e "Pilih metode setup Android SDK:"
+  echo -e "  ${BOLD}1)${NC} Install otomatis paket esensial sekarang via terminal (${GREEN}Rekomendasi${NC})"
+  echo -e "  ${BOLD}2)${NC} Buka link download Android Studio di browser"
+  echo -e "  ${BOLD}3)${NC} Lewati (Saya akan atur nanti di Petak Settings)"
+
+  read -rp "Pilihan kamu [1-3] (default: 1): " install_sdk_choice
+  install_sdk_choice="${install_sdk_choice:-1}"
+
+  if [[ "${install_sdk_choice}" == "1" ]]; then
+    echo -e "\n${BOLD}Memulai instalasi Android SDK esensial...${NC}"
+    DEFAULT_SDK_DIR=""
+    if [[ "${OS}" == "Darwin" ]]; then
+      DEFAULT_SDK_DIR="${HOME}/Library/Android/sdk"
+      mkdir -p "${DEFAULT_SDK_DIR}"
+
+      if command -v brew >/dev/null 2>&1; then
+        echo -e "Memasang Android Platform Tools & scrcpy via Homebrew..."
+        brew install android-platform-tools scrcpy || true
+      else
+        echo -e "Homebrew tidak ditemukan. Mengunduh Command-Line Tools resmi dari Google..."
+        CMDLINE_URL="https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip"
+        TMP_ZIP="/tmp/cmdline-tools.zip"
+        curl -fSL "${CMDLINE_URL}" -o "${TMP_ZIP}"
+        mkdir -p "${DEFAULT_SDK_DIR}/cmdline-tools"
+        unzip -q -o "${TMP_ZIP}" -d "${DEFAULT_SDK_DIR}/cmdline-tools"
+        rm -f "${TMP_ZIP}"
+        if [[ -d "${DEFAULT_SDK_DIR}/cmdline-tools/cmdline-tools" ]]; then
+          rm -rf "${DEFAULT_SDK_DIR}/cmdline-tools/latest"
+          mv "${DEFAULT_SDK_DIR}/cmdline-tools/cmdline-tools" "${DEFAULT_SDK_DIR}/cmdline-tools/latest"
+        fi
+      fi
+    else
+      DEFAULT_SDK_DIR="${HOME}/Android/Sdk"
+      mkdir -p "${DEFAULT_SDK_DIR}"
+
+      echo -e "Mengecek paket distro Linux..."
+      if command -v apt-get >/dev/null 2>&1; then
+        echo -e "Menjalankan apt install untuk adb, scrcpy, dan openjdk..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq adb scrcpy openjdk-17-jdk || true
+      fi
+
+      if [[ ! -d "${DEFAULT_SDK_DIR}/cmdline-tools/latest" ]]; then
+        echo -e "Mengunduh Android Command-Line Tools resmi dari Google..."
+        CMDLINE_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+        TMP_ZIP="/tmp/cmdline-tools.zip"
+        curl -fSL "${CMDLINE_URL}" -o "${TMP_ZIP}"
+        mkdir -p "${DEFAULT_SDK_DIR}/cmdline-tools"
+        unzip -q -o "${TMP_ZIP}" -d "${DEFAULT_SDK_DIR}/cmdline-tools"
+        rm -f "${TMP_ZIP}"
+        if [[ -d "${DEFAULT_SDK_DIR}/cmdline-tools/cmdline-tools" ]]; then
+          rm -rf "${DEFAULT_SDK_DIR}/cmdline-tools/latest"
+          mv "${DEFAULT_SDK_DIR}/cmdline-tools/cmdline-tools" "${DEFAULT_SDK_DIR}/cmdline-tools/latest"
+        fi
+      fi
+    fi
+
+    # Accept licenses and install platform-tools if sdkmanager is present
+    SDKMANAGER_BIN=""
+    if [[ -x "${DEFAULT_SDK_DIR}/cmdline-tools/latest/bin/sdkmanager" ]]; then
+      SDKMANAGER_BIN="${DEFAULT_SDK_DIR}/cmdline-tools/latest/bin/sdkmanager"
+    elif command -v sdkmanager >/dev/null 2>&1; then
+      SDKMANAGER_BIN="$(command -v sdkmanager)"
+    fi
+
+    if [[ -n "${SDKMANAGER_BIN}" ]]; then
+      echo -e "Menerima lisensi Android SDK & memasang platform-tools (ADB)..."
+      yes | "${SDKMANAGER_BIN}" --sdk_root="${DEFAULT_SDK_DIR}" --licenses >/dev/null 2>&1 || true
+      "${SDKMANAGER_BIN}" --sdk_root="${DEFAULT_SDK_DIR}" "platform-tools" >/dev/null 2>&1 || true
+    fi
+
+    ANDROID_SDK_PATH="${DEFAULT_SDK_DIR}"
+    echo -e "${GREEN}✓ Android SDK berhasil disiapkan di: ${ANDROID_SDK_PATH}${NC}"
+  elif [[ "${install_sdk_choice}" == "2" ]]; then
+    echo -e "\nMembuka https://developer.android.com/studio..."
+    if command -v open >/dev/null 2>&1; then
+      open "https://developer.android.com/studio"
+    elif command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "https://developer.android.com/studio"
+    fi
+    read -rp "Tekan Enter setelah selesai menginstall Android Studio..."
+    if [[ "${OS}" == "Darwin" ]]; then
+      ANDROID_SDK_PATH="${HOME}/Library/Android/sdk"
+    else
+      ANDROID_SDK_PATH="${HOME}/Android/Sdk"
+    fi
+  else
+    echo -e "Setup Android SDK dilewati."
+  fi
 fi
 
 # ------------------------------------------------------------------------------
