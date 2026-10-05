@@ -249,3 +249,53 @@ fn test_pull_conflict_stops_at_conflict() {
     let st = status(&SystemExec, r1.path()).unwrap();
     assert!(st.entries.iter().all(|e| !e.conflicted));
 }
+
+#[test]
+fn test_pull_autostash_with_unstaged_changes() {
+    let bare = tempfile::tempdir().expect("bare tempdir");
+    let _ = Command::new("git")
+        .current_dir(bare.path())
+        .args(["init", "--bare", "-b", "main"])
+        .env("LC_ALL", "C")
+        .status();
+    let bare_url = format!("file://{}", bare.path().display());
+
+    // r1: initial commit pushed
+    let r1 = TestRepo::new();
+    r1.write_file("base.txt", "base content\n");
+    r1.commit("init");
+    r1.git(&["remote", "add", "origin", &bare_url]);
+    push(&SystemExec, r1.path(), "origin", "main", true, false).unwrap();
+
+    // r2: clone from bare
+    let r2_dir = tempfile::tempdir().expect("r2 tempdir");
+    let _ = Command::new("git")
+        .args(["clone", &bare_url, r2_dir.path().to_str().unwrap()])
+        .env("LC_ALL", "C")
+        .status();
+    let _ = Command::new("git")
+        .current_dir(r2_dir.path())
+        .args(["config", "--local", "user.name", "Tester 2"])
+        .status();
+    let _ = Command::new("git")
+        .current_dir(r2_dir.path())
+        .args(["config", "--local", "user.email", "t2@local"])
+        .status();
+
+    // r1: pushes a new commit
+    r1.write_file("new_file.txt", "from r1\n");
+    r1.commit("add new_file");
+    push(&SystemExec, r1.path(), "origin", "main", false, false).unwrap();
+
+    // r2: has UNSTAGED local edits in base.txt
+    fs::write(r2_dir.path().join("base.txt"), "base content\nlocal uncommitted edit\n").unwrap();
+
+    // Pull rebase in r2 — with autostash, this must SUCCEED without error 128
+    let pull_res = pull(&SystemExec, r2_dir.path(), PullMode::Rebase).expect("pull with autostash should succeed");
+    assert!(pull_res.ok);
+
+    // Verify local unstaged edit is preserved after rebase
+    let content = fs::read_to_string(r2_dir.path().join("base.txt")).unwrap();
+    assert!(content.contains("local uncommitted edit"));
+    assert!(r2_dir.path().join("new_file.txt").exists());
+}

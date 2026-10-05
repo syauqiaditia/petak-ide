@@ -82,8 +82,17 @@ pub fn fetch(
 }
 
 /// Pulls from upstream using either rebase or merge strategy.
+/// Uses `--autostash` by default (identical to Android Studio / IntelliJ "Update Project").
 pub fn pull(exec: &dyn Exec, repo: &Path, mode: PullMode) -> Result<OpResult, GitError> {
-    let mut args = vec!["-c", "core.editor=true", "pull", "--no-edit"];
+    let mut args = vec![
+        "-c",
+        "core.editor=true",
+        "-c",
+        "rebase.autoStash=true",
+        "pull",
+        "--autostash",
+        "--no-edit",
+    ];
     match mode {
         PullMode::Rebase => args.push("--rebase"),
         PullMode::Merge => args.push("--no-rebase"),
