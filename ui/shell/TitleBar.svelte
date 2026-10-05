@@ -437,16 +437,32 @@
             {:else}
               {#each filteredBranches as b}
                 {@const isCurrent = b.name === branchName || b.isCurrent}
-                <button
-                  class="branch-popup-item"
-                  class:current={isCurrent}
-                  onclick={() => handleSelectBranch(b.name)}
-                >
-                  <span class="branch-item-name" class:bold={isCurrent}>{b.name}</span>
-                  {#if isCurrent}
-                    <span class="branch-current-tag">HEAD</span>
+                <div class="branch-popup-row" class:current={isCurrent}>
+                  <button
+                    class="branch-popup-item"
+                    class:current={isCurrent}
+                    onclick={() => handleSelectBranch(b.name)}
+                  >
+                    <span class="branch-item-name" class:bold={isCurrent}>{b.name}</span>
+                    {#if isCurrent}
+                      <span class="branch-current-tag">HEAD</span>
+                    {/if}
+                  </button>
+                  {#if !isCurrent && !b.name.startsWith('origin/')}
+                    <button
+                      class="branch-popup-delete-btn"
+                      title="Hapus branch lokal '{b.name}'"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Hapus cabang lokal '${b.name}'?`)) {
+                          gitStore.branchDelete(b.name, true);
+                        }
+                      }}
+                    >
+                      ✕
+                    </button>
                   {/if}
-                </button>
+                </div>
               {/each}
             {/if}
           </div>
@@ -965,6 +981,40 @@
     text-align: center;
     font-size: 12px;
     color: #8b8f98;
+  }
+  .branch-popup-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    position: relative;
+    border-radius: 4px;
+    padding-right: 4px;
+  }
+  .branch-popup-row:hover {
+    background: #252830;
+  }
+  .branch-popup-row .branch-popup-item {
+    flex: 1;
+    min-width: 0;
+  }
+  .branch-popup-row:hover .branch-popup-delete-btn {
+    opacity: 0.7;
+  }
+  .branch-popup-delete-btn {
+    opacity: 0;
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 11px;
+    padding: 2px 6px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: opacity 0.1s, background 0.1s;
+  }
+  .branch-popup-delete-btn:hover {
+    opacity: 1 !important;
+    background: rgba(239, 68, 68, 0.18);
   }
   .branch-popup-item {
     width: 100%;

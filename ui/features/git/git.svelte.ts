@@ -725,10 +725,22 @@ class GitStore {
     if (!this.root) return;
     try {
       await api.gitBranchDelete(this.root, name, force);
-      this.showToast(`Branch '${name}' deleted`, { type: 'info' });
+      this.showToast(`Branch '${name}' berhasil dihapus`, { type: 'info' });
       await this.refresh();
     } catch (e: any) {
-      this.showToast(`Delete branch failed: ${e}`, { type: 'error' });
+      const err = String(e?.message || e);
+      if (!force && (err.toLowerCase().includes('not fully merged') || err.toLowerCase().includes('-d'))) {
+        try {
+          await api.gitBranchDelete(this.root, name, true);
+          this.showToast(`Branch '${name}' dipaksa hapus (-D)`, { type: 'info' });
+          await this.refresh();
+          return;
+        } catch (e2: any) {
+          this.showToast(`Gagal hapus branch: ${e2}`, { type: 'error' });
+          return;
+        }
+      }
+      this.showToast(`Gagal hapus branch: ${err}`, { type: 'error' });
     }
   }
 

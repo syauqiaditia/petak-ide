@@ -152,29 +152,37 @@
 
     <div class="spacer"></div>
 
-    <!-- Remote Actions Toolbar (Fetch, Pull ▾, Push) -->
+    <!-- Remote Actions Toolbar (Fetch, Update ▾, Push) -->
     <div class="remote-toolbar">
-      <button class="remote-btn" onclick={handleFetch} title="Fetch updates from remotes">
+      <button class="remote-btn" onclick={handleFetch} title="Fetch updates dari remote (tanpa ubah berkas lokal)">
         Fetch
       </button>
 
       <div class="pull-dropdown-wrapper">
         <button
           class="remote-btn pull-btn"
-          onclick={() => (pullDropdownOpen = !pullDropdownOpen)}
-          title="Pull from upstream"
+          onclick={() => handlePull('rebase')}
+          title="Update Project (Pull & Rebase — ⌘T)"
         >
-          <span>Pull</span>
-          <span class="pull-arrow">▾</span>
+          <span>Update</span>
+          <span
+            class="pull-arrow"
+            onclick={(e) => {
+              e.stopPropagation();
+              pullDropdownOpen = !pullDropdownOpen;
+            }}
+            role="button"
+            tabindex="0"
+          >▾</span>
         </button>
 
         {#if pullDropdownOpen}
           <div class="pull-menu">
-            <button class="pull-item" onclick={() => handlePull('merge')}>
-              Pull (Merge)
+            <button class="pull-item" onclick={() => { pullDropdownOpen = false; handlePull('rebase'); }}>
+              Update (Rebase — Rekomendasi)
             </button>
-            <button class="pull-item" onclick={() => handlePull('rebase')}>
-              Pull (Rebase)
+            <button class="pull-item" onclick={() => { pullDropdownOpen = false; handlePull('merge'); }}>
+              Pull (Merge Biasa)
             </button>
           </div>
         {/if}

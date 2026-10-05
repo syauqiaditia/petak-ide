@@ -655,10 +655,14 @@
           <button class="bp-close" onclick={() => (deleteBranchModalOpen = false)}>✕</button>
         </div>
         <div class="bp-modal-body">
-          <p class="bp-msg">Are you sure you want to delete branch '{selectedBranch.name}'?</p>
+          <p class="bp-msg">Hapus cabang lokal <strong>'{selectedBranch.name}'</strong>?</p>
+          <label style="display: flex; align-items: center; gap: 6px; margin: 12px 0 6px 0; font-size: 11.5px; color: #c9cdd4; cursor: pointer;">
+            <input type="checkbox" bind:checked={deleteBranchForce} />
+            <span>Paksa hapus (Force Delete <code>-D</code>)</span>
+          </label>
           {#if deleteBranchForce}
             <div class="bp-warn">
-              This branch has unmerged or unpushed commits. Force delete (-D) is required.
+              Cabang akan dihapus permanen meskipun belum di-merge penuh ke remote.
             </div>
           {/if}
         </div>
