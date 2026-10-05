@@ -1,7 +1,30 @@
 target/
-node_modules
 node_modules/
 dist/
 .DS_Store
 *.log
 /crates/app/gen/
+
+# Petak Local Data & Caches
+.petak/
+*.dmg
+*.app
+build_outputs/
+
+# Environment & Credentials
+.env
+.env.*
+*.local
+*.pem
+*.key
+.gitlab-pat
+
+# IDE & Editor settings
+.idea/
+.vscode/
+*.swp
+*~
+
+# Test & Coverage Outputs
+coverage/
+.nyc_output/

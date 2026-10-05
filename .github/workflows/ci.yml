@@ -1,0 +1,53 @@
+name: CI Test Suite
+
+on:
+  push:
+    branches: [main, develop, feat/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './crates -> target'
+
+      - name: Install System Dependencies (Linux)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install NPM Dependencies
+        run: npm ci
+
+      - name: Run Integrity & Type Checks
+        run: |
+          python3 scripts/check-app-symbols.py
+          npm run check
+
+      - name: Run Frontend Tests
+        run: npm test
+
+      - name: Run Backend Rust Tests
+        run: cargo test -p petak-core --lib
