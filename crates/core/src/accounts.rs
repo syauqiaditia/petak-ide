@@ -122,6 +122,21 @@ pub fn load_secure_token() -> io::Result<Option<String>> {
         }
     }
 
+    // Fallback: check standard ~/.gitlab-pat or ~/.gitlab_token
+    if let Some(home) = dirs::home_dir() {
+        for name in &[".gitlab-pat", ".gitlab_token"] {
+            let p = home.join(name);
+            if p.is_file() {
+                if let Ok(content) = fs::read_to_string(&p) {
+                    let token = content.trim().to_string();
+                    if !token.is_empty() {
+                        return Ok(Some(token));
+                    }
+                }
+            }
+        }
+    }
+
     Ok(None)
 }
 
