@@ -16,6 +16,7 @@
   } from '../agents/agentsLogic';
   import AccountsSettings from '../accounts/AccountsSettings.svelte';
   import { keymapStore, keyEventToShortcut, type ConflictInfo } from './keymapStore.svelte';
+  import McpSettings from './McpSettings.svelte';
 
   let {
     root = '',
@@ -210,12 +211,13 @@
 
   let isId = $derived(settingsStore.language === 'id');
 
-  // 9 Navigasi Kategori (Linear / Raycast Style)
+  // 10 Navigasi Kategori (Linear / Raycast Style)
   let categories = $derived([
     { id: 'general', label: isId ? 'Umum' : 'General', icon: 'gear' },
     { id: 'editor', label: isId ? 'Editor Kode' : 'Code Editor', icon: 'code' },
     { id: 'keymap', label: isId ? 'Pintasan Keyboard' : 'Keymap', icon: 'keyboard' },
     { id: 'agents', label: isId ? 'AI Agents & Disiplin' : 'AI Agents & Discipline', icon: 'bot' },
+    { id: 'mcp', label: 'MCP Servers', icon: 'server' },
     { id: 'toolchains', label: isId ? 'Toolchain & SDK' : 'Toolchains & SDK', icon: 'tool' },
     { id: 'git', label: 'Git & GitLab', icon: 'git' },
     { id: 'accounts', label: isId ? 'Akun & Jaringan' : 'Accounts & Network', icon: 'user' },
@@ -514,6 +516,13 @@
                 <path d="M12 2v4" />
                 <path d="M2 14h1" />
                 <path d="M21 14h1" />
+              </svg>
+            {:else if cat.icon === 'server'}
+              <svg class="cat-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+                <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+                <line x1="6" y1="6" x2="6.01" y2="6" stroke-width="2" />
+                <line x1="6" y1="18" x2="6.01" y2="18" stroke-width="2" />
               </svg>
             {:else if cat.icon === 'tool'}
               <svg class="cat-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -1219,6 +1228,10 @@
               </div>
             </div>
           </div>
+
+        <!-- MCP Servers Tab -->
+        {:else if settingsStore.activeCategory === 'mcp'}
+          <McpSettings root={root} />
 
         <!-- 5. Toolchain & SDK -->
         {:else if settingsStore.activeCategory === 'toolchains'}
