@@ -37,7 +37,11 @@ pub async fn mr_get_token_scope(
         let repo_path = Path::new(&resolved);
         let (client, _) =
             GitLabClient::from_repo(&exec, repo_path, None).map_err(|e| e.to_string())?;
-        client.get_token_scope().map_err(|e| e.to_string())
+        match client.get_token_scope() {
+            Ok(scope) => Ok(scope),
+            Err(petak_core::gitlab::GitLabError::Unauthorized(_)) => Ok(petak_core::gitlab::TokenScopeMode::None),
+            Err(e) => Err(e.to_string()),
+        }
     })
     .await
     .map_err(|e| e.to_string())?

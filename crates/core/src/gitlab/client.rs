@@ -269,7 +269,12 @@ impl GitLabClient {
 
         let (base_url, host, project_path) = parse_remote_url(remote_url)?;
 
-        let token = resolve_token_from_git_credential(exec, repo, &host).ok();
+        let token = crate::accounts::load_secure_token()
+            .ok()
+            .flatten()
+            .or_else(|| std::env::var("GITLAB_TOKEN").ok())
+            .or_else(|| std::env::var("GITLAB_PAT").ok())
+            .or_else(|| resolve_token_from_git_credential(exec, repo, &host).ok());
         let client = Self::new(base_url, token);
 
         Ok((client, project_path))
@@ -391,11 +396,24 @@ impl GitLabClient {
     }
 
     pub fn get_token_scope(&self) -> Result<TokenScopeMode, GitLabError> {
+        if self.token.is_none() {
+            return Err(GitLabError::Unauthorized("No GitLab token provided".to_string()));
+        }
         let url = format!("{}/api/v4/personal_access_tokens/self", self.base_url);
-        let (body, _) = self.execute_get(&url, Some(Duration::from_secs(60)), false)?;
-        let pat: PersonalAccessToken =
-            serde_json::from_str(&body).map_err(|e| GitLabError::Parse(e.to_string()))?;
-        Ok(TokenScopeMode::from_scopes(&pat.scopes))
+        match self.execute_get(&url, Some(Duration::from_secs(60)), false) {
+            Ok((body, _)) => {
+                let pat: PersonalAccessToken =
+                    serde_json::from_str(&body).map_err(|e| GitLabError::Parse(e.to_string()))?;
+                return Ok(TokenScopeMode::from_scopes(&pat.scopes));
+            }
+            Err(GitLabError::Unauthorized(msg)) => return Err(GitLabError::Unauthorized(msg)),
+            Err(_) => {}
+        }
+        // Fallback: if /user works, token has valid read/api access
+        if self.get_current_user().is_ok() {
+            return Ok(TokenScopeMode::Full);
+        }
+        Err(GitLabError::Unauthorized("Invalid or revoked GitLab token".to_string()))
     }
 
     pub fn get_personal_access_token(&self) -> Result<PersonalAccessToken, GitLabError> {
