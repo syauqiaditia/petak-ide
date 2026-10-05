@@ -447,4 +447,44 @@ export function getModelDescription(modelId: string): string {
   return '';
 }
 
+/**
+ * Safely extracts text chunk from ACP session/update payloads.
+ * Handles ACP agent_message_chunk objects ({ type: 'text', text: '...' }),
+ * nested arrays, raw strings, deltas, and tool output updates without [object Object].
+ */
+export function extractChunkText(update: any): string {
+  if (!update) return '';
+
+  // Direct string
+  if (typeof update === 'string') return update;
+
+  // If update is an array of chunks
+  if (Array.isArray(update)) {
+    return update.map((item) => extractChunkText(item)).join('');
+  }
+
+  if (typeof update === 'object') {
+    // If update contains a nested content field
+    if (update.content !== undefined) {
+      return extractChunkText(update.content);
+    }
+    // If update is an ACP content block { type: 'text', text: '...' }
+    if (typeof update.text === 'string') {
+      return update.text;
+    }
+    if (typeof update.delta === 'string') {
+      return update.delta;
+    }
+    if (typeof update.message === 'string') {
+      return update.message;
+    }
+    // If update has nested text object or array
+    if (update.text && typeof update.text === 'object') {
+      return extractChunkText(update.text);
+    }
+  }
+
+  return '';
+}
+
 

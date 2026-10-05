@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { truncateToolOutput } from './agentsLogic';
+  import { truncateToolOutput, extractChunkText } from './agentsLogic';
   import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
@@ -132,7 +132,7 @@
           <div class="message-role-label">
             {msg.role === 'user' ? 'Anda' : msg.role === 'agent' ? (activeSlot?.label || 'Agent') : 'Sistem'}
           </div>
-          <div class="message-body">{msg.content}</div>
+          <div class="message-body">{typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || JSON.stringify(msg.content))}</div>
 
           <!-- Tool calls if present -->
           {#if msg.toolCalls && msg.toolCalls.length > 0}

@@ -13,6 +13,7 @@ import {
   formatLessonEntry,
   isValidSlotTransition,
   DEFAULT_ALLOWLIST,
+  extractChunkText,
 } from '../ui/features/agents/agentsLogic.ts';
 
 test('permission: read mode always denies modification/execution', () => {
@@ -222,4 +223,40 @@ test('buildFixWithAgentDraft: works gracefully with minimal context', () => {
   assert.match(minimalDraft.userPrompt, /SyntaxError: Unexpected token/);
   assert.match(minimalDraft.userPrompt, /Tolong analisis error/);
 });
+
+test('extractChunkText: parses ACP session/update and text payloads safely', () => {
+  // 1. ACP object with content { type: 'text', text: '...' }
+  const acpChunk = {
+    sessionUpdate: 'agent_message_chunk',
+    content: {
+      type: 'text',
+      text: 'Halo! Ada yang bisa dibantu?',
+    },
+  };
+  assert.equal(extractChunkText(acpChunk), 'Halo! Ada yang bisa dibantu?');
+
+  // 2. Direct string content
+  assert.equal(extractChunkText({ content: 'Direct content' }), 'Direct content');
+
+  // 3. Raw string
+  assert.equal(extractChunkText('Raw string'), 'Raw string');
+
+  // 4. Array of chunks
+  const chunkArray = [
+    { type: 'text', text: 'Bagian 1 ' },
+    { type: 'text', text: 'Bagian 2' },
+  ];
+  assert.equal(extractChunkText(chunkArray), 'Bagian 1 Bagian 2');
+
+  // 5. Delta payload
+  assert.equal(extractChunkText({ delta: 'Delta text' }), 'Delta text');
+
+  // 6. Null or undefined
+  assert.equal(extractChunkText(null), '');
+  assert.equal(extractChunkText(undefined), '');
+
+  // 7. Nested content object
+  assert.equal(extractChunkText({ content: { text: 'Nested text' } }), 'Nested text');
+});
+
 

@@ -24,6 +24,7 @@ import {
   formatLessonEntry,
   DEFAULT_ALLOWLIST,
   isCommandInAllowlist,
+  extractChunkText,
 } from './agentsLogic';
 import { skillsStore } from './skillsStore.svelte';
 import { formatSkillsForPrompt } from './skillsLogic.ts';
@@ -160,8 +161,9 @@ class AgentsStore {
     } else if (event.Update) {
       const { slot_id, update } = event.Update;
       // Handle streaming token update or usage update
-      if (update && update.content) {
-        this.streamingContent += update.content;
+      const chunk = extractChunkText(update);
+      if (chunk) {
+        this.streamingContent += chunk;
       }
       if (update && update.usage) {
         this.usageReports[slot_id] = {
@@ -326,18 +328,21 @@ class AgentsStore {
 
     try {
       const response = await api.agentPrompt(slotId, formattedPrompt);
+      const rawContent = response.message || this.streamingContent || 'Aksi selesai.';
+      const cleanContent = typeof rawContent === 'string' ? rawContent : extractChunkText(rawContent);
+
       const agentMsg: ChatMessage = {
         id: `agent-${Date.now()}`,
         timestamp: Date.now(),
         role: 'agent',
-        content: response.message || this.streamingContent || 'Aksi selesai.',
+        content: cleanContent || 'Aksi selesai.',
         stop_reason: response.stopReason,
       };
       this.chatHistory[slotId] = [...this.chatHistory[slotId], agentMsg];
 
       // Auto-learn reflection: if agent formulated a lesson, append to project memory
-      if (this.isSelfImproveActive && response.message) {
-        const extractedLesson = extractLessonFromResponse(response.message);
+      if (this.isSelfImproveActive && cleanContent) {
+        const extractedLesson = extractLessonFromResponse(cleanContent);
         if (extractedLesson) {
           this.appendLessonToMemory(extractedLesson, 'Auto-Improvement').catch((err) => {
             console.warn('Auto-save lesson failed:', err);
