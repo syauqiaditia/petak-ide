@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 800px;
+    height: 240px;
+    background: #090a0f;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Ambient Glows */
+  .glow-1 {
+    position: absolute;
+    width: 380px;
+    height: 180px;
+    top: 30px;
+    left: 80px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.22) 0%, rgba(59, 130, 246, 0) 70%);
+    filter: blur(28px);
+  }
+  .glow-2 {
+    position: absolute;
+    width: 320px;
+    height: 180px;
+    bottom: 20px;
+    right: 140px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.22) 0%, rgba(139, 92, 246, 0) 70%);
+    filter: blur(28px);
+  }
+
+  /* Grid pattern overlay */
+  .grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image: 
+      linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: radial-gradient(circle at center, black 40%, transparent 85%);
+  }
+
+  .banner-content {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 36px;
+  }
+
+  /* Petak 4-Square Iconic Logo */
+  .logo-box {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo-aura {
+    position: absolute;
+    inset: -12px;
+    border-radius: 28px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.45) 0%, rgba(139, 92, 246, 0) 70%);
+    transition: all 0.1s ease;
+  }
+
+  .logo-cube {
+    width: 86px;
+    height: 86px;
+    background: rgba(18, 20, 29, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 22px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-gap: 6px;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  .cell {
+    border-radius: 8px;
+    transition: all 0.1s ease;
+  }
+
+  .cell-1 { background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%); }
+  .cell-2 { background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%); }
+  .cell-3 { background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%); }
+  .cell-4 { background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%); }
+
+  /* Info Column */
+  .info-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .title-text {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -1.2px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    text-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  .ide-badge {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.14);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+
+  .subtitle {
+    font-size: 15px;
+    color: #94a3b8;
+    font-weight: 450;
+    letter-spacing: -0.2px;
+  }
+
+  .pills-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #cbd5e1;
+  }
+
+  .pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .dot-rust { background: #f97316; }
+  .dot-tauri { background: #22d3ee; }
+  .dot-svelte { background: #ff3e00; }
+  .dot-ai { background: #a855f7; }
+</style>
+</head>
+<body>
+  <div class="glow-1" id="glow1"></div>
+  <div class="glow-2" id="glow2"></div>
+  <div class="grid-bg"></div>
+
+  <div class="banner-content">
+    <div class="logo-box">
+      <div class="logo-aura" id="aura"></div>
+      <div class="logo-cube" id="cube">
+        <div class="cell cell-1" id="c1"></div>
+        <div class="cell cell-2" id="c2"></div>
+        <div class="cell cell-3" id="c3"></div>
+        <div class="cell cell-4" id="c4"></div>
+      </div>
+    </div>
+
+    <div class="info-col">
+      <div class="title-row">
+        <span class="title-text">PETAK</span>
+        <span class="ide-badge">v0.8.1 BETA</span>
+      </div>
+      <div class="subtitle">Next-Gen Native Desktop IDE for Mobile & Flutter Engineers</div>
+      <div class="pills-row">
+        <div class="pill"><span class="pill-dot dot-rust"></span>Rust Core</div>
+        <div class="pill"><span class="pill-dot dot-tauri"></span>Tauri 2</div>
+        <div class="pill"><span class="pill-dot dot-svelte"></span>Svelte 5</div>
+        <div class="pill"><span class="pill-dot dot-ai"></span>Multi-Agent ACP</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Animation driver for frame-by-frame rendering
+    window.setFrame = function(progress) { // progress from 0.0 to 1.0
+      // Sine wave pulse
+      const wave = Math.sin(progress * Math.PI * 2);
+      const waveCos = Math.cos(progress * Math.PI * 2);
+
+      const aura = document.getElementById('aura');
+      const scaleAura = 1.0 + wave * 0.18;
+      const opacityAura = 0.45 + wave * 0.35;
+      aura.style.transform = `scale(${scaleAura})`;
+      aura.style.opacity = opacityAura;
+
+      const cube = document.getElementById('cube');
+      const scaleCube = 1.0 + wave * 0.03;
+      cube.style.transform = `scale(${scaleCube})`;
+
+      // Pulse cells with slight phase offset
+      const c1 = document.getElementById('c1');
+      const c2 = document.getElementById('c2');
+      const c3 = document.getElementById('c3');
+      const c4 = document.getElementById('c4');
+
+      const p1 = 0.8 + Math.sin(progress * Math.PI * 2) * 0.2;
+      const p2 = 0.8 + Math.sin(progress * Math.PI * 2 + Math.PI * 0.5) * 0.2;
+      const p3 = 0.8 + Math.sin(progress * Math.PI * 2 + Math.PI) * 0.2;
+      const p4 = 0.8 + Math.sin(progress * Math.PI * 2 + Math.PI * 1.5) * 0.2;
+
+      c1.style.opacity = p1;
+      c2.style.opacity = p2;
+      c3.style.opacity = p3;
+      c4.style.opacity = p4;
+
+      const glow1 = document.getElementById('glow1');
+      const glow2 = document.getElementById('glow2');
+      glow1.style.transform = `translate(${wave * 12}px, ${waveCos * 8}px)`;
+      glow2.style.transform = `translate(${-wave * 12}px, ${-waveCos * 8}px)`;
+    };
+  </script>
+</body>
+</html>
