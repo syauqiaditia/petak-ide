@@ -2532,7 +2532,7 @@ emulator-5558          unauthorized transport_id:5
     "sdk": "unknown"
   },
   {
-    "name": "UQi (wireless)",
+    "name": "iPhone Developer (wireless)",
     "id": "00008110-00012CCE0C09401E",
     "isSupported": true,
     "targetPlatform": "ios",
@@ -2568,9 +2568,9 @@ emulator-5558          unauthorized transport_id:5
         assert_eq!(emu.kind, DeviceKind::Emulator);
         assert_eq!(emu.platform, DevicePlatform::Android);
 
-        // 2. Physical wireless iPhone "UQi"
+        // 2. Physical wireless iPhone "iPhone Developer"
         let uqi = devs.iter().find(|d| d.id == "00008110-00012CCE0C09401E").unwrap();
-        assert_eq!(uqi.name, "UQi (wireless)");
+        assert_eq!(uqi.name, "iPhone Developer (wireless)");
         assert_eq!(uqi.state, DeviceState::Online);
         assert_eq!(uqi.flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
         assert_eq!(uqi.group.as_deref(), Some("physical"));
@@ -2598,7 +2598,7 @@ emulator-5558          unauthorized transport_id:5
     fn test_merge_devices_dedupe() {
         let flutter_fixture = r#"[
   {
-    "name": "UQi (wireless)",
+    "name": "iPhone Developer (wireless)",
     "id": "00008110-00012CCE0C09401E",
     "isSupported": true,
     "targetPlatform": "ios",
@@ -2640,10 +2640,10 @@ emulator-5558          unauthorized transport_id:5
             pairing_state: None,
         }];
 
-        // Devicectl also has UQi (duplicate of flutter devices)
+        // Devicectl also has iPhone Developer (duplicate of flutter devices)
         let devicectl_devs = vec![Device {
             id: "00008110-00012CCE0C09401E".to_string(),
-            name: "UQi (wireless)".to_string(),
+            name: "iPhone Developer (wireless)".to_string(),
             platform: DevicePlatform::Ios,
             kind: DeviceKind::Physical,
             state: DeviceState::Online,
@@ -2720,7 +2720,7 @@ emulator-5558          unauthorized transport_id:5
                 },
                 SnapshotDevice {
                     id: "00008110-00012CCE0C09401E".to_string(),
-                    name: "UQi (wireless)".to_string(),
+                    name: "iPhone Developer (wireless)".to_string(),
                     platform: "ios".to_string(),
                     state: "online".to_string(),
                     flutter_id: Some("00008110-00012CCE0C09401E".to_string()),
@@ -2732,7 +2732,7 @@ emulator-5558          unauthorized transport_id:5
                 },
                 SnapshotDevice {
                     id: "00008101-001234567890".to_string(),
-                    name: "UQi (paired)".to_string(),
+                    name: "iPhone Developer (paired)".to_string(),
                     platform: "ios".to_string(),
                     state: "offline".to_string(),
                     flutter_id: None,
@@ -2785,10 +2785,10 @@ emulator-5558          unauthorized transport_id:5
 
     #[test]
     fn test_flutter_devices_availability_merge() {
-        // Devicectl says UQi is unavailable/paired, but flutter devices sees it online
+        // Devicectl says device is unavailable/paired, but flutter devices sees it online
         let devicectl_devs = vec![Device {
             id: "00008110-00012CCE0C09401E".to_string(),
-            name: "UQi".to_string(),
+            name: "iPhone Developer".to_string(),
             platform: DevicePlatform::Ios,
             kind: DeviceKind::Physical,
             state: DeviceState::Offline,
@@ -2804,7 +2804,7 @@ emulator-5558          unauthorized transport_id:5
 
         let flutter_devs = vec![Device {
             id: "00008110-00012CCE0C09401E".to_string(),
-            name: "UQi (wireless)".to_string(),
+            name: "iPhone Developer (wireless)".to_string(),
             platform: DevicePlatform::Ios,
             kind: DeviceKind::Physical,
             state: DeviceState::Online,
@@ -2819,20 +2819,20 @@ emulator-5558          unauthorized transport_id:5
         }];
 
         let snap = merge_devices(&flutter_devs, &[], &[], &[], &devicectl_devs, &std::collections::HashMap::new());
-        let uqi = snap.devices.iter().find(|d| d.id == "00008110-00012CCE0C09401E").unwrap();
+        let dev = snap.devices.iter().find(|d| d.id == "00008110-00012CCE0C09401E").unwrap();
         // Since flutter sees it online, it is connected!
-        assert_eq!(uqi.connection, "connected");
-        assert_eq!(uqi.state, "online");
-        assert_eq!(uqi.conn_state, "connected_wifi");
-        assert_eq!(uqi.kind, "ios-physical");
-        assert_eq!(uqi.transport.as_deref(), Some("wifi"));
+        assert_eq!(dev.connection, "connected");
+        assert_eq!(dev.state, "online");
+        assert_eq!(dev.conn_state, "connected_wifi");
+        assert_eq!(dev.kind, "ios-physical");
+        assert_eq!(dev.transport.as_deref(), Some("wifi"));
     }
 
     #[test]
     fn test_ios_physical_device_deduplication_flutter_and_devicectl() {
         let flutter_devs = vec![Device {
             id: "00008110-00012CCE0C09401E".to_string(),
-            name: "UQi".to_string(),
+            name: "iPhone Physical".to_string(),
             platform: DevicePlatform::Ios,
             kind: DeviceKind::Physical,
             state: DeviceState::Online,
@@ -2848,7 +2848,7 @@ emulator-5558          unauthorized transport_id:5
 
         let devicectl_devs = vec![Device {
             id: "BC639450-9E15-4D5C-9A82-3A6B4E5F6A7B".to_string(),
-            name: "UQi".to_string(),
+            name: "iPhone Physical".to_string(),
             platform: DevicePlatform::Ios,
             kind: DeviceKind::Physical,
             state: DeviceState::Online,
@@ -2863,11 +2863,11 @@ emulator-5558          unauthorized transport_id:5
         }];
 
         let snap = merge_devices(&flutter_devs, &[], &[], &[], &devicectl_devs, &std::collections::HashMap::new());
-        let uqi_devs: Vec<_> = snap.devices.iter().filter(|d| d.name == "UQi").collect();
-        assert_eq!(uqi_devs.len(), 1, "Expected exactly 1 merged device for UQi, got {}", uqi_devs.len());
-        assert_eq!(uqi_devs[0].connection, "connected");
-        assert_eq!(uqi_devs[0].transport.as_deref(), Some("usb"));
-        assert_eq!(uqi_devs[0].flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
+        let devs: Vec<_> = snap.devices.iter().filter(|d| d.name == "iPhone Physical").collect();
+        assert_eq!(devs.len(), 1, "Expected exactly 1 merged device, got {}", devs.len());
+        assert_eq!(devs[0].connection, "connected");
+        assert_eq!(devs[0].transport.as_deref(), Some("usb"));
+        assert_eq!(devs[0].flutter_id.as_deref(), Some("00008110-00012CCE0C09401E"));
     }
 
     #[test]

@@ -172,7 +172,7 @@
   }
 
   // Obsidian Vault Integration
-  let obsidianVaultPath = $state('/Users/uqi/Documents/Coding/UQi/vault');
+  let obsidianVaultPath = $state('');
   let isObsidianConnected = $derived(!!obsidianVaultPath && obsidianVaultPath.trim().length > 0);
   let isSavingObsidian = $state(false);
   let obsidianFeedback = $state<string | null>(null);
@@ -198,8 +198,7 @@
   }
 
   function handleAutoDetectObsidian() {
-    obsidianVaultPath = '/Users/uqi/Documents/Coding/UQi/vault';
-    obsidianFeedback = '🔍 Vault terdeteksi di /Users/uqi/Documents/Coding/UQi/vault';
+    obsidianFeedback = 'Silakan pilih atau masukkan jalur direktori vault Obsidian Anda.';
     setTimeout(() => {
       obsidianFeedback = null;
     }, 3000);
@@ -1185,14 +1184,14 @@
                 <div class="setting-item-row column" style="margin-top: 8px;">
                   <div class="setting-meta" style="margin-bottom: 6px;">
                     <span class="setting-label">Path Direktori Vault Obsidian:</span>
-                    <span class="setting-hint">Folder root vault Obsidian di Mac/PC Anda (contoh: <code>/Users/uqi/Documents/Coding/UQi/vault</code>)</span>
+                    <span class="setting-hint">Folder root vault Obsidian di Mac/PC Anda (contoh: <code>~/Documents/Vault</code>)</span>
                   </div>
-                  <div style="display: flex; gap: 8px;">
+                  <div class="setting-control-row">
                     <input
                       type="text"
-                      class="setting-input-text full-width mono"
+                      class="setting-input-text"
                       bind:value={obsidianVaultPath}
-                      placeholder="/Users/uqi/Documents/Coding/UQi/vault"
+                      placeholder="~/Documents/Vault"
                     />
                     <button class="pill-btn active" style="white-space: nowrap; padding: 6px 16px;" onclick={handleSaveObsidianVault}>
                       {isSavingObsidian ? 'Menyimpan…' : 'Simpan Path Vault'}
@@ -1518,14 +1517,14 @@
         <!-- 6. Git & GitLab -->
         {:else if settingsStore.activeCategory === 'git'}
           <div class="settings-section">
-            <h2 class="settings-section-title">Git & GitLab istar.id</h2>
+            <h2 class="settings-section-title">Git & Integrasi Remote</h2>
             <div class="settings-group">
               <div class="setting-item-row">
                 <div class="setting-meta">
                   <span class="setting-label">Default Commit Branch</span>
                   <span class="setting-hint">Target branch kerja fitur aktif untuk pembuatan merge request</span>
                 </div>
-                <input type="text" class="setting-input-text mono" value="feat/phase5-agent" readonly />
+                <input type="text" class="setting-input-text mono" value="main" readonly />
               </div>
 
               <div class="setting-item-row">
@@ -1538,10 +1537,10 @@
 
               <div class="setting-item-row">
                 <div class="setting-meta">
-                  <span class="setting-label">Status GitLab istar.id</span>
-                  <span class="setting-hint">Host GitLab internal code.istar.id untuk sinkronisasi proyek Bank Jatim JConnect</span>
+                  <span class="setting-label">Status GitLab API</span>
+                  <span class="setting-hint">Host GitLab untuk sinkronisasi repositori dan Merge Requests</span>
                 </div>
-                <span class="keycap badge-green">● code.istar.id (Terhubung)</span>
+                <span class="keycap badge-green">Aktif (Terhubung)</span>
               </div>
             </div>
           </div>
@@ -1553,18 +1552,18 @@
             <div class="settings-group">
               <div class="setting-item-row">
                 <div class="setting-meta">
-                  <span class="setting-label">OpenVPN Kantor (tun0)</span>
-                  <span class="setting-hint">Tunnel split-tunneling untuk akses repositori internal GitLab istar.id</span>
+                  <span class="setting-label">VPN / Jaringan Privat</span>
+                  <span class="setting-hint">Status tunnel jaringan untuk akses repositori internal self-hosted</span>
                 </div>
-                <span class="keycap badge-green">● tun0 Aktif (10.8.0.0/24)</span>
+                <span class="keycap badge-green">Aktif</span>
               </div>
 
               <div class="setting-item-row">
                 <div class="setting-meta">
-                  <span class="setting-label">Tailscale Mesh</span>
-                  <span class="setting-hint">IP Tailscale server uqiflutter1 untuk remote pairing</span>
+                  <span class="setting-label">Mesh Network</span>
+                  <span class="setting-hint">Status jaringan mesh host untuk remote pairing</span>
                 </div>
-                <span class="keycap badge-blue">● 100.72.152.83 (Online)</span>
+                <span class="keycap badge-blue">● Online</span>
               </div>
             </div>
 

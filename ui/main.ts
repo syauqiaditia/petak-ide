@@ -284,8 +284,8 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
         return [
           {
             name: 'origin',
-            fetchUrl: 'git@code.istar.id:bankjatim/jconnect.git',
-            pushUrl: 'git@code.istar.id:bankjatim/jconnect.git',
+            fetchUrl: 'git@gitlab.com:example/project.git',
+            pushUrl: 'git@gitlab.com:example/project.git',
           },
         ];
       }
@@ -523,10 +523,10 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       }
       if (cmd === 'recent_projects_list') {
         return [
-          { name: 'jatim-ist-mb-flutter', path: '/mnt/storage/projects/jatim-ist-mb-flutter', lastOpened: Date.now() - 3600000, exists: true },
-          { name: 'voinzy', path: '/mnt/storage/projects/voinzy', lastOpened: Date.now() - 7200000, exists: true },
-          { name: 'petak', path: '/mnt/storage/uqi-projects/petak', lastOpened: Date.now() - 86400000, exists: true },
-          { name: 'old-project-deleted', path: '/mnt/storage/projects/old-deleted', lastOpened: Date.now() - 172800000, exists: false },
+          { name: 'flutter_sample', path: '~/Projects/flutter_sample', lastOpened: Date.now() - 3600000, exists: true },
+          { name: 'android_native', path: '~/Projects/android_native', lastOpened: Date.now() - 7200000, exists: true },
+          { name: 'petak', path: '~/Projects/petak', lastOpened: Date.now() - 86400000, exists: true },
+          { name: 'old-project-deleted', path: '~/Projects/old-deleted', lastOpened: Date.now() - 172800000, exists: false },
         ];
       }
       if (cmd === 'recent_projects_add' || cmd === 'recent_projects_remove') {

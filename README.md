@@ -179,7 +179,14 @@ git clone https://github.com/your-username/petak.git
 cd petak
 ```
 
-### 3. One-Command Build Script
+### 3. Interactive Setup Wizard (Recommended)
+Run the automated onboarding wizard to configure AI providers, Flutter/Android SDKs, and GitLab tokens:
+
+```bash
+./setup.sh
+```
+
+### 4. Build Script
 We provide a universal build script that checks prerequisites, compiles the Rust core, bundles the frontend, and packages the release:
 
 ```bash
@@ -192,7 +199,7 @@ To build and run in development mode with hot-reload:
 ./build.sh --dev
 ```
 
-### 4. Manual Build Commands
+### 5. Manual Build Commands
 If you prefer running build steps manually:
 ```bash
 # 1. Install frontend dependencies

@@ -193,7 +193,7 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
 }
 
 /**
- * Styling theme matching /home/uqi/vault/Projects/Petak/design/Suggest.html.
+ * Styling theme matching Petak IDE Design System.
  */
 export const completionTheme = EditorView.theme({
   '.cm-tooltip-autocomplete': {

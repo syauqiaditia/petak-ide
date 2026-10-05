@@ -551,7 +551,7 @@
 
     try {
       const possible50kPaths = [
-        '/Users/uqi/petak-bench/Big50k.kt',
+        '/tmp/petak-bench/Big50k.kt',
         '/tmp/petak-bench/Big50k.kt',
       ];
       let big50kPath = possible50kPaths[0];
@@ -588,7 +588,7 @@
       console.log(`[PETAK_BENCH] Open 50k median: ${medianOpen.toFixed(2)} ms`);
 
       const possible10kPaths = [
-        '/Users/uqi/petak-bench/Big10k.kt',
+        '/tmp/petak-bench/Big10k.kt',
         '/tmp/petak-bench/Big10k.kt',
       ];
       const big10kPath = possible10kPaths[0];
@@ -672,7 +672,7 @@
         statusText = `Benchmarking TS ${langItem.name}...`;
 
         const possiblePaths = [
-          `/Users/uqi/petak-bench/${langItem.file}`,
+          `/tmp/petak-bench/${langItem.file}`,
           `/tmp/petak-bench/${langItem.file}`,
         ];
         let filePath = possiblePaths[0];
@@ -815,7 +815,7 @@
     console.log('[PETAK_TEST] Running P1.2 automated test sequence...');
     try {
       if (!currentFolderPath) {
-        currentFolderPath = '/Users/uqi/petak-sample';
+        currentFolderPath = '/tmp/petak-sample';
         await openFolder(currentFolderPath);
       }
 
@@ -901,7 +901,7 @@
     await api.benchLog('P14_STARTING');
     try {
       if (!currentFolderPath) {
-        currentFolderPath = '/Users/uqi/petak-sample';
+        currentFolderPath = '/tmp/petak-sample';
         await openFolder(currentFolderPath);
       }
       await new Promise((r) => setTimeout(r, 600));
@@ -1107,7 +1107,7 @@
         if (recents && recents.length > 0) {
           await openFolder(recents[0]);
         } else {
-          await openFolder('/Users/uqi/petak-sample');
+          await openFolder('/tmp/petak-sample');
         }
       }
       await new Promise((r) => setTimeout(r, 600));
@@ -1163,7 +1163,7 @@
         if (recents && recents.length > 0) {
           await openFolder(recents[0]);
         } else {
-          await openFolder('/Users/uqi/petak-sample');
+          await openFolder('/tmp/petak-sample');
         }
       }
       await new Promise((r) => setTimeout(r, 600));
@@ -1225,7 +1225,7 @@
         if (recents && recents.length > 0) {
           await openFolder(recents[0]);
         } else {
-          await openFolder('/Users/uqi/petak-sample');
+          await openFolder('/tmp/petak-sample');
         }
       }
       await new Promise((r) => setTimeout(r, 600));

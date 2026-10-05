@@ -10,7 +10,7 @@ import type {
 
 export const DEMO_HERMES_DETECTION: HermesDetectionResult = {
   installed: true,
-  path: '/home/uqi/.local/bin/hermes',
+  path: '~/.local/bin/hermes',
   version: '0.8.2-phase5',
   check_ok: true,
   profiles: [

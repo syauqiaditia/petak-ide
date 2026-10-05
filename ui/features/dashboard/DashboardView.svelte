@@ -28,9 +28,9 @@
 
   // Modal form states
   let newProjectName = $state('my_flutter_app');
-  let newProjectOrg = $state('id.co.bankjatim');
-  let cloneRepoUrl = $state('https://code.istar.id/bankjatim/jatim-ist-mb-flutter.git');
-  let cloneTargetDir = $state('/mnt/storage/projects');
+  let newProjectOrg = $state('com.example');
+  let cloneRepoUrl = $state('');
+  let cloneTargetDir = $state('');
 
   // Doctor state
   let isInstallingKotlin = $state(false);
@@ -530,11 +530,11 @@
         <p class="modal-desc">{dict.cloneModalDesc}</p>
         <div class="form-row">
           <label class="form-label" for="clone-url">Repository URL:</label>
-          <input id="clone-url" type="text" class="modal-input" bind:value={cloneRepoUrl} placeholder="https://code.istar.id/..." />
+          <input id="clone-url" type="text" class="modal-input" bind:value={cloneRepoUrl} placeholder="https://gitlab.com/username/project.git" />
         </div>
         <div class="form-row">
           <label class="form-label" for="clone-dir">Target Directory:</label>
-          <input id="clone-dir" type="text" class="modal-input" bind:value={cloneTargetDir} placeholder="/mnt/storage/projects" />
+          <input id="clone-dir" type="text" class="modal-input" bind:value={cloneTargetDir} placeholder="~/Projects" />
         </div>
 
         <div class="code-preview-box">

@@ -23,8 +23,8 @@
   let descTab = $state<'write' | 'preview'>('write');
   let deleteSourceBranch = $state(true);
   let squashCommits = $state(true);
-  let assignee = $state('syauqi.aditia');
-  let reviewer = $state('reviewer');
+  let assignee = $state('');
+  let reviewer = $state('');
   let isSubmitting = $state(false);
   let errorMessage = $state<string | null>(null);
 
@@ -223,7 +223,7 @@
                 type="text"
                 class="text-input"
                 bind:value={assignee}
-                placeholder="syauqi.aditia (Saya)"
+                placeholder="username"
               />
             </div>
           </div>

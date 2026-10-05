@@ -698,9 +698,9 @@ mod tests {
 
     #[test]
     fn test_uri_roundtrip() {
-        let p = PathBuf::from("/Users/uqi/My Projects/main.dart");
+        let p = PathBuf::from("/Users/developer/My Projects/main.dart");
         let uri = path_to_uri(&p);
-        assert_eq!(uri, "file:///Users/uqi/My%20Projects/main.dart");
+        assert_eq!(uri, "file:///Users/developer/My%20Projects/main.dart");
         let back = uri_to_path(&uri).unwrap();
         assert_eq!(back, p);
     }

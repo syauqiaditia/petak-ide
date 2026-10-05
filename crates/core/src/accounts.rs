@@ -404,7 +404,7 @@ mod tests {
             assert_eq!(token_header.as_deref(), Some("valid-glpat-token"));
 
             let response = tiny_http::Response::from_string(
-                r#"{"id":1,"name":"syauqi","scopes":["api","read_user"],"expires_at":"2028-12-31"}"#,
+                r#"{"id":1,"name":"developer","scopes":["api","read_user"],"expires_at":"2028-12-31"}"#,
             )
             .with_status_code(200)
             .with_header(json_header());
@@ -413,7 +413,7 @@ mod tests {
 
         let res = accounts_test_with_url_and_token(&mock_url, "valid-glpat-token").unwrap();
         assert!(res.ok);
-        assert_eq!(res.user, "syauqi");
+        assert_eq!(res.user, "developer");
 
         handle.join().unwrap();
     }
@@ -447,7 +447,7 @@ mod tests {
             let request = server.recv().unwrap();
             assert_eq!(request.url(), "/api/v4/personal_access_tokens/self");
             let response = tiny_http::Response::from_string(
-                r#"{"id":1,"name":"syauqi","scopes":["api","read_user"],"expires_at":"2028-12-31"}"#,
+                r#"{"id":1,"name":"developer","scopes":["api","read_user"],"expires_at":"2028-12-31"}"#,
             )
             .with_status_code(200)
             .with_header(json_header());
@@ -563,7 +563,7 @@ mod tests {
             let req2 = server.recv().unwrap();
             assert_eq!(req2.url(), "/api/v4/user");
             let resp2 = tiny_http::Response::from_string(
-                r#"{"id":42,"username":"syauqi","name":"Muhammad Syauqi"}"#,
+                r#"{"id":42,"username":"developer","name":"Lead Developer"}"#,
             )
             .with_status_code(200)
             .with_header(json_header());
@@ -572,7 +572,7 @@ mod tests {
 
         let status = accounts_check_token_with_url_and_token(&mock_url, "tok").unwrap();
         assert!(status.ok);
-        assert_eq!(status.user, "syauqi");
+        assert_eq!(status.user, "developer");
         assert!(status.scope_valid); // assumed valid on fallback
         assert!(status.scopes.is_empty());
         assert!(status.message.contains("scope/expiry tidak tersedia"));
