@@ -204,3 +204,22 @@ export interface MemoryItem {
   updatedAt: number;
 }
 
+// ── Petak Skills Management Types ──────────────────────────────────────────
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  isCore: boolean;
+  scope: 'system' | 'project';
+  path: string;
+}
+
+export interface Skill {
+  name: string;
+  description: string;
+  content: string;
+  isCore: boolean;
+  scope: 'system' | 'project';
+  path: string;
+}
+

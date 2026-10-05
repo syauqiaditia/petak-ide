@@ -24,6 +24,8 @@ import {
   DEFAULT_ALLOWLIST,
   isCommandInAllowlist,
 } from './agentsLogic';
+import { skillsStore } from './skillsStore.svelte';
+import { formatSkillsForPrompt } from './skillsLogic.ts';
 import {
   DEMO_SLOTS,
   DEMO_CHAT_MESSAGES,
@@ -246,12 +248,23 @@ class AgentsStore {
       memorySnippet = await this.getMemorySnippetForPrompt();
     }
 
+    let skillsInjection = '';
+    try {
+      const activeSkills = await skillsStore.getActiveSkillsContent();
+      if (activeSkills.length > 0) {
+        skillsInjection = formatSkillsForPrompt(activeSkills);
+      }
+    } catch (err) {
+      console.warn('Failed to retrieve active skills for prompt:', err);
+    }
+
     const formattedPrompt = applyDisciplineDirectives(
       rawPrompt.trim(),
       this.isPonytailActive,
       this.isCavemanActive,
       this.isSelfImproveActive,
-      memorySnippet
+      memorySnippet,
+      skillsInjection
     );
 
     const userMsg: ChatMessage = {

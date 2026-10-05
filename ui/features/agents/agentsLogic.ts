@@ -190,7 +190,8 @@ export function applyDisciplineDirectives(
   isPonytail: boolean,
   isCaveman: boolean,
   isSelfImprove: boolean = false,
-  memoryContext: string = ''
+  memoryContext: string = '',
+  skillsInjection: string = ''
 ): string {
   const directives: string[] = [];
 
@@ -208,6 +209,10 @@ export function applyDisciplineDirectives(
     directives.push(
       '[DISCIPLINE: SELF-IMPROVE — Always consult project memory and conventions. When discovering a new bug fix pattern, user preference, or codebase quirk, formulate a concise lesson and propose saving it to project memory via lessons.md]'
     );
+  }
+
+  if (skillsInjection && skillsInjection.trim()) {
+    directives.push(skillsInjection.trim());
   }
 
   if (memoryContext && memoryContext.trim()) {

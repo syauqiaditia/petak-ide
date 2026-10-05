@@ -17,6 +17,8 @@
   import AccountsSettings from '../accounts/AccountsSettings.svelte';
   import { keymapStore, keyEventToShortcut, type ConflictInfo } from './keymapStore.svelte';
   import McpSettings from './McpSettings.svelte';
+  import { skillsStore } from '../agents/skillsStore.svelte';
+  import { isValidSkillName } from '../agents/skillsLogic';
 
   let {
     root = '',
@@ -203,6 +205,78 @@
     }, 3000);
   }
 
+  // Skills Management
+  let isSkillFormOpen = $state(false);
+  let skillFormIsEditing = $state(false);
+  let skillFormName = $state('');
+  let skillFormDescription = $state('');
+  let skillFormContent = $state('');
+  let skillFormError = $state<string | null>(null);
+  let isSavingSkill = $state(false);
+
+  function handleOpenCreateSkill() {
+    if (isSkillFormOpen && !skillFormIsEditing) {
+      isSkillFormOpen = false;
+      return;
+    }
+    skillFormIsEditing = false;
+    skillFormName = '';
+    skillFormDescription = '';
+    skillFormContent = '';
+    skillFormError = null;
+    isSkillFormOpen = true;
+  }
+
+  async function handleEditSkill(name: string) {
+    try {
+      const sk = await api.agentSkillGet(name, root || undefined);
+      skillFormIsEditing = true;
+      skillFormName = sk.name;
+      skillFormDescription = sk.description || '';
+      skillFormContent = sk.content || '';
+      skillFormError = null;
+      isSkillFormOpen = true;
+    } catch (err: any) {
+      console.error('Failed to load skill for edit:', err);
+    }
+  }
+
+  function handleCloseSkillForm() {
+    isSkillFormOpen = false;
+    skillFormError = null;
+  }
+
+  async function handleSaveSkillSubmit() {
+    const trimmedName = skillFormName.trim();
+    if (!isValidSkillName(trimmedName)) {
+      skillFormError = 'Nama skill tidak valid. Hanya huruf, angka, minus (-), dan underscore (_) yang diperbolehkan.';
+      return;
+    }
+    isSavingSkill = true;
+    skillFormError = null;
+    try {
+      await skillsStore.saveSkill(trimmedName, skillFormDescription.trim(), skillFormContent.trim(), root || undefined);
+      isSkillFormOpen = false;
+    } catch (err: any) {
+      skillFormError = err?.message || 'Gagal menyimpan skill';
+    } finally {
+      isSavingSkill = false;
+    }
+  }
+
+  async function handleDeleteSkill(name: string) {
+    if (name === 'ponytail' || name === 'caveman') return;
+    const confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+      ? window.confirm(`Apakah Anda yakin ingin menghapus skill '${name}'?`)
+      : true;
+    if (!confirmed) return;
+    try {
+      await skillsStore.deleteSkill(name, root || undefined);
+    } catch (err: any) {
+      console.error('Failed to delete skill:', err);
+    }
+  }
+
   // Keymap search
   let keymapSearch = $state('');
   let recordingActionId = $state<string | null>(null);
@@ -307,6 +381,11 @@
       if (team?.obsidianVaultPath) {
         obsidianVaultPath = team.obsidianVaultPath;
       }
+    } catch {
+      // ignore
+    }
+    try {
+      await skillsStore.loadSkills(root || undefined);
     } catch {
       // ignore
     }
@@ -1224,6 +1303,155 @@
                     checked={agentsStore.isSelfImproveActive}
                     onchange={() => agentsStore.toggleSelfImprove()}
                   />
+                </div>
+              </div>
+
+              <!-- Section 5: Manajemen Skills & Disiplin -->
+              <div class="settings-group-box">
+                <div class="box-header">
+                  <div>
+                    <div class="box-title">
+                      <span>🧠 Manajemen Skills & Disiplin</span>
+                      <span class="keycap badge-blue">{skillsStore.skills.length} Skill Terpasang</span>
+                    </div>
+                    <span class="setting-hint">Kelola skill core system dan kustom per-proyek (.petak/skills/) untuk disuntikkan ke prompt bot.</span>
+                  </div>
+                  <button class="pill-btn active" style="padding: 6px 14px;" onclick={handleOpenCreateSkill}>
+                    {isSkillFormOpen && !skillFormIsEditing ? '✕ Tutup Form' : '+ Tambah Skill Baru'}
+                  </button>
+                </div>
+
+                <!-- Form Tambah/Edit Skill -->
+                {#if isSkillFormOpen}
+                  <div class="add-bot-form-box" style="margin-bottom: 16px; padding: 14px; background: var(--p-bg-surface, #121317); border: 1px solid var(--border-focus, #3b82f6); border-radius: var(--radius-md, 6px);">
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between;">
+                      <span>{skillFormIsEditing ? '✏️ Edit Skill' : '➕ Tambah Skill Baru'}</span>
+                      {#if skillFormIsEditing && (skillFormName === 'ponytail' || skillFormName === 'caveman')}
+                        <span class="keycap badge-green">Core System 🔒</span>
+                      {/if}
+                    </div>
+
+                    {#if skillFormError}
+                      <div style="margin-bottom: 10px; padding: 6px 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 4px; color: #ef4444; font-size: 12px;">
+                        {skillFormError}
+                      </div>
+                    {/if}
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                      <div>
+                        <label class="field-label" for="skill-name-input">Nama Skill (identifier unik):</label>
+                        <input
+                          id="skill-name-input"
+                          type="text"
+                          class="setting-select-box full-width mono"
+                          bind:value={skillFormName}
+                          disabled={skillFormIsEditing}
+                          placeholder="e.g. flutter-expert, test-driven-dev"
+                        />
+                        <span class="setting-hint" style="font-size: 10px;">Hanya huruf, angka, minus (-), dan underscore (_).</span>
+                      </div>
+
+                      <div>
+                        <label class="field-label" for="skill-desc-input">Deskripsi Singkat:</label>
+                        <input
+                          id="skill-desc-input"
+                          type="text"
+                          class="setting-select-box full-width"
+                          bind:value={skillFormDescription}
+                          placeholder="Deskripsi tujuan skill..."
+                        />
+                      </div>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                      <label class="field-label" for="skill-content-input">Konten Petunjuk / Aturan Markdown:</label>
+                      <textarea
+                        id="skill-content-input"
+                        class="setting-select-box full-width mono"
+                        rows="6"
+                        style="height: auto; min-height: 120px; resize: vertical; padding: 8px;"
+                        bind:value={skillFormContent}
+                        placeholder="Tuliskan petunjuk aturan, SOP, atau konvensi yang harus dipatuhi bot..."
+                      ></textarea>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                      <button class="pill-btn" style="padding: 6px 14px;" onclick={handleCloseSkillForm}>
+                        Batal
+                      </button>
+                      <button
+                        class="pill-btn active"
+                        style="padding: 6px 18px;"
+                        onclick={handleSaveSkillSubmit}
+                        disabled={isSavingSkill || !skillFormName.trim() || !skillFormContent.trim()}
+                      >
+                        {isSavingSkill ? 'Menyimpan...' : '✓ Simpan Skill'}
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Tabel / List Skills -->
+                <div style="overflow-x: auto;">
+                  <table class="keymap-table" style="width: 100%;">
+                    <thead>
+                      <tr>
+                        <th style="width: 28%;">{isId ? 'Nama Skill' : 'Skill Name'}</th>
+                        <th style="width: 42%;">{isId ? 'Deskripsi' : 'Description'}</th>
+                        <th style="width: 15%;">{isId ? 'Status / Cakupan' : 'Scope'}</th>
+                        <th style="width: 15%; text-align: right;">{isId ? 'Aksi' : 'Action'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each skillsStore.skills as sk}
+                        <tr>
+                          <td>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                              <span style="font-weight: 600; font-family: var(--font-mono); color: var(--text-primary);">{sk.name}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">{sk.description || '-'}</span>
+                          </td>
+                          <td>
+                            {#if sk.isCore || sk.scope === 'system'}
+                              <span class="keycap badge-green" title="Core System Skill (Dilindungi)">Core System 🔒</span>
+                            {:else}
+                              <span class="keycap badge-blue" title="Project Skill (.petak/skills/)">Project Skill 📂</span>
+                            {/if}
+                          </td>
+                          <td style="text-align: right;">
+                            <div style="display: flex; justify-content: flex-end; gap: 6px;">
+                              <button
+                                class="action-btn"
+                                style="font-size: 11px; padding: 2px 8px;"
+                                onclick={() => handleEditSkill(sk.name)}
+                                title="Edit konten skill"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                class="action-btn danger"
+                                style="font-size: 11px; padding: 2px 8px; color: {sk.isCore || sk.name === 'ponytail' || sk.name === 'caveman' ? 'var(--text-muted)' : '#ef4444'};"
+                                disabled={sk.isCore || sk.name === 'ponytail' || sk.name === 'caveman'}
+                                onclick={() => handleDeleteSkill(sk.name)}
+                                title={sk.isCore || sk.name === 'ponytail' || sk.name === 'caveman' ? 'Skill core dilindungi sistem dan tidak boleh dihapus' : 'Hapus skill'}
+                              >
+                                🗑️ Hapus
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      {/each}
+                      {#if skillsStore.skills.length === 0}
+                        <tr>
+                          <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                            Tidak ada skill terpasang. Klik "+ Tambah Skill Baru" untuk menambahkan skill proyek.
+                          </td>
+                        </tr>
+                      {/if}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
