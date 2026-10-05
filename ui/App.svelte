@@ -31,6 +31,7 @@
   let DevicesPanelComponent = $state<any>(null);
   let DeviceMirrorPanelComponent = $state<any>(null);
   let AgentsPanelComponent = $state<any>(null);
+  let TestsPanelComponent = $state<any>(null);
 
   let isAgentPanelOpen = $derived(panelStore.activeRightPanel === 'agent');
 
@@ -56,6 +57,9 @@
     }
     if (activeRailTab === 'mr' && !MrViewComponent) {
       import('./features/mr/MrView.svelte').then((m) => (MrViewComponent = m.default));
+    }
+    if (activeRailTab === 'tests' && !TestsPanelComponent) {
+      import('./features/tests/TestsPanel.svelte').then((m) => (TestsPanelComponent = m.default));
     }
     if (activeRailTab === 'settings') {
       openToolchains();
@@ -1477,6 +1481,8 @@
           activeRailTab = 'git';
         } else if (window.location.search.includes('tab=mr') || window.location.search.includes('preview-mr')) {
           activeRailTab = 'mr';
+        } else if (window.location.search.includes('tab=tests') || window.location.search.includes('preview-tests')) {
+          activeRailTab = 'tests';
         } else if (window.location.search.includes('tab=toolchains')) {
           activeRailTab = 'settings';
         }
@@ -1542,6 +1548,10 @@
       }
       if (e.key === 'Escape' && mirrorStore.isOpen && !paletteOpen && !settingsStore.isOpen) {
         mirrorStore.close();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '4') {
+        e.preventDefault();
+        activeRailTab = 'tests';
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '6') {
         e.preventDefault();
@@ -1648,6 +1658,10 @@
 
         {#if activeRailTab === 'mr' && MrViewComponent}
           <MrViewComponent folderPath={currentFolderPath} />
+        {/if}
+
+        {#if activeRailTab === 'tests' && TestsPanelComponent}
+          <TestsPanelComponent folderPath={currentFolderPath} />
         {/if}
 
         {#if terminalOpen && TerminalPanelComponent}

@@ -486,6 +486,48 @@ export interface McpTestResult {
   error?: string;
 }
 
+export interface FlowStep {
+  id: string;
+  action: string;
+  selector?: string;
+  text?: string;
+  key?: string;
+  timeoutMs?: number;
+  description?: string;
+}
+
+export interface Flow {
+  id: string;
+  name: string;
+  description: string;
+  appId?: string;
+  steps: FlowStep[];
+  tags: string[];
+}
+
+export type FlowStepStatusKind = 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+
+export interface FlowStepStatus {
+  stepId: string;
+  status: FlowStepStatusKind;
+  durationMs?: number;
+  error?: string;
+  screenshotPath?: string;
+}
+
+export interface FlowRunResult {
+  flowId: string;
+  success: boolean;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  durationMs: number;
+  runner: string;
+  stepResults: FlowStepStatus[];
+  error?: string;
+  failureScreenshot?: string;
+}
+
 import type {
   GitRepoStatus,
   GitDiffOpts,
@@ -2181,6 +2223,87 @@ export const api = {
       return mockMcpStore.testServer(command, args, env);
     }
     return invoke<McpTestResult>('agent_mcp_test_server', { command, args, env });
+  },
+
+  async testListFlows(root?: string): Promise<Flow[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockFlowStore.listFlows(root);
+    }
+    return invoke<Flow[]>('test_list_flows', { root: root || null });
+  },
+
+  async testRunFlow(flowId: string, deviceSerial?: string, root?: string): Promise<FlowRunResult> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockFlowStore.runFlow(flowId, deviceSerial, root);
+    }
+    return invoke<FlowRunResult>('test_run_flow', { flowId, deviceSerial: deviceSerial || null, root: root || null });
+  },
+
+  async testCancelFlow(flowId: string): Promise<boolean> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockFlowStore.cancelFlow(flowId);
+    }
+    return invoke<boolean>('test_cancel_flow', { flowId });
+  },
+
+  async testCreateFlow(name: string, appId?: string, steps: FlowStep[] = [], root?: string): Promise<Flow> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockFlowStore.createFlow(name, appId, steps, root);
+    }
+    return invoke<Flow>('test_create_flow', { name, appId: appId || null, steps, root: root || null });
+  },
+};
+
+const mockFlowStore = {
+  flows: [
+    {
+      id: 'flow-login',
+      name: 'Login Flow',
+      description: 'Test login form authentication',
+      appId: 'com.example.app',
+      tags: ['smoke', 'auth'],
+      steps: [
+        { id: 's1', action: 'tap', selector: '#login-btn', description: 'Tap login button' },
+        { id: 's2', action: 'input', selector: '#username', text: 'testuser', description: 'Enter username' },
+      ],
+    },
+  ] as Flow[],
+  listFlows(_root?: string): Flow[] {
+    return JSON.parse(JSON.stringify(this.flows));
+  },
+  async runFlow(flowId: string, _deviceSerial?: string, _root?: string): Promise<FlowRunResult> {
+    const flow = this.flows.find((f) => f.id === flowId);
+    const steps = flow ? flow.steps : [];
+    const stepResults: FlowStepStatus[] = steps.map((s) => ({
+      stepId: s.id,
+      status: 'passed',
+      durationMs: 120,
+    }));
+    return {
+      flowId,
+      success: true,
+      totalSteps: steps.length,
+      passedSteps: steps.length,
+      failedSteps: 0,
+      durationMs: steps.length * 120,
+      runner: 'adb',
+      stepResults,
+    };
+  },
+  cancelFlow(_flowId: string): boolean {
+    return true;
+  },
+  createFlow(name: string, appId?: string, steps: FlowStep[] = [], _root?: string): Flow {
+    const newFlow: Flow = {
+      id: `flow-${Date.now()}`,
+      name,
+      description: `Scenario for ${name}`,
+      appId: appId || undefined,
+      steps: steps || [],
+      tags: ['custom'],
+    };
+    this.flows.push(newFlow);
+    return JSON.parse(JSON.stringify(newFlow));
   },
 };
 

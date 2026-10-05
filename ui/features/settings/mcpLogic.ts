@@ -60,6 +60,18 @@ export const MCP_PRESETS: McpPreset[] = [
     },
   },
   {
+    id: 'mobile-mcp',
+    name: 'Mobile MCP',
+    description: 'Mobile device automation & testing tools via MCP (@mobilenext/mobile-mcp)',
+    config: {
+      command: 'npx',
+      args: ['-y', '@mobilenext/mobile-mcp'],
+      env: {},
+      disabled: false,
+      autoApprove: ['mobile_tap', 'mobile_screenshot', 'mobile_input'],
+    },
+  },
+  {
     id: 'custom',
     name: 'Custom',
     description: 'Template kosong untuk server MCP khusus (stdio)',
