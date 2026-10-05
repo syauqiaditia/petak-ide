@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { formatUsageText } from './agentsLogic';
+  import { formatUsageText, ALL_PRESET_MODELS, getModelDisplayName } from './agentsLogic';
   import AgentChat from './AgentChat.svelte';
   import ProposedEdits from './ProposedEdits.svelte';
   import QuotaUsageView from './QuotaUsageView.svelte';
@@ -38,6 +38,7 @@
   }
 
   const HERMES_PROFILES: HermesBotProfile[] = [
+    { id: 'default', name: 'default', label: '🤖 Petak Agent', icon: '🤖', role: 'Asisten Utama (Coding & Project)', defaultModel: 'ag/gemini-3.8-flash-high' },
     { id: 'manager', name: 'manager', label: '👑 Manager', icon: '👑', role: 'Planner & Task Orchestrator', defaultModel: 'claude-3-7-sonnet' },
     { id: 'techlead', name: 'techlead', label: '🧠 Techlead', icon: '🧠', role: 'System Architect & Core Modules', defaultModel: 'claude-3-7-sonnet' },
     { id: 'senior', name: 'senior', label: '⚡ Senior', icon: '⚡', role: 'Fullstack Flutter & Rust Implementer', defaultModel: 'claude-3-7-sonnet' },
@@ -49,16 +50,16 @@
   let activeSlot = $derived(agentsStore.activeSlot);
 
   let activeProfileId = $derived.by(() => {
-    if (!activeSlot) return 'techlead';
+    if (!activeSlot) return 'default';
     const prof = (activeSlot.config?.hermesProfile || activeSlot.label || '').toLowerCase();
-    const match = HERMES_PROFILES.find((p) => prof.includes(p.id));
-    return match ? match.id : 'techlead';
+    const match = HERMES_PROFILES.find((p) => prof.includes(p.id) || p.id === prof);
+    return match ? match.id : 'default';
   });
 
   let currentModelName = $derived(
     activeSlot?.config?.model ||
     HERMES_PROFILES.find((p) => p.id === activeProfileId)?.defaultModel ||
-    'claude-3-7-sonnet'
+    'ag/gemini-3.8-flash-high'
   );
 
   function getModelInfo(modelName?: string | null): { name: string; type: 'claude' | 'gemini' | 'ollama' | 'other' } {
@@ -75,7 +76,7 @@
 
   function getProfileStatus(id: string): 'ready' | 'busy' | 'idle' {
     const matchingSlot = agentsStore.slots.find(
-      (s) => (s.config?.hermesProfile === id) || s.label.toLowerCase().includes(id)
+      (s) => (s.config?.hermesProfile === id) || s.label.toLowerCase().includes(id) || s.id === id
     );
     if (matchingSlot) {
       if (matchingSlot.status === 'busy') return 'busy';
@@ -90,11 +91,23 @@
     const select = e.target as HTMLSelectElement;
     const targetId = select.value;
     const matchingSlot = agentsStore.slots.find(
-      (s) => (s.config?.hermesProfile === targetId) || s.label.toLowerCase().includes(targetId)
+      (s) => (s.config?.hermesProfile === targetId) || s.label.toLowerCase().includes(targetId) || s.id === targetId
     );
     if (matchingSlot) {
       agentsStore.selectSlot(matchingSlot.id);
+    } else {
+      const profile = HERMES_PROFILES.find((p) => p.id === targetId);
+      if (profile) {
+        agentsStore.selectSlot(profile.id);
+      }
     }
+  }
+
+  function handleModelChange(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    const newModelId = select.value;
+    const targetSlotId = activeSlot?.id || 'default';
+    agentsStore.updateSlotModel(targetSlotId, newModelId);
   }
 
   onMount(async () => {
@@ -157,13 +170,13 @@
         ></span>
       </div>
 
-      <!-- Dynamic Active Model Icon (Claude, Gemini, Ollama) -->
+      <!-- Dynamic Active Model Dropdown Selector (Interactive in-chat model switch) -->
       <div
-        class="dynamic-model-badge"
+        class="dynamic-model-badge interactive"
         class:claude={modelInfo.type === 'claude'}
         class:gemini={modelInfo.type === 'gemini'}
         class:ollama={modelInfo.type === 'ollama'}
-        title="Model Aktif: {currentModelName}"
+        title="Klik untuk ganti model AI saat chat ({currentModelName})"
       >
         {#if modelInfo.type === 'claude'}
           <svg class="model-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -186,6 +199,47 @@
         {:else}
           <span class="model-name">{modelInfo.name}</span>
         {/if}
+        <select
+          class="model-select-overlay"
+          value={currentModelName}
+          onchange={handleModelChange}
+          aria-label="Pilih Model AI Saat Chat"
+        >
+          {#each ALL_PRESET_MODELS as m}
+            <option value={m.id}>
+              {m.name} ({m.id})
+            </option>
+          {/each}
+        </select>
+        <span class="dropdown-chevron">▾</span>
+      </div>
+
+      <!-- + New Chat & History Sessions Action Buttons -->
+      <div class="session-actions-group">
+        <button
+          type="button"
+          class="panel-icon-btn new-chat-btn"
+          onclick={() => agentsStore.newSession()}
+          title="Mulai percakapan baru (+ New Chat)"
+          aria-label="New Chat"
+        >
+          <span class="btn-icon">+</span>
+          <span class="btn-text">New</span>
+        </button>
+
+        <button
+          type="button"
+          class="panel-icon-btn history-btn"
+          class:active={agentsStore.isHistoryOpen}
+          onclick={() => agentsStore.toggleHistory()}
+          title="Lihat riwayat percakapan sebelumnya"
+          aria-label="History Sessions"
+        >
+          ⏱️
+          {#if agentsStore.savedSessions.length > 0}
+            <span class="history-count">{agentsStore.savedSessions.length}</span>
+          {/if}
+        </button>
       </div>
     </div>
 
@@ -256,6 +310,44 @@
 
   <!-- Main View Area (Full vertical space, no cramped tier stacked headers) -->
   <div class="panel-view-area">
+    {#if agentsStore.isHistoryOpen}
+      <div class="sessions-dropdown-backdrop" onclick={() => agentsStore.toggleHistory()} role="presentation">
+        <div class="sessions-dropdown" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Riwayat Percakapan">
+          <div class="sessions-header">
+            <span class="sessions-title">Riwayat Percakapan ({agentsStore.savedSessions.length})</span>
+            {#if agentsStore.savedSessions.length > 0}
+              <button class="clear-all-sessions-btn" onclick={() => agentsStore.clearAllSessions()}>Hapus Semua</button>
+            {/if}
+          </div>
+          <div class="sessions-list">
+            {#if agentsStore.savedSessions.length === 0}
+              <div class="empty-sessions">Belum ada riwayat percakapan yang tersimpan.</div>
+            {:else}
+              {#each agentsStore.savedSessions as sess (sess.id)}
+                <div class="session-row" onclick={() => agentsStore.loadSession(sess)} role="button" tabindex="0">
+                  <div class="session-info">
+                    <div class="session-snippet">{sess.title}</div>
+                    <div class="session-meta-line">
+                      <span class="session-date">{new Date(sess.createdAt).toLocaleDateString()} {new Date(sess.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span class="session-msg-badge">{sess.messageCount} pesan</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="delete-session-btn"
+                    onclick={(e) => { e.stopPropagation(); agentsStore.deleteSession(sess.id); }}
+                    title="Hapus sesi ini"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
+
     {#if activeSubTab === 'chat'}
       <AgentChat />
     {:else if activeSubTab === 'diff'}
@@ -415,6 +507,7 @@
 
   /* Dynamic Active Model Badge */
   .dynamic-model-badge {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 3px;
@@ -426,6 +519,215 @@
     background: rgba(255, 255, 255, 0.04);
     color: #9da1ad;
     flex-shrink: 0;
+  }
+
+  .dynamic-model-badge.interactive {
+    cursor: pointer;
+    padding-right: 12px;
+    transition: all 0.12s;
+  }
+
+  .dynamic-model-badge.interactive:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .model-select-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .dropdown-chevron {
+    font-size: 8px;
+    margin-left: 2px;
+    opacity: 0.6;
+  }
+
+  .session-actions-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .panel-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 22px;
+    padding: 0 5px;
+    background: #18191f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: #c9cdd4;
+    font-size: 10.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .panel-icon-btn:hover {
+    background: #23252e;
+    color: #f1f2f4;
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .panel-icon-btn.new-chat-btn {
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.3);
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .panel-icon-btn.new-chat-btn:hover {
+    background: rgba(59, 130, 246, 0.18);
+    color: #93c5fd;
+  }
+
+  .panel-icon-btn.history-btn.active {
+    background: #2a2d38;
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+
+  .history-count {
+    font-size: 8.5px;
+    background: #334155;
+    color: #f1f5f9;
+    border-radius: 6px;
+    padding: 0 3px;
+    font-weight: 700;
+  }
+
+  .sessions-dropdown-backdrop {
+    position: absolute;
+    inset: 38px 0 0 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sessions-dropdown {
+    background: #181920;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+    max-height: 280px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sessions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: #14151a;
+  }
+
+  .sessions-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .clear-all-sessions-btn {
+    background: transparent;
+    border: none;
+    color: #ef4444;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
+  .clear-all-sessions-btn:hover {
+    text-decoration: underline;
+  }
+
+  .sessions-list {
+    overflow-y: auto;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .empty-sessions {
+    padding: 18px 12px;
+    text-align: center;
+    color: #64748b;
+    font-size: 11px;
+    font-style: italic;
+  }
+
+  .session-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 7px;
+    background: #121318;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .session-row:hover {
+    background: #1e2029;
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .session-snippet {
+    font-size: 11px;
+    color: #e2e8f0;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 9.5px;
+    color: #64748b;
+  }
+
+  .session-msg-badge {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 3px;
+    border-radius: 3px;
+  }
+
+  .delete-session-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 3px;
+    opacity: 0.6;
+    transition: opacity 0.1s;
+  }
+
+  .delete-session-btn:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 0.15);
   }
 
   .dynamic-model-badge.claude {

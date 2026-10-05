@@ -14,6 +14,8 @@
 
   let isContextPickerOpen = $state(false);
   let attachedContextLabel = $state<string | null>(null);
+  let isSkillPickerOpen = $state(false);
+  let skillSearch = $state('');
 
   let activeSlot = $derived(agentsStore.activeSlot);
   let messages = $derived(agentsStore.activeMessages);
@@ -100,12 +102,12 @@
     {#if messages.length === 0 && !agentsStore.isStreaming}
       <!-- Empty Session Greeting & Quick Suggestions -->
       <div class="empty-chat-welcome">
-        <div class="welcome-icon">✨</div>
+        <div class="welcome-icon">🤖</div>
         <div class="welcome-title">
-          Sesi Agen: {activeSlot?.label || 'AI Agent'}
+          {activeSlot?.label || 'Petak Agent'}
         </div>
         <div class="welcome-desc">
-          Model: <code>{activeSlot?.config?.model || 'default'}</code> · Mode: <code>{activeSlot?.config?.permission || 'ask'}</code>
+          Model: <code>{activeSlot?.config?.model || 'ag/gemini-3.8-flash-high'}</code> · Izin: <code>{activePermission}</code>
         </div>
         <div class="quick-prompts">
           <button class="quick-prompt-btn" onclick={() => applyQuickPrompt('Review perubahan git terkini dan temukan potensi bug.')}>
@@ -113,6 +115,9 @@
           </button>
           <button class="quick-prompt-btn" onclick={() => applyQuickPrompt('Cari penyebab build error dan usulkan perbaikan minimal.')}>
             🛠️ Cari penyebab build error
+          </button>
+          <button class="quick-prompt-btn" onclick={() => applyQuickPrompt('Buatkan skenario pengujian otomatis Maestro untuk flow fitur ini.')}>
+            🧪 Buatkan flow test Maestro
           </button>
           <button class="quick-prompt-btn" onclick={() => applyQuickPrompt('Jelaskan arsitektur berkas ini dan dependensinya.')}>
             📖 Jelaskan fungsi berkas ini
@@ -318,28 +323,68 @@
           <span>{formatMcpPillLabel(mcpStore.activeCount)}</span>
         </button>
 
-        <!-- Custom Skills Context Pills -->
-        {#each skillsStore.skills.filter((s) => !s.isCore && s.name !== 'ponytail' && s.name !== 'caveman') as skill}
+        <!-- Custom Skills Context Pills (Render ONLY active custom skills to prevent badge flood) -->
+        {#each skillsStore.skills.filter((s) => !s.isCore && s.name !== 'ponytail' && s.name !== 'caveman' && skillsStore.activeCustomSkills.includes(s.name)) as skill}
           <button
             type="button"
-            class="context-pill custom-skill"
-            class:active={skillsStore.activeCustomSkills.includes(skill.name)}
+            class="context-pill custom-skill active"
             onclick={() => skillsStore.toggleSkill(skill.name)}
-            title={`Skill ${skill.name}: ${skill.description || 'Klik untuk aktifkan/nonaktifkan'}`}
+            title={`Skill ${skill.name}: ${skill.description || 'Klik untuk nonaktifkan'}`}
           >
-            <span>{skill.name}: {skillsStore.activeCustomSkills.includes(skill.name) ? 'ON' : 'OFF'}</span>
+            <span>{skill.name}: ON</span>
+            <span class="pill-remove-x">✕</span>
           </button>
         {/each}
 
-        <!-- Add Skill Pill -->
-        <button
-          type="button"
-          class="context-pill add-skill-pill"
-          onclick={() => settingsStore.open('agents')}
-          title="Kelola Skills di Settings"
-        >
-          <span>+ Skill</span>
-        </button>
+        <!-- Add / Toggle Skill Popover Trigger -->
+        <div class="skill-picker-anchor">
+          <button
+            type="button"
+            class="context-pill add-skill-pill"
+            class:active={isSkillPickerOpen}
+            onclick={() => (isSkillPickerOpen = !isSkillPickerOpen)}
+            title="Aktifkan atau pilih skill tambahan untuk percakapan ini"
+          >
+            <span>+ Skill ▾</span>
+          </button>
+
+          {#if isSkillPickerOpen}
+            <div class="skill-picker-popover" role="dialog" aria-label="Pilih Skills">
+              <div class="picker-header">
+                <span class="picker-title">Skills Tersedia ({skillsStore.skills.filter((s) => !s.isCore && s.name !== 'ponytail' && s.name !== 'caveman').length})</span>
+                <button type="button" class="close-picker-btn" onclick={() => (isSkillPickerOpen = false)}>✕</button>
+              </div>
+              <input
+                type="text"
+                class="skill-search-input"
+                placeholder="Cari nama skill..."
+                bind:value={skillSearch}
+              />
+              <div class="skills-picker-list">
+                {#each skillsStore.skills.filter((s) => !s.isCore && s.name !== 'ponytail' && s.name !== 'caveman' && (!skillSearch || s.name.toLowerCase().includes(skillSearch.toLowerCase()))) as skill}
+                  <label class="skill-picker-item">
+                    <input
+                      type="checkbox"
+                      checked={skillsStore.activeCustomSkills.includes(skill.name)}
+                      onchange={() => skillsStore.toggleSkill(skill.name)}
+                    />
+                    <div class="skill-item-info">
+                      <span class="skill-item-name">{skill.name}</span>
+                      {#if skill.description}
+                        <span class="skill-item-desc">{skill.description}</span>
+                      {/if}
+                    </div>
+                  </label>
+                {/each}
+              </div>
+              <div class="picker-footer">
+                <button type="button" class="manage-skills-link" onclick={() => { isSkillPickerOpen = false; settingsStore.open('agents'); }}>
+                  ⚙️ Kelola & Tambah Skill di Settings
+                </button>
+              </div>
+            </div>
+          {/if}
+        </div>
       </div>
 
       <div class="pills-right">
@@ -682,7 +727,9 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    flex-wrap: wrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
   }
 
   .pills-left::-webkit-scrollbar {
@@ -788,15 +835,170 @@
     font-weight: 600;
   }
 
+  .context-pill.custom-skill.active {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.12);
+    font-weight: 600;
+  }
+
+  .pill-remove-x {
+    font-size: 8px;
+    opacity: 0.6;
+    margin-left: 2px;
+  }
+
+  .pill-remove-x:hover {
+    opacity: 1;
+    color: #ef4444;
+  }
+
+  .skill-picker-anchor {
+    position: relative;
+    display: inline-flex;
+  }
+
   .context-pill.add-skill-pill {
     color: #8b949e;
     border-color: rgba(255, 255, 255, 0.15);
     border-style: dashed;
   }
 
-  .context-pill.add-skill-pill:hover {
+  .context-pill.add-skill-pill:hover,
+  .context-pill.add-skill-pill.active {
     color: #a78bfa;
     border-color: rgba(167, 139, 250, 0.4);
+    background: rgba(167, 139, 250, 0.1);
+  }
+
+  .skill-picker-popover {
+    position: absolute;
+    bottom: 30px;
+    left: 0;
+    width: 260px;
+    max-height: 280px;
+    background: #181920;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+    background: #131418;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .picker-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+  }
+
+  .close-picker-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+  }
+
+  .close-picker-btn:hover {
+    color: #f1f5f9;
+  }
+
+  .skill-search-input {
+    margin: 6px 8px;
+    padding: 4px 8px;
+    background: #101114;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 11px;
+    outline: none;
+  }
+
+  .skill-search-input:focus {
+    border-color: #3b82f6;
+  }
+
+  .skills-picker-list {
+    overflow-y: auto;
+    max-height: 180px;
+    padding: 2px 6px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .skill-picker-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 5px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #14151a;
+    transition: background 0.1s;
+  }
+
+  .skill-picker-item:hover {
+    background: #20222a;
+  }
+
+  .skill-picker-item input[type="checkbox"] {
+    margin-top: 2px;
+    cursor: pointer;
+  }
+
+  .skill-item-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .skill-item-name {
+    font-size: 11px;
+    color: #e2e8f0;
+    font-weight: 600;
+  }
+
+  .skill-item-desc {
+    font-size: 9.5px;
+    color: #64748b;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .picker-footer {
+    padding: 6px 10px;
+    background: #111216;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: center;
+  }
+
+  .manage-skills-link {
+    background: transparent;
+    border: none;
+    color: #60a5fa;
+    font-size: 10.5px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .manage-skills-link:hover {
+    text-decoration: underline;
   }
 
   .permission-pill-wrap {

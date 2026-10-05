@@ -16,6 +16,7 @@ import type {
   ProviderQuotaInfo,
   LlmQuotaReport,
   MemoryItem,
+  ChatSessionMeta,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -40,12 +41,16 @@ class AgentsStore {
   constructor() {
     if (typeof window !== 'undefined') {
       (window as any).__agentsStore = this;
+      this.loadSavedSessions();
     }
   }
 
   slots = $state<SlotSummary[]>([]);
   activeSlotId = $state<string | null>(null);
   chatHistory = $state<Record<string, ChatMessage[]>>({});
+  savedSessions = $state<ChatSessionMeta[]>([]);
+  activeSessionId = $state<string>('default-sess');
+  isHistoryOpen = $state(false);
   proposals = $state<Proposal[]>([]);
   pendingPermissions = $state<PendingPermissionRequest[]>([]);
   hermesDetection = $state<HermesDetectionResult | null>(null);
@@ -188,9 +193,40 @@ class AgentsStore {
     try {
       this.isLoading = true;
       const slots = await api.agentListSlots();
-      this.slots = slots;
-      if (!this.activeSlotId && slots.length > 0) {
-        this.activeSlotId = slots[0].id;
+      if (slots && slots.length > 0) {
+        this.slots = slots;
+        if (!this.activeSlotId) {
+          const defaultSlot = slots.find((s) => s.id === 'default' || s.label.toLowerCase().includes('petak'));
+          this.activeSlotId = defaultSlot ? defaultSlot.id : slots[0].id;
+        }
+      } else {
+        // Fallback default Petak Agent slot
+        const defaultSlot: SlotSummary = {
+          id: 'default',
+          label: 'Petak Agent',
+          kind: 'hermes',
+          status: 'ready',
+          session_id: 'default-sess',
+          capabilities: {
+            load_session: true,
+            supports_set_model: true,
+            current_model: 'ag/gemini-3.8-flash-high',
+            available_models: [],
+            supports_usage: true,
+          },
+          history_len: 0,
+          config: {
+            id: 'default',
+            label: 'Petak Agent',
+            kind: 'hermes',
+            model: 'ag/gemini-3.8-flash-high',
+            permission: 'ask',
+            hermesProfile: 'default',
+            cwd: '.',
+          },
+        };
+        this.slots = [defaultSlot];
+        this.activeSlotId = 'default';
       }
 
       // Populate demo chat history if empty and in demo mode
@@ -548,6 +584,110 @@ class AgentsStore {
     } catch (e: any) {
       this.error = `Gagal menghapus slot: ${e?.message || e}`;
     }
+  }
+
+  // ── Session & History Management ─────────────────────────────────────────
+
+  private loadSavedSessions() {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('petak_chat_sessions_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            this.savedSessions = parsed;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse petak_chat_sessions_v1:', e);
+      }
+    }
+  }
+
+  private persistSavedSessions() {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('petak_chat_sessions_v1', JSON.stringify(this.savedSessions));
+      } catch (e) {
+        console.warn('Failed to save petak_chat_sessions_v1:', e);
+      }
+    }
+  }
+
+  newSession(slotId?: string) {
+    const targetSlotId = slotId || this.activeSlotId;
+    if (!targetSlotId) return;
+
+    // Archive current session if it has user/agent messages
+    const currentMsgs = this.chatHistory[targetSlotId] || [];
+    if (currentMsgs.length > 0) {
+      const firstUserMsg = currentMsgs.find((m) => m.role === 'user');
+      const title = firstUserMsg ? firstUserMsg.content.slice(0, 48) : `Percakapan ${new Date().toLocaleTimeString()}`;
+      const sessionMeta: ChatSessionMeta = {
+        id: this.activeSessionId || `sess-${Date.now()}`,
+        slotId: targetSlotId,
+        title,
+        createdAt: currentMsgs[0]?.timestamp || Date.now(),
+        messageCount: currentMsgs.length,
+        messages: [...currentMsgs],
+        modelId: this.activeSlot?.config?.model,
+      };
+      this.savedSessions = [sessionMeta, ...this.savedSessions.filter((s) => s.id !== sessionMeta.id)].slice(0, 50);
+      this.persistSavedSessions();
+    }
+
+    // Reset current slot history & active session
+    this.chatHistory[targetSlotId] = [];
+    this.activeSessionId = `sess-${Date.now()}`;
+    this.error = null;
+    this.isHistoryOpen = false;
+  }
+
+  loadSession(session: ChatSessionMeta) {
+    // Save current if dirty
+    const currentMsgs = this.activeMessages;
+    if (currentMsgs.length > 0 && this.activeSlotId && this.activeSessionId !== session.id) {
+      const firstUserMsg = currentMsgs.find((m) => m.role === 'user');
+      const title = firstUserMsg ? firstUserMsg.content.slice(0, 48) : `Percakapan ${new Date().toLocaleTimeString()}`;
+      const prevMeta: ChatSessionMeta = {
+        id: this.activeSessionId,
+        slotId: this.activeSlotId,
+        title,
+        createdAt: currentMsgs[0]?.timestamp || Date.now(),
+        messageCount: currentMsgs.length,
+        messages: [...currentMsgs],
+        modelId: this.activeSlot?.config?.model,
+      };
+      this.savedSessions = [prevMeta, ...this.savedSessions.filter((s) => s.id !== prevMeta.id)].slice(0, 50);
+    }
+
+    this.activeSlotId = session.slotId;
+    this.activeSessionId = session.id;
+    this.chatHistory[session.slotId] = [...session.messages];
+    if (session.modelId) {
+      this.updateSlotModel(session.slotId, session.modelId);
+    }
+    this.persistSavedSessions();
+    this.isHistoryOpen = false;
+  }
+
+  deleteSession(sessionId: string) {
+    this.savedSessions = this.savedSessions.filter((s) => s.id !== sessionId);
+    this.persistSavedSessions();
+  }
+
+  clearAllSessions() {
+    this.savedSessions = [];
+    this.persistSavedSessions();
+    this.isHistoryOpen = false;
+  }
+
+  toggleHistory() {
+    this.isHistoryOpen = !this.isHistoryOpen;
+  }
+
+  updateSlotModel(slotId: string, newModel: string) {
+    this.updateSlotConfig(slotId, { model: newModel });
   }
 
   openFixWithAgent(draft: FixWithAgentDraft) {

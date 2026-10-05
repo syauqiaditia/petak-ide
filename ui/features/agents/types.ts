@@ -223,3 +223,15 @@ export interface Skill {
   path: string;
 }
 
+// ── Petak Chat Session Types ──────────────────────────────────────────────
+
+export interface ChatSessionMeta {
+  id: string;
+  slotId: string;
+  title: string;
+  createdAt: number;
+  messageCount: number;
+  messages: ChatMessage[];
+  modelId?: string | null;
+}
+
