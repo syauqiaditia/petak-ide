@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { gitStore } from './git.svelte';
   import { api } from '../../lib/api';
   import type { GitConflictFile } from '../../lib/api';
@@ -18,14 +17,17 @@
   interface MergeHunk {
     id: number;
     kind: 'clean' | 'conflict';
+    isIdentical: boolean; // Kiri dan kanan identik (Hijau)
     cleanLines: string[];
     oursLines: string[];
     theirsLines: string[];
     baseLines: string[];
-    // Resolution state for this hunk:
-    resolution: 'unresolved' | 'ours' | 'theirs' | 'both' | 'discarded' | 'custom';
-    resultLines: string[];
-    isEditing?: boolean;
+    // Status sisi yang dimasukkan ke Result:
+    acceptedSides: {
+      ours: boolean;
+      theirs: boolean;
+    };
+    customEdit?: string | null;
   }
 
   let hunks = $state<MergeHunk[]>([]);
@@ -33,6 +35,14 @@
   let historyIdx = $state(0);
   let isSaving = $state(false);
   let activeHunkIdx = $state(0);
+
+  function checkIsIdentical(ours: string[], theirs: string[]): boolean {
+    if (ours.length !== theirs.length) return false;
+    for (let i = 0; i < ours.length; i++) {
+      if (ours[i] !== theirs[i]) return false;
+    }
+    return true;
+  }
 
   // Parse file.merged into synchronized hunks
   function parseMergedIntoHunks(mergedText: string, baseText?: string | null): MergeHunk[] {
@@ -53,12 +63,13 @@
             result.push({
               id: hunkId++,
               kind: 'clean',
+              isIdentical: false,
               cleanLines: currentClean,
               oursLines: [],
               theirsLines: [],
               baseLines: [],
-              resolution: 'clean' as any,
-              resultLines: [...currentClean],
+              acceptedSides: { ours: false, theirs: false },
+              customEdit: null,
             });
             currentClean = [];
           }
@@ -85,19 +96,21 @@
         }
       } else if (state === 'theirs') {
         if (line.startsWith('>>>>>>>')) {
-          // If in rebase, git puts target branch (HEAD) at top and incoming at bottom.
-          // In Android Studio, Left = incoming commit, Right = target branch.
-          // We provide base if available, else empty in center
-          const initialResult = baseLines.length > 0 ? [...baseLines] : [];
+          const isIdentical = checkIsIdentical(oursLines, theirsLines);
           result.push({
             id: hunkId++,
             kind: 'conflict',
+            isIdentical,
             cleanLines: [],
             oursLines: [...oursLines],
             theirsLines: [...theirsLines],
             baseLines: [...baseLines],
-            resolution: 'unresolved',
-            resultLines: initialResult,
+            // Jika identik (hijau), otomatis masuk ke result!
+            acceptedSides: {
+              ours: isIdentical,
+              theirs: false,
+            },
+            customEdit: null,
           });
           state = 'clean';
         } else {
@@ -110,12 +123,13 @@
       result.push({
         id: hunkId++,
         kind: 'clean',
+        isIdentical: false,
         cleanLines: currentClean,
         oursLines: [],
         theirsLines: [],
         baseLines: [],
-        resolution: 'clean' as any,
-        resultLines: [...currentClean],
+        acceptedSides: { ours: false, theirs: false },
+        customEdit: null,
       });
     }
 
@@ -129,7 +143,8 @@
       oursLines: [...h.oursLines],
       theirsLines: [...h.theirsLines],
       baseLines: [...h.baseLines],
-      resultLines: [...h.resultLines],
+      acceptedSides: { ...h.acceptedSides },
+      customEdit: h.customEdit,
     }));
   }
 
@@ -165,65 +180,86 @@
     historyIdx = 0;
   });
 
+  // Hitung hasil baris Result untuk sebuah hunk
+  function getResultLines(hunk: MergeHunk): string[] {
+    if (hunk.kind === 'clean') return hunk.cleanLines;
+    if (hunk.customEdit !== null && hunk.customEdit !== undefined) {
+      return hunk.customEdit.split('\n');
+    }
+    // Jika identik (hijau), otomatis satu sisi masuk
+    if (hunk.isIdentical) {
+      return hunk.oursLines;
+    }
+    // Jika merah:
+    const lines: string[] = [];
+    if (hunk.acceptedSides.ours) {
+      lines.push(...hunk.oursLines);
+    }
+    if (hunk.acceptedSides.theirs) {
+      lines.push(...hunk.theirsLines);
+    }
+    return lines;
+  }
+
   // Conflict statistics
   let conflictHunks = $derived(hunks.filter((h) => h.kind === 'conflict'));
+  // Konflik belum selesai jika bukan identik DAN belum ada sisi yang dipilih
   let unresolvedCount = $derived(
-    conflictHunks.filter((h) => h.resolution === 'unresolved').length
+    conflictHunks.filter(
+      (h) => !h.isIdentical && !h.acceptedSides.ours && !h.acceptedSides.theirs && h.customEdit === null
+    ).length
   );
   let totalConflicts = $derived(conflictHunks.length);
 
-  // Gutter actions per hunk
-  function acceptLeftHunk(hunkId: number) {
+  /**
+   * AKSI GUTTER ALA ANDROID STUDIO:
+   * Jika klik Kiri (»): masukkan Kiri. Jika Kanan belum masuk, sekarang Kiri masuk.
+   * Jika kemudian klik Kanan («): Kanan IKUT MASUK (kiri duluan + kanan, jadi masuk semua)!
+   * Jika klik lagi pada sisi yang sudah aktif: batalkan sisi tersebut.
+   */
+  function toggleAcceptLeft(hunkId: number) {
     const next = cloneHunks(hunks);
     const target = next.find((h) => h.id === hunkId);
     if (!target) return;
-    target.resolution = 'ours';
-    target.resultLines = [...target.oursLines];
+    target.customEdit = null;
+    // Toggle sisi Kiri
+    target.acceptedSides.ours = !target.acceptedSides.ours;
     pushHistory(next);
   }
 
-  function acceptRightHunk(hunkId: number) {
+  function toggleAcceptRight(hunkId: number) {
     const next = cloneHunks(hunks);
     const target = next.find((h) => h.id === hunkId);
     if (!target) return;
-    target.resolution = 'theirs';
-    target.resultLines = [...target.theirsLines];
+    target.customEdit = null;
+    // Toggle sisi Kanan (jika Kiri sudah aktif, Kanan ikut masuk jadi keduanya ada)
+    target.acceptedSides.theirs = !target.acceptedSides.theirs;
     pushHistory(next);
   }
 
-  function discardLeftHunk(hunkId: number) {
+  function discardLeft(hunkId: number) {
     const next = cloneHunks(hunks);
     const target = next.find((h) => h.id === hunkId);
     if (!target) return;
-    target.resolution = 'theirs';
-    target.resultLines = [...target.theirsLines];
+    target.customEdit = null;
+    target.acceptedSides.ours = false;
     pushHistory(next);
   }
 
-  function discardRightHunk(hunkId: number) {
+  function discardRight(hunkId: number) {
     const next = cloneHunks(hunks);
     const target = next.find((h) => h.id === hunkId);
     if (!target) return;
-    target.resolution = 'ours';
-    target.resultLines = [...target.oursLines];
+    target.customEdit = null;
+    target.acceptedSides.theirs = false;
     pushHistory(next);
   }
 
-  function acceptBothHunk(hunkId: number) {
+  function updateHunkCustomText(hunkId: number, text: string) {
     const next = cloneHunks(hunks);
     const target = next.find((h) => h.id === hunkId);
     if (!target) return;
-    target.resolution = 'both';
-    target.resultLines = [...target.oursLines, ...target.theirsLines];
-    pushHistory(next);
-  }
-
-  function updateHunkResultText(hunkId: number, text: string) {
-    const next = cloneHunks(hunks);
-    const target = next.find((h) => h.id === hunkId);
-    if (!target) return;
-    target.resolution = 'custom';
-    target.resultLines = text.split('\n');
+    target.customEdit = text;
     pushHistory(next);
   }
 
@@ -231,9 +267,10 @@
   function handleAcceptAllLeft() {
     const next = cloneHunks(hunks);
     for (const h of next) {
-      if (h.kind === 'conflict') {
-        h.resolution = 'ours';
-        h.resultLines = [...h.oursLines];
+      if (h.kind === 'conflict' && !h.isIdentical) {
+        h.acceptedSides.ours = true;
+        h.acceptedSides.theirs = false;
+        h.customEdit = null;
       }
     }
     pushHistory(next);
@@ -242,9 +279,21 @@
   function handleAcceptAllRight() {
     const next = cloneHunks(hunks);
     for (const h of next) {
-      if (h.kind === 'conflict') {
-        h.resolution = 'theirs';
-        h.resultLines = [...h.theirsLines];
+      if (h.kind === 'conflict' && !h.isIdentical) {
+        h.acceptedSides.theirs = true;
+        h.acceptedSides.ours = false;
+        h.customEdit = null;
+      }
+    }
+    pushHistory(next);
+  }
+
+  function handleApplyAllIdentical() {
+    const next = cloneHunks(hunks);
+    for (const h of next) {
+      if (h.kind === 'conflict' && h.isIdentical) {
+        h.acceptedSides.ours = true;
+        h.acceptedSides.theirs = false;
       }
     }
     pushHistory(next);
@@ -267,11 +316,8 @@
     }
   }
 
-  // Synchronized scrolling across all 3 columns
-  let scrollContainerEl: HTMLDivElement | null = null;
-
   function scrollToNextConflict() {
-    const conflicts = hunks.filter((h) => h.kind === 'conflict');
+    const conflicts = hunks.filter((h) => h.kind === 'conflict' && !h.isIdentical);
     if (conflicts.length === 0) return;
     activeHunkIdx = (activeHunkIdx + 1) % conflicts.length;
     const targetEl = document.getElementById(`hunk-row-${conflicts[activeHunkIdx].id}`);
@@ -279,7 +325,7 @@
   }
 
   function scrollToPrevConflict() {
-    const conflicts = hunks.filter((h) => h.kind === 'conflict');
+    const conflicts = hunks.filter((h) => h.kind === 'conflict' && !h.isIdentical);
     if (conflicts.length === 0) return;
     activeHunkIdx = (activeHunkIdx - 1 + conflicts.length) % conflicts.length;
     const targetEl = document.getElementById(`hunk-row-${conflicts[activeHunkIdx].id}`);
@@ -297,7 +343,7 @@
     isSaving = true;
     try {
       const fullContent = hunks
-        .flatMap((h) => (h.kind === 'clean' ? h.cleanLines : h.resultLines))
+        .flatMap((h) => getResultLines(h))
         .join('\n');
 
       await api.gitConflictWrite(gitStore.root, file.path, fullContent);
@@ -371,15 +417,22 @@
         <span class="toolbar-label">Apply non-conflicting:</span>
         <button
           class="tool-btn bulk-btn"
+          onclick={handleApplyAllIdentical}
+          title="Apply Non-Conflicting Changes from Both Sides (»«)"
+        >
+          <span>»«</span>
+        </button>
+        <button
+          class="tool-btn bulk-btn"
           onclick={handleAcceptAllLeft}
-          title="Apply Non-Conflicting Changes from Left"
+          title="Apply Changes from Left (»)"
         >
           <span>»</span>
         </button>
         <button
           class="tool-btn bulk-btn"
           onclick={handleAcceptAllRight}
-          title="Apply Non-Conflicting Changes from Right"
+          title="Apply Changes from Right («)"
         >
           <span>«</span>
         </button>
@@ -429,14 +482,19 @@
     </div>
 
     <!-- 3-Way Editor Viewport (Synchronized Rows Grid) -->
-    <div class="editor-viewport" bind:this={scrollContainerEl}>
+    <div class="editor-viewport">
       <div class="sync-grid mono">
         {#each hunks as hunk (hunk.id)}
+          {@const resultLines = getResultLines(hunk)}
+          {@const hasSelection = hunk.acceptedSides.ours || hunk.acceptedSides.theirs || hunk.customEdit !== null}
+
           <div
             class="hunk-row"
-            class:is-conflict={hunk.kind === 'conflict'}
-            class:is-unresolved={hunk.kind === 'conflict' && hunk.resolution === 'unresolved'}
-            class:is-resolved={hunk.kind === 'conflict' && hunk.resolution !== 'unresolved'}
+            class:is-clean={hunk.kind === 'clean'}
+            class:is-identical={hunk.kind === 'conflict' && hunk.isIdentical}
+            class:is-conflict={hunk.kind === 'conflict' && !hunk.isIdentical}
+            class:is-unresolved={hunk.kind === 'conflict' && !hunk.isIdentical && !hasSelection}
+            class:is-resolved={hunk.kind === 'conflict' && (hunk.isIdentical || hasSelection)}
             id={`hunk-row-${hunk.id}`}
           >
             <!-- 1. LEFT PANE (Yours) -->
@@ -447,9 +505,19 @@
                     <span class="line-content">{line || ' '}</span>
                   </div>
                 {/each}
-              {:else}
+              {:else if hunk.isIdentical}
+                <!-- HIJAU: Kanan-kiri identik atau penambahan sama -->
+                <div class="hunk-badge badge-green">✓ Identik (Masuk Otomatis)</div>
                 {#each hunk.oursLines as line}
-                  <div class="code-line conflict-diff-line ours-line">
+                  <div class="code-line hl-green">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {:else}
+                <!-- MERAH: Kanan-kiri berbeda -->
+                <div class="hunk-badge badge-red">⚠️ Berbeda (Yours)</div>
+                {#each hunk.oursLines as line}
+                  <div class="code-line hl-red" class:is-picked={hunk.acceptedSides.ours}>
                     <span class="line-content">{line || ' '}</span>
                   </div>
                 {/each}
@@ -458,19 +526,20 @@
 
             <!-- 2. GUTTER LEFT-TO-CENTER (» and ✕) -->
             <div class="hunk-gutter gutter-left">
-              {#if hunk.kind === 'conflict'}
+              {#if hunk.kind === 'conflict' && !hunk.isIdentical}
                 <div class="gutter-actions-stack">
                   <button
                     class="gutter-action-btn accept-left"
-                    onclick={() => acceptLeftHunk(hunk.id)}
-                    title="Accept Left change into Result (»)"
+                    class:active-applied={hunk.acceptedSides.ours}
+                    onclick={() => toggleAcceptLeft(hunk.id)}
+                    title={hunk.acceptedSides.ours ? "Kiri sudah ada di Result (Klik untuk batalkan)" : "Masukkan baris Kiri ke Result (»)"}
                   >
-                    »
+                    {#if hunk.acceptedSides.ours}✓{:else}»{/if}
                   </button>
                   <button
                     class="gutter-action-btn discard-btn"
-                    onclick={() => discardLeftHunk(hunk.id)}
-                    title="Discard Left change (✕)"
+                    onclick={() => discardLeft(hunk.id)}
+                    title="Abaikan Kiri (✕)"
                   >
                     ✕
                   </button>
@@ -486,32 +555,48 @@
                     <span class="line-content">{line || ' '}</span>
                   </div>
                 {/each}
+              {:else if hunk.isIdentical}
+                <!-- HIJAU: Otomatis masuk jadi result -->
+                {#each hunk.oursLines as line}
+                  <div class="code-line hl-green-result">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
               {:else}
-                {#if hunk.resolution === 'unresolved'}
-                  <div class="unresolved-zone">
-                    <div class="unresolved-banner">
-                      <span class="unresolved-title">⚠️ Conflict</span>
-                      <div class="banner-quick-actions">
-                        <button onclick={() => acceptLeftHunk(hunk.id)} class="btn-micro">Accept Left</button>
-                        <button onclick={() => acceptBothHunk(hunk.id)} class="btn-micro">Both</button>
-                        <button onclick={() => acceptRightHunk(hunk.id)} class="btn-micro">Accept Right</button>
-                      </div>
+                <!-- MERAH: Menampilkan baris yang masuk (Kiri, Kanan, atau Keduanya) -->
+                {#if !hasSelection}
+                  <!-- Belum ada yang dipilih: panduan klik -->
+                  <div class="unresolved-center-hint">
+                    <div class="hint-title">⚠️ Konflik — Klik panah untuk memilih:</div>
+                    <div class="hint-buttons-row">
+                      <button class="hint-btn" onclick={() => toggleAcceptLeft(hunk.id)}>« Masukkan Kiri</button>
+                      <button class="hint-btn hint-both" onclick={() => { toggleAcceptLeft(hunk.id); toggleAcceptRight(hunk.id); }}>Masukkan Keduanya</button>
+                      <button class="hint-btn" onclick={() => toggleAcceptRight(hunk.id)}>Masukkan Kanan »</button>
                     </div>
-                    {#if hunk.resultLines.length > 0}
-                      {#each hunk.resultLines as line}
-                        <div class="code-line base-preview-line">
-                          <span class="line-content">{line || ' '}</span>
-                        </div>
-                      {/each}
+                    {#if hunk.baseLines.length > 0}
+                      <div class="base-preview-section">
+                        <span class="base-label">Base ancestor:</span>
+                        {#each hunk.baseLines as line}
+                          <div class="code-line base-line">{line || ' '}</div>
+                        {/each}
+                      </div>
                     {/if}
                   </div>
                 {:else}
-                  <div class="resolved-zone">
+                  <!-- Sudah dipilih: tampilkan baris yang masuk dan bisa diedit langsung -->
+                  <div class="resolved-center-editor">
+                    {#if hunk.acceptedSides.ours && hunk.acceptedSides.theirs}
+                      <div class="merged-both-pill">✓ Kiri + Kanan keduanya masuk</div>
+                    {:else if hunk.acceptedSides.ours}
+                      <div class="merged-side-pill ours">✓ Baris Kiri dimasukkan</div>
+                    {:else if hunk.acceptedSides.theirs}
+                      <div class="merged-side-pill theirs">✓ Baris Kanan dimasukkan</div>
+                    {/if}
                     <textarea
                       class="inline-result-editor mono"
-                      value={hunk.resultLines.join('\n')}
-                      oninput={(e) => updateHunkResultText(hunk.id, (e.target as HTMLTextAreaElement).value)}
-                      rows={Math.max(1, hunk.resultLines.length)}
+                      value={resultLines.join('\n')}
+                      oninput={(e) => updateHunkCustomText(hunk.id, (e.target as HTMLTextAreaElement).value)}
+                      rows={Math.max(1, resultLines.length)}
                       spellcheck="false"
                     ></textarea>
                   </div>
@@ -521,19 +606,20 @@
 
             <!-- 4. GUTTER CENTER-TO-RIGHT (« and ✕) -->
             <div class="hunk-gutter gutter-right">
-              {#if hunk.kind === 'conflict'}
+              {#if hunk.kind === 'conflict' && !hunk.isIdentical}
                 <div class="gutter-actions-stack">
                   <button
                     class="gutter-action-btn accept-right"
-                    onclick={() => acceptRightHunk(hunk.id)}
-                    title="Accept Right change into Result («)"
+                    class:active-applied={hunk.acceptedSides.theirs}
+                    onclick={() => toggleAcceptRight(hunk.id)}
+                    title={hunk.acceptedSides.theirs ? "Kanan sudah ada di Result (Klik untuk batalkan)" : "Masukkan baris Kanan ke Result («)"}
                   >
-                    «
+                    {#if hunk.acceptedSides.theirs}✓{:else}«{/if}
                   </button>
                   <button
                     class="gutter-action-btn discard-btn"
-                    onclick={() => discardRightHunk(hunk.id)}
-                    title="Discard Right change (✕)"
+                    onclick={() => discardRight(hunk.id)}
+                    title="Abaikan Kanan (✕)"
                   >
                     ✕
                   </button>
@@ -549,9 +635,19 @@
                     <span class="line-content">{line || ' '}</span>
                   </div>
                 {/each}
-              {:else}
+              {:else if hunk.isIdentical}
+                <!-- HIJAU: Kanan-kiri identik -->
+                <div class="hunk-badge badge-green">✓ Identik (Masuk Otomatis)</div>
                 {#each hunk.theirsLines as line}
-                  <div class="code-line conflict-diff-line theirs-line">
+                  <div class="code-line hl-green">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {:else}
+                <!-- MERAH: Kanan-kiri berbeda -->
+                <div class="hunk-badge badge-red">⚠️ Berbeda (Theirs)</div>
+                {#each hunk.theirsLines as line}
+                  <div class="code-line hl-red" class:is-picked={hunk.acceptedSides.theirs}>
                     <span class="line-content">{line || ' '}</span>
                   </div>
                 {/each}
@@ -790,18 +886,26 @@
     border-bottom: 1px solid #232529;
   }
 
+  /* HIJAU: Identik / Penambahan */
+  .hunk-row.is-identical {
+    background: rgba(34, 197, 94, 0.08);
+    border-top: 1px solid #166534;
+    border-bottom: 1px solid #166534;
+  }
+
+  /* MERAH: Konflik berbeda */
   .hunk-row.is-conflict.is-unresolved {
-    background: rgba(72, 46, 44, 0.45);
-    border-top: 1px solid #78350f;
-    border-bottom: 1px solid #78350f;
+    background: rgba(239, 68, 68, 0.12);
+    border-top: 1px solid #991b1b;
+    border-bottom: 1px solid #991b1b;
   }
 
   .hunk-row.is-conflict.is-resolved {
-    background: rgba(30, 41, 59, 0.35);
+    background: rgba(30, 41, 59, 0.25);
   }
 
   .hunk-pane {
-    padding: 4px 10px;
+    padding: 6px 10px;
     overflow-x: auto;
     white-space: pre;
   }
@@ -811,7 +915,7 @@
   }
 
   .pane-center {
-    background: #1a1b1e;
+    background: #18191c;
     border-left: 1px solid #2b2d30;
     border-right: 1px solid #2b2d30;
   }
@@ -823,27 +927,60 @@
   .code-line {
     min-height: 19px;
     color: #d1d5db;
+    padding: 0 4px;
+    border-radius: 2px;
   }
 
   .clean-line {
     color: #a1a1aa;
   }
 
-  .conflict-diff-line {
-    color: #ffffff;
+  /* HIJAU STYLING (Identik / Penambahan) */
+  .hl-green {
+    background: rgba(34, 197, 94, 0.22);
+    border-left: 3px solid #22c55e;
+    color: #86efac;
   }
 
-  .ours-line {
-    background: rgba(46, 67, 94, 0.6);
+  .hl-green-result {
+    background: rgba(34, 197, 94, 0.18);
+    border-left: 3px solid #22c55e;
+    color: #bbf7d0;
   }
 
-  .theirs-line {
-    background: rgba(72, 46, 44, 0.7);
-  }
-
-  .base-preview-line {
-    background: rgba(72, 46, 44, 0.4);
+  /* MERAH STYLING (Konflik berbeda) */
+  .hl-red {
+    background: rgba(239, 68, 68, 0.22);
+    border-left: 3px solid #ef4444;
     color: #fca5a5;
+  }
+
+  .hl-red.is-picked {
+    background: rgba(59, 130, 246, 0.28);
+    border-left: 3px solid #3b82f6;
+    color: #93c5fd;
+  }
+
+  .hunk-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-bottom: 4px;
+    display: inline-block;
+    user-select: none;
+  }
+
+  .badge-green {
+    background: #14532d;
+    color: #86efac;
+    border: 1px solid #166534;
+  }
+
+  .badge-red {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border: 1px solid #991b1b;
   }
 
   /* Gutters & Action Buttons */
@@ -853,30 +990,30 @@
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    padding-top: 4px;
+    padding-top: 6px;
     user-select: none;
   }
 
   .gutter-actions-stack {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     position: sticky;
-    top: 4px;
+    top: 6px;
   }
 
   .gutter-action-btn {
-    width: 22px;
-    height: 20px;
-    border-radius: 3px;
+    width: 24px;
+    height: 22px;
+    border-radius: 4px;
     border: none;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.08s;
+    transition: transform 0.08s, background 0.1s;
   }
 
   .gutter-action-btn:hover {
@@ -886,6 +1023,17 @@
   .accept-left,
   .accept-right {
     background: #2563eb;
+    color: #ffffff;
+  }
+
+  .accept-left:hover,
+  .accept-right:hover {
+    background: #3b82f6;
+  }
+
+  .accept-left.active-applied,
+  .accept-right.active-applied {
+    background: #16a34a;
     color: #ffffff;
   }
 
@@ -899,46 +1047,102 @@
     color: #ffffff;
   }
 
-  /* Center Zone */
-  .unresolved-zone {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .unresolved-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 2px 6px;
-    background: #7f1d1d;
-    border-radius: 3px;
-    font-size: 11px;
-    color: #fecaca;
+  /* Center Result Zone */
+  .unresolved-center-hint {
+    background: rgba(127, 29, 29, 0.25);
+    border: 1px dashed #ef4444;
+    border-radius: 4px;
+    padding: 8px 10px;
     user-select: none;
   }
 
-  .banner-quick-actions {
+  .hint-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fca5a5;
+    margin-bottom: 6px;
+  }
+
+  .hint-buttons-row {
     display: flex;
-    gap: 4px;
+    gap: 6px;
+    margin-bottom: 6px;
   }
 
-  .btn-micro {
-    padding: 1px 6px;
-    font-size: 10px;
-    background: #991b1b;
-    border: 1px solid #b91c1c;
+  .hint-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+    background: #2563eb;
+    border: 1px solid #3b82f6;
     color: #ffffff;
-    border-radius: 2px;
+    border-radius: 3px;
     cursor: pointer;
+    font-weight: 500;
   }
 
-  .btn-micro:hover {
-    background: #b91c1c;
+  .hint-btn:hover {
+    background: #3b82f6;
   }
 
-  .resolved-zone {
+  .hint-btn.hint-both {
+    background: #7c3aed;
+    border-color: #8b5cf6;
+  }
+
+  .hint-btn.hint-both:hover {
+    background: #8b5cf6;
+  }
+
+  .base-preview-section {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(239, 68, 68, 0.3);
+  }
+
+  .base-label {
+    font-size: 10px;
+    color: #9ca3af;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .base-line {
+    color: #9ca3af;
+    font-size: 11px;
+  }
+
+  .resolved-center-editor {
     width: 100%;
+  }
+
+  .merged-both-pill {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #581c87;
+    color: #d8b4fe;
+    display: inline-block;
+    margin-bottom: 4px;
+  }
+
+  .merged-side-pill {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-bottom: 4px;
+  }
+
+  .merged-side-pill.ours {
+    background: #1e3a8a;
+    color: #93c5fd;
+  }
+
+  .merged-side-pill.theirs {
+    background: #831843;
+    color: #fbcfe8;
   }
 
   .inline-result-editor {
