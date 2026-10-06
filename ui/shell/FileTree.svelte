@@ -54,6 +54,52 @@
   let childrenCache = $state<Record<string, Entry[]>>({});
   let loading = $state<Record<string, boolean>>({});
 
+  // Resizable & Collapsible Sidebar State
+  let isCollapsed = $state(false);
+  let treeWidth = $state(
+    Number(typeof localStorage !== 'undefined' ? (localStorage.getItem('petak.fileTreeWidth') || 260) : 260)
+  );
+  let isResizing = $state(false);
+
+  export function toggleCollapse() {
+    isCollapsed = !isCollapsed;
+  }
+
+  export function setCollapsed(val: boolean) {
+    isCollapsed = val;
+  }
+
+  function startResize(e: MouseEvent) {
+    e.preventDefault();
+    isResizing = true;
+    const startX = e.clientX;
+    const startWidth = treeWidth;
+
+    function onMouseMove(ev: MouseEvent) {
+      const newWidth = Math.min(Math.max(startWidth + (ev.clientX - startX), 180), 650);
+      treeWidth = newWidth;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('petak.fileTreeWidth', String(newWidth));
+      }
+    }
+
+    function onMouseUp() {
+      isResizing = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function resetWidth() {
+    treeWidth = 260;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('petak.fileTreeWidth', '260');
+    }
+  }
+
   // Multi-selection state
   let selectedPaths = $state<Set<string>>(new Set());
   let lastSelectedPath = $state<string | null>(null);
@@ -1166,6 +1212,9 @@
 
 <div
   class="file-tree"
+  class:collapsed={isCollapsed}
+  style:width={isCollapsed ? '0px' : `${treeWidth}px`}
+  style:min-width={isCollapsed ? '0px' : `${treeWidth}px`}
   tabindex="0"
   onkeydown={handleTreeKeydown}
   oncontextmenu={handleEmptyAreaContextMenu}
@@ -1199,6 +1248,11 @@
       <button class="icon-btn" onclick={expandAll} title="Expand All">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="4 10 12 18 20 10"/>
+        </svg>
+      </button>
+      <button class="icon-btn" onclick={toggleCollapse} title="Sembunyikan Project Tree (⌘1)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 18 9 12 15 6"/>
         </svg>
       </button>
     </div>
@@ -1380,6 +1434,18 @@
       {/if}
     </div>
   {/if}
+
+  {#if !isCollapsed}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="tree-resize-handle"
+      onmousedown={startResize}
+      ondblclick={resetWidth}
+      role="separator"
+      aria-label="Resize Project Tree"
+      title="Geser untuk mengubah lebar (Klik dua kali untuk reset)"
+    ></div>
+  {/if}
 </div>
 
 <!-- Context Menu Component -->
@@ -1540,7 +1606,6 @@
 
 <style>
   .file-tree {
-    width: 250px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -1550,6 +1615,29 @@
     -webkit-user-select: none;
     overflow: hidden;
     outline: none;
+    position: relative;
+    box-sizing: border-box;
+    transition: width 0.1s ease;
+  }
+  .file-tree.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    border-right: none !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+  }
+  .tree-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 20;
+    transition: background 0.15s;
+  }
+  .tree-resize-handle:hover {
+    background: rgba(53, 116, 240, 0.5);
   }
   .header {
     height: 36px;
@@ -1558,6 +1646,7 @@
     justify-content: space-between;
     padding: 0 10px 0 14px;
     border-bottom: 1px solid #1c1d22;
+    flex-shrink: 0;
   }
   .header-title {
     font-size: 11px;
@@ -1604,6 +1693,7 @@
   .tree-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
     display: flex;
     flex-direction: column;
     padding: 2px 0;
@@ -1613,11 +1703,12 @@
     align-items: center;
     gap: 6px;
     height: 26px;
-    padding-right: 12px;
+    padding-right: 14px;
     font-size: 13px;
     color: #bcbec4;
     text-align: left;
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     transition: background 0.1s;
     border: none;
     background: transparent;

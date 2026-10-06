@@ -23,22 +23,55 @@ function extractHoverText(contents: LspHover['contents']): string {
 }
 
 export const hoverTheme = EditorView.theme({
+  '.cm-tooltip': {
+    backgroundColor: '#1e1f22 !important',
+    border: '1px solid #383a42 !important',
+    borderRadius: '8px !important',
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important',
+    zIndex: '500 !important',
+    overflow: 'hidden !important',
+  },
+  '.cm-tooltip-hover': {
+    backgroundColor: '#1e1f22 !important',
+    border: '1px solid #383a42 !important',
+    borderRadius: '8px !important',
+    maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
+    maxHeight: '280px !important',
+    overflowY: 'auto !important',
+    overflowX: 'hidden !important',
+    color: '#d4d6dc !important',
+    fontSize: '12px !important',
+    scrollbarWidth: 'thin !important',
+    scrollbarColor: '#3c3f4a transparent !important',
+    boxSizing: 'border-box !important',
+  },
   '.cm-tooltip.cm-lsp-hover-tooltip': {
-    backgroundColor: '#16171b !important',
-    border: '1px solid #2d3039 !important',
+    backgroundColor: '#1e1f22 !important',
+    border: '1px solid #383a42 !important',
     borderRadius: '8px !important',
     padding: '0 !important',
     color: '#d4d6dc !important',
     fontSize: '12px !important',
-    maxWidth: 'min(520px, calc(100vw - 460px), calc(100% - 24px)) !important',
+    maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
     overflowX: 'hidden !important',
     boxShadow: '0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3) !important',
     fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important",
-    zIndex: '250 !important',
+    zIndex: '500 !important',
     scrollbarWidth: 'thin !important',
     scrollbarColor: '#3c3f4a transparent !important',
+    boxSizing: 'border-box !important',
+  },
+  '.cm-lsp-hover-tooltip': {
+    display: 'flex !important',
+    flexDirection: 'column !important',
+    width: '100% !important',
+    backgroundColor: '#1e1f22 !important',
+    padding: '0 !important',
+    color: '#d4d6dc !important',
+    fontSize: '12px !important',
+    fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important",
     boxSizing: 'border-box !important',
   },
   '.cm-lsp-hover-action-bar': {
@@ -237,10 +270,15 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
           const symbolText = doc.sliceString(from, to).trim() || 'symbol';
           const lineNum = lspPos.line + 1;
 
+          const visualPos = view.coordsAtPos(from);
+          const editorRect = view.dom.getBoundingClientRect();
+          // Never place above if token is within top 240px of editor (avoids overlapping code near top)
+          const placeAbove = visualPos ? (visualPos.top - editorRect.top > 240) : false;
+
           return {
             pos: from,
             end: to,
-            above: true,
+            above: placeAbove,
             create(view: EditorView) {
               const dom = document.createElement('div');
               dom.className = 'cm-lsp-hover-tooltip';
@@ -326,5 +364,11 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
     ),
     hoverKeymap,
     hoverTheme,
+    EditorView.domEventHandlers({
+      scroll(_event, view) {
+        view.dispatch({ effects: closeHoverTooltips });
+        return false;
+      },
+    }),
   ];
 }

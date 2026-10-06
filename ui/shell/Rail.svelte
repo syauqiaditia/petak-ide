@@ -15,6 +15,7 @@
     onToggleDevices,
     onToggleMirror,
     onSelectRailTab,
+    onToggleProjectTree,
   } = $props<{
     activeTab?: string;
     onTabChange?: (tab: string) => void;
@@ -27,11 +28,16 @@
     onToggleDevices?: () => void;
     onToggleMirror?: () => void;
     onSelectRailTab?: (tab: string) => void;
+    onToggleProjectTree?: () => void;
   }>();
 
   let isToolWindowsOpen = $state(false);
 
   function selectTab(tab: string) {
+    if (tab === 'project' && activeTab === 'project') {
+      onToggleProjectTree?.();
+      return;
+    }
     activeTab = tab;
     onTabChange?.(tab);
     onSelectRailTab?.(tab);
@@ -49,6 +55,9 @@
     if ((e.metaKey || e.ctrlKey) && e.key === '0') {
       e.preventDefault();
       isToolWindowsOpen = !isToolWindowsOpen;
+    } else if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+      e.preventDefault();
+      onToggleProjectTree?.();
     }
   }
 </script>

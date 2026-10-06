@@ -710,6 +710,7 @@
           onToggleDevices={() => panelStore.toggleRightPanel('devices')}
           onToggleMirror={() => mirrorStore.toggle()}
           onSelectRailTab={(t) => (activeRailTab = t)}
+          onToggleProjectTree={() => fileTreeComponent?.toggleCollapse()}
         />
       {/if}
     {/if}
