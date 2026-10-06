@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 use petak_core::exec::Exec;
-use super::common::*;
+use super::*;
 
 pub enum ActiveRun {
     Flutter(std::sync::Arc<Mutex<petak_core::run::FlutterRun>>),
@@ -725,7 +725,7 @@ pub async fn gradle_stop(
 }
 
 
-fn is_direct_adb_serial(s: &str) -> bool {
+pub fn is_direct_adb_serial(s: &str) -> bool {
     let trimmed = s.trim();
     trimmed.starts_with("emulator-")
         || trimmed.starts_with("usb:")

@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 use petak_core::exec::Exec;
-use super::common::*;
+use super::*;
 
 pub type AppRegistry = std::sync::Arc<petak_core::lsp::Registry>;
 

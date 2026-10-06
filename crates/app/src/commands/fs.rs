@@ -1,7 +1,8 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 use petak_core::exec::Exec;
-use super::common::*;
+use tauri_plugin_dialog::DialogExt;
+use super::*;
 
 pub fn lh_store_dir(app: &tauri::AppHandle, root: &str) -> Result<std::path::PathBuf, String> {
     use petak_core::sha2::Digest;
@@ -22,7 +23,7 @@ pub fn lh_store_dir(app: &tauri::AppHandle, root: &str) -> Result<std::path::Pat
 }
 
 
-fn snapshot_file_if_small(store: &std::path::Path, full_path: &std::path::Path, rel: &str, kind: &str) {
+pub fn snapshot_file_if_small(store: &std::path::Path, full_path: &std::path::Path, rel: &str, kind: &str) {
     if let Ok(meta) = std::fs::metadata(full_path) {
         if meta.is_file() && meta.len() <= 2 * 1024 * 1024 {
             if let Ok(content) = std::fs::read(full_path) {
@@ -412,7 +413,7 @@ pub fn lh_snapshot(app: tauri::AppHandle, root: String, rel: String, kind: Strin
 }
 
 
-fn resolve_cmd_root(app: &tauri::AppHandle, root_opt: Option<String>) -> Result<String, String> {
+pub fn resolve_cmd_root(app: &tauri::AppHandle, root_opt: Option<String>) -> Result<String, String> {
     if let Some(r) = root_opt {
         if !r.trim().is_empty() {
             return Ok(r);
