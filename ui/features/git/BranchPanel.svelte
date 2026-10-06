@@ -111,6 +111,21 @@
   let checkoutTargetBranch = $state('');
   let checkoutAutoStash = $state(true);
 
+  let remoteContextMenuVisible = $state(false);
+  let remoteContextMenuPos = $state<{ x: number; y: number }>({ x: 0, y: 0 });
+  let selectedRemoteBranch = $state<string>('');
+
+  function handleRemoteBranchContextMenu(e: MouseEvent, fullName: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    selectedRemoteBranch = fullName.startsWith('origin/') ? fullName : `origin/${fullName}`;
+    const x = Math.min(e.clientX, window.innerWidth - 220);
+    const y = Math.min(e.clientY, window.innerHeight - 200);
+    remoteContextMenuPos = { x: Math.max(10, x), y: Math.max(10, y) };
+    remoteContextMenuVisible = true;
+    branchContextMenuVisible = false;
+  }
+
   let restoreBackupModalOpen = $state(false);
   let targetBackup = $state<GitBackupRef | null>(null);
 
@@ -175,11 +190,15 @@
     if (branchContextMenuVisible && !target.closest('.branch-context-menu')) {
       branchContextMenuVisible = false;
     }
+    if (remoteContextMenuVisible && !target.closest('.branch-context-menu')) {
+      remoteContextMenuVisible = false;
+    }
   }
 
   function handleWindowKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       branchContextMenuVisible = false;
+      remoteContextMenuVisible = false;
     }
   }
 
@@ -420,7 +439,9 @@
               class:filtered={activeBranchFilter === `origin/${row.fullName}`}
               style:padding-left="{14 + row.depth * 14}px"
               onclick={() => filterByBranch(`origin/${row.fullName}`)}
-              title="origin/{row.fullName}"
+              ondblclick={() => promptCheckout(`origin/${row.fullName}`)}
+              oncontextmenu={(e) => handleRemoteBranchContextMenu(e, row.fullName)}
+              title="origin/{row.fullName} (Double-click to checkout)"
             >
               <span class="name">{row.name}</span>
             </button>
@@ -562,6 +583,43 @@
         onclick={() => openDeleteBranch(selectedBranch!)}
       >
         <span>Delete Branch</span>
+      </button>
+    </div>
+  {/if}
+
+  <!-- Remote Branch Context Menu (F3 ala Android Studio) -->
+  {#if remoteContextMenuVisible && selectedRemoteBranch}
+    <div
+      class="branch-context-menu"
+      style:left="{remoteContextMenuPos.x}px"
+      style:top="{remoteContextMenuPos.y}px"
+    >
+      <button
+        class="b-menu-item"
+        onclick={() => {
+          remoteContextMenuVisible = false;
+          promptCheckout(selectedRemoteBranch);
+        }}
+      >
+        <span>Checkout as Local Branch…</span>
+      </button>
+      <button
+        class="b-menu-item"
+        onclick={() => {
+          remoteContextMenuVisible = false;
+          openCompareWithBranch(selectedRemoteBranch);
+        }}
+      >
+        <span>Compare with Current…</span>
+      </button>
+      <button
+        class="b-menu-item"
+        onclick={() => {
+          remoteContextMenuVisible = false;
+          filterByBranch(selectedRemoteBranch);
+        }}
+      >
+        <span>Filter Log to this Branch</span>
       </button>
     </div>
   {/if}

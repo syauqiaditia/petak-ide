@@ -80,10 +80,32 @@
           case 'open-settings':
             settingsStore.open();
             break;
+          case 'git_commit':
+            panelStore.activeLeftSidebar = 'git';
+            gitStore.activeSubTab = 'commit';
+            break;
+          case 'git_push':
+            panelStore.activeLeftSidebar = 'git';
+            gitStore.openPushModal();
+            break;
+          case 'git_pull':
+            gitStore.pullRemote('rebase');
+            break;
+          case 'git_branches':
+            panelStore.activeLeftSidebar = 'git';
+            break;
+          case 'git_rebase':
+          case 'rebase':
+            panelStore.activeLeftSidebar = 'git';
+            gitStore.activeSubTab = 'log';
+            gitStore.showToast('Pilih commit atau branch di Git Log untuk rebase', { type: 'info' });
+            break;
+          case 'git_stash':
           case 'stash':
           case 'stash_changes':
             gitStore.openStash();
             break;
+          case 'git_unstash':
           case 'unstash':
           case 'unstash_changes':
             gitStore.openUnstash();

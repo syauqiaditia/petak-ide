@@ -98,6 +98,8 @@ pub fn build_app_menu<R: Runtime>(app_handle: &AppHandle<R>) -> tauri::Result<Me
         .item(&MenuItemBuilder::with_id("git_pull", "Update Project...").accelerator("CmdOrCtrl+T").build(app_handle)?)
         .item(&MenuItemBuilder::with_id("git_branches", "Branches...").build(app_handle)?)
         .separator()
+        .item(&MenuItemBuilder::with_id("git_rebase", "Rebase...").build(app_handle)?)
+        .separator()
         .item(&MenuItemBuilder::with_id("git_stash", "Stash Changes...").build(app_handle)?)
         .item(&MenuItemBuilder::with_id("git_unstash", "Unstash Changes...").build(app_handle)?)
         .separator()

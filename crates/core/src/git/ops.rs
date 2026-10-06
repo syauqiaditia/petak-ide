@@ -496,7 +496,22 @@ pub fn branch_create(
 
 pub fn branch_checkout(exec: &dyn Exec, repo: &Path, name: &str) -> Result<(), GitError> {
     validate_branch_name(name)?;
-    git(exec, repo, &["checkout", name])?;
+    let target = if let Some(stripped) = name.strip_prefix("remotes/").or_else(|| Some(name)) {
+        if let Some((_remote, local_name)) = stripped.split_once('/') {
+            let local_ref = format!("refs/heads/{}", local_name);
+            if git(exec, repo, &["show-ref", "--verify", &local_ref]).is_ok() {
+                local_name.to_string()
+            } else {
+                let _ = git(exec, repo, &["checkout", "-b", local_name, "--track", stripped]);
+                return Ok(());
+            }
+        } else {
+            name.to_string()
+        }
+    } else {
+        name.to_string()
+    };
+    git(exec, repo, &["checkout", &target])?;
     Ok(())
 }
 
@@ -528,7 +543,7 @@ pub struct CheckoutResult {
     pub message: String,
 }
 
-/// Checkout a branch with optional auto-stash (stash push -u before, pop after).
+/// Checkout a branch with optional auto-stash (stash push before, pop after).
 pub fn checkout_with_stash(
     exec: &dyn Exec,
     repo: &Path,
@@ -544,13 +559,49 @@ pub fn checkout_with_stash(
         // Check if worktree is dirty
         let status_out = git(exec, repo, &["status", "--porcelain"])?;
         if !status_out.trim().is_empty() {
-            // Stash including untracked
-            git(exec, repo, &["stash", "push", "-u", "-m", &format!("auto-stash before checkout {}", branch)])?;
-            stashed = true;
+            // Stash changes before checkout (no -u to prevent untracked file errors)
+            if git(
+                exec,
+                repo,
+                &[
+                    "stash",
+                    "push",
+                    "-m",
+                    &format!("auto-stash before checkout {}", branch),
+                ],
+            )
+            .is_ok()
+            {
+                stashed = true;
+            }
         }
     }
 
-    let checkout_result = git(exec, repo, &["checkout", branch]);
+    // Handle remote branch checkout:
+    // If branch starts with "origin/" or "remotes/origin/":
+    let checkout_result = if let Some(stripped) = branch.strip_prefix("remotes/").or_else(|| Some(branch)) {
+        if let Some((_remote, local_name)) = stripped.split_once('/') {
+            let local_ref = format!("refs/heads/{}", local_name);
+            let local_exists = git(exec, repo, &["show-ref", "--verify", &local_ref]).is_ok();
+
+            if local_exists {
+                // Local branch already exists, checkout local branch
+                git(exec, repo, &["checkout", local_name])
+            } else {
+                // Local branch doesn't exist yet: create tracking branch
+                let track_res = git(exec, repo, &["checkout", "-b", local_name, "--track", stripped]);
+                if track_res.is_ok() {
+                    track_res
+                } else {
+                    git(exec, repo, &["checkout", branch])
+                }
+            }
+        } else {
+            git(exec, repo, &["checkout", branch])
+        }
+    } else {
+        git(exec, repo, &["checkout", branch])
+    };
 
     if let Err(e) = checkout_result {
         // If checkout failed and we stashed, pop the stash back
@@ -573,12 +624,18 @@ pub fn checkout_with_stash(
         }
     }
 
-    let message = if stashed && stash_popped {
-        format!("Checkout ke '{}' berhasil (perubahan di-stash lalu di-pop).", branch)
-    } else if stashed && !stash_popped {
-        format!("Checkout ke '{}' berhasil. Stash pop gagal (kemungkinan conflict). Cek `git stash list`.", branch)
+    let target_display = if branch.starts_with("origin/") {
+        branch.strip_prefix("origin/").unwrap_or(branch)
     } else {
-        format!("Checkout ke '{}' berhasil.", branch)
+        branch
+    };
+
+    let message = if stashed && stash_popped {
+        format!("Checkout ke '{}' berhasil (perubahan di-stash lalu di-pop).", target_display)
+    } else if stashed && !stash_popped {
+        format!("Checkout ke '{}' berhasil. Stash pop gagal (kemungkinan conflict). Cek `git stash list`.", target_display)
+    } else {
+        format!("Checkout ke '{}' berhasil.", target_display)
     };
 
     Ok(CheckoutResult {
