@@ -475,7 +475,7 @@ fn is_version_newer(latest: &str, current: &str) -> bool {
 #[tauri::command]
 pub async fn app_check_update() -> Result<UpdateCheckResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let current_version = "0.8.1".to_string();
+        let current_version = "0.8.2".to_string();
         let repo = "syauqiaditia/petak-ide";
         let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
 

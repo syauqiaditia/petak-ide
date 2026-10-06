@@ -57,8 +57,8 @@ RELEASE_JSON="$(curl -sL "${CURL_AUTH[@]}" -H "User-Agent: Petak-Installer" -H "
 
 TAG_NAME="$(echo "${RELEASE_JSON}" | grep -m1 '"tag_name":' | cut -d '"' -f 4 || true)"
 if [[ -z "${TAG_NAME}" ]]; then
-  echo -e "${YELLOW}Gagal mengambil rilis terbaru via API. Menggunakan fallback tag v0.8.1...${NC}"
-  TAG_NAME="v0.8.1"
+  echo -e "${YELLOW}Gagal mengambil rilis terbaru via API. Menggunakan fallback tag v0.8.2...${NC}"
+  TAG_NAME="v0.8.2"
 fi
 
 VERSION="${TAG_NAME#v}"
@@ -103,7 +103,7 @@ case "${1:-}" in
   version|-v|--version)
     echo "Petak IDE (macOS Desktop)"
     if [[ -d "/Applications/Petak.app" ]]; then
-      defaults read /Applications/Petak.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo "v0.8.1"
+      defaults read /Applications/Petak.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo "v0.8.2"
     fi
     exit 0
     ;;
@@ -153,7 +153,7 @@ case "${1:-}" in
     ;;
   version|-v|--version)
     echo "Petak IDE (Linux Binary)"
-    "${HOME}/.local/bin/petak-app" --version 2>/dev/null || echo "v0.8.1"
+    "${HOME}/.local/bin/petak-app" --version 2>/dev/null || echo "v0.8.2"
     exit 0
     ;;
   help|-h|--help)

@@ -34,7 +34,7 @@ test('b23 UI 1: Standalone Welcome Dashboard isolation in App.svelte and TitleBa
   const titleBarCode = fs.readFileSync(titleBarPath, 'utf-8');
   assert.ok(titleBarCode.includes('showDashboard = false') || titleBarCode.includes('showDashboard?: boolean'));
   assert.ok(titleBarCode.includes('{#if showDashboard}'));
-  assert.ok(titleBarCode.includes('brand-version-badge') || titleBarCode.includes('v0.8.1'));
+  assert.ok(titleBarCode.includes('brand-version-badge') || titleBarCode.includes('v0.8.2'));
 });
 
 test('b23 UI 2: Toolchains panel has live rescan button and toolchain SVG icons', () => {
