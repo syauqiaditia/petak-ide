@@ -225,6 +225,8 @@
     onOpenDashboard?: () => void;
   }>();
 
+  let effectiveBranchName = $derived(gitStore.currentBranch || branchName || '');
+
   let isRunning = $derived(
     runStore.state === 'running' ||
     runStore.state === 'reloading' ||
@@ -431,12 +433,12 @@
   </div>
 
   <!-- Branch switcher with popup -->
-  {#if branchName}
+  {#if effectiveBranchName}
     <div class="branch-wrap">
       <button
         class="branch-btn"
         onclick={toggleBranchPopup}
-        title="Git Branch: {branchName} (Click to switch branch)"
+        title="Git Branch: {effectiveBranchName} (Click to switch branch)"
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="6" cy="5" r="2"></circle>
@@ -444,7 +446,7 @@
           <circle cx="18" cy="7" r="2"></circle>
           <path d="M6 7v10M18 9c0 5-6 4-12 8"></path>
         </svg>
-        <span class="branch-label">{branchName}</span>
+        <span class="branch-label">{effectiveBranchName}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2">
           <path d="M6 9l6 6 6-6"></path>
         </svg>
@@ -471,7 +473,7 @@
               <div class="branch-popup-empty">No branches found</div>
             {:else}
               {#each filteredBranches as b}
-                {@const isCurrent = b.name === branchName || b.isCurrent}
+                {@const isCurrent = b.name === effectiveBranchName || b.isCurrent}
                 <div class="branch-popup-row" class:current={isCurrent}>
                   <button
                     class="branch-popup-item"

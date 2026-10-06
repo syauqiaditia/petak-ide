@@ -77,6 +77,7 @@ class GitStore {
   // Log & branches state
   branches = $state<GitBranchList | null>(null);
   branchesLoading = $state<boolean>(false);
+  currentBranch = $state<string | null>(null);
 
   logCommits = $state<GitCommit[]>([]);
   logGraph = $state<GitGraphRow[]>([]);
@@ -430,8 +431,21 @@ class GitStore {
     this.branchesLoading = true;
     try {
       this.branches = await api.gitBranches(this.root);
+      const curr = this.branches?.local?.find((b) => b.isCurrent);
+      if (curr) {
+        this.currentBranch = curr.name;
+      } else {
+        const b = await api.gitBranch(this.root);
+        this.currentBranch = b || null;
+      }
     } catch (e: any) {
       console.error('Failed to load branches:', e);
+      try {
+        const b = await api.gitBranch(this.root);
+        this.currentBranch = b || null;
+      } catch {
+        // ignore
+      }
     } finally {
       this.branchesLoading = false;
     }
@@ -739,9 +753,12 @@ class GitStore {
     if (!this.root) return;
     try {
       const res = await api.gitCheckout(this.root, name, autoStash);
+      const cleanName = name.startsWith('origin/') ? name.slice(7) : name;
+      this.currentBranch = cleanName;
       const stashMsg = res.stashed ? (res.stashPopped ? ' (changes auto-stashed & restored)' : ' (changes stashed)') : '';
-      this.showToast(`Switched to branch '${name}'${stashMsg}`, { type: 'success' });
+      this.showToast(`Switched to branch '${cleanName}'${stashMsg}`, { type: 'success' });
       await this.refresh();
+      await this.loadBranches();
     } catch (e: any) {
       this.showToast(`Checkout failed: ${e}`, { type: 'error' });
     }

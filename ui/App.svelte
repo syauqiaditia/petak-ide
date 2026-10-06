@@ -668,7 +668,7 @@
 <div class="app-layout">
   <TitleBar
     projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
-    {branchName}
+    branchName={gitStore.currentBranch || branchName}
     {showDashboard}
     onPickFolder={handlePickFolder}
     onSelectProject={openFolder}
