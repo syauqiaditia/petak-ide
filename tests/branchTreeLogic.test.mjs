@@ -110,3 +110,43 @@ test('branchTreeLogic: filterBranchTree retains hierarchy and current branch if 
   assert.equal(filtered[0].prefix, 'fix/');
   assert.equal(filtered[0].children.length, 2);
 });
+
+test('branchTreeLogic: folder toggle collapse and expand behaves predictably with unique idPrefix', () => {
+  const branches = [
+    { name: 'fix/flazz-upgrade-v3.0.3', isCurrent: true },
+    { name: 'fix/sonny/event-download', isCurrent: false },
+    { name: 'canary/dev/1.10.0', isCurrent: false },
+    { name: 'dev/e-statement', isCurrent: false },
+  ];
+
+  const tree = buildBranchTree(branches);
+
+  // 1. Initially fix/ expanded
+  const expandedLocal = new Set(['fix/']);
+  const localRows = flattenBranchTree(tree, expandedLocal, 0, 'loc');
+
+  // Verify idPrefix
+  assert.equal(localRows[0].id, 'loc:f:fix/');
+  assert.equal(localRows[1].id, 'loc:b:fix/flazz-upgrade-v3.0.3');
+
+  // Verify remote rows with rem prefix
+  const expandedRemote = new Set(['fix/']);
+  const remoteRows = flattenBranchTree(tree, expandedRemote, 0, 'rem');
+  assert.equal(remoteRows[0].id, 'rem:f:fix/');
+  assert.notEqual(localRows[0].id, remoteRows[0].id);
+
+  // 2. Collapse fix/
+  expandedLocal.delete('fix/');
+  const collapsedRows = flattenBranchTree(tree, expandedLocal, 0, 'loc');
+  assert.equal(collapsedRows[0].fullName, 'fix/');
+  assert.equal(collapsedRows[0].isExpanded, false);
+  // Next row should be next folder canary/, not children of fix/
+  assert.equal(collapsedRows[1].fullName, 'canary/');
+
+  // 3. Re-expand fix/
+  expandedLocal.add('fix/');
+  const reExpandedRows = flattenBranchTree(tree, expandedLocal, 0, 'loc');
+  assert.equal(reExpandedRows[0].fullName, 'fix/');
+  assert.equal(reExpandedRows[0].isExpanded, true);
+  assert.equal(reExpandedRows[1].fullName, 'fix/flazz-upgrade-v3.0.3');
+});

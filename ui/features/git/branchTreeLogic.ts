@@ -178,16 +178,18 @@ export function filterBranchTree(nodes: TreeNode[], query: string): TreeNode[] {
 export function flattenBranchTree(
   nodes: TreeNode[],
   expandedFolders: Set<string>,
-  depth = 0
+  depth = 0,
+  idPrefix = ''
 ): FlatDisplayItem[] {
   const rows: FlatDisplayItem[] = [];
+  const pfx = idPrefix ? `${idPrefix}:` : '';
 
   for (const node of nodes) {
     if (node.type === 'folder') {
       const isExpanded = expandedFolders.has(node.fullPrefix);
       rows.push({
         type: 'folder',
-        id: 'f:' + node.fullPrefix,
+        id: `${pfx}f:${node.fullPrefix}`,
         name: node.prefix,
         fullName: node.fullPrefix,
         depth,
@@ -196,13 +198,13 @@ export function flattenBranchTree(
       });
 
       if (isExpanded) {
-        rows.push(...flattenBranchTree(node.children, expandedFolders, depth + 1));
+        rows.push(...flattenBranchTree(node.children, expandedFolders, depth + 1, idPrefix));
       }
     } else {
       const b = node.branch;
       rows.push({
         type: 'branch',
-        id: 'b:' + b.name,
+        id: `${pfx}b:${b.name}`,
         name: node.displayName,
         fullName: b.name,
         depth,

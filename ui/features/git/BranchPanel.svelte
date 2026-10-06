@@ -31,9 +31,10 @@
   // Search filter query
   let searchQuery = $state('');
 
-  // Collapsible sections & folders
+  // Collapsible sections & folders (separated for local and remote)
   let expandedSections = $state<Set<string>>(new Set(['local', 'remote', 'tags', 'backups']));
-  let expandedFolders = $state<Set<string>>(new Set(['canary/', 'fix/', 'feat/', 'release/']));
+  let expandedLocalFolders = $state<Set<string>>(new Set(['canary/', 'fix/', 'feat/', 'release/']));
+  let expandedRemoteFolders = $state<Set<string>>(new Set(['canary/', 'fix/', 'feat/', 'release/']));
 
   function toggleSection(sec: string) {
     const next = new Set(expandedSections);
@@ -45,20 +46,30 @@
     expandedSections = next;
   }
 
-  function toggleFolder(fullPrefix: string) {
-    const next = new Set(expandedFolders);
+  function toggleLocalFolder(fullPrefix: string) {
+    const next = new Set(expandedLocalFolders);
     if (next.has(fullPrefix)) {
       next.delete(fullPrefix);
     } else {
       next.add(fullPrefix);
     }
-    expandedFolders = next;
+    expandedLocalFolders = next;
+  }
+
+  function toggleRemoteFolder(fullPrefix: string) {
+    const next = new Set(expandedRemoteFolders);
+    if (next.has(fullPrefix)) {
+      next.delete(fullPrefix);
+    } else {
+      next.add(fullPrefix);
+    }
+    expandedRemoteFolders = next;
   }
 
   // Trees and flattened rows
   let localTree = $derived(buildBranchTree(localBranches));
   let filteredLocalTree = $derived(filterBranchTree(localTree, searchQuery));
-  let flatLocalRows = $derived(flattenBranchTree(filteredLocalTree, expandedFolders));
+  let flatLocalRows = $derived(flattenBranchTree(filteredLocalTree, expandedLocalFolders, 0, 'loc'));
 
   let remoteTree = $derived(
     buildBranchTree(
@@ -72,7 +83,7 @@
     )
   );
   let filteredRemoteTree = $derived(filterBranchTree(remoteTree, searchQuery));
-  let flatRemoteRows = $derived(flattenBranchTree(filteredRemoteTree, expandedFolders));
+  let flatRemoteRows = $derived(flattenBranchTree(filteredRemoteTree, expandedRemoteFolders, 0, 'rem'));
 
   let filteredTags = $derived(
     tags.filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -133,16 +144,21 @@
     gitStore.branch?.head || localBranches.find((b) => b.isCurrent)?.name || 'HEAD'
   );
 
-  // Auto-expand parent folders of current branch
+  let lastActiveBranch = '';
+
+  // Auto-expand parent folders only when current branch actually changes (not re-trigger on folder clicks)
   $effect(() => {
-    if (currentBranchName) {
+    if (currentBranchName && currentBranchName !== lastActiveBranch) {
+      lastActiveBranch = currentBranchName;
       const parts = currentBranchName.split('/');
       if (parts.length > 1) {
+        const next = new Set(expandedLocalFolders);
         let acc = '';
         for (let i = 0; i < parts.length - 1; i++) {
           acc += parts[i] + '/';
-          expandedFolders.add(acc);
+          next.add(acc);
         }
+        expandedLocalFolders = next;
       }
     }
   });
@@ -419,15 +435,15 @@
           {searchQuery ? 'No matching local branches' : 'No local branches'}
         </div>
       {:else}
-        {#each flatLocalRows as row}
+        {#each flatLocalRows as row (row.id)}
           {#if row.type === 'folder'}
             <div
               class="tree-folder-row"
               style:padding-left="{10 + row.depth * 14}px"
-              onclick={() => toggleFolder(row.fullName)}
+              onclick={() => toggleLocalFolder(row.fullName)}
               role="button"
               tabindex="0"
-              onkeydown={(e) => { if (e.key === 'Enter') toggleFolder(row.fullName); }}
+              onkeydown={(e) => { if (e.key === 'Enter') toggleLocalFolder(row.fullName); }}
             >
               <span class="caret">{row.isExpanded ? '▾' : '▸'}</span>
               <svg class="folder-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -481,15 +497,15 @@
           {searchQuery ? 'No matching remote branches' : 'No remote branches'}
         </div>
       {:else}
-        {#each flatRemoteRows as row}
+        {#each flatRemoteRows as row (row.id)}
           {#if row.type === 'folder'}
             <div
               class="tree-folder-row"
               style:padding-left="{10 + row.depth * 14}px"
-              onclick={() => toggleFolder(row.fullName)}
+              onclick={() => toggleRemoteFolder(row.fullName)}
               role="button"
               tabindex="0"
-              onkeydown={(e) => { if (e.key === 'Enter') toggleFolder(row.fullName); }}
+              onkeydown={(e) => { if (e.key === 'Enter') toggleRemoteFolder(row.fullName); }}
             >
               <span class="caret">{row.isExpanded ? '▾' : '▸'}</span>
               <svg class="folder-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
