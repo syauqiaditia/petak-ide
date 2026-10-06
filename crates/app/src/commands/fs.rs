@@ -314,6 +314,100 @@ pub fn fs_copy(root: String, srcs: Vec<String>, dest: String) -> Result<Vec<Stri
 
 
 #[tauri::command]
+pub async fn fs_copy_external(
+    src_paths: Vec<String>,
+    dest_dir: String,
+    new_name: Option<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dest = std::path::Path::new(&dest_dir);
+        if !dest.is_dir() {
+            std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+        }
+
+        let mut copied = Vec::new();
+        for (i, src_str) in src_paths.iter().enumerate() {
+            let src = std::path::Path::new(src_str);
+            if !src.exists() {
+                return Err(format!("Source path '{}' does not exist", src_str));
+            }
+
+            let file_name = if src_paths.len() == 1 {
+                if let Some(ref custom_name) = new_name {
+                    if !custom_name.trim().is_empty() {
+                        custom_name.trim().to_string()
+                    } else {
+                        src.file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| format!("file_{}", i))
+                    }
+                } else {
+                    src.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| format!("file_{}", i))
+                }
+            } else {
+                src.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| format!("file_{}", i))
+            };
+
+            let target = dest.join(&file_name);
+            if src.is_dir() {
+                petak_core::fsops::copy_dir_recursive(src, &target).map_err(|e| e.to_string())?;
+            } else {
+                std::fs::copy(src, &target).map_err(|e| e.to_string())?;
+            }
+            copied.push(target.to_string_lossy().to_string());
+        }
+        Ok(copied)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+
+#[tauri::command]
+pub async fn fs_get_clipboard_files() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "macos")]
+        {
+            let script = r#"
+use framework "Foundation"
+use framework "AppKit"
+
+set pb to current application's NSPasteboard's generalPasteboard()
+set fileURLs to pb's readObjectsForClasses:{current application's NSURL} options:(current application's NSDictionary's dictionary())
+set outPaths to ""
+if fileURLs is not missing value then
+    repeat with u in fileURLs
+        if (u's isFileURL()) as boolean then
+            set outPaths to outPaths & (u's |path|()) & linefeed
+        end if
+    end repeat
+end if
+return outPaths
+"#;
+            if let Ok(output) = std::process::Command::new("osascript").arg("-e").arg(script).output() {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let files: Vec<String> = stdout
+                        .lines()
+                        .map(|l| l.trim().to_string())
+                        .filter(|l| !l.is_empty() && std::path::Path::new(l).exists())
+                        .collect();
+                    return Ok(files);
+                }
+            }
+        }
+        Ok(Vec::new())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+
+#[tauri::command]
 pub fn fs_duplicate(root: String, rel: String) -> Result<String, String> {
     petak_core::fsops::duplicate(std::path::Path::new(&root), &rel)
         .map(|p| p.to_string_lossy().to_string())

@@ -31,7 +31,7 @@ pub fn should_emit_path(p: &Path) -> bool {
     let is_tmp = p
         .file_name()
         .and_then(|n| n.to_str())
-        .map_or(false, |s| s.ends_with(".petak-tmp"));
+        .map_or(false, |s| s.ends_with(".petak-tmp") || s.ends_with(".tmp"));
     if is_tmp {
         return false;
     }
@@ -39,6 +39,20 @@ pub fn should_emit_path(p: &Path) -> bool {
     let mut in_git = false;
     let mut git_subpath = std::path::PathBuf::new();
     for comp in p.components() {
+        let comp_str = comp.as_os_str().to_string_lossy();
+        if comp_str == "build"
+            || comp_str == ".dart_tool"
+            || comp_str == ".gradle"
+            || comp_str == "target"
+            || comp_str == "node_modules"
+            || comp_str == "Pods"
+            || comp_str == ".idea"
+            || comp_str == ".petak"
+            || comp_str == ".cxx"
+        {
+            return false;
+        }
+
         if in_git {
             git_subpath.push(comp);
         } else if comp.as_os_str() == ".git" {

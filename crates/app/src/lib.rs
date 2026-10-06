@@ -249,6 +249,8 @@ pub fn run() {
             commands::fs_rename,
             commands::fs_move,
             commands::fs_copy,
+            commands::fs_copy_external,
+            commands::fs_get_clipboard_files,
             commands::fs_duplicate,
             commands::fs_trash,
             commands::os_reveal,

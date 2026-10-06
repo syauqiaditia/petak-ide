@@ -11,6 +11,7 @@
   import LocalHistoryModal from './LocalHistoryModal.svelte';
   import DiffModal from './DiffModal.svelte';
   import CompareBranchModal from '../features/git/CompareBranchModal.svelte';
+  import CopyFileModal from './CopyFileModal.svelte';
   import {
     formatCopyPath,
     canCopyPackageImport,
@@ -98,16 +99,50 @@
   let modalDiffFile = $state<GitDiffFile | null>(null);
   let modalDiffTitle = $state('');
 
+  // Copy modal state (Android Studio-style Copy File)
+  let copyModalOpen = $state(false);
+  let copyModalSrcPaths = $state<string[]>([]);
+  let copyModalDestDir = $state('');
+
+  function openCopyModal(srcs: string[], dest: string) {
+    if (srcs.length === 0) return;
+    copyModalSrcPaths = srcs;
+    copyModalDestDir = dest;
+    copyModalOpen = true;
+  }
+
   // pubspec.yaml cache for package: import syntax
   let pubspecPackageName = $state<string>('');
 
   onMount(() => {
+    let unlistenDragDrop: (() => void) | null = null;
+    (async () => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        unlistenDragDrop = await getCurrentWindow().onDragDropEvent((event) => {
+          if (event.payload.type === 'drop') {
+            const paths = event.payload.paths;
+            if (paths && paths.length > 0) {
+              const target = selectedPaths.size === 1 ? Array.from(selectedPaths)[0] : folderPath;
+              const entry = findEntryByPath(target);
+              const destDir = entry?.is_dir ? entry.path : (entry ? getParentDir(entry.path) : folderPath);
+              openCopyModal(paths, destDir);
+            }
+          }
+        });
+      } catch (_) {}
+    })();
+
     if (typeof window !== 'undefined' && window.location.search.includes('menu-git')) {
       setTimeout(() => {
         selectedPaths = new Set(['/project/lib/main.dart']);
         openContextMenuForSelection(140, 180);
       }, 300);
     }
+
+    return () => {
+      if (unlistenDragDrop) unlistenDragDrop();
+    };
   });
 
   $effect(() => {
@@ -406,9 +441,22 @@
 
   // Tree Clipboard Actions
   async function executePaste(targetDirPath?: string) {
-    if (!treeClipboard || treeClipboard.paths.length === 0) return;
     const targetDir = targetDirPath ?? (selectedPaths.size === 1 ? Array.from(selectedPaths)[0] : folderPath);
-    const destRel = getRelPath(targetDir);
+    const targetEntry = findEntryByPath(targetDir);
+    const destDir = targetEntry?.is_dir ? targetDir : (targetEntry ? getParentDir(targetDir) : folderPath);
+
+    // 1. Cek apakah ada file dari luar (macOS Finder clipboard)
+    try {
+      const clipboardFiles = await api.fsGetClipboardFiles();
+      if (clipboardFiles && clipboardFiles.length > 0) {
+        openCopyModal(clipboardFiles, destDir);
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Cek clipboard internal Petak
+    if (!treeClipboard || treeClipboard.paths.length === 0) return;
+    const destRel = getRelPath(destDir);
     const srcsRel = treeClipboard.paths.map(getRelPath);
 
     try {
@@ -418,10 +466,10 @@
       } else {
         await api.fsCopy(folderPath, srcsRel, destRel);
       }
-      if (childrenCache[targetDir]) {
-        childrenCache[targetDir] = await api.listDir(targetDir);
+      if (childrenCache[destDir]) {
+        childrenCache[destDir] = await api.listDir(destDir);
       } else {
-        await refreshExpandedFolders([targetDir]);
+        await refreshExpandedFolders([destDir]);
       }
     } catch (e: any) {
       alert('Paste failed: ' + (e?.message || String(e)));
@@ -442,6 +490,27 @@
 
   async function handleDrop(e: DragEvent, targetEntry?: Entry) {
     e.preventDefault();
+
+    // 1. Cek file drag & drop dari luar (Finder / desktop)
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      const extPaths: string[] = [];
+      for (let i = 0; i < e.dataTransfer.files.length; i++) {
+        const file = e.dataTransfer.files[i];
+        const p = (file as any).path;
+        if (p) extPaths.push(p);
+      }
+      if (extPaths.length > 0) {
+        const destDir = targetEntry
+          ? targetEntry.is_dir
+            ? targetEntry.path
+            : getParentDir(targetEntry.path)
+          : folderPath;
+        openCopyModal(extPaths, destDir);
+        return;
+      }
+    }
+
+    // 2. Drag & drop internal antar folder di Petak
     const data = e.dataTransfer?.getData('text/plain');
     if (!data) return;
     try {
@@ -1448,6 +1517,24 @@
     diffFile={modalDiffFile}
     title={modalDiffTitle}
     onclose={() => (diffModalOpen = false)}
+  />
+{/if}
+
+{#if copyModalOpen}
+  <CopyFileModal
+    srcPaths={copyModalSrcPaths}
+    initialDestDir={copyModalDestDir}
+    onClose={() => (copyModalOpen = false)}
+    onSuccess={async (copied) => {
+      copyModalOpen = false;
+      if (childrenCache[copyModalDestDir]) {
+        childrenCache[copyModalDestDir] = await api.listDir(copyModalDestDir);
+      }
+      await refreshExpandedFolders([copyModalDestDir, ...copied]);
+      if (copied.length > 0) {
+        selectedPaths = new Set(copied);
+      }
+    }}
   />
 {/if}
 

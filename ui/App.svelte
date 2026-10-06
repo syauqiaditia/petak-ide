@@ -410,6 +410,19 @@
     }
   }
 
+  let externalChangeTimer: any = null;
+  let batchedExternalPaths = new Set<string>();
+
+  function queueExternalChange(paths: string[]) {
+    for (const p of paths) batchedExternalPaths.add(p);
+    if (externalChangeTimer) clearTimeout(externalChangeTimer);
+    externalChangeTimer = setTimeout(() => {
+      const allPaths = Array.from(batchedExternalPaths);
+      batchedExternalPaths.clear();
+      handleExternalChange(allPaths);
+    }, 200);
+  }
+
   async function handleExternalChange(paths: string[]) {
     // 1. Check open tabs
     for (const tab of tabsManager.tabs) {
@@ -532,7 +545,7 @@
     // 1. Listen for filesystem events
     try {
       unlistenFs = await api.onFsChanged((payload) => {
-        handleExternalChange(payload.paths);
+        queueExternalChange(payload.paths);
       });
     } catch (e) {
       console.warn('Failed to listen to fs-changed:', e);

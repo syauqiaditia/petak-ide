@@ -1310,6 +1310,14 @@ export const api = {
     return invoke<string[]>('fs_copy', { root, srcs, dest });
   },
 
+  fsCopyExternal(srcPaths: string[], destDir: string, newName?: string): Promise<string[]> {
+    return invoke<string[]>('fs_copy_external', { srcPaths, destDir, newName });
+  },
+
+  fsGetClipboardFiles(): Promise<string[]> {
+    return invoke<string[]>('fs_get_clipboard_files');
+  },
+
   fsDuplicate(root: string, rel: string): Promise<string> {
     return invoke<string>('fs_duplicate', { root, rel });
   },
