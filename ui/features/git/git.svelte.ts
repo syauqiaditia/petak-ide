@@ -615,7 +615,18 @@ class GitStore {
         path: file.path,
         ignoreWs: this.ignoreWs,
       });
-      this.commitDiffFile = diffs[0] ?? null;
+      const diffFile = diffs[0] ?? null;
+      this.commitDiffFile = diffFile;
+      const fileName = file.path.split('/').pop() || file.path;
+      const shortSha = this.selectedCommitSha.slice(0, 7);
+      this.centerDiff = {
+        diffFile,
+        filePath: file.path,
+        leftLabel: `${shortSha}~1 (Parent)`,
+        rightLabel: `${shortSha} (Commit)`,
+        sourceKind: 'commit',
+        title: `${fileName} (${shortSha} vs parent)`,
+      };
     } catch (e: any) {
       console.error('Failed to load commit diff:', e);
       this.commitDiffFile = null;
