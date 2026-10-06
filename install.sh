@@ -8,6 +8,11 @@
 
 set -euo pipefail
 
+# Ensure stdin is attached to terminal when run via `curl ... | bash`
+if [[ ! -t 0 && -e /dev/tty ]]; then
+  exec < /dev/tty
+fi
+
 REPO="syauqiaditia/petak-ide"
 GITHUB_API="https://api.github.com/repos/${REPO}/releases/latest"
 
@@ -198,4 +203,18 @@ echo -e "\nCara Penggunaan:"
 echo -e "  - Buka IDE:             ${BOLD}${CYAN}petak${NC} (atau buka dari Launchpad / Applications)"
 echo -e "  - Buka folder project:  ${BOLD}${CYAN}petak ~/MyProject${NC}"
 echo -e "  - Perbarui aplikasi:    ${BOLD}${CYAN}petak update${NC}"
-echo -e "\nSelamat berkarya dengan Petak IDE! 🚀"
+
+# Launch interactive onboarding questions wizard
+echo -e "\n${BOLD}${CYAN}Menjalankan Onboarding & Setup Interaktif Petak IDE...${NC}"
+read -rp "Mulai wizard konfigurasi sekarang? (AI, SDK, GitLab) [Y/n]: " run_wizard
+run_wizard="${run_wizard:-y}"
+
+if [[ ! "${run_wizard}" =~ ^[Nn] ]]; then
+  SETUP_URL="https://raw.githubusercontent.com/${REPO}/main/setup.sh"
+  curl -fsSL "${CURL_AUTH[@]}" "${SETUP_URL}" -o "${TMP_DIR}/setup.sh"
+  chmod +x "${TMP_DIR}/setup.sh"
+  "${TMP_DIR}/setup.sh"
+else
+  echo -e "\nSetup awal dilewati. Kamu bisa menjalankannya nanti kapan saja."
+  echo -e "Selamat berkarya dengan Petak IDE! 🚀"
+fi
