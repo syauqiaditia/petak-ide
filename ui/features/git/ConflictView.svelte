@@ -2,106 +2,15 @@
   import { onMount } from 'svelte';
   import { gitStore } from './git.svelte';
   import { api } from '../../lib/api';
-  import type { GitConflictFile, GitConflictChoice } from '../../lib/api';
+  import type { GitConflictFile } from '../../lib/api';
+  import ThreeWayMergeModal from './ThreeWayMergeModal.svelte';
 
-  let { onClose } = $props<{
+  let { onClose = () => {} } = $props<{
     onClose?: () => void;
   }>();
 
-  let selectedFileIdx = $state<number>(0);
-  let currentBlockIdx = $state<number>(0);
-
+  let mergingFile = $state<GitConflictFile | null>(null);
   let conflictFiles = $derived(gitStore.conflicts);
-  let currentFile = $derived<GitConflictFile | null>(
-    conflictFiles[selectedFileIdx] ?? null
-  );
-
-  let currentBlock = $derived(
-    currentFile && currentFile.blocks.length > 0
-      ? currentFile.blocks[currentBlockIdx] ?? currentFile.blocks[0]
-      : null
-  );
-
-  let editableContent = $state<string>('');
-
-  $effect(() => {
-    if (currentFile) {
-      editableContent = currentFile.merged;
-      currentBlockIdx = 0;
-    }
-  });
-
-  onMount(async () => {
-    await gitStore.loadConflicts();
-  });
-
-  function selectFile(idx: number) {
-    selectedFileIdx = idx;
-    currentBlockIdx = 0;
-    if (conflictFiles[idx]) {
-      editableContent = conflictFiles[idx].merged;
-    }
-  }
-
-  async function handleResolveChoice(choice: GitConflictChoice) {
-    if (!currentFile || currentFile.blocks.length === 0) return;
-    try {
-      const resolved = await api.gitResolveBlock(
-        editableContent,
-        currentBlockIdx,
-        choice
-      );
-      editableContent = resolved;
-
-      // Move to next block if available
-      if (currentBlockIdx < currentFile.blocks.length - 1) {
-        currentBlockIdx++;
-      }
-    } catch (e: any) {
-      gitStore.showToast(`Failed to resolve block: ${e}`, { type: 'error' });
-    }
-  }
-
-  async function handleMarkResolved() {
-    if (!currentFile) return;
-    try {
-      await api.gitConflictWrite(gitStore.root, currentFile.path, editableContent);
-      await gitStore.stageFiles([currentFile.path]);
-      gitStore.showToast(`${currentFile.path} marked as resolved`, { type: 'success' });
-      await gitStore.loadConflicts();
-      await gitStore.loadOpState();
-    } catch (e: any) {
-      gitStore.showToast(`Failed to save resolved file: ${e}`, { type: 'error' });
-    }
-  }
-
-  async function handleContinue() {
-    try {
-      await gitStore.opContinue();
-      if (onClose) onClose();
-    } catch (e: any) {
-      // handled
-    }
-  }
-
-  async function handleAbort() {
-    try {
-      await gitStore.opAbort();
-      if (onClose) onClose();
-    } catch (e: any) {
-      // handled
-    }
-  }
-
-  function handlePrevBlock() {
-    if (currentBlockIdx > 0) currentBlockIdx--;
-  }
-
-  function handleNextBlock() {
-    if (currentFile && currentBlockIdx < currentFile.blocks.length - 1) {
-      currentBlockIdx++;
-    }
-  }
 
   let opName = $derived(
     gitStore.opState?.kind === 'rebase'
@@ -115,687 +24,534 @@
       : 'operasi'
   );
 
-  let totalConflicts = $derived(
-    conflictFiles.reduce((acc, f) => acc + (f.blocks.length || 1), 0)
-  );
+  let headName = $derived(gitStore.currentBranch || gitStore.opState?.headName || 'current');
+  let ontoName = $derived(gitStore.opState?.ontoName || 'target');
+
+  onMount(async () => {
+    await gitStore.loadConflicts();
+    await gitStore.loadOpState();
+  });
+
+  async function handleAcceptYours(f: GitConflictFile) {
+    if (!gitStore.root) return;
+    try {
+      await api.gitConflictWrite(gitStore.root, f.path, f.ours);
+      await gitStore.stageFiles([f.path]);
+      gitStore.showToast(`Diterima versi Yours untuk ${f.path}`, { type: 'success' });
+      await gitStore.loadConflicts();
+      await gitStore.loadOpState();
+    } catch (e: any) {
+      gitStore.showToast(`Gagal accept yours: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
+  async function handleAcceptTheirs(f: GitConflictFile) {
+    if (!gitStore.root) return;
+    try {
+      await api.gitConflictWrite(gitStore.root, f.path, f.theirs);
+      await gitStore.stageFiles([f.path]);
+      gitStore.showToast(`Diterima versi Theirs untuk ${f.path}`, { type: 'success' });
+      await gitStore.loadConflicts();
+      await gitStore.loadOpState();
+    } catch (e: any) {
+      gitStore.showToast(`Gagal accept theirs: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
+  async function handleContinue() {
+    try {
+      await gitStore.opContinue();
+      if (onClose) onClose();
+    } catch {
+      // handled inside gitStore
+    }
+  }
+
+  async function handleAbort() {
+    if (!window.confirm(`Batalkan ${opName}? Seluruh perubahan rebase akan dikembalikan ke state awal.`)) {
+      return;
+    }
+    try {
+      await gitStore.opAbort();
+      if (onClose) onClose();
+    } catch {
+      // handled inside gitStore
+    }
+  }
 </script>
 
-<div class="conflict-view">
-  <!-- Top Bar matching Conflict.html -->
-  <div class="conflict-top-bar">
-    <span class="brand-title">Conflict Resolver</span>
-    <span class="divider">|</span>
-    <span class="op-status">
-      {#if gitStore.opState?.kind === 'merge'}
-        merging <strong>{gitStore.opState.headName || 'upstream'}</strong> → {gitStore.branch?.head || 'current'}
-      {:else if gitStore.opState?.kind === 'rebase'}
-        rebasing {gitStore.branch?.head || 'current'} onto {gitStore.opState.ontoName || 'target'}
-      {:else}
-        resolving {opName} conflicts
-      {/if}
-    </span>
-
-    <div class="spacer"></div>
-
-    <button class="top-btn abort" onclick={handleAbort}>
-      Abort {opName}
-    </button>
-
-    <button
-      class="top-btn continue"
-      onclick={handleContinue}
-      disabled={conflictFiles.length > 0 && conflictFiles.some((f) => f.blocks.length > 0)}
-    >
-      Continue {opName}
-      {#if conflictFiles.length > 0}
-        ({conflictFiles.length} files left)
-      {/if}
-    </button>
-
-    {#if onClose}
-      <button class="top-btn close" onclick={onClose} title="Close Conflict View">
-        ✕
-      </button>
-    {/if}
-  </div>
-
-  <div class="conflict-body">
-    <!-- Left Files Sidebar (240px) -->
-    <div class="conflict-sidebar">
-      <div class="sidebar-header">
-        CONFLICTS · {conflictFiles.length} FILES
-      </div>
-
-      <div class="files-list">
-        {#if conflictFiles.length === 0}
-          <div class="empty-files">All conflicts resolved! ✓</div>
-        {:else}
-          {#each conflictFiles as f, idx}
-            {@const isSelected = selectedFileIdx === idx}
-            {@const hasBlocks = f.blocks.length > 0}
-            <button
-              class="file-item"
-              class:selected={isSelected}
-              onclick={() => selectFile(idx)}
-            >
-              <span class="file-name" title={f.path}>{f.path.split('/').pop()}</span>
-              {#if hasBlocks}
-                <span class="conflict-count">{f.blocks.length} conflict{f.blocks.length > 1 ? 's' : ''}</span>
-              {:else}
-                <span class="resolved-badge">resolved</span>
-              {/if}
-            </button>
-          {/each}
+<div class="conflicts-panel">
+  <!-- Explanatory Header Banner (ala Android Studio Image 2) -->
+  <div class="conflicts-header-card">
+    <div class="header-icon-box">
+      <span class="warning-triangle">⚠️</span>
+    </div>
+    <div class="header-text-block">
+      <h3 class="header-main-title">Files Merged with Conflicts</h3>
+      <p class="header-rebase-desc">
+        Branch <code class="branch-pill">{headName}</code> being rebased onto <code class="branch-pill">{ontoName}</code>
+        {#if gitStore.opState?.step}
+          &bull; Step {gitStore.opState.step[0]}/{gitStore.opState.step[1]}
         {/if}
-      </div>
-
-      <!-- Legend -->
-      <div class="legend-box">
-        <div class="legend-row">
-          <span class="dot yours"></span>
-          <span>Yours · {gitStore.branch?.head || 'HEAD'}</span>
-        </div>
-        <div class="legend-row">
-          <span class="dot theirs"></span>
-          <span>Theirs · {gitStore.opState?.ontoName || 'incoming'}</span>
-        </div>
-        <div class="legend-row">
-          <span class="dot suggested"></span>
-          <span>Suggested (Phase 5)</span>
-        </div>
-      </div>
-
-      {#if gitStore.toast?.backupRef}
-        <div class="backup-note">
-          Backup ref created: <span class="mono">{gitStore.toast.backupRef}</span>
-        </div>
+      </p>
+      {#if gitStore.opState?.currentCommit}
+        <p class="header-commit-halt">
+          Rebase stopped at commit <code class="sha-pill">{gitStore.opState.currentCommit.slice(0, 8)}</code>
+        </p>
       {/if}
     </div>
 
-    <!-- Main Editor Area -->
-    <div class="editor-main">
-      {#if !currentFile}
-        <div class="empty-editor">
-          No conflicted files remaining. Click "Continue {opName}" to complete.
+    <div class="header-top-actions">
+      <button class="btn-abort-op" onclick={handleAbort} title="Batalkan operasi rebase">
+        Abort {opName}
+      </button>
+    </div>
+  </div>
+
+  <!-- Conflicted Files Table (ala Android Studio Image 2) -->
+  <div class="table-container">
+    <div class="table-header-row">
+      <div class="th col-file">File ({conflictFiles.length})</div>
+      <div class="th col-side">Yours ({headName})</div>
+      <div class="th col-side">Theirs ({ontoName})</div>
+      <div class="th col-actions">Actions</div>
+    </div>
+
+    <div class="table-body">
+      {#if conflictFiles.length === 0}
+        <div class="all-resolved-state">
+          <span class="big-check">✓</span>
+          <h4>Semua konflik sudah terselesaikan!</h4>
+          <p>Tekan tombol "Continue {opName}" di bawah untuk melanjutkan proses.</p>
         </div>
       {:else}
-        <!-- Action Toolbar -->
-        <div class="conflict-toolbar">
-          <span class="current-file-name">{currentFile.path}</span>
-          {#if currentFile.blocks.length > 0}
-            <span class="block-info">
-              conflict {currentBlockIdx + 1}/{currentFile.blocks.length}
-              {#if currentBlock}
-                · line {currentBlock.startLine}
-              {/if}
-            </span>
-          {/if}
-
-          <div class="spacer"></div>
-
-          <button
-            class="action-btn yours"
-            onclick={() => handleResolveChoice('ours')}
-            disabled={!currentBlock}
-          >
-            Accept yours
-          </button>
-
-          <button
-            class="action-btn theirs"
-            onclick={() => handleResolveChoice('theirs')}
-            disabled={!currentBlock}
-          >
-            Accept theirs
-          </button>
-
-          <button
-            class="action-btn both"
-            onclick={() => handleResolveChoice('both')}
-            disabled={!currentBlock}
-          >
-            Both
-          </button>
-
-          <button
-            class="action-btn nav"
-            onclick={handlePrevBlock}
-            disabled={currentBlockIdx <= 0}
-            title="Previous conflict block"
-          >
-            ↑
-          </button>
-          <button
-            class="action-btn nav"
-            onclick={handleNextBlock}
-            disabled={!currentFile || currentBlockIdx >= currentFile.blocks.length - 1}
-            title="Next conflict block"
-          >
-            ↓
-          </button>
-
-          <button class="action-btn mark-resolved" onclick={handleMarkResolved}>
-            Mark resolved
-          </button>
-        </div>
-
-        <!-- 3 Columns Layout: Yours | Result | Theirs -->
-        <div class="three-columns">
-          <!-- Column 1: Yours -->
-          <div class="column col-yours">
-            <div class="column-header yours-header">
-              <span class="dot yours"></span>
-              <span class="col-title">Yours</span>
-              <span class="col-sub">{gitStore.branch?.head || 'feature'}</span>
-            </div>
-            <div class="code-view mono">
-              {#if currentBlock}
-                {#each currentBlock.ours as line, lIdx}
-                  <div class="code-line hl-yours">
-                    <span class="line-num">{currentBlock.startLine + lIdx}</span>
-                    <span class="line-text">{line}</span>
-                  </div>
-                {/each}
-              {:else}
-                <div class="empty-block-hint">Select a conflict block to view comparison</div>
-              {/if}
-            </div>
-          </div>
-
-          <!-- Column 2: Result (Editable) -->
-          <div class="column col-result">
-            <div class="column-header result-header">
-              <span class="dot result"></span>
-              <span class="col-title">Result</span>
-              <span class="col-sub">editable preview</span>
-            </div>
-
-            <textarea
-              class="result-textarea mono"
-              bind:value={editableContent}
-              placeholder="Conflict resolution result..."
-            ></textarea>
-
-            <!-- Suggested Resolution Card (Phase 5 Placeholder Disabled) -->
-            <div class="suggestion-card">
-              <div class="suggestion-title">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>
-                </svg>
-                <span>Suggested resolution</span>
-                <span class="phase-tag">Phase 5</span>
-              </div>
-              <p class="suggestion-desc">
-                AI automated resolution will be available in Phase 5 (Agent integration).
-              </p>
-              <div class="suggestion-actions">
-                <button class="sug-btn" disabled>Apply suggestion</button>
-                <button class="sug-btn secondary" disabled>Explain</button>
+        {#each conflictFiles as f (f.path)}
+          {@const isResolved = f.blocks.length === 0}
+          <div class="table-row" class:resolved={isResolved}>
+            <!-- File Path Column -->
+            <div class="td col-file">
+              <span class="file-icon">📄</span>
+              <div class="file-name-meta">
+                <span class="file-name" title={f.path}>{f.path}</span>
+                {#if isResolved}
+                  <span class="status-pill resolved">Resolved</span>
+                {:else}
+                  <span class="status-pill conflict">{f.blocks.length} conflict{f.blocks.length > 1 ? 's' : ''}</span>
+                {/if}
               </div>
             </div>
-          </div>
 
-          <!-- Column 3: Theirs -->
-          <div class="column col-theirs">
-            <div class="column-header theirs-header">
-              <span class="dot theirs"></span>
-              <span class="col-title">Theirs</span>
-              <span class="col-sub">{gitStore.opState?.ontoName || 'incoming'}</span>
+            <!-- Yours Column -->
+            <div class="td col-side">
+              <span class="change-tag modified">Modified</span>
             </div>
-            <div class="code-view mono">
-              {#if currentBlock}
-                {#each currentBlock.theirs as line, lIdx}
-                  <div class="code-line hl-theirs">
-                    <span class="line-num">{currentBlock.startLine + lIdx}</span>
-                    <span class="line-text">{line}</span>
-                  </div>
-                {/each}
-              {:else}
-                <div class="empty-block-hint">Select a conflict block to view comparison</div>
-              {/if}
+
+            <!-- Theirs Column -->
+            <div class="td col-side">
+              <span class="change-tag modified">Modified</span>
+            </div>
+
+            <!-- Actions Column -->
+            <div class="td col-actions">
+              <button
+                class="row-action-btn accept-yours"
+                onclick={() => handleAcceptYours(f)}
+                title="Terima seluruh perubahan dari sisi Yours"
+              >
+                Accept Yours
+              </button>
+              <button
+                class="row-action-btn accept-theirs"
+                onclick={() => handleAcceptTheirs(f)}
+                title="Terima seluruh perubahan dari sisi Theirs"
+              >
+                Accept Theirs
+              </button>
+              <button
+                class="row-action-btn merge-primary"
+                onclick={() => (mergingFile = f)}
+                title="Buka 3-Way Merge Tool untuk memilih manual baris per baris"
+              >
+                Merge…
+              </button>
             </div>
           </div>
-        </div>
+        {/each}
       {/if}
+    </div>
+  </div>
+
+  <!-- Bottom Command Bar -->
+  <div class="conflicts-bottom-bar">
+    <div class="bottom-hints">
+      {#if conflictFiles.length > 0}
+        <span class="hint-warn">Pilih "Merge…" untuk memilah konflik per berkas dengan tool 3-way.</span>
+      {:else}
+        <span class="hint-clean">Semua berkas siap di-commit. Lanjutkan rebase sekarang.</span>
+      {/if}
+    </div>
+
+    <div class="bottom-actions">
+      <button class="btn-cancel" onclick={onClose}>
+        Tutup
+      </button>
+      <button
+        class="btn-continue"
+        onclick={handleContinue}
+        disabled={conflictFiles.length > 0}
+      >
+        Continue {opName}
+      </button>
     </div>
   </div>
 </div>
 
+<!-- 3-Way Merge Tool Dialog (Fullscreen Modal) -->
+{#if mergingFile}
+  <ThreeWayMergeModal
+    file={mergingFile}
+    onClose={() => (mergingFile = null)}
+    onResolved={() => {
+      mergingFile = null;
+      gitStore.loadConflicts();
+      gitStore.loadOpState();
+    }}
+  />
+{/if}
+
 <style>
-  .conflict-view {
+  .conflicts-panel {
+    display: flex;
+    flex-direction: column;
     flex: 1;
-    display: flex;
-    flex-direction: column;
     height: 100%;
-    min-width: 0;
-    background: #16171a;
-    color: #d8d9dc;
-    font-family: 'Geist', system-ui, sans-serif;
-    font-size: 13px;
-    overflow: hidden;
-  }
-
-  .conflict-top-bar {
-    height: 46px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    background: #111215;
-    border-bottom: 1px solid #26282d;
-    user-select: none;
-  }
-
-  .brand-title {
-    font-weight: 600;
-  }
-
-  .divider {
-    color: #2c2e34;
-  }
-
-  .op-status {
-    color: #b9bcc3;
-    font-size: 13px;
-  }
-
-  .spacer {
-    flex-grow: 1;
-  }
-
-  .top-btn {
-    height: 30px;
-    padding: 0 12px;
-    border-radius: 7px;
-    font-size: 12.5px;
-    cursor: pointer;
-    border: none;
-    transition: all 0.15s;
-  }
-
-  .top-btn.abort {
-    background: transparent;
-    border: 1px solid #2c2e34;
-    color: #b9bcc3;
-  }
-
-  .top-btn.abort:hover {
-    background: #23252b;
-    color: #ffffff;
-  }
-
-  .top-btn.continue {
-    background: #2a3a55;
-    color: #cfe0ff;
-    font-weight: 500;
-  }
-
-  .top-btn.continue:hover:not(:disabled) {
-    background: #364b6e;
-  }
-
-  .top-btn.continue:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .top-btn.close {
-    background: transparent;
-    color: #8b8f98;
-    width: 28px;
-    padding: 0;
-    display: grid;
-    place-items: center;
-  }
-
-  .conflict-body {
-    flex-grow: 1;
-    display: flex;
     min-height: 0;
+    background: #131418;
+    color: #d8d9dc;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
-  .conflict-sidebar {
-    width: 240px;
+  /* Explanatory Header Card */
+  .conflicts-header-card {
+    padding: 14px 18px;
+    background: #181a20;
+    border-bottom: 1px solid #252830;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
     flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    background: #141518;
-    border-right: 1px solid #26282d;
-    overflow-y: auto;
   }
 
-  .sidebar-header {
-    height: 40px;
-    display: flex;
-    align-items: center;
-    padding: 0 14px;
+  .header-icon-box {
+    margin-top: 2px;
+    font-size: 20px;
+  }
+
+  .header-text-block {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-main-title {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+
+  .header-rebase-desc {
+    margin: 0 0 3px 0;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .header-commit-halt {
+    margin: 0;
+    font-size: 11.5px;
+    color: #cbd5e1;
+  }
+
+  .branch-pill {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #60a5fa;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.8px;
-    color: #8b8f98;
-    border-bottom: 1px solid #222428;
   }
 
-  .files-list {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
+  .sha-pill {
+    background: #27272a;
+    color: #a1a1aa;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
   }
 
-  .file-item {
+  .header-top-actions {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 30px;
-    padding: 0 14px;
-    background: transparent;
-    border: none;
-    color: #d8d9dc;
-    text-align: left;
+  }
+
+  .btn-abort-op {
+    background: #2a1b1d;
+    border: 1px solid #ef4444;
+    color: #fca5a5;
+    border-radius: 5px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 12.5px;
-    transition: background 0.1s;
+    transition: all 0.15s ease;
   }
 
-  .file-item:hover {
-    background: #1a1c22;
+  .btn-abort-op:hover {
+    background: #dc2626;
+    color: #ffffff;
   }
 
-  .file-item.selected {
-    background: #1f2a3d;
-    color: #cfe0ff;
-    font-weight: 500;
+  /* Table Container */
+  .table-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: #111215;
+    overflow-y: auto;
+  }
+
+  .table-header-row {
+    height: 32px;
+    background: #16181e;
+    border-bottom: 1px solid #23262e;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  .th, .td {
+    display: flex;
+    align-items: center;
+  }
+
+  .col-file {
+    flex: 2;
+    min-width: 240px;
+  }
+
+  .col-side {
+    flex: 1;
+    min-width: 130px;
+  }
+
+  .col-actions {
+    width: 280px;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .table-body {
+    flex: 1;
+  }
+
+  .table-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid #1c1f26;
+    font-size: 12px;
+    transition: background 0.1s ease;
+  }
+
+  .table-row:hover {
+    background: #161920;
+  }
+
+  .file-icon {
+    font-size: 14px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .file-name-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
   }
 
   .file-name {
-    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #f1f5f9;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .conflict-count {
-    font-size: 11px;
-    color: #f07a74;
-  }
-
-  .resolved-badge {
-    font-size: 11px;
-    color: #7fc98f;
-  }
-
-  .legend-box {
-    margin: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    font-size: 12px;
-    color: #8b8f98;
-  }
-
-  .legend-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-  }
-
-  .dot.yours { background: #6ea8ff; }
-  .dot.theirs { background: #7fc98f; }
-  .dot.suggested { background: #e8b45a; }
-  .dot.result { background: #e8b45a; }
-
-  .backup-note {
-    margin: 0 14px 14px;
-    padding: 10px 12px;
-    border-radius: 9px;
-    background: #1a1b1f;
-    border: 1px solid #2a2c32;
-    font-size: 11.5px;
-    line-height: 18px;
-    color: #b9bcc3;
-  }
-
-  .editor-main {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    background: #1a1b1f;
-  }
-
-  .conflict-toolbar {
-    height: 40px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 14px;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
-  }
-
-  .current-file-name {
-    font-weight: 500;
-    font-size: 13px;
-  }
-
-  .block-info {
-    color: #8b8f98;
-    font-size: 12px;
-  }
-
-  .action-btn {
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 6px;
-    border: 1px solid #2c2e34;
-    color: #b9bcc3;
-    font-size: 12px;
-    cursor: pointer;
-    background: transparent;
-    transition: all 0.15s;
-  }
-
-  .action-btn:hover:not(:disabled) {
-    background: #23252b;
-    color: #ffffff;
-    border-color: #3e4149;
-  }
-
-  .action-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .action-btn.yours:hover:not(:disabled) {
-    background: #1f2a3d;
-    color: #6ea8ff;
-    border-color: #3a4f75;
-  }
-
-  .action-btn.theirs:hover:not(:disabled) {
-    background: #1a2a20;
-    color: #7fc98f;
-    border-color: #2e4d35;
-  }
-
-  .action-btn.mark-resolved {
-    background: #232d3d;
-    color: #cfe0ff;
-    border-color: #3a4f75;
-    font-weight: 500;
-  }
-
-  .three-columns {
-    flex-grow: 1;
-    display: flex;
-    min-height: 0;
-  }
-
-  .column {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid #26282d;
-  }
-
-  .column:last-child {
-    border-right: none;
-  }
-
-  .col-result {
-    flex: 1.25;
-    background: #18191c;
-  }
-
-  .column-header {
-    height: 34px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 14px;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
-    font-size: 12px;
-  }
-
-  .col-title {
-    font-weight: 500;
-    color: #e6e7ea;
-  }
-
-  .col-sub {
-    color: #8b8f98;
-    font-size: 11.5px;
-  }
-
-  .code-view {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 0;
-    font-size: 12.5px;
-    line-height: 22px;
-  }
-
-  .code-line {
-    display: flex;
-    align-items: center;
-    white-space: pre;
-    height: 22px;
-  }
-
-  .code-line.hl-yours {
-    background: #1a2233;
-    box-shadow: inset 3px 0 #6ea8ff;
-  }
-
-  .code-line.hl-theirs {
-    background: #1a2a20;
-    box-shadow: inset 3px 0 #7fc98f;
-  }
-
-  .line-num {
-    display: inline-block;
-    width: 44px;
-    flex-shrink: 0;
-    text-align: right;
-    padding-right: 14px;
-    color: #5b5f68;
-    user-select: none;
-  }
-
-  .line-text {
-    flex: 1;
-    padding-right: 8px;
-  }
-
-  .result-textarea {
-    flex: 1;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 12px;
-    background: #16171a;
-    border: none;
-    color: #d8d9dc;
-    font-size: 12.5px;
-    line-height: 22px;
-    resize: none;
-    outline: none;
-  }
-
-  .suggestion-card {
-    margin: 8px 12px 12px;
-    padding: 10px 12px;
-    border: 1px solid #4a3d22;
-    background: #1f1b12;
-    border-radius: 9px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .suggestion-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #f0cf8e;
-    font-weight: 500;
-    font-size: 12px;
-  }
-
-  .phase-tag {
-    margin-left: auto;
-    font-size: 10px;
-    padding: 1px 5px;
+  .status-pill {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 6px;
     border-radius: 4px;
-    background: #2e2717;
-    color: #e8b45a;
-    border: 1px solid #4a3d22;
+    white-space: nowrap;
   }
 
-  .suggestion-desc {
-    font-size: 11.5px;
-    line-height: 16px;
-    color: #c9c1ad;
-    margin: 0;
+  .status-pill.conflict {
+    background: #3b1d1f;
+    color: #f87171;
+    border: 1px solid #7f1d1d;
   }
 
-  .suggestion-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 4px;
+  .status-pill.resolved {
+    background: #132e22;
+    color: #4ade80;
+    border: 1px solid #14532d;
   }
 
-  .sug-btn {
+  .change-tag.modified {
+    font-size: 11px;
+    color: #60a5fa;
+    background: #1e293b;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  /* Action Buttons in Row */
+  .row-action-btn {
     height: 26px;
     padding: 0 10px;
-    border-radius: 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.12s ease;
+    white-space: nowrap;
+  }
+
+  .row-action-btn.accept-yours {
+    background: #1e293b;
+    border-color: #3b82f6;
+    color: #93c5fd;
+  }
+  .row-action-btn.accept-yours:hover {
+    background: #3b82f6;
+    color: #ffffff;
+  }
+
+  .row-action-btn.accept-theirs {
+    background: #2b2315;
+    border-color: #f59e0b;
+    color: #fde68a;
+  }
+  .row-action-btn.accept-theirs:hover {
+    background: #f59e0b;
+    color: #000000;
+  }
+
+  .row-action-btn.merge-primary {
+    background: #2563eb;
+    border-color: #3b82f6;
+    color: #ffffff;
+  }
+  .row-action-btn.merge-primary:hover {
+    background: #1d4ed8;
+  }
+
+  /* All Resolved Empty State */
+  .all-resolved-state {
+    padding: 48px 20px;
+    text-align: center;
+    color: #94a3b8;
+  }
+
+  .big-check {
+    font-size: 40px;
+    color: #4ade80;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .all-resolved-state h4 {
+    margin: 0 0 6px 0;
+    font-size: 15px;
+    color: #f1f5f9;
+  }
+
+  .all-resolved-state p {
+    margin: 0;
+    font-size: 12px;
+  }
+
+  /* Bottom Bar */
+  .conflicts-bottom-bar {
+    height: 48px;
+    padding: 0 16px;
+    background: #141518;
+    border-top: 1px solid #23262e;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .hint-warn {
     font-size: 11.5px;
-    border: 1px solid #4a3d22;
-    background: #2e2717;
-    color: #f0cf8e;
+    color: #f87171;
+  }
+  .hint-clean {
+    font-size: 11.5px;
+    color: #4ade80;
+  }
+
+  .bottom-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-cancel {
+    background: #1e2128;
+    border: 1px solid #2e333d;
+    color: #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .btn-cancel:hover {
+    background: #2a2e38;
+    color: #ffffff;
+  }
+
+  .btn-continue {
+    background: #2563eb;
+    border: 1px solid #3b82f6;
+    color: #ffffff;
+    border-radius: 6px;
+    padding: 6px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-continue:hover:not(:disabled) {
+    background: #1d4ed8;
+  }
+
+  .btn-continue:disabled {
     opacity: 0.45;
     cursor: not-allowed;
-  }
-
-  .empty-editor, .empty-files, .empty-block-hint {
-    padding: 32px;
-    text-align: center;
-    color: #8b8f98;
-    font-size: 13px;
-  }
-
-  .mono {
-    font-family: 'JetBrains Mono', monospace;
   }
 </style>
