@@ -89,7 +89,7 @@ Traditional mobile IDEs like Android Studio consume gigabytes of memory, suffer 
 
 ## Benchmarks & Performance Scorecard
 
-| Metric | Petak IDE v0.8.1 | Android Studio (Koala/Ladybug) | VS Code (with Mobile Extensions) |
+| Metric | Petak IDE v0.8.2 | Android Studio (Koala/Ladybug) | VS Code (with Mobile Extensions) |
 |---|---|---|---|
 | **RAM Usage (Idle)** | **~100–120 MB** | 1,800–3,500 MB | 650–1,200 MB |
 | **Binary Bundle Size** | **6.6 MB** | ~1,400 MB | ~350 MB |
@@ -134,6 +134,37 @@ Petak is designed as a hybrid system separating safety-critical systems programm
 │  └────────────────────┴───────────────────┴──────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🚀 Quick Install (No Build Tools Required)
+
+Install Petak IDE instantly on macOS or Linux using the standalone installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/syauqiaditia/petak-ide/main/install.sh | bash
+```
+
+Or download the pre-built application package from [GitHub Releases](https://github.com/syauqiaditia/petak-ide/releases/latest):
+- **macOS (Apple Silicon M1/M2/M3/M4):** [Petak_0.8.2_aarch64.dmg](https://github.com/syauqiaditia/petak-ide/releases/latest)
+- **Linux (x86_64):** [petak-linux-x86_64](https://github.com/syauqiaditia/petak-ide/releases/latest)
+
+---
+
+### 💻 Command Line Interface (CLI)
+The installer registers the `petak` command in your terminal (`~/.local/bin/petak`):
+```bash
+petak                 # Launch Petak IDE
+petak ~/MyProject     # Open project folder directly
+petak update          # Check and update to the latest release
+petak version         # Show installed version
+```
+
+---
+
+### 🔄 Seamless In-App & CLI Updates
+- **Sticky In-App Badge:** When a new version is released, an eye-catching **`✨ Update vX.Y.Z`** badge appears in the TitleBar and StatusBar. Clicking it automatically downloads, installs, and restarts Petak in one click.
+- **Manual CLI Update:** Run `petak update` anytime from your terminal to update cleanly without touching your browser.
 
 ---
 

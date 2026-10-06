@@ -38,6 +38,15 @@ export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
 
+export interface UpdateCheckResult {
+  updateAvailable: boolean;
+  currentVersion: string;
+  latestVersion: string;
+  releaseNotes: string;
+  releaseUrl: string;
+  downloadUrl?: string;
+}
+
 export interface Entry {
   name: string;
   path: string;
@@ -1330,6 +1339,26 @@ export const api = {
 
   accountsClear(): Promise<void> {
     return invoke('accounts_clear');
+  },
+
+  appCheckUpdate(): Promise<UpdateCheckResult> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return Promise.resolve({
+        updateAvailable: false,
+        currentVersion: '0.8.2',
+        latestVersion: '0.8.2',
+        releaseNotes: '',
+        releaseUrl: 'https://github.com/syauqiaditia/petak-ide',
+      });
+    }
+    return invoke<UpdateCheckResult>('app_check_update');
+  },
+
+  appApplyUpdate(downloadUrl: string): Promise<void> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return Promise.resolve();
+    }
+    return invoke('app_apply_update', { downloadUrl });
   },
 
   osOpenDefault(path: string): Promise<void> {

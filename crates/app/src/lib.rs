@@ -383,6 +383,8 @@ pub fn run() {
             commands::accounts_test,
             commands::accounts_clear,
             commands::accounts_check_token_status,
+            commands::app_check_update,
+            commands::app_apply_update,
             commands::mirror_open,
             // Batch 11
             commands::adb_pair,

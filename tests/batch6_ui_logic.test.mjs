@@ -41,6 +41,7 @@ const STORE_DEFS = {
   mcpStore: path.resolve(uiRoot, 'features/settings/mcpStore.svelte.ts'),
   testStore: path.resolve(uiRoot, 'features/tests/testStore.svelte.ts'),
   skillsStore: path.resolve(uiRoot, 'features/agents/skillsStore.svelte.ts'),
+  updateStore: path.resolve(uiRoot, 'features/updater/updateStore.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {

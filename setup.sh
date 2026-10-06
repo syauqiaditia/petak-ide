@@ -8,6 +8,10 @@
 
 set -uo pipefail
 
+if [[ ! -t 0 && -e /dev/tty ]]; then
+  exec < /dev/tty
+fi
+
 # ANSI Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -442,27 +446,47 @@ echo -e "  - AI Model:     ${AI_MODEL}"
 echo -e "  - GitLab URL:   ${GITLAB_URL}"
 echo -e "  - GitLab Auth:  $(test -f "${HOME}/.gitlab-pat" && echo -e "${GREEN}Terkonfigurasi (~/.gitlab-pat)${NC}" || echo -e "${YELLOW}Belum ada${NC}")"
 
-echo -e "\nIngin langsung compile dan install Petak IDE sekarang?"
-echo -e "  ${BOLD}1)${NC} Ya, build aplikasi sekarang (jalankan \`./build.sh\`)"
-echo -e "  ${BOLD}2)${NC} Jalankan dalam mode development (\`./build.sh --dev\`)"
-echo -e "  ${BOLD}3)${NC} Tidak, saya akan build manual nanti"
+if [[ -f "${ROOT_DIR}/build.sh" ]]; then
+  echo -e "\nIngin langsung compile dan install Petak IDE sekarang?"
+  echo -e "  ${BOLD}1)${NC} Ya, build aplikasi sekarang (jalankan \`./build.sh\`)"
+  echo -e "  ${BOLD}2)${NC} Jalankan dalam mode development (\`./build.sh --dev\`)"
+  echo -e "  ${BOLD}3)${NC} Tidak, saya akan build manual nanti"
 
-read -rp "Pilihan kamu [1-3] (default: 1): " build_choice
-build_choice="${build_choice:-1}"
+  read -rp "Pilihan kamu [1-3] (default: 1): " build_choice
+  build_choice="${build_choice:-1}"
 
-case "${build_choice}" in
-  1)
-    echo -e "\nMemulai kompilasi rilis Petak IDE..."
-    exec ./build.sh
-    ;;
-  2)
-    echo -e "\nMenjalankan Petak IDE mode dev..."
-    exec ./build.sh --dev
-    ;;
-  *)
-    echo -e "\nSelesai! Kamu bisa menjalankan perintah berikut kapan saja:"
-    echo -e "  - Compile rilis: ${BOLD}./build.sh${NC}"
-    echo -e "  - Mode live dev: ${BOLD}./build.sh --dev${NC}"
-    echo -e "  - Jalankan test: ${BOLD}./build.sh --test${NC}"
-    ;;
-esac
+  case "${build_choice}" in
+    1)
+      echo -e "\nMemulai kompilasi rilis Petak IDE..."
+      exec "${ROOT_DIR}/build.sh"
+      ;;
+    2)
+      echo -e "\nMenjalankan Petak IDE mode dev..."
+      exec "${ROOT_DIR}/build.sh" --dev
+      ;;
+    *)
+      echo -e "\nSelesai! Kamu bisa menjalankan perintah berikut kapan saja:"
+      echo -e "  - Compile rilis: ${BOLD}./build.sh${NC}"
+      echo -e "  - Mode live dev: ${BOLD}./build.sh --dev${NC}"
+      echo -e "  - Jalankan test: ${BOLD}./build.sh --test${NC}"
+      ;;
+  esac
+elif command -v petak >/dev/null 2>&1 || [[ -d "/Applications/Petak.app" ]]; then
+  echo -e "\nIngin langsung meluncurkan Petak IDE sekarang?"
+  echo -e "  ${BOLD}1)${NC} Ya, buka Petak IDE sekarang (${GREEN}petak${NC})"
+  echo -e "  ${BOLD}2)${NC} Buka nanti"
+
+  read -rp "Pilihan kamu [1-2] (default: 1): " launch_choice
+  launch_choice="${launch_choice:-1}"
+
+  if [[ "${launch_choice}" == "1" ]]; then
+    echo -e "\nMembuka Petak IDE..."
+    if [[ "${OS}" == "Darwin" && -d "/Applications/Petak.app" ]]; then
+      open -a /Applications/Petak.app
+    elif command -v petak >/dev/null 2>&1; then
+      petak
+    fi
+  else
+    echo -e "\nKetik ${BOLD}petak${NC} di terminal kapan saja untuk membuka IDE."
+  fi
+fi
