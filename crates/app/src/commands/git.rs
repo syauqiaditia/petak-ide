@@ -1134,6 +1134,39 @@ pub async fn git_stash_drop(root: String, index: usize) -> Result<String, String
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn git_stash_files(root: String, index: usize) -> Result<Vec<petak_core::git::StashFileEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_files(&exec, repo, index).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stash_apply_file(root: String, index: usize, file_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_apply_file(&exec, repo, index, &file_path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_stash_file_diff(root: String, index: usize, file_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        petak_core::git::stash_file_diff(&exec, repo, index, &file_path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ──────────── Batch 3 Ghost-text suggest & Settings ────────────
 
 

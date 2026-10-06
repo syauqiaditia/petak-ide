@@ -8,6 +8,7 @@
   import CommitDetail from './CommitDetail.svelte';
   import ConflictView from './ConflictView.svelte';
   import StashModal from './StashModal.svelte';
+  import StashView from './StashView.svelte';
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
 
@@ -137,6 +138,17 @@
         onclick={() => (gitStore.activeSubTab = 'log')}
       >
         Log
+      </button>
+
+      <button
+        class="tab-btn"
+        class:active={gitStore.activeSubTab === 'stash'}
+        onclick={() => (gitStore.activeSubTab = 'stash')}
+      >
+        Stashes
+        {#if gitStore.stashCount > 0}
+          <span class="count-badge stash">{gitStore.stashCount}</span>
+        {/if}
       </button>
 
       {#if conflictCount > 0 || opRunning}
@@ -277,6 +289,8 @@
         <LogView />
         <CommitDetail />
       </div>
+    {:else if gitStore.activeSubTab === 'stash'}
+      <StashView />
     {:else}
       <ConflictView onClose={() => (gitStore.activeSubTab = 'commit')} />
     {/if}
@@ -485,6 +499,10 @@
     background: #1f2a3d;
     padding: 1px 6px;
     border-radius: 10px;
+  }
+  .count-badge.stash {
+    color: #93c5fd;
+    background: #1e2638;
   }
 
   .spacer {

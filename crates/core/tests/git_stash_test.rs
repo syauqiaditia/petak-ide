@@ -96,3 +96,42 @@ fn test_git_stash_lifecycle_dummy_repo() {
     let list_after_drop = stash_list(&exec, repo.path()).unwrap();
     assert!(list_after_drop.is_empty(), "drop should delete stash@{{0}}");
 }
+
+#[test]
+fn test_git_stash_file_cherry_pick_and_diff() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    // Create 2 modified files
+    repo.write_file("file_a.txt", "content a\n");
+    git(&exec, repo.path(), &["add", "file_a.txt"]).unwrap();
+    git(&exec, repo.path(), &["commit", "-m", "commit a"]).unwrap();
+
+    repo.write_file("file_b.txt", "content b\n");
+    git(&exec, repo.path(), &["add", "file_b.txt"]).unwrap();
+    git(&exec, repo.path(), &["commit", "-m", "commit b"]).unwrap();
+
+    // Modify both
+    repo.write_file("file_a.txt", "modified a\n");
+    repo.write_file("file_b.txt", "modified b\n");
+
+    // Stash them
+    petak_core::git::stash_push(&exec, repo.path(), Some("stash two files"), false).unwrap();
+    assert_eq!(repo.read_file("file_a.txt"), "content a\n");
+    assert_eq!(repo.read_file("file_b.txt"), "content b\n");
+
+    // 1. Check stash_files
+    let files = petak_core::git::stash_files(&exec, repo.path(), 0).unwrap();
+    assert_eq!(files.len(), 2);
+    assert!(files.iter().any(|f| f.path == "file_a.txt"));
+    assert!(files.iter().any(|f| f.path == "file_b.txt"));
+
+    // 2. Check diff
+    let diff_a = petak_core::git::stash_file_diff(&exec, repo.path(), 0, "file_a.txt").unwrap();
+    assert!(diff_a.contains("modified a"));
+
+    // 3. Cherry pick ONLY file_a.txt
+    petak_core::git::stash_apply_file(&exec, repo.path(), 0, "file_a.txt").unwrap();
+    assert_eq!(repo.read_file("file_a.txt"), "modified a\n");
+    assert_eq!(repo.read_file("file_b.txt"), "content b\n"); // file_b remains untouched!
+}

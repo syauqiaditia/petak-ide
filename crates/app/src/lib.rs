@@ -300,6 +300,9 @@ pub fn run() {
             commands::git_stash_apply,
             commands::git_stash_pop,
             commands::git_stash_drop,
+            commands::git_stash_files,
+            commands::git_stash_apply_file,
+            commands::git_stash_file_diff,
             // Batch 3 - Ghost-text & Settings
             commands::suggest_index_build,
             commands::suggest_index_update,

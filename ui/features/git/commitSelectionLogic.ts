@@ -142,7 +142,9 @@ export interface FileContextAction {
     | 'copy_path'
     | 'reveal_finder'
     | 'delete_untracked'
-    | 'add_to_vcs';
+    | 'add_to_vcs'
+    | 'stash_changes'
+    | 'unstash_changes';
   label: string;
   danger?: boolean;
 }
@@ -153,6 +155,8 @@ export function getFileContextActions(
   isUntracked: boolean
 ): FileContextAction[] {
   const actions: FileContextAction[] = [
+    { id: 'stash_changes', label: 'Stash Changes…' },
+    { id: 'unstash_changes', label: 'Unstash Changes…' },
     { id: 'rollback', label: 'Rollback…', danger: true },
     { id: 'goto_file', label: 'Go to File' },
     { id: 'show_diff', label: 'Show Diff' },

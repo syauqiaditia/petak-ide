@@ -49,7 +49,10 @@ pub use rebase::{
 };
 pub use remote::{fetch, pull, push, remotes};
 pub use status::{parse_status, status};
-pub use stash::{stash_apply, stash_drop, stash_list, stash_pop, stash_push, StashEntry};
+pub use stash::{
+    stash_apply, stash_apply_file, stash_drop, stash_file_diff, stash_files, stash_list,
+    stash_pop, stash_push, StashEntry, StashFileEntry,
+};
 
 use std::fs;
 use std::path::Path;

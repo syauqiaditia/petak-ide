@@ -11,7 +11,7 @@
   import CompareBranchModal from './CompareBranchModal.svelte';
 
   let { onSelectTab } = $props<{
-    onSelectTab?: (tab: 'commit' | 'log' | 'conflict') => void;
+    onSelectTab?: (tab: 'commit' | 'log' | 'conflict' | 'stash') => void;
   }>();
 
   let branchList = $derived(gitStore.branches);
@@ -267,13 +267,15 @@
   <!-- Sub-tab switcher -->
   <div class="panel-tabs">
     <button
-      class="panel-tab active"
+      class="panel-tab"
+      class:active={gitStore.activeSubTab === 'log'}
       onclick={() => onSelectTab?.('log')}
     >
       Log
     </button>
     <button
       class="panel-tab"
+      class:active={gitStore.activeSubTab === 'commit'}
       onclick={() => onSelectTab?.('commit')}
     >
       Commit
@@ -281,8 +283,15 @@
         <span class="commit-count">{totalChanges}</span>
       {/if}
     </button>
-    <button class="panel-tab muted" disabled>
+    <button
+      class="panel-tab"
+      class:active={gitStore.activeSubTab === 'stash'}
+      onclick={() => onSelectTab?.('stash')}
+    >
       Stash
+      {#if gitStore.stashCount > 0}
+        <span class="commit-count">{gitStore.stashCount}</span>
+      {/if}
     </button>
   </div>
 

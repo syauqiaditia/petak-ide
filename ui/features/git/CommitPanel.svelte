@@ -145,6 +145,12 @@
     contextMenuOpen = false;
 
     switch (actionId) {
+      case 'stash_changes':
+        gitStore.openStash();
+        break;
+      case 'unstash_changes':
+        gitStore.openUnstash();
+        break;
       case 'add_to_vcs':
         await gitStore.stageFiles([path]);
         break;

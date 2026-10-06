@@ -128,8 +128,8 @@ class GitStore {
     this.isStashModalOpen = false;
   }
 
-  // Active sub tab ('commit' | 'log' | 'conflict')
-  activeSubTab = $state<'commit' | 'log' | 'conflict'>(
+  // Active sub tab ('commit' | 'log' | 'stash' | 'conflict')
+  activeSubTab = $state<'commit' | 'log' | 'stash' | 'conflict'>(
     typeof window !== 'undefined' && (window.location.search.includes('log') || window.location.search.includes('sub=log'))
       ? 'log'
       : typeof window !== 'undefined' && window.location.search.includes('conflict')

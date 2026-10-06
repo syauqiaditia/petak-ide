@@ -116,6 +116,54 @@ pub fn stash_drop(exec: &dyn Exec, repo: &Path, index: usize) -> Result<String, 
     git(exec, repo, &["stash", "drop", &selector])
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StashFileEntry {
+    pub path: String,
+    pub status: String,
+}
+
+/// List files contained in a specific stash entry.
+pub fn stash_files(exec: &dyn Exec, repo: &Path, index: usize) -> Result<Vec<StashFileEntry>, GitError> {
+    let selector = format!("stash@{{{}}}", index);
+    let out = git(exec, repo, &["stash", "show", &selector, "--name-status"])?;
+    let mut files = Vec::new();
+    for line in out.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+        let status = parts[0];
+        let path = if parts.len() > 1 { parts[1..].join(" ") } else { parts[0].to_string() };
+        files.push(StashFileEntry {
+            path,
+            status: match status.chars().next() {
+                Some('A') => "added".to_string(),
+                Some('D') => "deleted".to_string(),
+                _ => "modified".to_string(),
+            },
+        });
+    }
+    Ok(files)
+}
+
+/// Cherry-pick/apply a single file from stash into the working tree.
+pub fn stash_apply_file(exec: &dyn Exec, repo: &Path, index: usize, file_path: &str) -> Result<String, GitError> {
+    let selector = format!("stash@{{{}}}", index);
+    git(exec, repo, &["checkout", &selector, "--", file_path])
+}
+
+/// Show unified diff of a specific file in a stash entry.
+pub fn stash_file_diff(exec: &dyn Exec, repo: &Path, index: usize, file_path: &str) -> Result<String, GitError> {
+    let parent = format!("stash@{{{}}}^1", index);
+    let target = format!("stash@{{{}}}", index);
+    git(exec, repo, &["diff", &parent, &target, "--", file_path])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

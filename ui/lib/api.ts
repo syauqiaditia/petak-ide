@@ -313,6 +313,11 @@ export interface GitStashEntry {
   date: string;
 }
 
+export interface GitStashFileEntry {
+  path: string;
+  status: 'modified' | 'added' | 'deleted' | string;
+}
+
 export interface GitCompareFile {
   path: string;
   oldPath?: string;
@@ -1466,6 +1471,33 @@ export const api = {
     } catch (e: any) {
       console.warn('git_stash_drop fallback:', e);
       return 'Dropped stash';
+    }
+  },
+
+  async gitStashFiles(root: string, index: number): Promise<GitStashFileEntry[]> {
+    try {
+      return await invoke<GitStashFileEntry[]>('git_stash_files', { root, index });
+    } catch (e: any) {
+      console.warn('git_stash_files fallback:', e);
+      return [];
+    }
+  },
+
+  async gitStashApplyFile(root: string, index: number, filePath: string): Promise<string> {
+    try {
+      return await invoke<string>('git_stash_apply_file', { root, index, filePath });
+    } catch (e: any) {
+      console.warn('git_stash_apply_file fallback:', e);
+      return `Restored ${filePath}`;
+    }
+  },
+
+  async gitStashFileDiff(root: string, index: number, filePath: string): Promise<string> {
+    try {
+      return await invoke<string>('git_stash_file_diff', { root, index, filePath });
+    } catch (e: any) {
+      console.warn('git_stash_file_diff fallback:', e);
+      return '';
     }
   },
 
