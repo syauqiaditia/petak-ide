@@ -42,10 +42,22 @@ export interface FlatDisplayItem {
 }
 
 /**
+ * Check if a TreeNode is or contains the current active branch.
+ */
+export function nodeHasCurrent(node: TreeNode): boolean {
+  if (node.type === 'branch') {
+    return !!node.branch.isCurrent;
+  }
+  return node.children.some(nodeHasCurrent);
+}
+
+/**
  * Build prefix tree from a flat list of branches.
  * e.g. "canary/prod/1.9.0" -> folder "canary/" -> subfolder "prod/" -> leaf "1.9.0"
- * If only 1 branch has that prefix, it can optionally remain unnested or nested.
- * Default: split by "/" into hierarchy.
+ * Current active branch (isCurrent === true) is always sorted to the top:
+ * - If at root level, placed at the top preceding other branches & folders.
+ * - If inside a folder, that folder is sorted to the top of its level, and within it,
+ *   subfolders containing the active branch or the active leaf are sorted to the top.
  */
 export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
   interface IntermediateFolder {
@@ -73,16 +85,15 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
   }
 
   function convert(inter: IntermediateFolder, prefixAcc: string): TreeNode[] {
-    const result: TreeNode[] = [];
-
     // Sort folder keys alphabetically
     const folderKeys = Array.from(inter.folders.keys()).sort();
+    const folderNodes: TreeFolderNode[] = [];
     for (const key of folderKeys) {
       const sub = inter.folders.get(key)!;
       const full = prefixAcc + key;
       const children = convert(sub, full);
       const total = countBranchesInTree(children);
-      result.push({
+      folderNodes.push({
         type: 'folder',
         prefix: key,
         fullPrefix: full,
@@ -93,17 +104,32 @@ export function buildBranchTree(branches: BranchInfo[]): TreeNode[] {
 
     // Sort leaves alphabetically
     const sortedLeaves = [...inter.leaves].sort((a, b) => a.name.localeCompare(b.name));
+    const leafNodes: TreeLeafNode[] = [];
     for (const leaf of sortedLeaves) {
       const parts = leaf.name.split('/');
       const leafName = parts[parts.length - 1];
-      result.push({
+      leafNodes.push({
         type: 'branch',
         branch: leaf,
         displayName: leafName,
       });
     }
 
-    return result;
+    // Rule 1: If any leaf at this level is the current active branch, it goes to the very top (index 0)
+    const activeLeafIdx = leafNodes.findIndex((l) => l.branch.isCurrent);
+    if (activeLeafIdx !== -1) {
+      const activeLeaf = leafNodes.splice(activeLeafIdx, 1)[0];
+      return [activeLeaf, ...folderNodes, ...leafNodes];
+    }
+
+    // Rule 2: If any folder at this level contains the current active branch, that folder goes to the very top (index 0)
+    const activeFolderIdx = folderNodes.findIndex((f) => nodeHasCurrent(f));
+    if (activeFolderIdx !== -1) {
+      const activeFolder = folderNodes.splice(activeFolderIdx, 1)[0];
+      return [activeFolder, ...folderNodes, ...leafNodes];
+    }
+
+    return [...folderNodes, ...leafNodes];
   }
 
   return convert(root, '');

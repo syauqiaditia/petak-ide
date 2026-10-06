@@ -11,6 +11,10 @@
   import BuildPanel from '../run/BuildPanel.svelte';
   import LogcatPanel from '../run/LogcatPanel.svelte';
   import ToolchainsPanel from '../toolchain/ToolchainsPanel.svelte';
+  import BranchPanel from '../git/BranchPanel.svelte';
+  import LogView from '../git/LogView.svelte';
+  import CommitDetail from '../git/CommitDetail.svelte';
+  import { gitStore } from '../git/git.svelte';
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
   import { runStore } from '../run/runStore.svelte';
   import { logcatStore } from '../run/logcatStore.svelte';
@@ -44,8 +48,10 @@
 
   let tabs = $state<TabItem[]>([]);
   let activeTabId = $state<number | null>(null);
-  let activeSection = $state<'run' | 'build' | 'logcat' | 'problems' | 'usages' | 'terminal' | 'toolchains'>(
-    typeof window !== 'undefined' && window.location.search.includes('tab=run')
+  let activeSection = $state<'git' | 'run' | 'build' | 'logcat' | 'problems' | 'usages' | 'terminal' | 'toolchains'>(
+    typeof window !== 'undefined' && (window.location.search.includes('tab=git') || window.location.search.includes('git') || window.location.search.includes('sub=log'))
+      ? 'git'
+      : typeof window !== 'undefined' && window.location.search.includes('tab=run')
       ? 'run'
       : typeof window !== 'undefined' && window.location.search.includes('tab=build')
       ? 'build'
@@ -261,6 +267,14 @@
     return tabs.map((t) => ({ id: t.id, name: t.name }));
   }
 
+  export function openGit() {
+    activeSection = 'git';
+    gitStore.activeSubTab = 'log';
+    if (folderPath && (!gitStore.root || gitStore.root !== folderPath)) {
+      gitStore.refresh(folderPath);
+    }
+  }
+
   export function openRun() {
     activeSection = 'run';
   }
@@ -299,8 +313,19 @@
     }, 10);
   }
 
-  export function getActiveSection(): 'problems' | 'terminal' | 'run' | 'build' | 'logcat' | 'usages' | 'toolchains' {
+  export function getActiveSection(): 'git' | 'problems' | 'terminal' | 'run' | 'build' | 'logcat' | 'usages' | 'toolchains' {
     return activeSection;
+  }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key === '9') {
+      e.preventDefault();
+      if (activeSection === 'git') {
+        onClose();
+      } else {
+        openGit();
+      }
+    }
   }
 
   onMount(async () => {
@@ -418,6 +443,8 @@
   });
 </script>
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 <div class="terminal-panel" style:height="{panelHeight}px">
   <div
     class="panel-resize-handle"
@@ -431,6 +458,19 @@
   ></div>
   <div class="panel-header">
     <div class="tabs-list">
+      <!-- Git Tab (Urutan #1, ⌘9) -->
+      <div
+        class="panel-tab git-tab"
+        class:active={activeSection === 'git'}
+        onclick={openGit}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') openGit(); }}
+      >
+        <span class="tab-label">Git</span>
+        <span class="tab-badge git-shortcut-badge">⌘9</span>
+      </div>
+
       <!-- Run Tab -->
       <div
         class="panel-tab run-tab"
@@ -640,6 +680,16 @@
       <button class="term-nav-btn" onclick={() => findInTerminal('prev')} title="Previous match">▲</button>
       <button class="term-nav-btn" onclick={() => findInTerminal('next')} title="Next match">▼</button>
       <button class="term-close-btn" onclick={() => (terminalSearchOpen = false)} title="Close search">✕</button>
+    </div>
+  {/if}
+
+  {#if activeSection === 'git'}
+    <div class="panel-body git-body">
+      <div class="git-dock-layout">
+        <BranchPanel onSelectTab={(t) => (gitStore.activeSubTab = t)} />
+        <LogView />
+        <CommitDetail />
+      </div>
     </div>
   {/if}
 
@@ -900,12 +950,43 @@
   .problems-body,
   .run-body,
   .build-body,
-  .logcat-body {
+  .logcat-body,
+  .git-body {
     padding: 0;
     flex: 1;
     min-height: 0;
     display: flex;
     overflow: hidden;
+  }
+
+  .git-body {
+    background: #121317;
+  }
+
+  .git-dock-layout {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+  }
+
+  .git-shortcut-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    background: #1e2027;
+    border: 1px solid #2a2d36;
+    border-radius: 4px;
+    color: #9aa0a6;
+    letter-spacing: 0.5px;
+  }
+
+  .panel-tab.git-tab.active .git-shortcut-badge {
+    background: #232a3b;
+    border-color: #3b4b6b;
+    color: #8bb2ff;
   }
 
   .logcat-badge {

@@ -3,7 +3,7 @@
  */
 
 export const MIN_BOTTOM_PANEL_HEIGHT = 120;
-export const DEFAULT_BOTTOM_PANEL_HEIGHT = 232;
+export const DEFAULT_BOTTOM_PANEL_HEIGHT = 270;
 
 /**
  * Clamp bottom panel height:

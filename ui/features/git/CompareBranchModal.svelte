@@ -9,12 +9,14 @@
     baseBranch = 'HEAD',
     targetBranch = '',
     scopePath = '',
+    title = '',
     onclose = () => {},
   }: {
     root: string;
     baseBranch?: string;
     targetBranch: string;
     scopePath?: string;
+    title?: string;
     onclose: () => void;
   } = $props();
 
@@ -126,7 +128,7 @@
     <!-- Top Header -->
     <div class="compare-header">
       <div class="header-info">
-        <span class="compare-title">Compare with Branch</span>
+        <span class="compare-title">{title || 'Compare with Branch'}</span>
         <span class="branch-pill base">{baseBranch}</span>
         <span class="vs-text">↔</span>
         <span class="branch-pill target">{targetBranch}</span>

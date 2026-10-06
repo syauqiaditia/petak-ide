@@ -207,6 +207,21 @@
     }, 20);
   }
 
+  async function openGit() {
+    if (terminalOpen && terminalComponent?.getActiveSection?.() === 'git') {
+      terminalOpen = false;
+      return;
+    }
+    if (!TerminalPanelComponent) {
+      const mod = await import('./features/terminal/TerminalPanel.svelte');
+      TerminalPanelComponent = mod.default;
+    }
+    terminalOpen = true;
+    setTimeout(() => {
+      terminalComponent?.openGit?.();
+    }, 20);
+  }
+
   $effect(() => {
     if (toolchainStore.settingsModalOpen) {
       toolchainStore.settingsModalOpen = false;
@@ -659,6 +674,10 @@
       if ((e.metaKey || e.ctrlKey) && e.key === '6') {
         e.preventDefault();
         toggleAgentsPanel();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '9') {
+        e.preventDefault();
+        openGit();
       }
     };
     window.addEventListener('keydown', handleKeydownMirror);
