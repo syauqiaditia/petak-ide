@@ -1,0 +1,2534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak IDE — Git Bottom Dock & Left Commit Architecture Mockup</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      /* Petak Layer Depth Tokens (Variant A: Cursor/Linear) */
+      --bg-base: #0c0d10;
+      --bg-surface: #121317;
+      --bg-workspace: #15161b;
+      --bg-elevated: #1c1e24;
+      --bg-hover: #22242c;
+      --bg-active: #2a2d36;
+
+      --border-default: #1e2027;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-focus: rgba(110, 168, 255, 0.5);
+
+      --text-main: #d8d9dc;
+      --text-muted: #8b8f98;
+      --text-dim: #60646c;
+      --accent: #6ea8ff;
+      --accent-hover: #82b5ff;
+      --accent-subtle: rgba(110, 168, 255, 0.12);
+
+      --success: #7fc98f;
+      --success-bg: rgba(127, 201, 143, 0.12);
+      --warning: #e8b45a;
+      --warning-bg: rgba(232, 180, 90, 0.12);
+      --danger: #f07a74;
+      --danger-bg: rgba(240, 122, 116, 0.12);
+      --purple: #b388ff;
+
+      --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-code: 'JetBrains Mono', monospace;
+    }
+
+    body.variant-b {
+      --bg-base: #0a0b0d;
+      --bg-surface: #0f1013;
+      --bg-workspace: #141518;
+      --bg-elevated: #191a1e;
+      --bg-hover: #1f2025;
+      --bg-active: #26282e;
+      --border-default: #17181c;
+      --accent: #7c9aff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      user-select: none;
+      -webkit-user-select: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Showcase Control Bar */
+    .showcase-banner {
+      height: 32px;
+      background: #0d0f13;
+      border-bottom: 1px solid #1f222a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 11.5px;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+    .showcase-title {
+      font-weight: 600;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .showcase-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge-pill {
+      background: rgba(110, 168, 255, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(110, 168, 255, 0.25);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .showcase-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      color: var(--text-main);
+      border-radius: 4px;
+      padding: 3px 9px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .showcase-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
+    }
+    .showcase-btn.active {
+      background: var(--accent-subtle);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* App Shell Container */
+    #app-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Mock IDE Titlebar */
+    .ide-titlebar {
+      height: 38px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .traffic-lights {
+      display: flex;
+      gap: 7px;
+      margin-right: 4px;
+    }
+    .traffic-light {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .tl-close { background: #ff5f56; }
+    .tl-min { background: #ffbd2e; }
+    .tl-max { background: #27c93f; }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 600;
+      color: var(--text-main);
+      font-size: 13px;
+    }
+    .brand-logo {
+      display: grid;
+      grid-template-columns: 6px 6px;
+      gap: 2px;
+    }
+    .brand-logo-cell {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 1px;
+    }
+    .brand-logo-cell.dim { background: rgba(110, 168, 255, 0.4); }
+
+    .project-pill {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .project-pill:hover { background: var(--bg-hover); }
+
+    .branch-pill {
+      background: rgba(110, 168, 255, 0.08);
+      border: 1px solid rgba(110, 168, 255, 0.2);
+      border-radius: 5px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .branch-pill:hover {
+      background: rgba(110, 168, 255, 0.16);
+      border-color: var(--accent);
+    }
+
+    /* Top Toolbar VCS Quick Actions */
+    .top-toolbar-git {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 6px;
+    }
+    .top-git-btn {
+      padding: 3px 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      color: var(--text-main);
+      border-radius: 4px;
+      font-size: 11.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .top-git-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
+    }
+    .top-git-btn.push {
+      background: var(--accent-subtle);
+      border-color: rgba(110, 168, 255, 0.3);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .top-git-btn.push:hover {
+      background: rgba(110, 168, 255, 0.22);
+    }
+    .top-push-badge {
+      background: var(--accent);
+      color: #0b0c10;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 0 5px;
+      border-radius: 8px;
+      line-height: 14px;
+    }
+
+    .titlebar-spacer { flex: 1; }
+
+    /* IDE Main Area */
+    .ide-main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Left Activity Rail (48px) */
+    .left-rail {
+      width: 48px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .rail-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+      background: transparent;
+      border: none;
+    }
+    .rail-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .rail-btn.active {
+      background: var(--bg-active);
+      color: var(--accent);
+    }
+    .rail-btn.active::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      width: 3px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 0 2px 2px 0;
+    }
+    .rail-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: var(--accent);
+      color: #0c0d10;
+      font-size: 9px;
+      font-weight: 700;
+      border-radius: 6px;
+      padding: 1px 4px;
+      line-height: 1;
+    }
+
+    /* ========================================================= */
+    /* PANEL KIRI (Tool Window Samping): COMMIT & STASH           */
+    /* ========================================================= */
+    .left-dock-panel {
+      width: 320px;
+      min-width: 250px;
+      max-width: 500px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    /* Clean Switcher Header: Changes vs Stashes */
+    .left-dock-header {
+      height: 40px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px 0 12px;
+      flex-shrink: 0;
+    }
+    .dock-tab-switcher {
+      display: flex;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .dock-tab-btn {
+      padding: 3px 9px;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+      border: none;
+      background: transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .dock-tab-btn:hover {
+      color: var(--text-main);
+    }
+    .dock-tab-btn.active {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+    }
+    .dock-tab-counter {
+      font-size: 10px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: var(--bg-hover);
+      color: var(--text-muted);
+    }
+    .dock-tab-btn.active .dock-tab-counter {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+
+    .dock-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .dock-tool-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .dock-tool-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+
+    /* Content Area inside Left Dock */
+    .left-dock-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Tab View 1: Changes & Commit Box */
+    #view-changes {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .changes-tree-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 6px;
+      min-height: 120px;
+    }
+    .tree-group-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 6px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .tree-group-header:hover {
+      background: var(--bg-hover);
+    }
+    .group-arrow {
+      transition: transform 0.15s ease;
+      color: var(--text-dim);
+    }
+    .group-arrow.collapsed {
+      transform: rotate(-90deg);
+    }
+    .group-counter {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    .custom-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border: 1px solid #3c404d;
+      border-radius: 3px;
+      background: var(--bg-base);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+      position: relative;
+    }
+    .custom-checkbox:checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .custom-checkbox:checked::after {
+      content: '';
+      width: 4px;
+      height: 7px;
+      border: solid #0c0d10;
+      border-width: 0 1.5px 1.5px 0;
+      transform: rotate(45deg);
+      position: absolute;
+      top: 1px;
+    }
+
+    /* File Row — Clean Minimalist ala Android Studio New UI */
+    .file-row {
+      display: flex;
+      align-items: center;
+      padding: 5px 8px;
+      margin: 1px 0;
+      border-radius: 4px;
+      gap: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.1s ease;
+      position: relative;
+    }
+    .file-row:hover {
+      background: var(--bg-hover);
+    }
+    .file-row.selected {
+      background: var(--bg-active);
+    }
+
+    /* File status communicates through text color, NOT ugly square badges */
+    .file-row.file-modified .file-leaf-name {
+      color: #58a6ff; /* Clean Blue */
+    }
+    .file-row.file-added .file-leaf-name {
+      color: #56c989; /* Clean Green */
+    }
+    .file-row.file-deleted .file-leaf-name {
+      color: #f07a74; /* Clean Red */
+      text-decoration: line-through;
+    }
+    .file-row.file-unversioned .file-leaf-name {
+      color: #8fa0b5;
+    }
+
+    .file-leaf-name {
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .file-dir-path {
+      font-size: 11px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .file-hover-actions {
+      display: none;
+      align-items: center;
+      gap: 3px;
+      margin-left: auto;
+    }
+    .file-row:hover .file-hover-actions {
+      display: flex;
+    }
+    .file-action-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .file-action-icon:hover {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+    }
+
+    /* Resizer Splitter between Tree and Commit Message Box */
+    .vertical-splitter {
+      height: 4px;
+      background: var(--border-default);
+      cursor: row-resize;
+      transition: background 0.15s ease;
+      flex-shrink: 0;
+    }
+    .vertical-splitter:hover {
+      background: var(--accent);
+    }
+
+    /* Single Spacious Commit Message Box */
+    .commit-box {
+      padding: 10px;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 145px;
+      min-height: 100px;
+      max-height: 250px;
+      flex-shrink: 0;
+    }
+    .commit-textarea {
+      flex: 1;
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      font-size: 12.5px;
+      padding: 8px 10px;
+      resize: none;
+      outline: none;
+      line-height: 1.45;
+      transition: border-color 0.15s ease;
+    }
+    .commit-textarea:focus {
+      border-color: var(--border-focus);
+    }
+    .commit-textarea::placeholder {
+      color: var(--text-dim);
+    }
+
+    .commit-actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .amend-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .primary-split-btn {
+      display: flex;
+      align-items: center;
+      background: var(--accent);
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .primary-split-action {
+      background: transparent;
+      border: none;
+      color: #0b0c10;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .primary-split-action:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .primary-split-dropdown {
+      background: transparent;
+      border: none;
+      border-left: 1px solid rgba(0, 0, 0, 0.2);
+      color: #0b0c10;
+      padding: 5px 7px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .primary-split-dropdown:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    /* Tab View 2: Stashes List */
+    #view-stashes {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      padding: 8px;
+      gap: 8px;
+    }
+    .stash-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px 6px;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .stash-count-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .stash-new-btn {
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      border: 1px solid rgba(110, 168, 255, 0.25);
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stash-new-btn:hover {
+      background: rgba(110, 168, 255, 0.22);
+    }
+    .stash-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .stash-card {
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 6px;
+      padding: 9px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .stash-card:hover {
+      border-color: #2e323e;
+      background: var(--bg-elevated);
+    }
+    .stash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .stash-id {
+      font-family: var(--font-code);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .stash-time {
+      font-size: 10.5px;
+      color: var(--text-dim);
+    }
+    .stash-msg {
+      font-size: 12px;
+      color: var(--text-main);
+      font-weight: 500;
+      line-height: 1.35;
+    }
+    .stash-meta {
+      font-size: 11px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stash-actions-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 3px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .stash-act-btn {
+      padding: 2px 7px;
+      font-size: 10.5px;
+      border-radius: 3px;
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .stash-act-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .stash-act-btn.apply {
+      color: var(--accent);
+      border-color: rgba(110, 168, 255, 0.3);
+      background: var(--accent-subtle);
+    }
+
+    /* Vertical Resizer between Left Dock and Center */
+    .workspace-splitter-v {
+      width: 4px;
+      background: var(--border-default);
+      cursor: col-resize;
+      transition: background 0.15s ease;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .workspace-splitter-v:hover {
+      background: var(--accent);
+    }
+
+    /* ========================================================= */
+    /* AREA TENGAH & BAWAH CONTAINER (Flex: 1 Column)            */
+    /* ========================================================= */
+    .center-and-bottom-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+      min-height: 0;
+      background: var(--bg-workspace);
+    }
+
+    /* ========================================================= */
+    /* AREA TENGAH: EDITOR KODE & DIFF VIEW                      */
+    /* ========================================================= */
+    .center-editor-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 180px;
+      background: var(--bg-workspace);
+    }
+
+    /* Editor Tabs Bar */
+    .editor-tabs-bar {
+      height: 36px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .editor-tab {
+      height: 35px;
+      padding: 0 12px;
+      background: transparent;
+      border: none;
+      border-top: 2px solid transparent;
+      border-right: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+    .editor-tab:hover {
+      background: var(--bg-surface);
+      color: var(--text-main);
+    }
+    .editor-tab.active {
+      background: var(--bg-workspace);
+      color: var(--text-main);
+      border-top-color: var(--accent);
+      font-weight: 500;
+    }
+    .editor-tab.diff-tab {
+      color: var(--accent);
+    }
+    .editor-tab.diff-tab.active {
+      border-top-color: var(--accent);
+    }
+    .editor-tab-close {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+    .editor-tab-close:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+
+    /* Editor Breadcrumbs */
+    .editor-breadcrumbs {
+      height: 22px;
+      background: var(--bg-workspace);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 11px;
+      color: var(--text-dim);
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .crumb-sep { opacity: 0.5; }
+    .crumb-active { color: var(--text-muted); font-weight: 500; }
+
+    /* Editor Content Canvas */
+    .editor-content-canvas {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* Normal Code View */
+    .code-view-container {
+      flex: 1;
+      display: flex;
+      overflow: auto;
+      font-family: var(--font-code);
+      font-size: 12.5px;
+      line-height: 1.6;
+      background: var(--bg-workspace);
+    }
+    .code-gutter {
+      width: 44px;
+      padding: 12px 10px 12px 0;
+      text-align: right;
+      color: #434752;
+      border-right: 1px solid var(--border-subtle);
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .code-lines {
+      padding: 12px 16px;
+      flex: 1;
+      color: #abb2bf;
+    }
+    .code-kw { color: #c678dd; }
+    .code-fn { color: #61afef; }
+    .code-str { color: #98c379; }
+    .code-comment { color: #5c6370; font-style: italic; }
+    .code-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background: var(--accent);
+      vertical-align: middle;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+    /* Diff View inside Editor */
+    .diff-view-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-workspace);
+    }
+    .diff-sticky-toolbar {
+      height: 34px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .diff-file-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .diff-badge-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+    .diff-stats {
+      font-family: var(--font-code);
+      font-size: 11px;
+      display: flex;
+      gap: 4px;
+    }
+    .stat-add { color: var(--success); }
+    .stat-del { color: var(--danger); }
+
+    .diff-view-mode-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .diff-mini-btn {
+      padding: 2px 7px;
+      font-size: 11px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      color: var(--text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .diff-mini-btn.active {
+      color: var(--text-main);
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .diff-split-panes {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: auto;
+      font-family: var(--font-code);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .diff-pane-col {
+      overflow-x: auto;
+      border-right: 1px solid var(--border-default);
+    }
+    .diff-row {
+      display: flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 0 8px;
+    }
+    .diff-row.del {
+      background: rgba(240, 122, 116, 0.12);
+      color: #f7a5a1;
+    }
+    .diff-row.add {
+      background: rgba(127, 201, 143, 0.12);
+      color: #a3e0b0;
+    }
+    .diff-ln {
+      width: 32px;
+      text-align: right;
+      padding-right: 8px;
+      color: #4b4f5a;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    /* Horizontal Resizer between Editor and Bottom Panel */
+    .workspace-splitter-h {
+      height: 4px;
+      background: var(--border-default);
+      cursor: row-resize;
+      transition: background 0.15s ease;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .workspace-splitter-h:hover {
+      background: var(--accent);
+    }
+
+    /* ========================================================= */
+    /* PANEL BAWAH (BOTTOM DOCK): SEJAJAR TERMINAL, RUN, GIT ⌘9  */
+    /* ========================================================= */
+    .bottom-dock {
+      height: 270px;
+      min-height: 120px;
+      max-height: 520px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .bottom-dock.collapsed {
+      height: 32px !important;
+      min-height: 32px !important;
+    }
+
+    /* Bottom Dock Header Bar with Tabs */
+    .bottom-dock-header {
+      height: 32px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      flex-shrink: 0;
+    }
+    .dock-tabs-list {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .dock-tab {
+      height: 31px;
+      padding: 0 11px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+      background: transparent;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+    }
+    .dock-tab:hover {
+      color: var(--text-main);
+    }
+    .dock-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+      background: rgba(110, 168, 255, 0.05);
+    }
+    .dock-shortcut-badge {
+      font-size: 9.5px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--bg-hover);
+      color: var(--text-dim);
+    }
+    .dock-tab.active .dock-shortcut-badge {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+
+    .dock-header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dock-filter-select {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      outline: none;
+    }
+    .dock-search-box {
+      display: flex;
+      align-items: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      padding: 2px 6px;
+      gap: 4px;
+    }
+    .dock-search-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-main);
+      font-size: 11px;
+      width: 110px;
+    }
+    .dock-ctrl-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+    }
+    .dock-ctrl-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+
+    /* Git Tool Window Body inside Bottom Dock */
+    .bottom-git-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Column 1: Branches Tree Sidebar */
+    .git-branches-sidebar {
+      width: 200px;
+      min-width: 160px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .branch-tree-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 4px;
+    }
+    .branch-group-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-dim);
+      padding: 6px 8px 3px;
+      letter-spacing: 0.3px;
+    }
+    .branch-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .branch-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .branch-item.active {
+      background: var(--accent-subtle);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .branch-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+    .branch-item.active .branch-dot {
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    /* Column 2: Commit Graph & History Table */
+    .git-log-table-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+      border-right: 1px solid var(--border-default);
+      background: var(--bg-workspace);
+    }
+    .log-table-header {
+      height: 26px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .log-table-rows {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .log-table-row {
+      display: flex;
+      align-items: center;
+      height: 27px;
+      padding: 0 10px;
+      font-size: 11.5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+    .log-table-row:hover {
+      background: var(--bg-hover);
+    }
+    .log-table-row.selected {
+      background: var(--bg-active);
+      border-left: 2px solid var(--accent);
+    }
+
+    .col-graph { width: 42px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .col-msg { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; padding-right: 16px; }
+    .col-msg-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .col-author { width: 110px; color: var(--text-muted); font-size: 11px; flex-shrink: 0; padding-right: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .col-date { width: 90px; color: var(--text-dim); font-size: 11px; flex-shrink: 0; padding-right: 10px; }
+    .col-sha { width: 65px; font-family: var(--font-code); color: var(--text-dim); font-size: 11px; flex-shrink: 0; text-align: right; }
+
+    .tag-badge {
+      font-size: 9.5px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+    .tag-head {
+      background: rgba(110, 168, 255, 0.2);
+      color: var(--accent);
+      border: 1px solid rgba(110, 168, 255, 0.4);
+    }
+    .tag-branch {
+      background: rgba(127, 201, 143, 0.2);
+      color: var(--success);
+      border: 1px solid rgba(127, 201, 143, 0.4);
+    }
+
+    /* Column 3: Commit Details Inspector */
+    .git-inspector-pane {
+      width: 320px;
+      min-width: 260px;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 10px 12px;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .inspector-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .inspector-sha {
+      font-family: var(--font-code);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .inspector-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .inspector-msg-box {
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      padding: 8px 10px;
+      font-family: var(--font-code);
+      font-size: 11.5px;
+      color: var(--text-main);
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    .inspector-files-title {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .inspector-file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .inspector-file-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .inspector-file-row:hover {
+      background: var(--bg-hover);
+    }
+    .badge-diff-m { color: #58a6ff; font-weight: 700; font-family: var(--font-code); font-size: 10px; }
+    .badge-diff-a { color: #56c989; font-weight: 700; font-family: var(--font-code); font-size: 10px; }
+
+    /* Other Bottom Tabs (Dummy view when Terminal/Problems selected) */
+    .dummy-bottom-view {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      font-size: 13px;
+      background: var(--bg-base);
+      font-family: var(--font-code);
+    }
+
+    /* Bottom Status Bar */
+    .ide-statusbar {
+      height: 24px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      z-index: 50;
+    }
+    .statusbar-left, .statusbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .statusbar-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .statusbar-item:hover {
+      color: var(--text-main);
+    }
+    .statusbar-branch {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Toast Notification */
+    #toast-notification {
+      position: fixed;
+      bottom: 34px;
+      right: 20px;
+      background: #1f232c;
+      border: 1px solid var(--accent);
+      color: var(--text-main);
+      padding: 8px 14px;
+      border-radius: 5px;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #toast-notification.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Showcase Banner -->
+  <div class="showcase-banner">
+    <div class="showcase-title">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <span>Petak IDE Git Layout Prototype</span>
+      <span class="badge-pill">Kiri: Commit & Stash | Bawah: Git Log ⌘9 | Tengah: Editor</span>
+    </div>
+
+    <div class="showcase-controls">
+      <!-- Toggle Left Panel Tab -->
+      <span style="color: var(--text-dim); font-size: 11px;">Kiri:</span>
+      <button class="showcase-btn active" id="btn-showcase-changes" onclick="switchLeftTab('changes')">Changes (3)</button>
+      <button class="showcase-btn" id="btn-showcase-stashes" onclick="switchLeftTab('stashes')">Stashes (2)</button>
+
+      <span style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">Tengah:</span>
+      <button class="showcase-btn active" id="btn-showcase-editor" onclick="switchCenterView('code')">Code Editor</button>
+      <button class="showcase-btn" id="btn-showcase-diff" onclick="switchCenterView('diff')">[Diff] Tab</button>
+
+      <span style="color: var(--text-dim); font-size: 11px; margin-left: 6px;">Bawah (⌘9):</span>
+      <button class="showcase-btn active" id="btn-showcase-git" onclick="switchBottomDockTab('git')">Git Active</button>
+      <button class="showcase-btn" id="btn-showcase-terminal" onclick="switchBottomDockTab('terminal')">Terminal</button>
+      <button class="showcase-btn" onclick="toggleBottomDock()">Toggle Dock</button>
+
+      <button class="showcase-btn" onclick="toggleThemeVariant()">🎨 Varian A/B</button>
+    </div>
+  </div>
+
+  <!-- App Shell Container -->
+  <div id="app-container">
+
+    <!-- IDE Titlebar -->
+    <div class="ide-titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-light tl-close"></div>
+        <div class="traffic-light tl-min"></div>
+        <div class="traffic-light tl-max"></div>
+      </div>
+      <div class="brand-group">
+        <div class="brand-logo">
+          <div class="brand-logo-cell"></div>
+          <div class="brand-logo-cell dim"></div>
+          <div class="brand-logo-cell dim"></div>
+          <div class="brand-logo-cell"></div>
+        </div>
+        <span>Petak</span>
+      </div>
+
+      <div class="project-pill">
+        <span>petak-p4m</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+      </div>
+
+      <!-- Current Branch Pill with ahead/behind status -->
+      <div class="branch-pill" title="Current Git Branch: feat/p3-git (Click to switch)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+        <span>feat/p3-git</span>
+        <span style="font-size: 11px; opacity: 0.85;">↑2</span>
+      </div>
+
+      <!-- Top Toolbar Remote VCS Quick Actions -->
+      <div class="top-toolbar-git">
+        <button class="top-git-btn" onclick="showToast('Project updated (Rebased with origin/main)')" title="Update Project (⌘T)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+          <span>Update</span>
+        </button>
+
+        <button class="top-git-btn push" onclick="showToast('Pushed 2 commits to origin/feat/p3-git')" title="Push Commits (⌘⇧K)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6M12 9v12"></path></svg>
+          <span>Push</span>
+          <span class="top-push-badge">2</span>
+        </button>
+      </div>
+
+      <div class="titlebar-spacer"></div>
+
+      <div style="font-size: 11px; color: var(--text-dim);">
+        Petak Studio • v0.8.3
+      </div>
+    </div>
+
+    <!-- IDE Main Workspace Area -->
+    <div class="ide-main">
+
+      <!-- Left Activity Rail -->
+      <div class="left-rail">
+        <button class="rail-btn" title="Project Files (⌘1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h7l2 2h9v12H3z"></path></svg>
+        </button>
+
+        <button class="rail-btn active" id="rail-git-btn" title="Commit & Git (⌘K)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+          <span class="rail-badge">3</span>
+        </button>
+
+        <button class="rail-btn" title="Merge Requests (⌘5)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"></path></svg>
+        </button>
+
+        <button class="rail-btn" title="Run & Test (⌘6)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+      </div>
+
+      <!-- ==================================================== -->
+      <!-- PANEL KIRI (Tool Window Samping): COMMIT & STASH      -->
+      <!-- ==================================================== -->
+      <div class="left-dock-panel" id="left-dock-panel">
+
+        <!-- Clean Segmented Tab Switcher: Changes (3) | Stashes (2) -->
+        <div class="left-dock-header">
+          <div class="dock-tab-switcher">
+            <button class="dock-tab-btn active" id="tab-btn-changes" onclick="switchLeftTab('changes')">
+              <span>Changes</span>
+              <span class="dock-tab-counter" id="counter-changes">3</span>
+            </button>
+            <button class="dock-tab-btn" id="tab-btn-stashes" onclick="switchLeftTab('stashes')">
+              <span>Stashes</span>
+              <span class="dock-tab-counter" id="counter-stashes">2</span>
+            </button>
+          </div>
+
+          <div class="dock-header-actions">
+            <button class="dock-tool-btn" onclick="switchCenterView('diff')" title="Open Diff in Editor (⌘D)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+            </button>
+            <button class="dock-tool-btn" onclick="refreshStatus()" title="Refresh Git Status">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+            </button>
+            <button class="dock-tool-btn" onclick="showToast('Commit settings')" title="Settings">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Left Dock Body -->
+        <div class="left-dock-body">
+
+          <!-- View 1: Changes List & Commit Message Box -->
+          <div id="view-changes">
+            <div class="changes-tree-area">
+              <!-- Single Clean Group Header -->
+              <div class="tree-group-header" onclick="toggleChangesGroup()">
+                <svg class="group-arrow" id="changes-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                <input type="checkbox" class="custom-checkbox" id="check-all" checked onclick="event.stopPropagation(); toggleSelectAll(this.checked)">
+                <span style="font-weight: 600;">Changes</span>
+                <span class="group-counter">(3)</span>
+              </div>
+
+              <div id="changes-file-list">
+                <!-- File 1: Modified (Blue text, no badge box!) -->
+                <div class="file-row file-modified selected" onclick="selectChangeFile('CommitPanel.svelte')">
+                  <input type="checkbox" class="custom-checkbox file-check" checked onclick="event.stopPropagation()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--text-dim); flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span class="file-leaf-name">CommitPanel.svelte</span>
+                  <span class="file-dir-path">ui/features/git</span>
+                  <div class="file-hover-actions">
+                    <button class="file-action-icon" onclick="event.stopPropagation(); switchCenterView('diff')" title="View Diff">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                    </button>
+                    <button class="file-action-icon" onclick="event.stopPropagation(); showToast('Reverted CommitPanel.svelte')" title="Revert">↺</button>
+                  </div>
+                </div>
+
+                <!-- File 2: Modified -->
+                <div class="file-row file-modified" onclick="selectChangeFile('DiffView.svelte')">
+                  <input type="checkbox" class="custom-checkbox file-check" checked onclick="event.stopPropagation()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--text-dim); flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span class="file-leaf-name">DiffView.svelte</span>
+                  <span class="file-dir-path">ui/features/git</span>
+                  <div class="file-hover-actions">
+                    <button class="file-action-icon" onclick="event.stopPropagation(); switchCenterView('diff')" title="View Diff">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                    </button>
+                    <button class="file-action-icon" onclick="event.stopPropagation(); showToast('Reverted DiffView.svelte')" title="Revert">↺</button>
+                  </div>
+                </div>
+
+                <!-- File 3: Added (Green text, no badge box!) -->
+                <div class="file-row file-added" onclick="selectChangeFile('StashList.svelte')">
+                  <input type="checkbox" class="custom-checkbox file-check" checked onclick="event.stopPropagation()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--text-dim); flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span class="file-leaf-name">StashList.svelte</span>
+                  <span class="file-dir-path">ui/features/git</span>
+                  <div class="file-hover-actions">
+                    <button class="file-action-icon" onclick="event.stopPropagation(); switchCenterView('diff')" title="View Diff">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                    </button>
+                    <button class="file-action-icon" onclick="event.stopPropagation(); showToast('Reverted StashList.svelte')" title="Revert">↺</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Collapsible Group: Unversioned -->
+              <div class="tree-group-header" onclick="toggleUnversionedGroup()" style="margin-top: 6px;">
+                <svg class="group-arrow collapsed" id="unversioned-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                <input type="checkbox" class="custom-checkbox" id="check-unversioned" onclick="event.stopPropagation()">
+                <span style="font-weight: 600;">Unversioned Files</span>
+                <span class="group-counter">(1)</span>
+              </div>
+              <div id="unversioned-file-list" style="display: none;">
+                <div class="file-row file-unversioned" onclick="selectChangeFile('mockup_bottom_git.html')">
+                  <input type="checkbox" class="custom-checkbox file-check" onclick="event.stopPropagation()">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--text-dim); flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <span class="file-leaf-name">mockup_bottom_git.html</span>
+                  <span class="file-dir-path">docs/git-redesign</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Resizer Splitter between Tree and Commit Box -->
+            <div class="vertical-splitter" id="left-v-splitter" title="Drag to resize commit box"></div>
+
+            <!-- Spacious Commit Message Box -->
+            <div class="commit-box" id="left-commit-box">
+              <textarea class="commit-textarea" id="commit-textarea" placeholder="Commit message">feat(git): add bottom Git dock and clean left Commit/Stash switcher</textarea>
+
+              <div class="commit-actions-bar">
+                <label class="amend-wrap">
+                  <input type="checkbox" class="custom-checkbox" id="check-amend">
+                  <span>Amend</span>
+                </label>
+
+                <div class="primary-split-btn">
+                  <button class="primary-split-action" onclick="commitChanges()">
+                    <span>Commit</span>
+                  </button>
+                  <button class="primary-split-dropdown" onclick="showToast('Option: Commit and Push (⌘⌥K)')" title="Commit Options">▾</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- View 2: Stashes List -->
+          <div id="view-stashes" style="display: none;">
+            <div class="stash-toolbar">
+              <span class="stash-count-label">SAVED STASHES (2)</span>
+              <button class="stash-new-btn" onclick="showToast('Creating new stash from current changes...')">
+                <span>+ Stash Changes</span>
+              </button>
+            </div>
+
+            <div class="stash-list">
+              <!-- Stash 0 -->
+              <div class="stash-card">
+                <div class="stash-header">
+                  <span class="stash-id">stash@{0}</span>
+                  <span class="stash-time">2 hours ago</span>
+                </div>
+                <div class="stash-msg">WIP on feat/p3-git: bottom dock layout experiment</div>
+                <div class="stash-meta">
+                  <span>branch: feat/p3-git</span>
+                  <span>•</span>
+                  <span>4 files changed</span>
+                </div>
+                <div class="stash-actions-row">
+                  <button class="stash-act-btn apply" onclick="showToast('Applied stash@{0}')">Apply</button>
+                  <button class="stash-act-btn" onclick="showToast('Popped stash@{0}')">Pop</button>
+                  <button class="stash-act-btn" onclick="switchCenterView('diff')" title="View diff of stash">Diff</button>
+                  <button class="stash-act-btn" onclick="showToast('Dropped stash@{0}')" style="margin-left: auto; color: var(--danger);">Drop</button>
+                </div>
+              </div>
+
+              <!-- Stash 1 -->
+              <div class="stash-card">
+                <div class="stash-header">
+                  <span class="stash-id">stash@{1}</span>
+                  <span class="stash-time">Yesterday</span>
+                </div>
+                <div class="stash-msg">quick save token palette before pull</div>
+                <div class="stash-meta">
+                  <span>branch: main</span>
+                  <span>•</span>
+                  <span>2 files changed</span>
+                </div>
+                <div class="stash-actions-row">
+                  <button class="stash-act-btn apply" onclick="showToast('Applied stash@{1}')">Apply</button>
+                  <button class="stash-act-btn" onclick="showToast('Popped stash@{1}')">Pop</button>
+                  <button class="stash-act-btn" onclick="switchCenterView('diff')">Diff</button>
+                  <button class="stash-act-btn" onclick="showToast('Dropped stash@{1}')" style="margin-left: auto; color: var(--danger);">Drop</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Vertical Resizer Handle between Left Dock and Center -->
+      <div class="workspace-splitter-v" id="main-splitter-v" title="Drag to resize panel kiri"></div>
+
+      <!-- ==================================================== -->
+      <!-- AREA TENGAH & BAWAH CONTAINER                       -->
+      <!-- ==================================================== -->
+      <div class="center-and-bottom-container">
+
+        <!-- ================================================== -->
+        <!-- AREA TENGAH: EDITOR KODE & DIFF VIEW               -->
+        <!-- ================================================== -->
+        <div class="center-editor-area" id="center-editor-area">
+
+          <!-- Editor Tabs Bar -->
+          <div class="editor-tabs-bar">
+            <button class="editor-tab" id="editor-tab-app" onclick="switchCenterView('app')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6M8 6 2 12 8 18"></polyline></svg>
+              <span>App.svelte</span>
+              <span class="editor-tab-close">✕</span>
+            </button>
+
+            <button class="editor-tab active" id="editor-tab-commit" onclick="switchCenterView('code')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6M8 6 2 12 8 18"></polyline></svg>
+              <span>CommitPanel.svelte</span>
+              <span class="editor-tab-close">✕</span>
+            </button>
+
+            <button class="editor-tab diff-tab" id="editor-tab-diff" onclick="switchCenterView('diff')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+              <span>[Diff] CommitPanel.svelte</span>
+              <span class="editor-tab-close" onclick="closeDiffTab(event)">✕</span>
+            </button>
+          </div>
+
+          <!-- Editor Breadcrumbs -->
+          <div class="editor-breadcrumbs">
+            <span>petak-p4m</span>
+            <span class="crumb-sep">/</span>
+            <span>ui</span>
+            <span class="crumb-sep">/</span>
+            <span>features</span>
+            <span class="crumb-sep">/</span>
+            <span>git</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb-active" id="crumb-file-name">CommitPanel.svelte</span>
+          </div>
+
+          <!-- Editor Content Canvas -->
+          <div class="editor-content-canvas">
+
+            <!-- View A: Code Editor View -->
+            <div class="code-view-container" id="editor-code-view">
+              <div class="code-gutter">
+                <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div>
+              </div>
+              <div class="code-lines">
+                <div><span class="code-kw">import</span> { onMount } <span class="code-kw">from</span> <span class="code-str">'svelte'</span>;</div>
+                <div><span class="code-kw">import</span> { gitStore } <span class="code-kw">from</span> <span class="code-str">'./git.svelte'</span>;</div>
+                <div><span class="code-kw">import</span> StashList <span class="code-kw">from</span> <span class="code-str">'./StashList.svelte'</span>;</div>
+                <div><br></div>
+                <div><span class="code-comment">// Petak IDE: UQi Layout Architecture</span></div>
+                <div><span class="code-comment">// Panel Kiri: Commit & Stash | Panel Bawah: Git Tool Window (⌘9) | Tengah: Editor</span></div>
+                <div><span class="code-kw">export function</span> <span class="code-fn">initGitWorkstation</span>() {</div>
+                <div>  <span class="code-kw">const</span> dock = gitStore.<span class="code-fn">getBottomDock</span>();</div>
+                <div>  dock.<span class="code-fn">registerTab</span>({</div>
+                <div>    id: <span class="code-str">'git'</span>,</div>
+                <div>    label: <span class="code-str">'Git'</span>,</div>
+                <div>    shortcut: <span class="code-str">'⌘9'</span>,</div>
+                <div>    view: <span class="code-str">'LogGraphAndInspector'</span></div>
+                <div>  });</div>
+                <div>}</div>
+                <div><br></div>
+                <div><span class="code-comment">// Developer mengoding di area tengah sembari memantau perubahan aktif &amp; stash di kiri!</span></div>
+                <div><span class="code-kw">let</span> activeFile = <span class="code-str">'CommitPanel.svelte'</span>;<span class="code-cursor"></span></div>
+              </div>
+            </div>
+
+            <!-- View B: Diff View (Interchangeable Tab in Editor) -->
+            <div class="diff-view-container" id="editor-diff-view" style="display: none;">
+              <div class="diff-sticky-toolbar">
+                <div class="diff-file-meta">
+                  <span class="diff-badge-pill">MODIFIED</span>
+                  <span style="font-weight: 600;">ui/features/git/CommitPanel.svelte</span>
+                  <div class="diff-stats">
+                    <span class="stat-add">+44</span>
+                    <span class="stat-del">-12</span>
+                  </div>
+                </div>
+
+                <div class="diff-view-mode-group">
+                  <button class="diff-mini-btn active">Side-by-Side</button>
+                  <button class="diff-mini-btn">Unified</button>
+                  <span style="color: var(--text-dim); font-size: 11px; margin: 0 4px;">|</span>
+                  <button class="diff-mini-btn" onclick="showToast('Jump to Previous Hunk')">▲ Prev</button>
+                  <button class="diff-mini-btn" onclick="showToast('Jump to Next Hunk')">▼ Next (1 of 3)</button>
+                  <button class="diff-mini-btn" style="color: var(--success);" onclick="showToast('Hunk staged')">Stage Hunk ✓</button>
+                </div>
+              </div>
+
+              <div class="diff-split-panes">
+                <!-- Left Pane: Original -->
+                <div class="diff-pane-col">
+                  <div class="diff-row"><span class="diff-ln">12</span><span>- const showTabs = ['Commit', 'History', 'Stash'];</span></div>
+                  <div class="diff-row del"><span class="diff-ln">13</span><span>- let activeTab = 'Commit'; // Bertumpuk di dock kiri</span></div>
+                  <div class="diff-row del"><span class="diff-ln">14</span><span>- let isModalOpen = true;</span></div>
+                  <div class="diff-row"><span class="diff-ln">15</span><span>  export function render() {</span></div>
+                  <div class="diff-row del"><span class="diff-ln">16</span><span>-   return &lt;div class="badge-square M"&gt;M&lt;/div&gt;;</span></div>
+                  <div class="diff-row"><span class="diff-ln">17</span><span>  }</span></div>
+                </div>
+
+                <!-- Right Pane: Modified -->
+                <div class="diff-pane-col">
+                  <div class="diff-row"><span class="diff-ln">12</span><span>+ const leftTabs = ['Changes', 'Stashes'];</span></div>
+                  <div class="diff-row add"><span class="diff-ln">13</span><span>+ // Arsitektur Baru: History pindah ke Bottom Dock (⌘9)</span></div>
+                  <div class="diff-row add"><span class="diff-ln">14</span><span>+ let bottomGitActive = true;</span></div>
+                  <div class="diff-row"><span class="diff-ln">15</span><span>  export function render() {</span></div>
+                  <div class="diff-row add"><span class="diff-ln">16</span><span>+   return &lt;span class="file-text modified"&gt;File&lt;/span&gt;;</span></div>
+                  <div class="diff-row"><span class="diff-ln">17</span><span>  }</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Horizontal Resizer Handle between Editor and Bottom Panel -->
+        <div class="workspace-splitter-h" id="main-splitter-h" title="Drag to resize panel bawah (double click to toggle)"></div>
+
+        <!-- ================================================== -->
+        <!-- PANEL BAWAH (BOTTOM DOCK): TOOL WINDOW 'GIT' (⌘9)  -->
+        <!-- ================================================== -->
+        <div class="bottom-dock" id="bottom-dock">
+
+          <!-- Bottom Dock Header with Tabs -->
+          <div class="bottom-dock-header">
+            <div class="dock-tabs-list">
+              <button class="dock-tab" id="dock-tab-term" onclick="switchBottomDockTab('terminal')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5M12 19 20 19"/></svg>
+                <span>Terminal</span>
+              </button>
+
+              <button class="dock-tab" id="dock-tab-run" onclick="switchBottomDockTab('run')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Run</span>
+              </button>
+
+              <button class="dock-tab" id="dock-tab-logcat" onclick="switchBottomDockTab('logcat')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>
+                <span>Logcat</span>
+              </button>
+
+              <button class="dock-tab" id="dock-tab-problems" onclick="switchBottomDockTab('problems')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>Problems</span>
+                <span class="dock-shortcut-badge">0</span>
+              </button>
+
+              <!-- TOOL WINDOW GIT AKTIF SEJAJAR TERMINAL & PROBLEMS (⌘9) -->
+              <button class="dock-tab active" id="dock-tab-git" onclick="switchBottomDockTab('git')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>
+                <span>Git</span>
+                <span class="dock-shortcut-badge">⌘9</span>
+              </button>
+            </div>
+
+            <!-- Toolbar Kanan Bottom Dock -->
+            <div class="dock-header-controls" id="dock-git-controls">
+              <select class="dock-filter-select" onchange="showToast('Filter branch: ' + this.value)">
+                <option>Branch: All</option>
+                <option selected>Branch: feat/p3-git</option>
+                <option>Branch: main</option>
+              </select>
+
+              <select class="dock-filter-select" onchange="showToast('Filter author: ' + this.value)">
+                <option>User: All</option>
+                <option>syauqi1717</option>
+              </select>
+
+              <div class="dock-search-box">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Filter commits… (⌘F)" oninput="filterCommits(this.value)">
+              </div>
+
+              <button class="dock-ctrl-btn" onclick="toggleMaximizeBottomDock()" title="Maximize / Restore">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9M9 21 3 21 3 15M21 3 14 10M3 21 10 14"/></svg>
+              </button>
+              <button class="dock-ctrl-btn" onclick="toggleBottomDock()" title="Close Git Tool Window (⌘9)">✕</button>
+            </div>
+          </div>
+
+          <!-- Bottom Dock Content: Git Tool Window View (3 Columns) -->
+          <div class="bottom-git-body" id="bottom-git-view">
+
+            <!-- Kolom 1: Branches & Remote Tree Sidebar (200px) -->
+            <div class="git-branches-sidebar">
+              <div class="branch-tree-content">
+                <div class="branch-group-label">LOCAL BRANCHES</div>
+                <div class="branch-item active" onclick="switchBranch('feat/p3-git')">
+                  <span class="branch-dot"></span>
+                  <span>feat/p3-git</span>
+                </div>
+                <div class="branch-item" onclick="switchBranch('main')">
+                  <span class="branch-dot" style="opacity: 0.4;"></span>
+                  <span>main</span>
+                </div>
+                <div class="branch-item" onclick="switchBranch('fix/lsp-hover')">
+                  <span class="branch-dot" style="opacity: 0.4;"></span>
+                  <span>fix/lsp-hover</span>
+                </div>
+
+                <div class="branch-group-label" style="margin-top: 6px;">REMOTE (ORIGIN)</div>
+                <div class="branch-item" onclick="switchBranch('origin/feat/p3-git')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/></svg>
+                  <span>origin/feat/p3-git</span>
+                </div>
+                <div class="branch-item" onclick="switchBranch('origin/main')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/></svg>
+                  <span>origin/main</span>
+                </div>
+
+                <div class="branch-group-label" style="margin-top: 6px;">TAGS</div>
+                <div class="branch-item" onclick="showToast('Tag v0.8.2')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                  <span>v0.8.2</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Kolom 2: Interactive Commit Graph & Table (Flex 1) -->
+            <div class="git-log-table-area">
+              <div class="log-table-header">
+                <span class="col-graph" style="font-weight: 600;">Graph</span>
+                <span class="col-msg" style="font-weight: 600; color: var(--text-muted);">Commit Message</span>
+                <span class="col-author" style="font-weight: 600; color: var(--text-dim);">Author</span>
+                <span class="col-date" style="font-weight: 600; color: var(--text-dim);">Date</span>
+                <span class="col-sha" style="font-weight: 600; color: var(--text-dim);">SHA</span>
+              </div>
+
+              <div class="log-table-rows" id="log-table-rows">
+
+                <!-- Commit 1 (Active / HEAD) -->
+                <div class="log-table-row selected" onclick="selectCommit(0)">
+                  <div class="col-graph">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                      <line x1="12" y1="12" x2="12" y2="24" stroke="#6ea8ff" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="4.5" fill="#6ea8ff"/>
+                    </svg>
+                  </div>
+                  <div class="col-msg">
+                    <span class="tag-badge tag-head">HEAD</span>
+                    <span class="tag-badge tag-branch">feat/p3-git</span>
+                    <span class="col-msg-text" style="font-weight: 500;">feat(ui): add resizable and collapsible Project tree with horizontal scroll</span>
+                  </div>
+                  <div class="col-author">syauqi1717</div>
+                  <div class="col-date">Today 11:20</div>
+                  <div class="col-sha">6b8cbec</div>
+                </div>
+
+                <!-- Commit 2 -->
+                <div class="log-table-row" onclick="selectCommit(1)">
+                  <div class="col-graph">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                      <line x1="12" y1="0" x2="12" y2="24" stroke="#7fc98f" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="4.5" fill="#7fc98f"/>
+                    </svg>
+                  </div>
+                  <div class="col-msg">
+                    <span class="col-msg-text">feat(git): redesign Git &amp; Diff UI ala Android Studio New UI and fix laggy continue rebase</span>
+                  </div>
+                  <div class="col-author">syauqi1717</div>
+                  <div class="col-date">Today 08:38</div>
+                  <div class="col-sha">ef34a32</div>
+                </div>
+
+                <!-- Commit 3 -->
+                <div class="log-table-row" onclick="selectCommit(2)">
+                  <div class="col-graph">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                      <line x1="12" y1="0" x2="12" y2="24" stroke="#b388ff" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="4.5" fill="#b388ff"/>
+                    </svg>
+                  </div>
+                  <div class="col-msg">
+                    <span class="tag-badge" style="background: rgba(179, 136, 255, 0.2); color: var(--purple);">origin/main</span>
+                    <span class="col-msg-text">fix(editor): fix missing document code on tab switch with breakpoints</span>
+                  </div>
+                  <div class="col-author">syauqi1717</div>
+                  <div class="col-date">Yesterday</div>
+                  <div class="col-sha">1ff1d99</div>
+                </div>
+
+                <!-- Commit 4 -->
+                <div class="log-table-row" onclick="selectCommit(3)">
+                  <div class="col-graph">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                      <line x1="12" y1="0" x2="12" y2="24" stroke="#e8b45a" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="4.5" fill="#e8b45a"/>
+                    </svg>
+                  </div>
+                  <div class="col-msg">
+                    <span class="col-msg-text">feat: add code editor breakpoint gutter and auto-detect physical devices in top runner</span>
+                  </div>
+                  <div class="col-author">syauqi1717</div>
+                  <div class="col-date">Oct 4</div>
+                  <div class="col-sha">b175a14</div>
+                </div>
+
+                <!-- Commit 5 -->
+                <div class="log-table-row" onclick="selectCommit(4)">
+                  <div class="col-graph">
+                    <svg width="24" height="24" viewBox="0 0 24 24">
+                      <line x1="12" y1="0" x2="12" y2="12" stroke="#56c989" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="4.5" fill="#56c989"/>
+                    </svg>
+                  </div>
+                  <div class="col-msg">
+                    <span class="col-msg-text">feat(fs): add external file copy dialog ala Android Studio and eliminate run freeze</span>
+                  </div>
+                  <div class="col-author">syauqi1717</div>
+                  <div class="col-date">Oct 3</div>
+                  <div class="col-sha">7d28cea</div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Kolom 3: Commit Details Inspector (320px) -->
+            <div class="git-inspector-pane" id="git-inspector-pane">
+              <div class="inspector-header">
+                <span class="inspector-sha" id="insp-sha">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+                  <span id="insp-sha-text">commit 6b8cbec</span>
+                </span>
+                <button class="dock-ctrl-btn" onclick="showToast('Copied SHA: 6b8cbec')" title="Copy SHA">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </div>
+
+              <div class="inspector-meta" id="insp-author">
+                Author: <strong>Muhammad Syauqi</strong> &lt;syauqi@ist.id&gt;<br>
+                Date: Tue Oct 6 11:20:14 2026 +0700
+              </div>
+
+              <div class="inspector-msg-box" id="insp-message">feat(ui): add resizable and collapsible Project tree with horizontal scroll, fix LSP hover and lint tooltip glitch with opaque background and auto-placement</div>
+
+              <div class="inspector-files-title">CHANGED FILES (3)</div>
+              <div class="inspector-file-list" id="insp-file-list">
+                <div class="inspector-file-row">
+                  <span class="badge-diff-m">M</span>
+                  <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ui/shell/FileTree.svelte</span>
+                  <span style="font-size: 10.5px; color: var(--success);">+85</span>
+                  <span style="font-size: 10.5px; color: var(--danger);">-24</span>
+                </div>
+                <div class="inspector-file-row">
+                  <span class="badge-diff-m">M</span>
+                  <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ui/features/editor/LspHover.svelte</span>
+                  <span style="font-size: 10.5px; color: var(--success);">+42</span>
+                  <span style="font-size: 10.5px; color: var(--danger);">-10</span>
+                </div>
+                <div class="inspector-file-row">
+                  <span class="badge-diff-a">A</span>
+                  <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">ui/shell/treeResizeLogic.ts</span>
+                  <span style="font-size: 10.5px; color: var(--success);">+64</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Dummy View for Other Bottom Tabs (Terminal, Problems, etc.) -->
+          <div class="dummy-bottom-view" id="bottom-dummy-view" style="display: none;">
+            <div id="dummy-content-text">$ zsh — Terminal 1 (ready)</div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Bottom Status Bar -->
+    <div class="ide-statusbar">
+      <div class="statusbar-left">
+        <div class="statusbar-item" onclick="showToast('Git branch: feat/p3-git')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+          <span class="statusbar-branch">feat/p3-git</span>
+          <span style="font-size: 10px; opacity: 0.8;">↑2</span>
+        </div>
+        <div class="statusbar-item">
+          <span style="color: var(--success);">●</span>
+          <span>Git: Ready</span>
+        </div>
+        <div class="statusbar-item" onclick="toggleBottomDock()">
+          <span style="color: var(--accent);">[⌘9]</span>
+          <span>Git Tool Window Active</span>
+        </div>
+      </div>
+
+      <div class="statusbar-right">
+        <div class="statusbar-item">UTF-8</div>
+        <div class="statusbar-item">Spaces: 2</div>
+        <div class="statusbar-item">Svelte</div>
+        <div class="statusbar-item">Ln 18, Col 24</div>
+        <div class="statusbar-item" style="color: var(--text-dim);">RAM: 412 MB</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast Notification Box -->
+  <div id="toast-notification">Notification</div>
+
+  <!-- Interactive JavaScript -->
+  <script>
+    // Commit details data for interactive bottom dock inspector
+    const commitsData = [
+      {
+        sha: '6b8cbec',
+        fullSha: '6b8cbec8129841804240751927',
+        author: 'Muhammad Syauqi <syauqi@ist.id>',
+        date: 'Tue Oct 6 11:20:14 2026 +0700',
+        message: 'feat(ui): add resizable and collapsible Project tree with horizontal scroll, fix LSP hover and lint tooltip glitch with opaque background and auto-placement',
+        files: [
+          { name: 'ui/shell/FileTree.svelte', status: 'M', add: '+85', del: '-24' },
+          { name: 'ui/features/editor/LspHover.svelte', status: 'M', add: '+42', del: '-10' },
+          { name: 'ui/shell/treeResizeLogic.ts', status: 'A', add: '+64', del: '' }
+        ]
+      },
+      {
+        sha: 'ef34a32',
+        fullSha: 'ef34a32fdebb7d34a0f44b2701a6fc571ea159be',
+        author: 'Muhammad Syauqi <syauqi@ist.id>',
+        date: 'Tue Oct 6 08:38:35 2026 +0700',
+        message: 'feat(git): redesign Git & Diff UI ala Android Studio New UI and fix laggy continue rebase with loading state and auto-stage',
+        files: [
+          { name: 'ui/features/git/CommitPanel.svelte', status: 'M', add: '+44', del: '-44' },
+          { name: 'ui/features/git/ConflictView.svelte', status: 'M', add: '+36', del: '-6' },
+          { name: 'ui/features/git/DiffView.svelte', status: 'M', add: '+132', del: '-28' },
+          { name: 'ui/features/git/GitView.svelte', status: 'M', add: '+32', del: '-14' },
+          { name: 'ui/features/git/git.svelte.ts', status: 'A', add: '+6', del: '' }
+        ]
+      },
+      {
+        sha: '1ff1d99',
+        fullSha: '1ff1d997635c12847192837263541625471927',
+        author: 'Muhammad Syauqi <syauqi@ist.id>',
+        date: 'Mon Oct 5 16:45:21 2026 +0700',
+        message: 'fix(editor): fix missing document code on tab switch with breakpoints by initializing state cleanly with savedContent',
+        files: [
+          { name: 'ui/features/editor/EditorState.ts', status: 'M', add: '+18', del: '-5' },
+          { name: 'ui/features/editor/DocumentManager.ts', status: 'M', add: '+22', del: '-12' }
+        ]
+      },
+      {
+        sha: 'b175a14',
+        fullSha: 'b175a148927162547192837461527394857192',
+        author: 'Muhammad Syauqi <syauqi@ist.id>',
+        date: 'Sun Oct 4 19:12:08 2026 +0700',
+        message: 'feat: add code editor breakpoint gutter and auto-detect physical devices in top runner picker',
+        files: [
+          { name: 'ui/features/editor/BreakpointGutter.svelte', status: 'A', add: '+112', del: '' },
+          { name: 'ui/features/run/DeviceSelector.svelte', status: 'M', add: '+45', del: '-14' }
+        ]
+      },
+      {
+        sha: '7d28cea',
+        fullSha: '7d28cea7162534819203847561829304958172',
+        author: 'Muhammad Syauqi <syauqi@ist.id>',
+        date: 'Sat Oct 3 14:05:50 2026 +0700',
+        message: 'feat(fs): add external file copy dialog ala Android Studio and eliminate run freeze by ignoring build dirs in watcher',
+        files: [
+          { name: 'ui/shell/FileCopyDialog.svelte', status: 'A', add: '+78', del: '' },
+          { name: 'crates/core/src/watcher.rs', status: 'M', add: '+28', del: '-10' }
+        ]
+      }
+    ];
+
+    // Switch Left Tool Window tab (Changes vs Stashes)
+    function switchLeftTab(tab) {
+      const viewChanges = document.getElementById('view-changes');
+      const viewStashes = document.getElementById('view-stashes');
+      const tabBtnChanges = document.getElementById('tab-btn-changes');
+      const tabBtnStashes = document.getElementById('tab-btn-stashes');
+
+      const showcaseBtnChanges = document.getElementById('btn-showcase-changes');
+      const showcaseBtnStashes = document.getElementById('btn-showcase-stashes');
+
+      if (tab === 'changes') {
+        viewChanges.style.display = 'flex';
+        viewStashes.style.display = 'none';
+        tabBtnChanges.classList.add('active');
+        tabBtnStashes.classList.remove('active');
+        if (showcaseBtnChanges) showcaseBtnChanges.classList.add('active');
+        if (showcaseBtnStashes) showcaseBtnStashes.classList.remove('active');
+      } else {
+        viewChanges.style.display = 'none';
+        viewStashes.style.display = 'flex';
+        tabBtnChanges.classList.remove('active');
+        tabBtnStashes.classList.add('active');
+        if (showcaseBtnChanges) showcaseBtnChanges.classList.remove('active');
+        if (showcaseBtnStashes) showcaseBtnStashes.classList.add('active');
+      }
+    }
+
+    // Switch Center Editor View (Code vs Diff vs Other tab)
+    function switchCenterView(view) {
+      const codeView = document.getElementById('editor-code-view');
+      const diffView = document.getElementById('editor-diff-view');
+      const tabApp = document.getElementById('editor-tab-app');
+      const tabCommit = document.getElementById('editor-tab-commit');
+      const tabDiff = document.getElementById('editor-tab-diff');
+      const crumb = document.getElementById('crumb-file-name');
+
+      const scEditor = document.getElementById('btn-showcase-editor');
+      const scDiff = document.getElementById('btn-showcase-diff');
+
+      if (view === 'diff') {
+        codeView.style.display = 'none';
+        diffView.style.display = 'flex';
+        tabApp.classList.remove('active');
+        tabCommit.classList.remove('active');
+        tabDiff.classList.add('active');
+        tabDiff.style.display = 'flex';
+        crumb.textContent = '[Diff] CommitPanel.svelte';
+        if (scEditor) scEditor.classList.remove('active');
+        if (scDiff) scDiff.classList.add('active');
+      } else if (view === 'app') {
+        codeView.style.display = 'flex';
+        diffView.style.display = 'none';
+        tabApp.classList.add('active');
+        tabCommit.classList.remove('active');
+        tabDiff.classList.remove('active');
+        crumb.textContent = 'App.svelte';
+        if (scEditor) scEditor.classList.add('active');
+        if (scDiff) scDiff.classList.remove('active');
+      } else {
+        codeView.style.display = 'flex';
+        diffView.style.display = 'none';
+        tabApp.classList.remove('active');
+        tabCommit.classList.add('active');
+        tabDiff.classList.remove('active');
+        crumb.textContent = 'CommitPanel.svelte';
+        if (scEditor) scEditor.classList.add('active');
+        if (scDiff) scDiff.classList.remove('active');
+      }
+    }
+
+    function closeDiffTab(event) {
+      event.stopPropagation();
+      document.getElementById('editor-tab-diff').style.display = 'none';
+      switchCenterView('code');
+    }
+
+    function selectChangeFile(fileName) {
+      document.querySelectorAll('#changes-file-list .file-row').forEach(row => row.classList.remove('selected'));
+      event.currentTarget.classList.add('selected');
+      // Clicking file switches to Diff tab in center editor!
+      switchCenterView('diff');
+      showToast('Opened Diff: ' + fileName);
+    }
+
+    // Toggle Collapsible groups in Changes list
+    function toggleChangesGroup() {
+      const list = document.getElementById('changes-file-list');
+      const arrow = document.getElementById('changes-arrow');
+      if (list.style.display === 'none') {
+        list.style.display = 'block';
+        arrow.classList.remove('collapsed');
+      } else {
+        list.style.display = 'none';
+        arrow.classList.add('collapsed');
+      }
+    }
+
+    function toggleUnversionedGroup() {
+      const list = document.getElementById('unversioned-file-list');
+      const arrow = document.getElementById('unversioned-arrow');
+      if (list.style.display === 'none') {
+        list.style.display = 'block';
+        arrow.classList.remove('collapsed');
+      } else {
+        list.style.display = 'none';
+        arrow.classList.add('collapsed');
+      }
+    }
+
+    function toggleSelectAll(checked) {
+      document.querySelectorAll('#changes-file-list .file-check').forEach(cb => cb.checked = checked);
+    }
+
+    // Switch Bottom Dock tab (Git ⌘9 vs Terminal vs Logcat vs Problems)
+    function switchBottomDockTab(tab) {
+      const bottomDock = document.getElementById('bottom-dock');
+      bottomDock.classList.remove('collapsed');
+
+      const tabs = ['term', 'run', 'logcat', 'problems', 'git'];
+      tabs.forEach(t => {
+        const el = document.getElementById('dock-tab-' + t);
+        if (el) el.classList.remove('active');
+      });
+
+      const activeEl = document.getElementById('dock-tab-' + (tab === 'terminal' ? 'term' : tab));
+      if (activeEl) activeEl.classList.add('active');
+
+      const gitView = document.getElementById('bottom-git-view');
+      const gitControls = document.getElementById('dock-git-controls');
+      const dummyView = document.getElementById('bottom-dummy-view');
+      const dummyText = document.getElementById('dummy-content-text');
+
+      const scGit = document.getElementById('btn-showcase-git');
+      const scTerm = document.getElementById('btn-showcase-terminal');
+
+      if (tab === 'git') {
+        gitView.style.display = 'flex';
+        gitControls.style.display = 'flex';
+        dummyView.style.display = 'none';
+        if (scGit) scGit.classList.add('active');
+        if (scTerm) scTerm.classList.remove('active');
+      } else {
+        gitView.style.display = 'none';
+        gitControls.style.display = 'none';
+        dummyView.style.display = 'flex';
+        dummyText.textContent = tab === 'terminal' ? '$ zsh — Petak Integrated Terminal (ready)' :
+                               tab === 'run' ? '▶ Flutter Run: Running process on Pixel 8 Pro (pid 34810)' :
+                               tab === 'logcat' ? 'Logcat Stream: 124 lines captured (filter: com.bankjatim.connect)' :
+                               'Problems: No diagnostics or compiler errors found.';
+        if (scGit) scGit.classList.remove('active');
+        if (scTerm && tab === 'terminal') scTerm.classList.add('active');
+      }
+    }
+
+    // Toggle minimize/maximize bottom dock
+    function toggleBottomDock() {
+      const dock = document.getElementById('bottom-dock');
+      dock.classList.toggle('collapsed');
+      showToast(dock.classList.contains('collapsed') ? 'Bottom dock minimized' : 'Bottom dock restored (⌘9)');
+    }
+
+    function toggleMaximizeBottomDock() {
+      const dock = document.getElementById('bottom-dock');
+      if (dock.style.height === '480px') {
+        dock.style.height = '270px';
+      } else {
+        dock.style.height = '480px';
+      }
+    }
+
+    // Select Commit in Bottom Dock table and update Inspector
+    function selectCommit(index) {
+      const rows = document.querySelectorAll('#log-table-rows .log-table-row');
+      rows.forEach((r, i) => {
+        if (i === index) r.classList.add('selected');
+        else r.classList.remove('selected');
+      });
+
+      const commit = commitsData[index];
+      if (!commit) return;
+
+      document.getElementById('insp-sha-text').textContent = 'commit ' + commit.sha;
+      document.getElementById('insp-author').innerHTML = `Author: <strong>${commit.author.split('<')[0].trim()}</strong> &lt;${commit.author.split('<')[1] || ''}<br>Date: ${commit.date}`;
+      document.getElementById('insp-message').textContent = commit.message;
+
+      const fileList = document.getElementById('insp-file-list');
+      fileList.innerHTML = '';
+      commit.files.forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'inspector-file-row';
+        row.innerHTML = `
+          <span class="badge-diff-${f.status.toLowerCase()}">${f.status}</span>
+          <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.name}</span>
+          ${f.add ? `<span style="font-size: 10.5px; color: var(--success);">${f.add}</span>` : ''}
+          ${f.del ? `<span style="font-size: 10.5px; color: var(--danger);">${f.del}</span>` : ''}
+        `;
+        fileList.appendChild(row);
+      });
+    }
+
+    function switchBranch(branchName) {
+      document.querySelectorAll('.branch-item').forEach(b => b.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      showToast('Switched branch view to: ' + branchName);
+    }
+
+    function filterCommits(query) {
+      const rows = document.querySelectorAll('#log-table-rows .log-table-row');
+      const q = query.toLowerCase();
+      rows.forEach(r => {
+        const text = r.textContent.toLowerCase();
+        r.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+    }
+
+    function commitChanges() {
+      const msg = document.getElementById('commit-textarea').value.trim();
+      if (!msg) {
+        showToast('Please type a commit message first!');
+        return;
+      }
+      showToast('Committed: ' + msg.slice(0, 32) + '...');
+    }
+
+    function refreshStatus() {
+      showToast('Git status refreshed: 3 modified files');
+    }
+
+    function toggleThemeVariant() {
+      document.body.classList.toggle('variant-b');
+      showToast(document.body.classList.contains('variant-b') ? 'Switched to Varian B (Zed/Fleet Dark)' : 'Switched to Varian A (Cursor/Linear Dark)');
+    }
+
+    // Toast helper
+    function showToast(msg) {
+      const toast = document.getElementById('toast-notification');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2500);
+    }
+
+    // Keyboard Shortcuts: ⌘9 for Bottom Dock, ⌘K for Left Dock
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '9') {
+        e.preventDefault();
+        switchBottomDockTab('git');
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        switchLeftTab('changes');
+      }
+    });
+
+    // Interactive Resizing for splitters
+    (function initSplitters() {
+      // 1. Horizontal Splitter (Between Editor and Bottom Dock)
+      const hSplitter = document.getElementById('main-splitter-h');
+      const bottomDock = document.getElementById('bottom-dock');
+      let isDraggingH = false;
+      let startY = 0;
+      let startHeight = 0;
+
+      hSplitter.addEventListener('mousedown', (e) => {
+        isDraggingH = true;
+        startY = e.clientY;
+        startHeight = bottomDock.offsetHeight;
+        document.body.style.cursor = 'row-resize';
+      });
+
+      // 2. Vertical Splitter (Between Left Dock and Center)
+      const vSplitter = document.getElementById('main-splitter-v');
+      const leftDock = document.getElementById('left-dock-panel');
+      let isDraggingV = false;
+      let startX = 0;
+      let startWidth = 0;
+
+      vSplitter.addEventListener('mousedown', (e) => {
+        isDraggingV = true;
+        startX = e.clientX;
+        startWidth = leftDock.offsetWidth;
+        document.body.style.cursor = 'col-resize';
+      });
+
+      // 3. Vertical Splitter inside Left Dock (Between Tree and Commit Box)
+      const leftVSplitter = document.getElementById('left-v-splitter');
+      const leftCommitBox = document.getElementById('left-commit-box');
+      let isDraggingLeftV = false;
+      let startLeftY = 0;
+      let startLeftHeight = 0;
+
+      leftVSplitter.addEventListener('mousedown', (e) => {
+        isDraggingLeftV = true;
+        startLeftY = e.clientY;
+        startLeftHeight = leftCommitBox.offsetHeight;
+        document.body.style.cursor = 'row-resize';
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (isDraggingH) {
+          const dy = startY - e.clientY;
+          const newH = Math.max(120, Math.min(520, startHeight + dy));
+          bottomDock.style.height = newH + 'px';
+        }
+        if (isDraggingV) {
+          const dx = e.clientX - startX;
+          const newW = Math.max(240, Math.min(500, startWidth + dx));
+          leftDock.style.width = newW + 'px';
+        }
+        if (isDraggingLeftV) {
+          const dy = startLeftY - e.clientY;
+          const newH = Math.max(90, Math.min(260, startLeftHeight + dy));
+          leftCommitBox.style.height = newH + 'px';
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDraggingH || isDraggingV || isDraggingLeftV) {
+          isDraggingH = false;
+          isDraggingV = false;
+          isDraggingLeftV = false;
+          document.body.style.cursor = 'default';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

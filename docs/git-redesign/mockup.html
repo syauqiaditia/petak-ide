@@ -1,0 +1,2511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak Git Redesign Mockup (ala Android Studio New UI)</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      /* Petak Layer Depth Tokens (Variant A: Cursor/Linear) */
+      --bg-base: #0c0d10;
+      --bg-surface: #121317;
+      --bg-workspace: #15161b;
+      --bg-elevated: #1c1e24;
+      --bg-hover: #22242c;
+      --bg-active: #2a2d36;
+
+      --border-default: #1e2027;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-focus: rgba(110, 168, 255, 0.5);
+
+      --text-main: #d8d9dc;
+      --text-muted: #8b8f98;
+      --text-dim: #60646c;
+      --accent: #6ea8ff;
+      --accent-hover: #82b5ff;
+      --accent-subtle: rgba(110, 168, 255, 0.12);
+
+      --success: #7fc98f;
+      --success-bg: rgba(127, 201, 143, 0.12);
+      --warning: #e8b45a;
+      --warning-bg: rgba(232, 180, 90, 0.12);
+      --danger: #f07a74;
+      --danger-bg: rgba(240, 122, 116, 0.12);
+      --purple: #b388ff;
+
+      --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-code: 'JetBrains Mono', monospace;
+    }
+
+    body.variant-b {
+      --bg-base: #0a0b0d;
+      --bg-surface: #0f1013;
+      --bg-workspace: #141518;
+      --bg-elevated: #191a1e;
+      --bg-hover: #1f2025;
+      --bg-active: #26282e;
+      --border-default: #17181c;
+      --accent: #7c9aff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      user-select: none;
+      -webkit-user-select: none;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Control Banner for Mockup Showcase */
+    .showcase-banner {
+      height: 34px;
+      background: #111318;
+      border-bottom: 1px solid #232630;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 12px;
+      z-index: 100;
+    }
+    .showcase-title {
+      font-weight: 600;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .showcase-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge-pill {
+      background: rgba(110, 168, 255, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(110, 168, 255, 0.25);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .showcase-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      color: var(--text-main);
+      border-radius: 4px;
+      padding: 3px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .showcase-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
+    }
+    .showcase-btn.active {
+      background: var(--accent-subtle);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* App Shell Container */
+    #app-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Mock IDE Titlebar */
+    .ide-titlebar {
+      height: 38px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .traffic-lights {
+      display: flex;
+      gap: 7px;
+      margin-right: 4px;
+    }
+    .traffic-light {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .tl-close { background: #ff5f56; }
+    .tl-min { background: #ffbd2e; }
+    .tl-max { background: #27c93f; }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 600;
+      color: var(--text-main);
+      font-size: 13px;
+    }
+    .brand-logo {
+      display: grid;
+      grid-template-columns: 6px 6px;
+      gap: 2px;
+    }
+    .brand-logo-cell {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 1px;
+    }
+    .brand-logo-cell.dim { background: rgba(110, 168, 255, 0.4); }
+
+    .project-pill {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .project-pill:hover { background: var(--bg-hover); }
+
+    .branch-pill {
+      background: rgba(110, 168, 255, 0.08);
+      border: 1px solid rgba(110, 168, 255, 0.2);
+      border-radius: 5px;
+      padding: 3px 10px;
+      font-size: 12px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .branch-pill:hover {
+      background: rgba(110, 168, 255, 0.16);
+      border-color: var(--accent);
+    }
+
+    /* Top Toolbar VCS Quick Actions (Update & Push live in IDE top toolbar!) */
+    .top-toolbar-git {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 6px;
+    }
+    .top-git-btn {
+      padding: 3px 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      color: var(--text-main);
+      border-radius: 4px;
+      font-size: 11.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .top-git-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
+    }
+    .top-git-btn.push {
+      background: var(--accent-subtle);
+      border-color: rgba(110, 168, 255, 0.3);
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .top-git-btn.push:hover {
+      background: rgba(110, 168, 255, 0.22);
+    }
+    .top-push-badge {
+      background: var(--accent);
+      color: #0b0c10;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 0 5px;
+      border-radius: 8px;
+      line-height: 14px;
+    }
+
+    /* Bottom Status Bar (ala Android Studio) */
+    .ide-statusbar {
+      height: 24px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      z-index: 50;
+    }
+    .statusbar-left, .statusbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .statusbar-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .statusbar-item:hover {
+      color: var(--text-main);
+    }
+    .statusbar-branch {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .titlebar-spacer { flex: 1; }
+
+    /* IDE Main Area */
+    .ide-main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* Left Activity Rail (48px) */
+    .left-rail {
+      width: 48px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .rail-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+      background: transparent;
+      border: none;
+    }
+    .rail-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .rail-btn.active {
+      background: var(--bg-active);
+      color: var(--accent);
+    }
+    .rail-btn.active::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      width: 3px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 0 2px 2px 0;
+    }
+    .rail-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: var(--accent);
+      color: #0c0d10;
+      font-size: 9px;
+      font-weight: 700;
+      border-radius: 6px;
+      padding: 1px 4px;
+      line-height: 1;
+    }
+
+    /* Workspace Content Area */
+    .workspace-wrapper {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* ========================================================= */
+    /* CORE REDESIGNED GIT WORKSPACE                             */
+    /* ========================================================= */
+    .git-view-root {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-surface);
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* In Mode A (Dock): Git Tool Window width is 320px resizable */
+    body.mode-dock .git-view-root {
+      width: 320px;
+      min-width: 260px;
+      max-width: 580px;
+      border-right: 1px solid var(--border-default);
+      flex-shrink: 0;
+    }
+
+    body.mode-dock .vcs-header {
+      display: none;
+    }
+
+    /* Clean Commit Tool Window Header (ala Android Studio New UI) */
+    .commit-tool-header {
+      height: 38px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      flex-shrink: 0;
+    }
+    .commit-tool-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      letter-spacing: -0.2px;
+    }
+    .commit-tool-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tool-action-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .tool-action-btn:hover {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+    }
+
+    /* In Mode B (Full Tab): Git takes 100% width of workspace */
+    body.mode-full .git-view-root {
+      flex: 1;
+      width: 100%;
+      border-right: none;
+    }
+
+    /* New Clean VCS Header */
+    .vcs-header {
+      height: 42px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Segmented Navigation Tabs */
+    .vcs-segmented-nav {
+      display: flex;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .vcs-nav-tab {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      background: transparent;
+      transition: all 0.15s ease;
+    }
+    .vcs-nav-tab:hover {
+      color: var(--text-main);
+      background: var(--bg-hover);
+    }
+    .vcs-nav-tab.active {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+    .tab-counter {
+      background: var(--bg-hover);
+      color: var(--text-muted);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .vcs-nav-tab.active .tab-counter {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+    .vcs-nav-tab.conflict-tab {
+      color: var(--danger);
+    }
+    .vcs-nav-tab.conflict-tab .tab-counter {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .vcs-header-spacer { flex: 1; }
+
+    /* Unified VCS Remote Toolbar */
+    .vcs-remote-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Split Update Button (Pull / Rebase) */
+    .split-btn {
+      display: flex;
+      align-items: center;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      overflow: hidden;
+      transition: border-color 0.15s ease;
+    }
+    .split-btn:hover { border-color: var(--text-muted); }
+    .split-btn-action {
+      padding: 4px 9px;
+      font-size: 12px;
+      color: var(--text-main);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .split-btn-action:hover { background: var(--bg-hover); }
+    .split-btn-arrow {
+      padding: 4px 6px;
+      font-size: 10px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-left: 1px solid var(--border-default);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    .split-btn-arrow:hover { background: var(--bg-hover); color: var(--text-main); }
+
+    /* Push Accent Button */
+    .vcs-push-btn {
+      padding: 4px 10px;
+      background: var(--accent-subtle);
+      border: 1px solid rgba(110, 168, 255, 0.3);
+      color: var(--accent);
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .vcs-push-btn:hover {
+      background: rgba(110, 168, 255, 0.22);
+      border-color: var(--accent);
+    }
+    .push-badge {
+      background: var(--accent);
+      color: #0c0d10;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      line-height: 1;
+    }
+
+    .icon-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .icon-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-default);
+      color: var(--text-main);
+    }
+
+    /* In-Progress Operation Banner (Rebase / Merge) */
+    .vcs-op-banner {
+      height: 36px;
+      background: rgba(232, 180, 90, 0.12);
+      border-bottom: 1px solid rgba(232, 180, 90, 0.3);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--warning);
+      flex-shrink: 0;
+    }
+    .op-banner-actions {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .banner-action-btn {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .banner-abort {
+      background: transparent;
+      border-color: rgba(240, 122, 116, 0.4);
+      color: var(--danger);
+    }
+    .banner-abort:hover { background: var(--danger-bg); }
+    .banner-continue {
+      background: var(--warning);
+      color: #0c0d10;
+      font-weight: 600;
+    }
+    .banner-continue:hover { opacity: 0.9; }
+
+    /* ========================================================= */
+    /* CHANGES CONTAINER                                         */
+    /* ========================================================= */
+    .changes-container {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* Commit Pane */
+    .commit-pane {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-surface);
+      position: relative;
+    }
+
+    /* In Mode A: Commit Pane is 100% of the Tool Window width */
+    body.mode-dock .commit-pane {
+      flex: 1;
+      width: 100%;
+    }
+
+    /* In Mode B: Commit Pane is resizable on the left (e.g. 360px) */
+    body.mode-full .commit-pane {
+      width: 360px;
+      min-width: 280px;
+      max-width: 600px;
+      flex-shrink: 0;
+    }
+
+    /* Pane Toolbar: Select All */
+    .pane-toolbar {
+      height: 34px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      flex-shrink: 0;
+    }
+    .checkbox-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .checkbox-wrap:hover { color: var(--text-main); }
+    .custom-checkbox {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* Changes Tree Area */
+    .changes-tree-area {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 120px;
+      padding-top: 4px;
+    }
+
+    /* Single Clean Tree Group Header */
+    .tree-group-header {
+      height: 28px;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+      user-select: none;
+      cursor: default;
+    }
+    .tree-group-header:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .group-arrow-btn {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+    }
+    .group-arrow-btn:hover { color: var(--text-main); }
+    .group-arrow {
+      font-size: 9px;
+      transition: transform 0.15s ease;
+    }
+    .group-arrow.collapsed { transform: rotate(-90deg); }
+
+    .group-label-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      flex: 1;
+    }
+    .group-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .group-counter {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 400;
+    }
+
+    .file-row {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px 0 24px;
+      gap: 6px;
+      cursor: pointer;
+      position: relative;
+      border-radius: 4px;
+      margin: 1px 4px;
+      transition: background 0.1s ease;
+    }
+    .file-row:hover { background: var(--bg-hover); }
+    .file-row.selected {
+      background: rgba(110, 168, 255, 0.12);
+    }
+    .file-row.selected::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 3px;
+      bottom: 3px;
+      width: 2px;
+      background: var(--accent);
+      border-radius: 1px;
+    }
+
+    .file-icon {
+      flex-shrink: 0;
+      color: var(--text-dim);
+    }
+
+    .file-leaf-name {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Android Studio New UI: File status conveyed cleanly by text color */
+    .file-row.file-modified .file-leaf-name { color: #58a6ff; }
+    .file-row.file-added .file-leaf-name { color: #56c989; }
+    .file-row.file-unversioned .file-leaf-name { color: #7ee787; }
+
+    .file-dir-path {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-left: 4px;
+      flex: 1;
+    }
+
+    .file-hover-actions {
+      display: none;
+      align-items: center;
+      gap: 2px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .file-row:hover .file-hover-actions {
+      display: flex;
+    }
+    .file-action-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 11px;
+      background: transparent;
+      border: none;
+    }
+    .file-action-icon:hover {
+      background: var(--bg-elevated);
+      color: var(--text-main);
+    }
+
+    /* Vertical Splitter inside Commit Pane */
+    .vertical-splitter {
+      height: 5px;
+      background: var(--border-default);
+      cursor: row-resize;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.15s ease;
+    }
+    .vertical-splitter:hover, .vertical-splitter.dragging {
+      background: var(--accent);
+    }
+
+    /* Commit Message Box (Bottom) — Spacious & Clean */
+    .commit-box {
+      height: 165px;
+      min-height: 120px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      padding: 10px 12px;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Textarea Message with Proportional Font */
+    .commit-textarea {
+      flex: 1;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .commit-textarea:focus {
+      border-color: #3574f0;
+      box-shadow: 0 0 0 1px rgba(53, 116, 240, 0.35);
+    }
+    .commit-textarea::placeholder {
+      color: var(--text-dim);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+    }
+
+    /* Commit Actions Bar */
+    .commit-actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .amend-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    .amend-wrap:hover { color: var(--text-main); }
+
+    /* Primary Commit Split Button */
+    .primary-split-btn {
+      display: flex;
+      border-radius: 5px;
+      overflow: hidden;
+      background: #3574f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .primary-split-action {
+      padding: 6px 14px;
+      background: #3574f0;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+    }
+    .primary-split-action:hover { background: #4480fa; }
+    .primary-split-dropdown {
+      padding: 6px 8px;
+      background: #2b61cf;
+      color: #ffffff;
+      border: none;
+      border-left: 1px solid rgba(255,255,255,0.2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+    .primary-split-dropdown:hover { background: #3574f0; }
+
+    /* Dropdown Menus */
+    .dropdown-popup {
+      position: absolute;
+      bottom: 45px;
+      right: 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-default);
+      border-radius: 6px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      width: 200px;
+      z-index: 200;
+      display: none;
+      overflow: hidden;
+    }
+    .dropdown-popup.open { display: block; }
+    .dropdown-item {
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--accent);
+    }
+    .dropdown-shortcut {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* Resizable Horizontal Splitter (In Mode B: Full Workspace) */
+    .horizontal-splitter {
+      width: 6px;
+      background: var(--border-default);
+      cursor: col-resize;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.15s ease;
+      z-index: 10;
+    }
+    .horizontal-splitter::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 24px;
+      background: var(--text-dim);
+      border-radius: 1px;
+    }
+    .horizontal-splitter:hover, .horizontal-splitter.dragging {
+      background: var(--accent);
+    }
+    .horizontal-splitter:hover::after, .horizontal-splitter.dragging::after {
+      background: #ffffff;
+    }
+
+    /* In Mode A: Horizontal Splitter between Tool Window and Editor */
+    body.mode-dock .horizontal-splitter {
+      display: block;
+    }
+    /* In Mode B: Splitter between Commit Pane and Diff Pane */
+    body.mode-full .horizontal-splitter {
+      display: block;
+    }
+
+    /* ========================================================= */
+    /* RIGHT DIFF VIEW PANE (Full Mode or in Center Editor)      */
+    /* ========================================================= */
+    .diff-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-workspace);
+      overflow: hidden;
+      min-width: 380px;
+    }
+
+    /* In Mode A: Diff Pane inside git-view-root is hidden (moves to editor area) */
+    body.mode-dock .git-view-root .diff-pane {
+      display: none;
+    }
+    /* In Mode B: Diff Pane is visible inside git-view-root */
+    body.mode-full .git-view-root .diff-pane {
+      display: flex;
+    }
+
+    /* Diff Toolbar */
+    .diff-toolbar {
+      height: 38px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .diff-file-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .diff-stats-pill {
+      font-family: var(--font-code);
+      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      display: flex;
+      gap: 5px;
+    }
+    .diff-stats-add { color: var(--success); }
+    .diff-stats-del { color: var(--danger); }
+
+    .diff-toolbar-spacer { flex: 1; }
+
+    /* Hunk Navigators & Controls */
+    .diff-control-group {
+      display: flex;
+      align-items: center;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 5px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .diff-tool-btn {
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .diff-tool-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+    .diff-tool-btn.active { background: var(--bg-elevated); color: var(--accent); }
+
+    /* Diff Canvas (Side by Side) */
+    .diff-canvas {
+      flex: 1;
+      display: flex;
+      overflow: auto;
+      font-family: var(--font-code);
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .diff-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-default);
+      min-width: 300px;
+      background: var(--bg-workspace);
+    }
+    .diff-col-header {
+      height: 26px;
+      background: #111216;
+      border-bottom: 1px solid var(--border-default);
+      padding: 0 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .diff-lines-wrapper {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .diff-row {
+      display: flex;
+      height: 20px;
+      align-items: center;
+    }
+    .diff-row.add { background: var(--success-bg); }
+    .diff-row.del { background: var(--danger-bg); }
+
+    .diff-line-num {
+      width: 40px;
+      text-align: right;
+      padding-right: 8px;
+      color: var(--text-dim);
+      user-select: none;
+      font-size: 10.5px;
+      flex-shrink: 0;
+    }
+    .diff-line-text {
+      flex: 1;
+      padding-left: 8px;
+      white-space: pre;
+      overflow: hidden;
+      color: #abb2bf;
+    }
+    .diff-row.add .diff-line-text { color: #a6e22e; }
+    .diff-row.del .diff-line-text { color: #f92672; }
+
+    /* ========================================================= */
+    /* CENTER EDITOR CONTAINER (MODE A)                          */
+    /* ========================================================= */
+    .editor-center-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-workspace);
+      overflow: hidden;
+      min-width: 380px;
+    }
+    body.mode-full .editor-center-container {
+      display: none;
+    }
+
+    /* Editor Tab Bar */
+    .editor-tabs-bar {
+      height: 36px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+      gap: 2px;
+      overflow-x: auto;
+    }
+    .editor-tab {
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      cursor: pointer;
+      border: none;
+    }
+    .editor-tab:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .editor-tab.active {
+      background: var(--bg-workspace);
+      color: var(--text-main);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .editor-tab.diff-tab {
+      color: var(--accent);
+      background: rgba(110, 168, 255, 0.08);
+      border: 1px solid rgba(110, 168, 255, 0.2);
+    }
+    .editor-tab-close {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .editor-tab-close:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+
+    /* Editor Body Simulation */
+    .editor-canvas {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      font-family: var(--font-code);
+      font-size: 12.5px;
+      line-height: 20px;
+    }
+    .code-gutter {
+      width: 44px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      color: var(--text-dim);
+      padding: 12px 6px;
+      text-align: right;
+      font-size: 11px;
+      user-select: none;
+    }
+    .code-lines {
+      flex: 1;
+      padding: 12px 16px;
+      overflow: auto;
+      color: #abb2bf;
+    }
+    .code-keyword { color: #c678dd; }
+    .code-func { color: #61afef; }
+    .code-string { color: #98c379; }
+    .code-comment { color: #5c6370; font-style: italic; }
+
+    /* ========================================================= */
+    /* LOG & HISTORY VIEW (Tab 2)                                */
+    /* ========================================================= */
+    .history-container {
+      flex: 1;
+      display: none;
+      overflow: hidden;
+      min-height: 0;
+    }
+    .history-container.active { display: flex; }
+
+    .branches-sidebar {
+      width: 220px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .branch-search-box {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .search-input {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      padding: 4px 8px;
+      color: var(--text-main);
+      font-size: 11.5px;
+      outline: none;
+    }
+    .branches-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+    .branch-row {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .branch-row:hover { background: var(--bg-hover); color: var(--text-main); }
+    .branch-row.current {
+      background: rgba(110, 168, 255, 0.1);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .log-table-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-workspace);
+      overflow: hidden;
+    }
+    .log-table-header {
+      height: 28px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      gap: 12px;
+    }
+    .log-rows {
+      flex: 1;
+      overflow-y: auto;
+      font-family: var(--font-ui);
+    }
+    .log-row {
+      height: 28px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 12px;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      cursor: pointer;
+    }
+    .log-row:hover { background: var(--bg-hover); }
+    .log-row.selected {
+      background: var(--bg-active);
+      color: var(--accent);
+    }
+    .log-graph-col {
+      width: 32px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .graph-svg {
+      width: 32px;
+      height: 28px;
+    }
+
+    .log-subject-col {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .commit-ref-tag {
+      background: rgba(110, 168, 255, 0.15);
+      border: 1px solid rgba(110, 168, 255, 0.3);
+      color: var(--accent);
+      font-size: 10px;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-weight: 600;
+    }
+    .commit-ref-tag.head {
+      background: rgba(127, 201, 143, 0.15);
+      border-color: rgba(127, 201, 143, 0.3);
+      color: var(--success);
+    }
+    .log-author-col {
+      width: 120px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .log-date-col {
+      width: 90px;
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+    .log-sha-col {
+      width: 65px;
+      font-family: var(--font-code);
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .commit-detail-pane {
+      width: 360px;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      padding: 14px;
+      gap: 12px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    /* ========================================================= */
+    /* TOAST NOTIFICATION                                        */
+    /* ========================================================= */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 24px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--accent);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      border-radius: 6px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .toast-container.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .toast-undo-btn {
+      background: var(--accent);
+      color: #0c0d10;
+      font-weight: 600;
+      border-radius: 4px;
+      padding: 3px 8px;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="mode-dock">
+
+  <!-- Top Showcase Controls -->
+  <div class="showcase-banner">
+    <div class="showcase-title">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+      Petak Git Redesign Mockup (ala Android Studio New UI)
+      <span class="badge-pill">Interactive Prototype</span>
+    </div>
+    <div class="showcase-controls">
+      <span style="color: var(--text-muted); font-size: 11px;">Pilihan Mode:</span>
+      <button class="showcase-btn active" id="btn-mode-dock" onclick="setLayoutMode('dock')">
+        <span>◫ Tool Window (⌘K Samping)</span>
+      </button>
+      <button class="showcase-btn" id="btn-mode-full" onclick="setLayoutMode('full')">
+        <span>⧉ Full Git Center Tab</span>
+      </button>
+      <div style="width: 1px; height: 16px; background: var(--border-default);"></div>
+      <button class="showcase-btn" onclick="toggleConflictBanner()">
+        <span>⚡ Toggle Rebase Conflict</span>
+      </button>
+      <button class="showcase-btn" onclick="toggleThemeVariant()">
+        <span>🎨 Varian A/B Theme</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="app-container">
+
+    <!-- IDE Titlebar -->
+    <div class="ide-titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-light tl-close"></div>
+        <div class="traffic-light tl-min"></div>
+        <div class="traffic-light tl-max"></div>
+      </div>
+      <div class="brand-group">
+        <div class="brand-logo">
+          <div class="brand-logo-cell"></div>
+          <div class="brand-logo-cell dim"></div>
+          <div class="brand-logo-cell dim"></div>
+          <div class="brand-logo-cell"></div>
+        </div>
+        <span>Petak</span>
+      </div>
+
+      <div class="project-pill">
+        <span>petak-p4m</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+      </div>
+
+      <!-- Current Branch Pill with ahead/behind status -->
+      <div class="branch-pill" title="Current Git Branch: feat/p3-git (Click to switch)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+        <span>feat/p3-git</span>
+        <span style="font-size: 11px; opacity: 0.85;">↑2</span>
+      </div>
+
+      <!-- Top Toolbar Remote VCS Quick Actions (Moved out of Commit Panel!) -->
+      <div class="top-toolbar-git">
+        <button class="top-git-btn" onclick="showToast('Project updated (Rebased with origin/main)')" title="Update Project (⌘T)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+          <span>Update</span>
+        </button>
+
+        <button class="top-git-btn push" onclick="showToast('Pushed 2 commits to origin/feat/p3-git')" title="Push Commits (⌘⇧K)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6M12 9v12"></path></svg>
+          <span>Push</span>
+          <span class="top-push-badge">2</span>
+        </button>
+      </div>
+
+      <div class="titlebar-spacer"></div>
+
+      <div style="font-size: 11px; color: var(--text-dim);">
+        Petak Studio • v0.8.3
+      </div>
+    </div>
+
+    <!-- IDE Main Workspace Area -->
+    <div class="ide-main">
+
+      <!-- Left Activity Rail -->
+      <div class="left-rail">
+        <button class="rail-btn" title="Project Files (⌘1)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h7l2 2h9v12H3z"></path></svg>
+        </button>
+
+        <button class="rail-btn active" id="rail-git-btn" title="Commit & Git (⌘K)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+          <span class="rail-badge" id="rail-changes-badge">3</span>
+        </button>
+
+        <button class="rail-btn" title="Merge Requests (⌘5)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"></path></svg>
+        </button>
+
+        <button class="rail-btn" title="Run & Test (⌘6)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+      </div>
+
+      <!-- Center Workspace Container -->
+      <div class="workspace-wrapper" id="workspace-wrapper">
+
+        <!-- ============================================== -->
+        <!-- CORE GIT VIEW (Inside Dock or Full Workspace)  -->
+        <!-- ============================================== -->
+        <div class="git-view-root" id="git-view-root">
+
+          <!-- Clean Consolidated VCS Header -->
+          <div class="vcs-header">
+
+            <!-- Segmented View Tabs (Changes, History, Conflicts) -->
+            <div class="vcs-segmented-nav">
+              <button class="vcs-nav-tab active" id="nav-tab-changes" onclick="switchSubTab('changes')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                <span>Changes</span>
+                <span class="tab-counter" id="tab-counter-changes">3</span>
+              </button>
+
+              <button class="vcs-nav-tab" id="nav-tab-history" onclick="switchSubTab('history')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>History</span>
+              </button>
+
+              <button class="vcs-nav-tab conflict-tab" id="nav-tab-conflicts" style="display: none;" onclick="switchSubTab('conflicts')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"></path></svg>
+                <span>Conflicts</span>
+                <span class="tab-counter">! 1</span>
+              </button>
+            </div>
+
+            <div class="vcs-header-spacer"></div>
+
+            <!-- Unified Remote Actions Toolbar -->
+            <div class="vcs-remote-toolbar">
+
+              <!-- Split Update Button (⌘T) -->
+              <div class="split-btn">
+                <button class="split-btn-action" onclick="showToast('Project updated (Rebased with origin/main)')" title="Update Project (⌘T)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+                  <span>Update</span>
+                </button>
+                <button class="split-btn-arrow" onclick="toggleDropdown('update-menu', event)" title="Update options">▾</button>
+              </div>
+
+              <!-- Push Button with Ahead Counter -->
+              <button class="vcs-push-btn" onclick="showToast('Pushed 2 commits to origin/feat/p3-git')" title="Push Commits (⌘⇧K)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6M12 9v12"></path></svg>
+                <span>Push</span>
+                <span class="push-badge">2</span>
+              </button>
+
+              <!-- More Actions Dropdown (Stash, Fetch, Remotes) -->
+              <button class="icon-btn" onclick="toggleDropdown('more-vcs-menu', event)" title="More Git Actions">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+              </button>
+
+              <!-- Refresh Button -->
+              <button class="icon-btn" onclick="refreshGit()" title="Refresh Status">
+                <svg id="refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Rebase Conflict Banner (Conditional) -->
+          <div class="vcs-op-banner" id="vcs-op-banner" style="display: none;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            <span><strong>Rebasing</strong> 2/5 — <span style="color: var(--danger); font-weight: 600;">1 file in conflict</span></span>
+            <div class="op-banner-actions">
+              <button class="banner-action-btn banner-abort" onclick="abortRebase()">Abort Rebase</button>
+              <button class="banner-action-btn banner-continue" onclick="continueRebase()">Resolve & Continue</button>
+            </div>
+          </div>
+
+          <!-- ==================================== -->
+          <!-- SUBTAB 1: CHANGES & COMMIT PANE      -->
+          <!-- ==================================== -->
+          <div class="changes-container" id="changes-view">
+
+            <!-- Left Commit Pane -->
+            <div class="commit-pane" id="commit-pane">
+
+              <!-- Clean Commit Tool Window Header (ala Android Studio New UI) -->
+              <div class="commit-tool-header">
+                <div class="commit-tool-title">Commit</div>
+                <div class="commit-tool-actions">
+                  <button class="tool-action-btn" onclick="openDiffInEditor(event)" title="Show Diff in Editor (⌘D)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                  </button>
+                  <button class="tool-action-btn" id="refresh-icon-btn" onclick="refreshGit()" title="Refresh Status">
+                    <svg id="refresh-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                  </button>
+                  <button class="tool-action-btn" onclick="toggleDropdown('commit-gear-menu', event)" title="View Options (⚙)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Changes Tree -->
+              <div class="changes-tree-area" id="changes-tree-area">
+
+                <!-- Group 1: Changes (Single Clean Header) -->
+                <div class="tree-group-header">
+                  <button class="group-arrow-btn" onclick="toggleGroup('group-changes', event)" title="Collapse/Expand">
+                    <svg class="group-arrow" id="arrow-group-changes" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <label class="group-label-wrap">
+                    <input type="checkbox" class="custom-checkbox" id="check-all" checked onchange="toggleSelectAll(this.checked)">
+                    <span class="group-title">Changes</span>
+                    <span class="group-counter" id="tracked-count">(3)</span>
+                  </label>
+                </div>
+
+                <div id="group-changes-list">
+                  <!-- File 1: Modified -->
+                  <div class="file-row selected file-modified" id="file-row-1" onclick="selectFile(1)">
+                    <input type="checkbox" class="custom-checkbox file-check" checked onchange="updateCheckedState(event)">
+                    <svg class="file-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span class="file-leaf-name">CommitPanel.svelte</span>
+                    <span class="file-dir-path">ui/features/git</span>
+                    <div class="file-hover-actions">
+                      <button class="file-action-icon" onclick="openDiffInEditor(event, 1)" title="Show Diff (⌘D)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                      </button>
+                      <button class="file-action-icon" onclick="rollbackFile(event, 1)" title="Rollback file (⌘⌥Z)">↺</button>
+                    </div>
+                  </div>
+
+                  <!-- File 2: Modified -->
+                  <div class="file-row file-modified" id="file-row-2" onclick="selectFile(2)">
+                    <input type="checkbox" class="custom-checkbox file-check" checked onchange="updateCheckedState(event)">
+                    <svg class="file-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span class="file-leaf-name">GitView.svelte</span>
+                    <span class="file-dir-path">ui/features/git</span>
+                    <div class="file-hover-actions">
+                      <button class="file-action-icon" onclick="openDiffInEditor(event, 2)" title="Show Diff (⌘D)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                      </button>
+                      <button class="file-action-icon" onclick="rollbackFile(event, 2)" title="Rollback file (⌘⌥Z)">↺</button>
+                    </div>
+                  </div>
+
+                  <!-- File 3: Added -->
+                  <div class="file-row file-added" id="file-row-3" onclick="selectFile(3)">
+                    <input type="checkbox" class="custom-checkbox file-check" checked onchange="updateCheckedState(event)">
+                    <svg class="file-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span class="file-leaf-name">spec.md</span>
+                    <span class="file-dir-path">docs/git-redesign</span>
+                    <div class="file-hover-actions">
+                      <button class="file-action-icon" onclick="openDiffInEditor(event, 3)" title="Show Diff (⌘D)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/></svg>
+                      </button>
+                      <button class="file-action-icon" onclick="rollbackFile(event, 3)" title="Rollback file (⌘⌥Z)">↺</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Group 2: Unversioned Files -->
+                <div class="tree-group-header">
+                  <button class="group-arrow-btn" onclick="toggleGroup('group-unversioned', event)" title="Collapse/Expand">
+                    <svg class="group-arrow collapsed" id="arrow-group-unversioned" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <label class="group-label-wrap">
+                    <input type="checkbox" class="custom-checkbox" id="check-unversioned" onchange="toggleUnversioned(this.checked)">
+                    <span class="group-title">Unversioned Files</span>
+                    <span class="group-counter">(1)</span>
+                  </label>
+                </div>
+
+                <div id="group-unversioned-list" style="display: none;">
+                  <div class="file-row file-unversioned" id="file-row-4" onclick="selectFile(4)">
+                    <input type="checkbox" class="custom-checkbox file-check" onchange="updateCheckedState(event)">
+                    <svg class="file-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span class="file-leaf-name">mockup.html</span>
+                    <span class="file-dir-path">docs/git-redesign</span>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- Vertical Splitter between Tree and Commit Box -->
+              <div class="vertical-splitter" id="vertical-splitter" title="Drag to resize commit box"></div>
+
+              <!-- Commit Message Box — Spacious, Clean, Minimalist -->
+              <div class="commit-box" id="commit-box">
+                <!-- Single Spacious Textarea with Proportional Font -->
+                <textarea
+                  class="commit-textarea"
+                  id="commit-input"
+                  placeholder="Commit message"
+                  oninput="handleMessageInput(this.value)"
+                ></textarea>
+
+                <!-- Clean Actions Bar: Amend on Left, Commit Button on Right -->
+                <div class="commit-actions-bar">
+                  <label class="amend-wrap" title="Amend previous commit">
+                    <input type="checkbox" class="custom-checkbox" id="amend-check">
+                    <span>Amend</span>
+                  </label>
+
+                  <!-- Primary Split Button: Commit / Commit and Push -->
+                  <div class="primary-split-btn">
+                    <button class="primary-split-action" id="commit-submit-btn" onclick="executeCommit()">
+                      <span>Commit</span>
+                    </button>
+                    <button class="primary-split-dropdown" onclick="toggleDropdown('commit-menu', event)" title="Commit options">▾</button>
+                  </div>
+                </div>
+
+                <!-- Commit Dropdown Options -->
+                <div class="dropdown-popup" id="commit-menu">
+                  <div class="dropdown-item" onclick="executeCommitAndPush()">
+                    <span>Commit and Push…</span>
+                    <span class="dropdown-shortcut">⌘⌥K</span>
+                  </div>
+                  <div class="dropdown-item" onclick="showToast('Created git patch file in workspace')">
+                    <span>Create Patch…</span>
+                  </div>
+                </div>
+
+                <!-- Gear Dropdown Options -->
+                <div class="dropdown-popup tool-gear-popup" id="commit-gear-menu" style="bottom: auto; top: 40px; right: 10px;">
+                  <div class="dropdown-item" onclick="showToast('Group by Directory toggled')">
+                    <span>Group by Directory</span>
+                  </div>
+                  <div class="dropdown-item" onclick="showToast('Show Ignored Files toggled')">
+                    <span>Show Ignored Files</span>
+                  </div>
+                  <div style="height: 1px; background: var(--border-default); margin: 4px 0;"></div>
+                  <div class="dropdown-item" onclick="setLayoutMode('full')">
+                    <span>Open Full Git Tab</span>
+                    <span class="dropdown-shortcut">⌘9</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Resizable Splitter (In Full Mode: separates commit pane from diff pane) -->
+            <div class="horizontal-splitter" id="horizontal-splitter" title="Drag to resize sidebar (Double-click to reset)"></div>
+
+            <!-- Right Diff View Pane (Visible in Full Mode inside Git View) -->
+            <div class="diff-pane" id="full-diff-pane">
+
+              <!-- Diff Toolbar -->
+              <div class="diff-toolbar">
+                <div class="diff-file-title">
+                  <span class="status-badge M" id="diff-badge">M</span>
+                  <span id="diff-path">ui/features/git/CommitPanel.svelte</span>
+                  <span class="diff-stats-pill">
+                    <span class="diff-stats-add">+42</span>
+                    <span class="diff-stats-del">-12</span>
+                  </span>
+                </div>
+
+                <div class="diff-toolbar-spacer"></div>
+
+                <!-- Hunk Jump Buttons -->
+                <div class="diff-control-group">
+                  <button class="diff-tool-btn" onclick="showToast('Jumped to previous hunk')">▲ Prev</button>
+                  <span style="font-size: 11px; color: var(--text-dim); padding: 0 4px;">1 of 3</span>
+                  <button class="diff-tool-btn" onclick="showToast('Jumped to next hunk')">▼ Next</button>
+                </div>
+
+                <!-- View Mode Toggle (Side-by-Side vs Unified) -->
+                <div class="diff-control-group">
+                  <button class="diff-tool-btn active" id="btn-diff-sbs" onclick="setDiffMode('sbs')">Side by Side</button>
+                  <button class="diff-tool-btn" id="btn-diff-unified" onclick="setDiffMode('unified')">Unified</button>
+                </div>
+              </div>
+
+              <!-- Diff Canvas (Side by Side SBS Layout) -->
+              <div class="diff-canvas" id="diff-canvas">
+
+                <!-- Left Column (Old Version) -->
+                <div class="diff-column">
+                  <div class="diff-col-header">
+                    <span>Base Version (HEAD)</span>
+                    <span>CommitPanel.svelte</span>
+                  </div>
+                  <div class="diff-lines-wrapper">
+                    <div class="diff-row"><span class="diff-line-num">732</span><span class="diff-line-text">&lt;style&gt;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">733</span><span class="diff-line-text">  .commit-panel {</span></div>
+                    <div class="diff-row del"><span class="diff-line-num">734</span><span class="diff-line-text">-   width: 320px;</span></div>
+                    <div class="diff-row del"><span class="diff-line-num">735</span><span class="diff-line-text">-   flex-shrink: 0;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">736</span><span class="diff-line-text">    display: flex;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">737</span><span class="diff-line-text">    flex-direction: column;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">738</span><span class="diff-line-text">    background: #18191c;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">739</span><span class="diff-line-text">    border-right: 1px solid #2b2d30;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">740</span><span class="diff-line-text">    height: 100%;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">741</span><span class="diff-line-text">    overflow: hidden;</span></div>
+                  </div>
+                </div>
+
+                <!-- Right Column (New Version with Resizable Gutter) -->
+                <div class="diff-column">
+                  <div class="diff-col-header">
+                    <span>Working Tree (Changes)</span>
+                    <span style="color: var(--success);">+4 lines</span>
+                  </div>
+                  <div class="diff-lines-wrapper">
+                    <div class="diff-row"><span class="diff-line-num">732</span><span class="diff-line-text">&lt;style&gt;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">733</span><span class="diff-line-text">  .commit-panel {</span></div>
+                    <div class="diff-row add"><span class="diff-line-num">734</span><span class="diff-line-text">+   width: var(--commit-width, 360px);</span></div>
+                    <div class="diff-row add"><span class="diff-line-num">735</span><span class="diff-line-text">+   min-width: 280px;</span></div>
+                    <div class="diff-row add"><span class="diff-line-num">736</span><span class="diff-line-text">+   max-width: 600px;</span></div>
+                    <div class="diff-row add"><span class="diff-line-num">737</span><span class="diff-line-text">+   flex-shrink: 0;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">738</span><span class="diff-line-text">    display: flex;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">739</span><span class="diff-line-text">    flex-direction: column;</span></div>
+                    <div class="diff-row"><span class="diff-line-num">740</span><span class="diff-line-text">    background: var(--p-bg-surface);</span></div>
+                    <div class="diff-row"><span class="diff-line-num">741</span><span class="diff-line-text">    border-right: 1px solid var(--border-default);</span></div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ==================================== -->
+          <!-- SUBTAB 2: HISTORY & LOG VIEW         -->
+          <!-- ==================================== -->
+          <div class="history-container" id="history-view">
+
+            <!-- Branches Tree Sidebar -->
+            <div class="branches-sidebar">
+              <div class="branch-search-box">
+                <input type="text" class="search-input" placeholder="Search branches…">
+              </div>
+              <div class="branches-tree">
+                <div style="padding: 6px 12px; font-size: 11px; font-weight: 600; color: var(--text-dim);">LOCAL BRANCHES</div>
+                <div class="branch-row current">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+                  <span>feat/p3-git</span>
+                </div>
+                <div class="branch-row">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+                  <span>main</span>
+                </div>
+                <div class="branch-row">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+                  <span>fix/lsp-hover</span>
+                </div>
+
+                <div style="padding: 10px 12px 6px; font-size: 11px; font-weight: 600; color: var(--text-dim);">REMOTE (ORIGIN)</div>
+                <div class="branch-row">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path></svg>
+                  <span>origin/main</span>
+                </div>
+                <div class="branch-row">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path></svg>
+                  <span>origin/feat/p3-git</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Commit Table with Interactive Graph -->
+            <div class="log-table-area">
+              <div class="log-table-header">
+                <span style="width: 32px;">Graph</span>
+                <span style="flex: 1;">Commit Message</span>
+                <span style="width: 120px;">Author</span>
+                <span style="width: 90px;">Date</span>
+                <span style="width: 65px;">SHA</span>
+              </div>
+              <div class="log-rows">
+                <!-- Commit 1 -->
+                <div class="log-row selected">
+                  <div class="log-graph-col">
+                    <svg class="graph-svg" viewBox="0 0 32 28">
+                      <!-- Vertical branch line down to next node -->
+                      <line x1="16" y1="14" x2="16" y2="28" stroke="#6ea8ff" stroke-width="2" />
+                      <!-- Node bead -->
+                      <circle cx="16" cy="14" r="4.5" fill="#6ea8ff" />
+                    </svg>
+                  </div>
+                  <div class="log-subject-col">
+                    <span class="commit-ref-tag head">HEAD</span>
+                    <span class="commit-ref-tag">feat/p3-git</span>
+                    <span>feat(ui): add resizable and collapsible Project tree with horizontal scroll</span>
+                  </div>
+                  <div class="log-author-col">syauqi1717</div>
+                  <div class="log-date-col">Today 14:32</div>
+                  <div class="log-sha-col">6b8cbec</div>
+                </div>
+
+                <!-- Commit 2 -->
+                <div class="log-row">
+                  <div class="log-graph-col">
+                    <svg class="graph-svg" viewBox="0 0 32 28">
+                      <!-- Vertical branch line through node -->
+                      <line x1="16" y1="0" x2="16" y2="28" stroke="#7fc98f" stroke-width="2" />
+                      <!-- Node bead -->
+                      <circle cx="16" cy="14" r="4.5" fill="#7fc98f" />
+                    </svg>
+                  </div>
+                  <div class="log-subject-col">
+                    <span>feat(git): redesign Git & Diff UI ala Android Studio New UI</span>
+                  </div>
+                  <div class="log-author-col">syauqi1717</div>
+                  <div class="log-date-col">Today 08:38</div>
+                  <div class="log-sha-col">ef34a32</div>
+                </div>
+
+                <!-- Commit 3 -->
+                <div class="log-row">
+                  <div class="log-graph-col">
+                    <svg class="graph-svg" viewBox="0 0 32 28">
+                      <!-- Line from top ending at node -->
+                      <line x1="16" y1="0" x2="16" y2="14" stroke="#b388ff" stroke-width="2" />
+                      <!-- Node bead -->
+                      <circle cx="16" cy="14" r="4.5" fill="#b388ff" />
+                    </svg>
+                  </div>
+                  <div class="log-subject-col">
+                    <span class="commit-ref-tag">origin/main</span>
+                    <span>fix(editor): fix missing document code on tab switch with breakpoints</span>
+                  </div>
+                  <div class="log-author-col">syauqi1717</div>
+                  <div class="log-date-col">Yesterday</div>
+                  <div class="log-sha-col">1ff1d99</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Commit Detail Inspector -->
+            <div class="commit-detail-pane">
+              <div style="font-weight: 600; font-size: 13px;">Commit 6b8cbec</div>
+              <div style="font-size: 11.5px; color: var(--text-muted);">
+                Author: <strong>Muhammad Syauqi</strong> &lt;syauqi@ist.id&gt;<br>
+                Date: Tue Oct 6 14:32:00 2026 +0700
+              </div>
+              <div style="background: var(--bg-base); padding: 10px; border-radius: 5px; font-family: var(--font-code); font-size: 11.5px; border: 1px solid var(--border-default);">
+                feat(ui): add resizable and collapsible Project tree with horizontal scroll, fix LSP hover and lint tooltip glitch
+              </div>
+              <div style="font-size: 11px; font-weight: 600; color: var(--text-dim); margin-top: 8px;">CHANGED FILES (3)</div>
+              <div style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; gap: 6px;"><span style="color: var(--warning);">M</span> ui/shell/FileTree.svelte</div>
+                <div style="display: flex; gap: 6px;"><span style="color: var(--warning);">M</span> ui/features/editor/LspHover.svelte</div>
+                <div style="display: flex; gap: 6px;"><span style="color: var(--success);">A</span> ui/shell/treeResizeLogic.ts</div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ============================================== -->
+        <!-- MODE A ONLY: CENTER EDITOR CANVAS              -->
+        <!-- ============================================== -->
+        <div class="editor-center-container" id="editor-center-container">
+
+          <!-- Editor Tabs Bar -->
+          <div class="editor-tabs-bar">
+            <button class="editor-tab active" id="tab-code-app" onclick="switchEditorTab('code')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6M8 6 2 12 8 18"></polyline></svg>
+              <span>App.svelte</span>
+              <span class="editor-tab-close">✕</span>
+            </button>
+
+            <button class="editor-tab" id="tab-code-git" onclick="switchEditorTab('code')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6M8 6 2 12 8 18"></polyline></svg>
+              <span>gitStore.svelte.ts</span>
+              <span class="editor-tab-close">✕</span>
+            </button>
+
+            <!-- Diff Editor Tab (Opens when file clicked in Commit Panel) -->
+            <button class="editor-tab diff-tab" id="tab-editor-diff" onclick="switchEditorTab('diff')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+              <span id="tab-diff-title">[Diff] CommitPanel.svelte</span>
+              <span class="editor-tab-close" onclick="closeEditorDiffTab(event)">✕</span>
+            </button>
+          </div>
+
+          <!-- Active Code Content -->
+          <div class="editor-canvas" id="editor-code-view">
+            <div class="code-gutter">
+              <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div>
+            </div>
+            <div class="code-lines">
+              <div><span class="code-keyword">import</span> { onMount } <span class="code-keyword">from</span> <span class="code-string">'svelte'</span>;</div>
+              <div><span class="code-keyword">import</span> { gitStore } <span class="code-keyword">from</span> <span class="code-string">'./git.svelte'</span>;</div>
+              <div><br></div>
+              <div><span class="code-comment">// Android Studio New UI: Non-modal Commit Tool Window</span></div>
+              <div><span class="code-keyword">export function</span> <span class="code-func">initializeGitWorkflow</span>() {</div>
+              <div>  console.<span class="code-func">log</span>(<span class="code-string">'Petak IDE Git Redesign Active'</span>);</div>
+              <div>  <span class="code-keyword">const</span> commitPanel = gitStore.<span class="code-func">getCommitPanel</span>();</div>
+              <div>  commitPanel.<span class="code-func">setResizable</span>(<span class="code-keyword">true</span>);</div>
+              <div>}</div>
+              <div><br></div>
+              <div><span class="code-comment">// Developer can code while viewing commit changes on the left!</span></div>
+              <div><span class="code-keyword">let</span> isEditing = <span class="code-keyword">true</span>;</div>
+            </div>
+          </div>
+
+          <!-- Embedded Full Diff View (When Diff Tab is Active in Editor) -->
+          <div class="diff-pane" id="editor-diff-view" style="display: none;">
+            <div class="diff-toolbar">
+              <div class="diff-file-title">
+                <span class="status-badge M" id="editor-diff-badge">M</span>
+                <span id="editor-diff-path">ui/features/git/CommitPanel.svelte</span>
+                <span class="diff-stats-pill">
+                  <span class="diff-stats-add">+42</span>
+                  <span class="diff-stats-del">-12</span>
+                </span>
+              </div>
+              <div class="diff-toolbar-spacer"></div>
+              <div class="diff-control-group">
+                <button class="diff-tool-btn" onclick="showToast('Jumped to previous hunk')">▲ Prev</button>
+                <span style="font-size: 11px; color: var(--text-dim); padding: 0 4px;">1 of 3</span>
+                <button class="diff-tool-btn" onclick="showToast('Jumped to next hunk')">▼ Next</button>
+              </div>
+              <div class="diff-control-group">
+                <button class="diff-tool-btn active">Side by Side</button>
+                <button class="diff-tool-btn">Unified</button>
+              </div>
+            </div>
+
+            <div class="diff-canvas">
+              <div class="diff-column">
+                <div class="diff-col-header">
+                  <span>Base Version (HEAD)</span>
+                  <span>CommitPanel.svelte</span>
+                </div>
+                <div class="diff-lines-wrapper">
+                  <div class="diff-row"><span class="diff-line-num">732</span><span class="diff-line-text">&lt;style&gt;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">733</span><span class="diff-line-text">  .commit-panel {</span></div>
+                  <div class="diff-row del"><span class="diff-line-num">734</span><span class="diff-line-text">-   width: 320px;</span></div>
+                  <div class="diff-row del"><span class="diff-line-num">735</span><span class="diff-line-text">-   flex-shrink: 0;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">736</span><span class="diff-line-text">    display: flex;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">737</span><span class="diff-line-text">    flex-direction: column;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">738</span><span class="diff-line-text">    background: #18191c;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">739</span><span class="diff-line-text">    border-right: 1px solid #2b2d30;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">740</span><span class="diff-line-text">    height: 100%;</span></div>
+                </div>
+              </div>
+
+              <div class="diff-column">
+                <div class="diff-col-header">
+                  <span>Working Tree (Changes)</span>
+                  <span style="color: var(--success);">+4 lines</span>
+                </div>
+                <div class="diff-lines-wrapper">
+                  <div class="diff-row"><span class="diff-line-num">732</span><span class="diff-line-text">&lt;style&gt;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">733</span><span class="diff-line-text">  .commit-panel {</span></div>
+                  <div class="diff-row add"><span class="diff-line-num">734</span><span class="diff-line-text">+   width: var(--commit-width, 360px);</span></div>
+                  <div class="diff-row add"><span class="diff-line-num">735</span><span class="diff-line-text">+   min-width: 280px;</span></div>
+                  <div class="diff-row add"><span class="diff-line-num">736</span><span class="diff-line-text">+   max-width: 600px;</span></div>
+                  <div class="diff-row add"><span class="diff-line-num">737</span><span class="diff-line-text">+   flex-shrink: 0;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">738</span><span class="diff-line-text">    display: flex;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">739</span><span class="diff-line-text">    flex-direction: column;</span></div>
+                  <div class="diff-row"><span class="diff-line-num">740</span><span class="diff-line-text">    background: var(--p-bg-surface);</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Bottom Status Bar (ala Android Studio) -->
+    <div class="ide-statusbar">
+      <div class="statusbar-left">
+        <div class="statusbar-item statusbar-branch" title="Git Branch: feat/p3-git (Click to switch)" onclick="showToast('Branch Switcher: feat/p3-git')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="7" r="2"></circle><path d="M6 7v10M18 9c0 5-6 4-12 8"></path></svg>
+          <span>feat/p3-git</span>
+          <span style="opacity: 0.85; font-size: 10px;">↑2</span>
+        </div>
+        <div class="statusbar-item" style="color: var(--text-dim);">
+          <span>Git: Ready</span>
+        </div>
+      </div>
+      <div class="statusbar-right">
+        <div class="statusbar-item">UTF-8</div>
+        <div class="statusbar-item">Spaces: 2</div>
+        <div class="statusbar-item">Svelte</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    <span id="toast-message">Action successful</span>
+    <button class="toast-undo-btn" id="toast-undo" onclick="undoAction()">Undo</button>
+  </div>
+
+  <!-- JS Logic for Full Interactivity -->
+  <script>
+    let currentMode = 'dock'; // 'dock' or 'full'
+    let currentTab = 'changes'; // 'changes', 'history', 'conflicts'
+    let isDraggingHorizontal = false;
+    let isDraggingVertical = false;
+
+    // Resizable Horizontal Splitter
+    const gitViewRoot = document.getElementById('git-view-root');
+    const commitPane = document.getElementById('commit-pane');
+    const horizontalSplitter = document.getElementById('horizontal-splitter');
+
+    horizontalSplitter.addEventListener('mousedown', (e) => {
+      isDraggingHorizontal = true;
+      horizontalSplitter.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+    });
+
+    // Double-click splitter to reset to default 360px
+    horizontalSplitter.addEventListener('dblclick', () => {
+      if (currentMode === 'dock') {
+        gitViewRoot.style.width = '360px';
+      } else {
+        commitPane.style.width = '360px';
+      }
+      showToast('Commit panel width reset to default (360px)');
+    });
+
+    // Resizable Vertical Splitter inside Commit Pane
+    const commitBox = document.getElementById('commit-box');
+    const verticalSplitter = document.getElementById('vertical-splitter');
+
+    verticalSplitter.addEventListener('mousedown', (e) => {
+      isDraggingVertical = true;
+      verticalSplitter.classList.add('dragging');
+      document.body.style.cursor = 'row-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDraggingHorizontal) {
+        if (currentMode === 'dock') {
+          const newWidth = e.clientX - 48; // offset left rail
+          if (newWidth >= 280 && newWidth <= 580) {
+            gitViewRoot.style.width = `${newWidth}px`;
+          }
+        } else {
+          const newWidth = e.clientX - 48;
+          if (newWidth >= 280 && newWidth <= 600) {
+            commitPane.style.width = `${newWidth}px`;
+          }
+        }
+      }
+      if (isDraggingVertical) {
+        const paneRect = commitPane.getBoundingClientRect();
+        const newBoxHeight = paneRect.bottom - e.clientY;
+        if (newBoxHeight >= 140 && newBoxHeight <= 350) {
+          commitBox.style.height = `${newBoxHeight}px`;
+        }
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDraggingHorizontal) {
+        isDraggingHorizontal = false;
+        horizontalSplitter.classList.remove('dragging');
+        document.body.style.cursor = 'default';
+      }
+      if (isDraggingVertical) {
+        isDraggingVertical = false;
+        verticalSplitter.classList.remove('dragging');
+        document.body.style.cursor = 'default';
+      }
+    });
+
+    // Switch Layout Modes: Dock Tool Window vs Full Git Center Tab
+    function setLayoutMode(mode) {
+      currentMode = mode;
+      document.body.className = mode === 'dock' ? 'mode-dock' : 'mode-full';
+      const btnDock = document.getElementById('btn-mode-dock');
+      const btnFull = document.getElementById('btn-mode-full');
+
+      if (mode === 'dock') {
+        btnDock.classList.add('active');
+        btnFull.classList.remove('active');
+        showToast('Mode: Tool Window ⌘K (Editor tetap terlihat di tengah)');
+      } else {
+        btnDock.classList.remove('active');
+        btnFull.classList.add('active');
+        showToast('Mode: Full VCS Workstation (Diff & Log maksimal)');
+      }
+    }
+
+    // Sub-tab Navigation: Changes vs History vs Conflicts
+    function switchSubTab(tab) {
+      currentTab = tab;
+      const changesView = document.getElementById('changes-view');
+      const historyView = document.getElementById('history-view');
+      const navChanges = document.getElementById('nav-tab-changes');
+      const navHistory = document.getElementById('nav-tab-history');
+      const navConflicts = document.getElementById('nav-tab-conflicts');
+
+      navChanges.classList.toggle('active', tab === 'changes');
+      navHistory.classList.toggle('active', tab === 'history');
+      navConflicts.classList.toggle('active', tab === 'conflicts');
+
+      if (tab === 'changes') {
+        changesView.style.display = 'flex';
+        historyView.classList.remove('active');
+      } else if (tab === 'history') {
+        changesView.style.display = 'none';
+        historyView.classList.add('active');
+      } else if (tab === 'conflicts') {
+        changesView.style.display = 'flex';
+        historyView.classList.remove('active');
+        showToast('Conflict view: 1 file requires merge resolution');
+      }
+    }
+
+    // Select File in Changes Tree
+    function selectFile(id) {
+      document.querySelectorAll('.file-row').forEach(r => r.classList.remove('selected'));
+      const row = document.getElementById(`file-row-${id}`);
+      if (row) row.classList.add('selected');
+
+      const pathElem = document.getElementById('diff-path');
+      const badgeElem = document.getElementById('diff-badge');
+      const editorDiffPath = document.getElementById('editor-diff-path');
+      const editorDiffBadge = document.getElementById('editor-diff-badge');
+      const tabDiffTitle = document.getElementById('tab-diff-title');
+
+      let fileName = '';
+      let badge = 'M';
+
+      if (id === 1) {
+        fileName = 'ui/features/git/CommitPanel.svelte';
+        badge = 'M';
+      } else if (id === 2) {
+        fileName = 'ui/features/git/GitView.svelte';
+        badge = 'M';
+      } else if (id === 3) {
+        fileName = 'docs/git-redesign/spec.md';
+        badge = 'A';
+      } else if (id === 4) {
+        fileName = 'docs/git-redesign/mockup.html';
+        badge = '?';
+      }
+
+      pathElem.textContent = fileName;
+      badgeElem.textContent = badge;
+      badgeElem.className = `status-badge ${badge}`;
+
+      editorDiffPath.textContent = fileName;
+      editorDiffBadge.textContent = badge;
+      editorDiffBadge.className = `status-badge ${badge}`;
+      tabDiffTitle.textContent = `[Diff] ${fileName.split('/').pop()}`;
+
+      if (currentMode === 'dock') {
+        switchEditorTab('diff');
+      }
+    }
+
+    // Switch between Code and Diff in Center Editor (Mode A)
+    function switchEditorTab(tabType) {
+      const codeView = document.getElementById('editor-code-view');
+      const diffView = document.getElementById('editor-diff-view');
+      const tabCode = document.getElementById('tab-code-app');
+      const tabDiff = document.getElementById('tab-editor-diff');
+
+      if (tabType === 'diff') {
+        codeView.style.display = 'none';
+        diffView.style.display = 'flex';
+        tabDiff.style.display = 'flex';
+        tabDiff.classList.add('active');
+        tabCode.classList.remove('active');
+      } else {
+        codeView.style.display = 'flex';
+        diffView.style.display = 'none';
+        tabCode.classList.add('active');
+        tabDiff.classList.remove('active');
+      }
+    }
+
+    function closeEditorDiffTab(e) {
+      e.stopPropagation();
+      document.getElementById('tab-editor-diff').style.display = 'none';
+      switchEditorTab('code');
+    }
+
+    // Toggle Groups (Collapsible)
+    function toggleGroup(groupId) {
+      const list = document.getElementById(`${groupId}-list`);
+      const arrow = document.getElementById(`arrow-${groupId}`);
+      const isHidden = list.style.display === 'none';
+      list.style.display = isHidden ? 'block' : 'none';
+      arrow.classList.toggle('collapsed', !isHidden);
+    }
+
+    // Select All Checkbox
+    function toggleSelectAll(checked) {
+      document.querySelectorAll('#group-changes-list .file-check').forEach(c => c.checked = checked);
+      updateSubmitButton();
+    }
+
+    function toggleUnversioned(checked) {
+      document.querySelectorAll('#group-unversioned-list .file-check').forEach(c => c.checked = checked);
+      updateSubmitButton();
+    }
+
+    function updateCheckedState(e) {
+      e.stopPropagation();
+      updateSubmitButton();
+    }
+
+    function updateSubmitButton() {
+      const checkedChanges = document.querySelectorAll('#group-changes-list .file-check:checked').length;
+      const totalChecked = document.querySelectorAll('.file-check:checked').length;
+      const submitBtn = document.getElementById('commit-submit-btn');
+      const checkAll = document.getElementById('check-all');
+      const trackedCounter = document.getElementById('tracked-count');
+
+      if (checkAll) {
+        checkAll.checked = checkedChanges > 0;
+        checkAll.indeterminate = checkedChanges > 0 && checkedChanges < 3;
+      }
+      if (trackedCounter) {
+        trackedCounter.textContent = `(${checkedChanges})`;
+      }
+
+      if (totalChecked === 0) {
+        submitBtn.querySelector('span').textContent = 'No files';
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.5';
+      } else {
+        submitBtn.querySelector('span').textContent = 'Commit';
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+      }
+    }
+
+    // Helper functions for file actions
+    function openDiffInEditor(e, id = 1) {
+      if (e) e.stopPropagation();
+      selectFile(id);
+      switchEditorTab('diff');
+    }
+
+    function rollbackFile(e, id) {
+      if (e) e.stopPropagation();
+      showToast('↺ Rolled back file changes (git checkout --)');
+    }
+
+    // Message Input
+    function handleMessageInput(val) {
+      // Clean proportional message input
+    }
+
+    // Simulate AI Commit Message Generator
+    function generateAiCommitMessage() {
+      const input = document.getElementById('commit-input');
+      input.value = "Analyzing changes with AI...";
+      input.disabled = true;
+
+      setTimeout(() => {
+        input.disabled = false;
+        input.value = "feat(git): redesign Git layout with resizable splitter ala Android Studio New UI\n\n- Add interactive splitter between commit sidebar and diff viewer\n- Streamline VCS top bar with unified remote dropdown\n- Add support for tool window dock mode (⌘K)";
+        handleMessageInput(input.value);
+        showToast('✨ AI commit message generated successfully!');
+      }, 700);
+    }
+
+    // Commit Action Execution
+    function executeCommit() {
+      const input = document.getElementById('commit-input');
+      if (!input.value.trim()) {
+        showToast('⚠️ Please enter a commit message first');
+        input.focus();
+        return;
+      }
+      showToast('✓ Committed 3 files successfully!', true);
+      input.value = '';
+      handleMessageInput('');
+    }
+
+    function executeCommitAndPush() {
+      closeAllDropdowns();
+      executeCommit();
+      setTimeout(() => {
+        showToast('↑ Pushed commits to origin/feat/p3-git');
+      }, 1000);
+    }
+
+    // Toast Notification System
+    let toastTimeout;
+    function showToast(msg, showUndo = false) {
+      const toast = document.getElementById('toast-container');
+      const messageElem = document.getElementById('toast-message');
+      const undoBtn = document.getElementById('toast-undo');
+
+      messageElem.textContent = msg;
+      undoBtn.style.display = showUndo ? 'inline-block' : 'none';
+      toast.classList.add('show');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3500);
+    }
+
+    function undoAction() {
+      document.getElementById('toast-container').classList.remove('show');
+      showToast('↺ Commit undone (changes returned to working tree)');
+    }
+
+    // Dropdown Handling
+    function toggleDropdown(menuId, e) {
+      e.stopPropagation();
+      const menu = document.getElementById(menuId);
+      const isOpen = menu.classList.contains('open');
+      closeAllDropdowns();
+      if (!isOpen) menu.classList.add('open');
+    }
+
+    function closeAllDropdowns() {
+      document.querySelectorAll('.dropdown-popup').forEach(m => m.classList.remove('open'));
+    }
+
+    document.addEventListener('click', closeAllDropdowns);
+
+    // Refresh simulation
+    function refreshGit() {
+      const icon = document.getElementById('refresh-icon');
+      icon.style.transform = 'rotate(360deg)';
+      icon.style.transition = 'transform 0.5s ease';
+      setTimeout(() => {
+        icon.style.transform = 'none';
+        icon.style.transition = 'none';
+        showToast('Git repository status up to date');
+      }, 500);
+    }
+
+    // Toggle Conflict Banner
+    function toggleConflictBanner() {
+      const banner = document.getElementById('vcs-op-banner');
+      const conflictTab = document.getElementById('nav-tab-conflicts');
+      const isVisible = banner.style.display !== 'none';
+
+      banner.style.display = isVisible ? 'none' : 'flex';
+      conflictTab.style.display = isVisible ? 'none' : 'flex';
+      showToast(isVisible ? 'Conflict cleared' : '⚡ Rebase conflict simulated');
+    }
+
+    function abortRebase() {
+      toggleConflictBanner();
+      showToast('Rebase aborted successfully');
+    }
+
+    function continueRebase() {
+      toggleConflictBanner();
+      showToast('Rebase conflict resolved and continued');
+    }
+
+    // Toggle Theme Variant
+    function toggleThemeVariant() {
+      document.body.classList.toggle('variant-b');
+      const isB = document.body.classList.contains('variant-b');
+      showToast(`Switched to Theme Variant ${isB ? 'B (Zed/Fleet Zen)' : 'A (Cursor/Linear)'}`);
+    }
+
+    // Toggle Diff Mode (SBS vs Unified)
+    function setDiffMode(mode) {
+      document.getElementById('btn-diff-sbs').classList.toggle('active', mode === 'sbs');
+      document.getElementById('btn-diff-unified').classList.toggle('active', mode === 'unified');
+      showToast(`Diff mode switched to ${mode === 'sbs' ? 'Side-by-Side' : 'Unified'}`);
+    }
+
+    // Initialize in Dock Mode by default
+    setLayoutMode('dock');
+  </script>
+</body>
+</html>
