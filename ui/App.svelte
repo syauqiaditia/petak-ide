@@ -769,7 +769,6 @@
         onOpenLogcat={openLogcat}
       />
     {/if}
-    {/if}
 
     <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
     {#if !showDashboard}
