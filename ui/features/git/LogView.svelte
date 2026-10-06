@@ -49,6 +49,7 @@
   let rewordMessage = $state('');
 
   let dropModalOpen = $state(false);
+  let keepChangesInWorkingTree = $state(true);
   let hardResetModalOpen = $state(false);
   let newBranchModalOpen = $state(false);
   let newBranchName = $state('');
@@ -88,6 +89,10 @@
   );
   let canDrop = $derived(selectedCount >= 1 && !hasMergeCommit);
   let canRebase = $derived(selectedCount === 1 && !hasMergeCommit);
+  let isHeadSelected = $derived(
+    selectedCount === 1 &&
+    !!gitStore.selectedCommit?.refs?.some((r) => r.kind === 'head')
+  );
 
   function handleContextMenu(e: MouseEvent, commit: GitCommit) {
     e.preventDefault();
@@ -199,7 +204,16 @@
 
   async function submitDrop() {
     dropModalOpen = false;
-    await gitStore.dropCommits(gitStore.selectedCommitShas);
+    await gitStore.dropCommits(gitStore.selectedCommitShas, keepChangesInWorkingTree);
+  }
+
+  async function handleUndoCommit() {
+    contextMenuVisible = false;
+    const commit = gitStore.selectedCommit;
+    if (!commit) return;
+    executeWithPushCheck(async () => {
+      await gitStore.dropCommits([commit.sha], true);
+    });
   }
 
   function openRebaseFromHere() {
@@ -696,13 +710,23 @@
         <span>Fixup into Previous</span>
       </button>
 
+      {#if isHeadSelected}
+        <button
+          class="mi"
+          onclick={handleUndoCommit}
+          title="Batalkan commit ini dan kembalikan seluruh perubahannya ke Changes"
+        >
+          <span>Undo Commit (Kembalikan ke Changes)…</span>
+        </button>
+      {/if}
+
       <button
         class="mi danger"
         disabled={!canDrop}
         onclick={openDropModal}
         title={!canDrop ? 'Select non-merge commit(s) to drop' : 'Drop commit(s)'}
       >
-        <span>Drop Commits</span>
+        <span>Drop Commit(s)…</span>
       </button>
 
       <div class="menu-sep"></div>
@@ -888,6 +912,10 @@
         <div class="action-modal-body">
           <p>Are you sure you want to drop the {selectedCount} selected commit{selectedCount > 1 ? 's' : ''}?</p>
           <p class="muted-note">An automatic backup will be created in <code>refs/petak/backup/...</code> before rewrite.</p>
+          <label class="drop-keep-changes-label">
+            <input type="checkbox" bind:checked={keepChangesInWorkingTree} />
+            <span>Kembalikan perubahan berkas ke Changes (Keep in working tree)</span>
+          </label>
           {#if isAnyPushed}
             <div class="modal-warning">
               ⚠️ Warning: This commit is already on remote. Remote history will diverge!
@@ -1490,6 +1518,25 @@
     flex-direction: column;
     gap: 10px;
     font-size: 13px;
+  }
+
+  .drop-keep-changes-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #93c5fd;
+    cursor: pointer;
+    background: #172133;
+    padding: 8px 10px;
+    border-radius: 5px;
+    border: 1px solid #2563eb;
+    margin-top: 4px;
+  }
+
+  .drop-keep-changes-label input {
+    cursor: pointer;
+    accent-color: #3b82f6;
   }
 
   .field-label {

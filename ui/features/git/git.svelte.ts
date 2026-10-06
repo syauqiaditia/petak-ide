@@ -861,20 +861,26 @@ class GitStore {
     }
   }
 
-  async dropCommits(shas: string[]): Promise<GitOpResult> {
+  async dropCommits(shas: string[], keepChanges = true): Promise<GitOpResult> {
     if (!this.root) throw new Error('No repository open');
     try {
-      const res = await api.gitDrop(this.root, shas);
+      const res = await api.gitDrop(this.root, shas, keepChanges);
       if (res.stashConflict) {
         this.showToast(
           'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
           { type: 'warning' }
         );
       } else {
-        this.showToast(`Dropped ${shas.length} commit(s)`, {
+        const msg = keepChanges
+          ? `Dropped ${shas.length} commit(s) — perubahan dikembalikan ke Changes`
+          : `Dropped ${shas.length} commit(s)`;
+        this.showToast(msg, {
           type: 'info',
           backupRef: res.backupRef,
         });
+      }
+      if (keepChanges) {
+        this.activeSubTab = 'commit';
       }
       await this.refresh();
       return res;

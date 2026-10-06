@@ -575,7 +575,12 @@ pub fn fixup_into_previous(exec: &dyn Exec, repo: &Path, sha: &str) -> Result<Op
     rebase_run_with_op(exec, repo, &plan, "fixup")
 }
 
-pub fn drop(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, GitError> {
+pub fn drop(
+    exec: &dyn Exec,
+    repo: &Path,
+    shas: &[&str],
+    keep_changes: bool,
+) -> Result<OpResult, GitError> {
     if shas.is_empty() {
         let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
         return Ok(OpResult {
@@ -622,6 +627,32 @@ pub fn drop(exec: &dyn Exec, repo: &Path, shas: &[&str]) -> Result<OpResult, Git
     } else {
         "--root".to_string()
     };
+
+    // If keep_changes is requested, check if the dropped commits include HEAD
+    let current_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    let is_at_head = ordered.contains(&current_head);
+
+    if keep_changes && is_at_head && has_parent {
+        let backup_name = format!(
+            "refs/petak/backup/drop-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        );
+        let _ = git(exec, repo, &["update-ref", &backup_name, &current_head]);
+
+        // Reset to base (parent of oldest dropped commit), leaving all working tree changes intact
+        git(exec, repo, &["reset", &base])?;
+        let new_head = git(exec, repo, &["rev-parse", "HEAD"])?.trim().to_string();
+        return Ok(OpResult {
+            ok: true,
+            backup_ref: Some(backup_name),
+            stopped_at: None,
+            new_head,
+            stash_conflict: false,
+        });
+    }
 
     let mut items = rebase_todo(exec, repo, &base)?;
     for item in &mut items {

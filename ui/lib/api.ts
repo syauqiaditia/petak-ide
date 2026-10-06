@@ -702,8 +702,8 @@ export const api = {
     return invoke<GitOpResult>('git_fixup', { root, sha });
   },
 
-  gitDrop(root: string, shas: string[]): Promise<GitOpResult> {
-    return invoke<GitOpResult>('git_drop', { root, shas });
+  gitDrop(root: string, shas: string[], keepChanges = true): Promise<GitOpResult> {
+    return invoke<GitOpResult>('git_drop', { root, shas, keepChanges });
   },
 
   gitReset(root: string, sha: string, mode: GitResetMode): Promise<GitOpResult> {

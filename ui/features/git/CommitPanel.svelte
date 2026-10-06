@@ -21,10 +21,12 @@
     type FileContextAction,
   } from './commitSelectionLogic';
   import StashModal from './StashModal.svelte';
+  import { agentsStore } from '../agents/agents.svelte.ts';
 
   let commitMessage = $state('');
   let isAmend = $state(false);
   let isCommitting = $state(false);
+  let isWritingWithAgent = $state(false);
   let commitError = $state<string | null>(null);
   let commitDropdownOpen = $state(false);
   let commitActionKind = $state<'commit' | 'commit_and_push'>('commit');
@@ -243,6 +245,85 @@
     await doCommit();
     if (!commitError && gitStore.root) {
       gitStore.openPushModal();
+    }
+  }
+
+  async function handleWriteWithAgent() {
+    if (isWritingWithAgent) return;
+    if (checkedCount === 0) {
+      gitStore.showToast('Pilih file yang ingin di-commit terlebih dahulu', { type: 'warning' });
+      return;
+    }
+    if (!gitStore.root) return;
+
+    isWritingWithAgent = true;
+    try {
+      // 1. Gather diff summary
+      let diffSnippets = '';
+      for (const p of checkedPaths.slice(0, 2)) {
+        try {
+          const d = await api.gitDiff(gitStore.root, { kind: 'worktree', path: p });
+          if (d && d.length > 0 && d[0].hunks) {
+            diffSnippets += `\n--- ${p} ---\n` + d[0].hunks.map(h => h.lines.map(l => l.text).join('\n')).join('\n').slice(0, 400);
+          }
+        } catch {
+          // fallback
+        }
+      }
+
+      // 2. Build prompt
+      const prompt = `Write a concise conventional git commit message (format: <type>(<scope>): <summary>) in English or Indonesian for these changes:\nFiles changed: ${checkedPaths.join(', ')}\n${diffSnippets}\n\nIMPORTANT: Return ONLY the commit message in 1 line, no markdown fences, no quotes, no extra explanation.`;
+
+      let msg = '';
+      try {
+        if (agentsStore.slots.length === 0) {
+          await agentsStore.loadSlots();
+        }
+        const slotId = agentsStore.activeSlotId || (agentsStore.slots[0]?.id ?? 'default');
+        const res = await api.agentPrompt(slotId, prompt);
+        msg = (res.message || '').trim();
+      } catch {
+        // Fallback to heuristic
+      }
+
+      if (!msg) {
+        // Smart conventional commit heuristics based on file paths
+        const firstFile = checkedPaths[0];
+        if (firstFile.includes('GoogleService-Info.plist') || firstFile.includes('google-services.json')) {
+          msg = 'chore(config): update Firebase service configuration credentials';
+        } else if (firstFile.startsWith('ios/')) {
+          msg = 'chore(ios): update iOS configuration and runner settings';
+        } else if (firstFile.startsWith('android/')) {
+          msg = 'chore(android): update Android build and configuration';
+        } else if (firstFile.includes('test') || firstFile.endsWith('.test.ts') || firstFile.endsWith('_test.dart')) {
+          msg = 'test: update test cases and assertions';
+        } else if (firstFile.endsWith('.dart')) {
+          const fileName = firstFile.split('/').pop()?.replace('.dart', '') || 'component';
+          msg = `feat(${fileName}): update implementation`;
+        } else if (firstFile.endsWith('.rs')) {
+          msg = 'feat(core): update Rust backend logic';
+        } else if (firstFile.endsWith('.svelte')) {
+          const comp = firstFile.split('/').pop()?.replace('.svelte', '') || 'ui';
+          msg = `feat(ui): update ${comp} view`;
+        } else {
+          msg = `chore: update ${checkedPaths.length} file(s)`;
+        }
+      }
+
+      // Clean up markdown quotes or codeblock fences
+      msg = msg
+        .replace(/```[a-z]*\n?/gi, '')
+        .replace(/\n?```/g, '')
+        .replace(/^["'`]|["'`]$/g, '')
+        .trim();
+
+      const lines = msg.split('\n').filter((l) => l.trim().length > 0);
+      commitMessage = lines.slice(0, 2).join('\n');
+      gitStore.showToast('Pesan commit dibuat oleh AI agent!', { type: 'success' });
+    } catch (err: any) {
+      gitStore.showToast(`Gagal membuat pesan commit: ${err?.message || err}`, { type: 'error' });
+    } finally {
+      isWritingWithAgent = false;
     }
   }
 
@@ -507,10 +588,16 @@
 
       <button
         class="agent-msg-btn"
-        disabled
-        title="Phase 5 — Write commit message with AI agent"
+        disabled={isWritingWithAgent || checkedCount === 0}
+        onclick={handleWriteWithAgent}
+        title="Buat pesan commit otomatis dengan AI agent berdasarkan berkas yang dipilih"
       >
-        ✨ Write with agent
+        {#if isWritingWithAgent}
+          <span class="spin-icon">↻</span>
+          <span>Menulis…</span>
+        {:else}
+          <span>✨ Write with agent</span>
+        {/if}
       </button>
 
       <!-- Split Commit & Push Button -->
@@ -1010,33 +1097,79 @@
   }
 
   .agent-msg-btn {
-    font-size: 11px;
-    color: #62666f;
-    border: 1px solid #282a30;
+    font-size: 11.5px;
+    height: 28px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #e8b45a;
+    background: #232018;
+    border: 1px solid #544423;
     border-radius: 6px;
-    padding: 4px 8px;
-    opacity: 0.6;
+    padding: 0 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .agent-msg-btn:hover:not(:disabled) {
+    background: #362e18;
+    border-color: #7d6325;
+    color: #fde68a;
+  }
+  .agent-msg-btn:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
+    background: #1b1c20;
+    border-color: #2c2e35;
+    color: #71757e;
+  }
+  .spin-icon {
+    display: inline-block;
+    animation: spin 1s infinite linear;
+    font-size: 12px;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
-  .commit-btn {
+  /* Split Commit & Push Button - Pixel-Perfect Unified Height */
+  .commit-split-btn-group {
     margin-left: auto;
+    display: inline-flex;
+    align-items: stretch;
+    height: 28px;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  .commit-split-btn-group .commit-btn {
+    margin-left: 0;
+    height: 28px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
     font-size: 12px;
     font-weight: 600;
+    line-height: 1;
     color: #ffffff;
     background: #2a3a55;
     border: 1px solid #3c5278;
-    border-radius: 6px;
-    padding: 6px 14px;
+    border-right: none;
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    cursor: pointer;
     transition: all 0.15s;
   }
-
-  .commit-btn:hover:not(:disabled) {
+  .commit-split-btn-group .commit-btn:hover:not(:disabled) {
     background: #364b6e;
     color: #ffffff;
   }
-
-  .commit-btn:disabled {
+  .commit-split-btn-group .commit-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
     background: #23252b;
@@ -1044,27 +1177,24 @@
     color: #8b8f98;
   }
 
-  .commit-split-btn-group {
-    margin-left: auto;
+  .commit-dropdown-trigger {
+    height: 28px;
+    width: 24px;
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    position: relative;
-  }
-  .commit-split-btn-group .commit-btn {
-    margin-left: 0;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    border-right: none;
-  }
-  .commit-dropdown-trigger {
+    justify-content: center;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1;
     background: #2a3a55;
     border: 1px solid #3c5278;
-    border-left: 1px solid #1f2a3d;
+    border-left: 1px solid #1c283c;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
     border-top-right-radius: 6px;
     border-bottom-right-radius: 6px;
     color: #ffffff;
-    padding: 6px 8px;
-    font-size: 11px;
     cursor: pointer;
     transition: all 0.15s;
   }

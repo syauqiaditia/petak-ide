@@ -320,12 +320,14 @@ pub async fn git_fixup(root: String, sha: String) -> Result<petak_core::git::OpR
 pub async fn git_drop(
     root: String,
     shas: Vec<String>,
+    keep_changes: Option<bool>,
 ) -> Result<petak_core::git::OpResult, String> {
+    let keep = keep_changes.unwrap_or(true);
     tauri::async_runtime::spawn_blocking(move || {
         let exec = petak_core::exec::SystemExec;
         let repo = std::path::Path::new(&root);
         let sha_slices: Vec<&str> = shas.iter().map(|s| s.as_str()).collect();
-        petak_core::git::drop(&exec, repo, &sha_slices).map_err(|e| e.to_string())
+        petak_core::git::drop(&exec, repo, &sha_slices, keep).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
