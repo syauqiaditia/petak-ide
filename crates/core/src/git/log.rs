@@ -329,6 +329,8 @@ pub fn log_with_state(
         replay_args.push(&skip_str);
 
         if filter.branches.is_empty() {
+            replay_args.push("--exclude=refs/stash");
+            replay_args.push("--exclude=refs/petak/backup/*");
             replay_args.push("--all");
         } else {
             for b in &filter.branches {
@@ -412,6 +414,8 @@ pub fn log_with_state(
         }
     } else {
         if filter.branches.is_empty() {
+            args.push("--exclude=refs/stash");
+            args.push("--exclude=refs/petak/backup/*");
             args.push("--all");
         } else {
             for b in &filter.branches {

@@ -80,6 +80,10 @@ fn test_git_log_and_branches_integration() {
     ]);
     let alice_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
 
+    // 6. Create a stash to ensure stashes are excluded from git log graph
+    repo.write_file("stash_test.txt", "wip stash\n");
+    repo.git(&["stash", "push", "-u", "-m", "wip test stash"]);
+
     // -------------------------------------------------------------
     // Test branches()
     // -------------------------------------------------------------
