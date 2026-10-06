@@ -23,6 +23,9 @@
   import { settingsStore } from './features/settings/settingsStore.svelte';
   import SettingsModal from './features/settings/SettingsModal.svelte';
   import DashboardView from './features/dashboard/DashboardView.svelte';
+  import RightDock from './shell/RightDock.svelte';
+  import { handlePreviewQueryParams } from './shell/previewUrlHandler';
+  import { buildStaticActions } from './shell/staticActions';
   import RightRail from './shell/RightRail.svelte';
   import MemoryView from './features/agents/MemoryView.svelte';
   import { runBenchmark as runBenchmarkExt, runAutomatedTestMode } from './features/benchmarks/benchRunner';
@@ -282,91 +285,15 @@
     }
   }
 
-  const staticActions = [
-    {
-      id: 'open-folder',
-      label: 'Open Folder...',
-      shortcut: '⌘O',
-      run: () => handlePickFolder(),
-    },
-    {
-      id: 'save',
-      label: 'Save',
-      shortcut: '⌘S',
-      run: () => editorComponent?.handleSave(),
-    },
-    {
-      id: 'format-document',
-      label: 'Format Document',
-      shortcut: '⌥⌘L',
-      run: () => editorComponent?.handleFormat(),
-    },
-    {
-      id: 'format-selection',
-      label: 'Format Selection',
-      run: () => editorComponent?.handleFormat(),
-    },
-    {
-      id: 'close-tab',
-      label: 'Close Tab',
-      shortcut: '⌘W',
-      run: () => editorComponent?.handleCloseActiveTab(),
-    },
-    {
-      id: 'find-file',
-      label: 'Find File...',
-      shortcut: '⌘P',
-      run: () => openPalette('files'),
-    },
-    {
-      id: 'find-in-project',
-      label: 'Find in Project...',
-      shortcut: '⇧⌘F',
-      run: () => openPalette('text'),
-    },
-    {
-      id: 'recent-files',
-      label: 'Recent Files',
-      shortcut: '⌘E',
-      run: () => openPalette('recent'),
-    },
-    {
-      id: 'toggle-terminal',
-      label: 'Toggle Terminal',
-      shortcut: '⌃`',
-      run: () => toggleTerminal(),
-    },
-    {
-      id: 'toggle-problems',
-      label: 'Toggle Problems Panel',
-      shortcut: '⇧⌘M',
-      run: () => openProblems(),
-    },
-    {
-      id: 'reformat-code',
-      label: 'Reformat Code',
-      shortcut: '⌥⌘L',
-      run: () => editorComponent?.handleFormat(),
-    },
-    {
-      id: 'rename-symbol',
-      label: 'Rename Symbol',
-      shortcut: '⇧F6',
-      run: () => editorComponent?.handleRename(),
-    },
-    {
-      id: 'goto-definition',
-      label: 'Go to Definition',
-      shortcut: '⌘B',
-      run: () => editorComponent?.handleGoToDefinition(),
-    },
-    {
-      id: 'find-usages',
-      label: 'Find Usages',
-      shortcut: '⌥F7',
-      run: () => editorComponent?.handleFindUsages(),
-    },
-  ];
+  let staticActions = (
+    buildStaticActions({
+      handlePickFolder,
+      editorComponent,
+      openPalette,
+      toggleTerminal,
+      openProblems,
+    })
+  );
 
   function triggerIndexRebuild(rootPath: string) {
     if (!rootPath) return;
@@ -685,117 +612,13 @@
 
     // 5. Handle preview query params
     setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('running') || window.location.search.includes('preview-running')) {
-          runStore.state = 'running';
-          runStore.runId = 101;
-          runStore.lastReloadMs = 240;
-          runStore.lastReloadOk = true;
-          runStore.devtoolsUri = 'http://127.0.0.1:9100?uri=http://127.0.0.1:8181';
-          runStore.gradleDaemon = true;
-          runStore.outputLines = [
-            { id: 1, stream: 'stdout', line: 'Launching lib/main.dart on Pixel 8 in debug mode...' },
-            { id: 2, stream: 'stdout', line: 'Running Gradle task assembleDebug...' },
-            { id: 3, stream: 'stdout', line: '✓ Built build/app/outputs/flutter-apk/app-debug.apk' },
-            { id: 4, stream: 'stdout', line: 'Connecting to VM Service at ws://127.0.0.1:8181/ws' },
-            { id: 5, stream: 'stdout', line: 'The Flutter DevTools debugger and profiler is available at: http://127.0.0.1:9100?uri=http://127.0.0.1:8181' },
-            { id: 6, stream: 'stdout', line: '⚡ To hot reload changes while running, press "r" or use TitleBar.' },
-          ];
-        }
-        if (params.has('build-error') || window.location.search.includes('tab=build')) {
-          runStore.buildErrors = [
-            { file: 'lib/features/checkout/CheckoutScreen.kt', line: 48, col: 12, message: 'Unresolved reference: applyVoucher' },
-            { file: 'lib/features/cart/CartRepository.kt', line: 102, col: 4, message: 'Type mismatch: inferred type is Double? but Double was expected' },
-          ];
-        }
-        if (params.has('preview') || (window as any).__PETAK_PREVIEW__) {
-          runStore.snapshot = {
-            emulators: [
-              { id: 'Pixel_8_API_35', name: 'Pixel 8', kind: 'android-avd', state: 'running', deviceId: 'emulator-5554', sdk: '35' },
-              { id: 'Nexus_5_API_30', name: 'Nexus 5', kind: 'android-avd', state: 'stopped', deviceId: null, sdk: '30' },
-              { id: 'iPhone-15-Pro', name: 'iPhone 15 Pro', kind: 'ios-sim', state: 'running', deviceId: 'udid-ios-sim-15', sdk: '17.5' },
-              { id: 'iPad-Air-11', name: 'iPad Air 11-inch', kind: 'ios-sim', state: 'stopped', deviceId: null, sdk: '17.5' },
-            ],
-            physical: [
-              { id: '2A151FDH2008W4', name: 'Samsung Galaxy S23', platform: 'android', transport: 'usb', state: 'online' },
-              { id: '00008110-001A24621E22801E', name: 'UQi iPhone 14 Pro', platform: 'ios', transport: 'usb', state: 'online' },
-            ],
-          };
-          runStore.devices = [
-            { id: 'emulator-5554', name: 'Pixel 8', platform: 'android', kind: 'emulator', state: 'online', sdk: '35' },
-            { id: 'udid-ios-sim-15', name: 'iPhone 15 Pro', platform: 'ios', kind: 'emulator', state: 'online', sdk: '17.5' },
-            { id: '2A151FDH2008W4', name: 'Samsung Galaxy S23', platform: 'android', kind: 'physical', state: 'online' },
-          ];
-          runStore.selectedDeviceId = 'emulator-5554';
-          branchName = 'canary/prod/1.9.0';
-        }
-
-        if (window.location.search.includes('tab=run')) {
-          openRun();
-        } else if (window.location.search.includes('tab=build')) {
-          openBuild();
-        } else if (window.location.search.includes('tab=logcat')) {
-          openLogcat();
-        } else if (window.location.search.includes('tab=devices')) {
-          activeRailTab = 'devices';
-        } else if (window.location.search.includes('tab=git')) {
-          activeRailTab = 'git';
-        } else if (window.location.search.includes('tab=mr') || window.location.search.includes('preview-mr')) {
-          activeRailTab = 'mr';
-        } else if (window.location.search.includes('tab=tests') || window.location.search.includes('preview-tests')) {
-          activeRailTab = 'tests';
-        } else if (window.location.search.includes('tab=toolchains')) {
-          activeRailTab = 'settings';
-        }
-
-        if (params.has('mirror') || window.location.search.includes('preview-mirror')) {
-          const stateParam = params.get('mirror-state') || 'live';
-          const devParam = params.get('mirror-device') || 'Pixel 8 · API 35';
-          const isViewOnlyParam = params.get('mirror-viewonly') === 'true' || stateParam === 'view-only';
-
-          mirrorStore.isOpen = true;
-          mirrorStore.deviceName = devParam;
-          mirrorStore.serial = isViewOnlyParam ? 'udid-ios-sim-15' : 'emulator-5554';
-          mirrorStore.isViewOnly = isViewOnlyParam;
-
-          if (stateParam === 'empty') {
-            mirrorStore.status = 'empty';
-            mirrorStore.deviceName = 'No Device Selected';
-            mirrorStore.serial = '';
-          } else if (stateParam === 'connecting') {
-            mirrorStore.status = 'connecting';
-          } else if (stateParam === 'disconnected') {
-            mirrorStore.status = 'disconnected';
-            mirrorStore.disconnectReason = 'USB connection was lost or emulator exited. Re-plug device to resume stream.';
-          } else if (stateParam === 'error') {
-            mirrorStore.status = 'error';
-            if (params.has('screenrec') || isViewOnlyParam) {
-              mirrorStore.errorMessage = 'macOS authorization denied: Screen Recording permission is required to stream iOS Simulator display.';
-            } else {
-              mirrorStore.errorMessage = 'exit code 1: adb forward failed: device unauthorized. Please check USB debugging prompt on phone.';
-            }
-          } else if (stateParam === 'view-only') {
-            mirrorStore.status = 'view-only';
-            mirrorStore.deviceName = 'iPhone 15 Pro · iOS 17.5';
-            mirrorStore.isViewOnly = true;
-            mirrorStore.fps = 60;
-          } else {
-            mirrorStore.status = 'live';
-            mirrorStore.isViewOnly = false;
-            mirrorStore.fps = 59;
-            mirrorStore.latencyMs = 38;
-          }
-        }
-
-        if (params.has('agent') || window.location.search.includes('preview-agent')) {
-          isAgentPanelOpen = true;
-        }
-
-        if (params.has('settings') || window.location.search.includes('preview-settings')) {
-          settingsStore.open('agents');
-        }
-      }
+      handlePreviewQueryParams({
+        openRun,
+        openBuild,
+        openLogcat,
+        setActiveRailTab: (tab) => (activeRailTab = tab),
+        setBranchName: (name) => (branchName = name),
+      });
     }, 50);
 
     // Global keyboard shortcut for Mirror (Cmd-Shift-D / Ctrl-Shift-D) & Agents (Cmd-6)
@@ -939,44 +762,13 @@
 
     <!-- Right Tool Window Dock (Mutual Exclusivity: Agent OR Memory OR Mirror OR Devices) -->
     {#if !showDashboard && panelStore.activeRightPanel}
-      <div class="right-panel-dock">
-        {#if panelStore.activeRightPanel === 'agent'}
-          {#if AgentsPanelComponent}
-            <AgentsPanelComponent onClose={() => panelStore.closeRightPanel()} />
-          {:else}
-            <div class="agent-panel-slot">
-              <div class="agent-toolbar-top">
-                <span class="agent-title">AI Agents</span>
-                <button class="agent-close-btn" onclick={() => panelStore.closeRightPanel()}>✕</button>
-              </div>
-            </div>
-          {/if}
-        {:else if panelStore.activeRightPanel === 'memory'}
-          <div class="right-memory-dock" style="width: 480px; display: flex; flex-direction: column; height: 100%; border-left: 1px solid #26282d; background: #121317; z-index: 5;">
-            <div style="height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #26282d; background: #16171b;">
-              <div style="font-weight: 600; font-size: 12.5px; color: #d8d9dc; display: flex; align-items: center; gap: 6px;">
-                <span>📓 Project Memory (Obsidian Vault)</span>
-              </div>
-              <button class="agent-close-btn" onclick={() => panelStore.closeRightPanel()} title="Tutup Panel Memory">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg>
-              </button>
-            </div>
-            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
-              <MemoryView />
-            </div>
-          </div>
-        {:else if panelStore.activeRightPanel === 'mirror' && DeviceMirrorPanelComponent}
-          <DeviceMirrorPanelComponent
-            onSelectDevice={() => panelStore.openRightPanel('devices')}
-            onOpenLogcat={openLogcat}
-            onClose={() => panelStore.closeRightPanel()}
-          />
-        {:else if panelStore.activeRightPanel === 'devices' && DevicesPanelComponent}
-          <div class="right-devices-panel">
-            <DevicesPanelComponent onClose={() => panelStore.closeRightPanel()} />
-          </div>
-        {/if}
-      </div>
+      <RightDock
+        {AgentsPanelComponent}
+        {DeviceMirrorPanelComponent}
+        {DevicesPanelComponent}
+        onOpenLogcat={openLogcat}
+      />
+    {/if}
     {/if}
 
     <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
