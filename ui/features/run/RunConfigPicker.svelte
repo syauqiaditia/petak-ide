@@ -106,21 +106,24 @@
 <style>
   .config-picker {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
   }
   .trigger-btn {
     display: flex;
     align-items: center;
-    gap: 7px;
-    height: 30px;
-    padding: 0 8px 0 6px;
-    border-radius: 6px;
+    gap: 6px;
+    height: 26px;
+    padding: 0 6px 0 4px;
+    border-radius: 5px;
     background: transparent;
     border: none;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12.5px;
     color: #d8d9dc;
-    transition: background 0.15s;
+    transition: background 0.12s;
+    min-width: 0;
   }
   .trigger-btn:hover {
     background: #23252b;
@@ -129,9 +132,10 @@
     font-size: 10px;
     font-weight: 600;
     color: #101114;
-    border-radius: 4px;
-    padding: 1px 5px;
+    border-radius: 3px;
+    padding: 1px 4px;
     letter-spacing: 0.3px;
+    flex-shrink: 0;
   }
   .badge-and {
     background: #7fc98f;
@@ -144,10 +148,14 @@
     color: #8b8f98;
   }
   .config-name {
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 500;
     color: #e6e7ea;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: clamp(50px, 8vw, 110px);
+    min-width: 0;
   }
   .config-name.empty {
     color: #8b8f98;

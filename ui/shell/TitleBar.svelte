@@ -667,7 +667,7 @@
         <circle cx="11" cy="11" r="6"></circle>
         <path d="M20 20l-4.5-4.5"></path>
       </svg>
-      <span>Search everywhere</span>
+      <span class="search-label">Search everywhere</span>
       <span class="search-shortcut">⇧⇧</span>
     </button>
 
@@ -683,7 +683,7 @@
         <circle cx="12" cy="12" r="3"></circle>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
       </svg>
-      <span>Settings</span>
+      <span class="settings-label">Settings</span>
       <span class="action-shortcut">⌘,</span>
     </button>
 
@@ -722,22 +722,26 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px 0 12px;
+    gap: 6px;
+    padding: 0 10px;
     background: var(--p-bg-surface, #121317);
     border-bottom: 1px solid var(--border-default, #1e2027);
     user-select: none;
     -webkit-user-select: none;
+    min-width: 0;
+    overflow: hidden;
   }
   .traffic-lights-spacer {
-    width: 80px;
+    width: 76px;
     height: 100%;
     flex-shrink: 0;
   }
   .brand {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
+    cursor: pointer;
   }
   .brand-icon {
     width: 20px;
@@ -761,14 +765,16 @@
     font-weight: 600;
     letter-spacing: 0.2px;
     color: #e6e7ea;
+    font-size: 13px;
   }
   .brand-version-badge {
-    font-size: 11px;
+    font-size: 10.5px;
     color: #8b8f98;
     background: #1a1b1f;
-    padding: 1px 7px;
-    border-radius: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
     font-weight: 500;
+    transition: opacity 0.15s;
   }
   .back-to-editor-btn {
     display: flex;
@@ -790,8 +796,8 @@
     color: #8bb8ff;
   }
   .config-gear-btn {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 4px;
     display: grid;
     place-items: center;
@@ -800,6 +806,7 @@
     color: #8b8f98;
     cursor: pointer;
     transition: all 0.12s;
+    flex-shrink: 0;
   }
   .config-gear-btn:hover {
     background: #23252b;
@@ -807,34 +814,40 @@
   }
   .divider {
     width: 1px;
-    height: 18px;
-    background: #2c2e34;
+    height: 16px;
+    background: #282a30;
+    flex-shrink: 0;
   }
   .project-wrap {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    flex-shrink: 1;
   }
   .project-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 10px;
-    border-radius: 7px;
+    gap: 5px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
     font-weight: 500;
     color: #d8d9dc;
-    transition: background 0.15s;
+    font-size: 12.5px;
+    transition: background 0.12s;
     background: transparent;
     border: none;
     cursor: pointer;
-    max-width: 160px;
+    max-width: clamp(75px, 9vw, 150px);
+    min-width: 0;
   }
   .project-btn span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     display: inline-block;
-    max-width: 130px;
+    min-width: 0;
   }
   .project-btn:hover {
     background: #1e2025;
@@ -967,30 +980,37 @@
   }
   .branch-wrap {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    flex-shrink: 1;
   }
   .branch-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 10px;
-    border-radius: 7px;
+    gap: 5px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
     color: #b9bcc3;
-    transition: background 0.15s;
+    font-size: 12.5px;
+    transition: background 0.12s;
     background: transparent;
     border: none;
     cursor: pointer;
+    max-width: clamp(75px, 9vw, 140px);
+    min-width: 0;
   }
   .branch-btn:hover {
     background: #1e2025;
     color: #e6e7ea;
   }
   .branch-label {
-    max-width: 160px;
+    max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
   }
   .branch-popup-menu {
     position: absolute;
@@ -1109,34 +1129,41 @@
     color: #9eccff;
   }
   .spacer {
-    flex-grow: 1;
+    flex: 1 1 8px;
+    min-width: 4px;
     height: 100%;
   }
   .run-config-group {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     padding: 2px 4px;
-    border: 1px solid #2c2e34;
-    border-radius: 8px;
+    border: 1px solid #282a30;
+    border-radius: 7px;
     background: #17181c;
+    flex-shrink: 0;
+    min-width: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   }
   .group-divider {
     width: 1px;
-    height: 18px;
-    background: #2c2e34;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 0 2px;
+    flex-shrink: 0;
   }
   .action-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
     display: grid;
     place-items: center;
     color: #b9bcc3;
     background: transparent;
     border: none;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: all 0.12s;
+    flex-shrink: 0;
   }
   .action-btn:hover {
     background: #23252b;
@@ -1154,6 +1181,7 @@
   }
   .run-btn:hover {
     background: #284431;
+    color: #8ce49e;
   }
   .run-btn:disabled {
     opacity: 0.35;
@@ -1163,11 +1191,11 @@
     background: #1f3325;
   }
   .reload-btn {
-    background: #1f3325;
-    color: #7fc98f;
+    background: #232219;
+    color: #e8b45a;
   }
   .reload-btn:hover {
-    background: #284431;
+    background: #332f1f;
   }
   .restart-btn {
     background: #1a2936;
@@ -1185,6 +1213,7 @@
   }
   .stop-btn:hover {
     background: #2a1d1e;
+    color: #ff8580;
   }
   .stop-btn:disabled {
     opacity: 0.35;
@@ -1196,15 +1225,16 @@
   .cockpit-right {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    flex-shrink: 0;
   }
   .titlebar-action-btn {
     display: flex;
     align-items: center;
     gap: 5px;
-    height: 30px;
-    padding: 0 9px;
-    border-radius: 7px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
     font-size: 11.5px;
     font-weight: 500;
     color: #8b8f98;
@@ -1212,22 +1242,10 @@
     border: 1px solid transparent;
     cursor: pointer;
     transition: all 0.12s ease;
+    flex-shrink: 0;
   }
-  @media (max-width: 1200px) {
-    .titlebar-action-btn span {
-      display: none;
-    }
-    .titlebar-action-btn {
-      padding: 0 7px;
-    }
-    .search-btn span:first-of-type {
-      display: none;
-    }
-    .search-btn {
-      width: auto;
-      min-width: 60px;
-      padding: 0 8px;
-    }
+  .settings-label {
+    white-space: nowrap;
   }
   .titlebar-action-btn:hover {
     color: #d8d9dc;
@@ -1257,20 +1275,86 @@
   .search-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 30px;
-    padding: 0 12px;
-    border-radius: 7px;
-    border: 1px solid #2c2e34;
+    gap: 6px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid #282a30;
     color: #8b8f98;
-    width: 190px;
+    width: 145px;
     background: #16171a;
     cursor: pointer;
+    transition: all 0.12s;
+    font-size: 12px;
+  }
+  .search-btn:hover {
+    border-color: #383a42;
+    color: #bcbec4;
+    background: #1a1b1f;
+  }
+  .search-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .search-shortcut {
     margin-left: auto;
-    font-size: 11px;
+    font-size: 10px;
     color: #666a73;
+    font-family: inherit;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+  }
+  @media (max-width: 1320px) {
+    .settings-label,
+    .action-shortcut {
+      display: none !important;
+    }
+    .settings-toggle-btn {
+      width: 28px;
+      padding: 0;
+      justify-content: center;
+    }
+  }
+  @media (max-width: 1200px) {
+    .search-label {
+      display: none !important;
+    }
+    .search-btn {
+      width: auto;
+      min-width: 48px;
+      padding: 0 7px;
+    }
+    .brand-version-badge {
+      display: none !important;
+    }
+  }
+  @media (max-width: 1060px) {
+    .search-shortcut {
+      display: none !important;
+    }
+    .search-btn {
+      width: 28px;
+      padding: 0;
+      justify-content: center;
+      min-width: 28px;
+    }
+    .project-btn {
+      max-width: 100px;
+    }
+    .branch-btn {
+      max-width: 90px;
+    }
+  }
+  @media (max-width: 920px) {
+    .brand-text {
+      display: none !important;
+    }
+    .divider {
+      display: none !important;
+    }
   }
   .avatar {
     width: 28px;

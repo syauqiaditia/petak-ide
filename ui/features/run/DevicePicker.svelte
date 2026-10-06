@@ -79,10 +79,18 @@
   );
 
   function formatDeviceLabel(name: string, sdk?: string): string {
-    if (sdk) {
-      return `${name} · API ${sdk}`;
+    if (!sdk) return name;
+    const cleanSdk = sdk.trim();
+    if (!cleanSdk) return name;
+    if (name.includes(cleanSdk)) return name;
+    if (/^ios/i.test(cleanSdk)) {
+      const ver = cleanSdk.replace(/^ios\s*/i, '').split(/[\s-]/)[0];
+      return ver ? `${name} (${ver})` : `${name} (iOS)`;
     }
-    return name;
+    if (/^\d+$/.test(cleanSdk)) {
+      return `${name} (API ${cleanSdk})`;
+    }
+    return `${name} (${cleanSdk.split(/[\s-]/)[0]})`;
   }
 </script>
 
@@ -317,21 +325,24 @@
 <style>
   .device-picker {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
   }
   .trigger-btn {
     display: flex;
     align-items: center;
-    gap: 7px;
-    height: 30px;
-    padding: 0 8px 0 6px;
-    border-radius: 6px;
+    gap: 6px;
+    height: 26px;
+    padding: 0 6px 0 4px;
+    border-radius: 5px;
     background: transparent;
     border: none;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 12.5px;
     color: #d8d9dc;
-    transition: background 0.15s;
+    transition: background 0.12s;
+    min-width: 0;
   }
   .trigger-btn:hover {
     background: #23252b;
@@ -339,8 +350,8 @@
   .device-icon-wrap {
     display: flex;
     align-items: center;
-    width: 15px;
-    height: 15px;
+    width: 14px;
+    height: 14px;
     color: #b9bcc3;
     flex-shrink: 0;
   }
@@ -357,13 +368,14 @@
     flex-shrink: 0;
   }
   .device-name {
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 500;
     color: #e6e7ea;
     white-space: nowrap;
-    max-width: 140px;
+    max-width: clamp(75px, 11vw, 170px);
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
   }
   .device-name.empty {
     color: #8b8f98;
