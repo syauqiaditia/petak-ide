@@ -2,12 +2,15 @@
   import { onMount } from 'svelte';
   import { api, type GitStashEntry, type GitStashFileEntry } from '../../lib/api';
   import { gitStore } from './git.svelte';
+  import DiffView from './DiffView.svelte';
+  import type { GitDiffFile } from './types';
 
   let stashes = $state<GitStashEntry[]>([]);
   let selectedIndex = $state<number | null>(null);
   let stashFiles = $state<GitStashFileEntry[]>([]);
   let selectedFilePath = $state<string | null>(null);
-  let fileDiffContent = $state<string | null>(null);
+  let activeDiffFile = $state<GitDiffFile | null>(null);
+
   let loading = $state(false);
   let filesLoading = $state(false);
   let diffLoading = $state(false);
@@ -16,6 +19,43 @@
   let selectedStash = $derived(
     selectedIndex !== null ? stashes.find((s) => s.index === selectedIndex) ?? null : null
   );
+
+  // Folder grouping (Foldering)
+  interface StashFolderGroup {
+    dir: string;
+    files: GitStashFileEntry[];
+  }
+
+  let expandedFolders = $state<Set<string>>(new Set());
+
+  let folderGroups = $derived.by<StashFolderGroup[]>(() => {
+    const map = new Map<string, GitStashFileEntry[]>();
+    for (const file of stashFiles) {
+      const lastSlash = file.path.lastIndexOf('/');
+      const dir = lastSlash >= 0 ? file.path.substring(0, lastSlash) : '';
+      if (!map.has(dir)) {
+        map.set(dir, []);
+      }
+      map.get(dir)!.push(file);
+    }
+
+    const groups: StashFolderGroup[] = [];
+    for (const [dir, files] of map.entries()) {
+      groups.push({ dir, files });
+    }
+    groups.sort((a, b) => a.dir.localeCompare(b.dir));
+    return groups;
+  });
+
+  function toggleFolder(dir: string) {
+    const next = new Set(expandedFolders);
+    if (next.has(dir)) {
+      next.delete(dir);
+    } else {
+      next.add(dir);
+    }
+    expandedFolders = next;
+  }
 
   async function loadStashes() {
     if (!gitStore.root) return;
@@ -34,7 +74,7 @@
         selectedIndex = null;
         stashFiles = [];
         selectedFilePath = null;
-        fileDiffContent = null;
+        activeDiffFile = null;
       }
     } catch (e: any) {
       stashes = [];
@@ -48,15 +88,23 @@
   async function selectStash(index: number) {
     selectedIndex = index;
     selectedFilePath = null;
-    fileDiffContent = null;
+    activeDiffFile = null;
     if (!gitStore.root) return;
     filesLoading = true;
     try {
       stashFiles = await api.gitStashFiles(gitStore.root, index);
+      // Auto expand all folders
+      const allDirs = new Set<string>();
+      for (const f of stashFiles) {
+        const lastSlash = f.path.lastIndexOf('/');
+        allDirs.add(lastSlash >= 0 ? f.path.substring(0, lastSlash) : '');
+      }
+      expandedFolders = allDirs;
+
       if (stashFiles.length > 0) {
         selectFile(stashFiles[0].path);
       }
-    } catch (e: any) {
+    } catch {
       stashFiles = [];
     } finally {
       filesLoading = false;
@@ -68,9 +116,10 @@
     if (!gitStore.root || selectedIndex === null) return;
     diffLoading = true;
     try {
-      fileDiffContent = await api.gitStashFileDiff(gitStore.root, selectedIndex, path);
+      const diffs = await api.gitStashDiff(gitStore.root, selectedIndex, path);
+      activeDiffFile = diffs[0] ?? null;
     } catch {
-      fileDiffContent = '';
+      activeDiffFile = null;
     } finally {
       diffLoading = false;
     }
@@ -134,13 +183,18 @@
     }
   }
 
+  function getFileName(fullPath: string): string {
+    const idx = fullPath.lastIndexOf('/');
+    return idx >= 0 ? fullPath.substring(idx + 1) : fullPath;
+  }
+
   onMount(() => {
     loadStashes();
   });
 </script>
 
 <div class="stash-view">
-  <!-- Left Column: Stash List (340px) -->
+  <!-- Left Column: Stash List (300px) -->
   <div class="stash-sidebar">
     <div class="sidebar-header">
       <div class="header-title">
@@ -194,7 +248,7 @@
     {/if}
   </div>
 
-  <!-- Right Column: Stash Details & Changed Files (Master-Detail) -->
+  <!-- Right Area: Master-Detail (Folders/Files on Left, Full DiffView on Right) -->
   <div class="stash-detail-main">
     {#if selectedStash}
       <!-- Detail Header / Action Toolbar -->
@@ -237,13 +291,13 @@
         </div>
       </div>
 
-      <!-- Split Files List & Diff Viewer -->
+      <!-- Split Files Pane (Foldering) & Full DiffView -->
       <div class="stash-content-split">
-        <!-- Files List in Stash -->
+        <!-- Foldering Files Pane -->
         <div class="stash-files-pane">
           <div class="pane-title-bar">
-            <span>Berkas dalam Stash ({stashFiles.length})</span>
-            <span class="cherry-hint">Bisa cherry-pick per-file ➔</span>
+            <span>Berkas ({stashFiles.length})</span>
+            <span class="cherry-hint">Cherry-pick per berkas ➔</span>
           </div>
 
           {#if filesLoading}
@@ -252,67 +306,89 @@
             <div class="files-loading">Tidak ada berkas yang dimodifikasi.</div>
           {:else}
             <div class="file-entry-list">
-              {#each stashFiles as file (file.path)}
-                {@const isFileSelected = file.path === selectedFilePath}
-                <div
-                  class="file-row"
-                  class:selected={isFileSelected}
-                  onclick={() => selectFile(file.path)}
-                  role="button"
-                  tabindex="0"
-                  onkeydown={(e) => e.key === 'Enter' && selectFile(file.path)}
-                >
-                  <span class="file-status {file.status}">
-                    {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : 'M'}
-                  </span>
-                  <span class="file-path-text" title={file.path}>{file.path}</span>
-
-                  <button
-                    class="cherry-pick-btn"
-                    onclick={(e) => handleCherryPickFile(file.path, e)}
-                    title="Cherry-pick: Terapkan HANYA file ini ke working tree lokal"
+              {#each folderGroups as group (group.dir)}
+                {@const isExpanded = expandedFolders.has(group.dir)}
+                <!-- Folder Header Row -->
+                {#if group.dir}
+                  <div
+                    class="folder-group-row"
+                    onclick={() => toggleFolder(group.dir)}
+                    role="button"
+                    tabindex="0"
+                    onkeydown={(e) => e.key === 'Enter' && toggleFolder(group.dir)}
                   >
-                    Cherry-pick File
-                  </button>
-                </div>
+                    <span class="folder-chevron" class:expanded={isExpanded}>▶</span>
+                    <span class="folder-icon">📁</span>
+                    <span class="folder-name">{group.dir}</span>
+                    <span class="folder-count">{group.files.length}</span>
+                  </div>
+                {/if}
+
+                {#if !group.dir || isExpanded}
+                  <div class="folder-children" class:indented={!!group.dir}>
+                    {#each group.files as file (file.path)}
+                      {@const isFileSelected = file.path === selectedFilePath}
+                      <div
+                        class="file-row"
+                        class:selected={isFileSelected}
+                        onclick={() => selectFile(file.path)}
+                        role="button"
+                        tabindex="0"
+                        onkeydown={(e) => e.key === 'Enter' && selectFile(file.path)}
+                      >
+                        <span class="file-status {file.status}">
+                          {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : 'M'}
+                        </span>
+                        <span class="file-path-text" title={file.path}>
+                          {getFileName(file.path)}
+                        </span>
+
+                        <button
+                          class="cherry-pick-btn"
+                          onclick={(e) => handleCherryPickFile(file.path, e)}
+                          title="Cherry-pick: Terapkan HANYA file ini ke working tree lokal"
+                        >
+                          Cherry-pick
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
               {/each}
             </div>
           {/if}
         </div>
 
-        <!-- Diff Viewer Pane for Selected File -->
+        <!-- Full Integrated DiffView Pane (Identical to Commit & Log Diff) -->
         <div class="stash-diff-pane">
-          <div class="diff-header-bar">
-            <span>Diff: <strong>{selectedFilePath || 'Pilih berkas untuk melihat perbandingan'}</strong></span>
-            {#if selectedFilePath}
-              <button
-                class="diff-cherry-btn"
-                onclick={(e) => selectedFilePath && handleCherryPickFile(selectedFilePath, e)}
-                title="Terapkan hanya file ini ke working tree"
-              >
-                ✓ Terapkan Berkas Ini
-              </button>
-            {/if}
-          </div>
-
-          <div class="diff-body">
-            {#if diffLoading}
-              <div class="diff-loading">Memuat diff…</div>
-            {:else if !selectedFilePath}
-              <div class="diff-placeholder">Pilih salah satu berkas di sebelah kiri untuk melihat perubahannya.</div>
-            {:else if fileDiffContent}
-              <pre class="diff-pre"><code>{fileDiffContent}</code></pre>
-            {:else}
-              <div class="diff-placeholder">Tidak ada perbedaan pada berkas ini.</div>
-            {/if}
-          </div>
+          {#if diffLoading}
+            <div class="diff-loading-state">
+              <span class="loading-spin">↻</span>
+              <span>Memuat perbandingan berkas…</span>
+            </div>
+          {:else if activeDiffFile}
+            <DiffView
+              diffFile={activeDiffFile}
+              filePath={selectedFilePath ?? ''}
+              sourceKind="commit"
+            />
+          {:else if selectedFilePath}
+            <div class="diff-placeholder">
+              <span>Tidak ada perbedaan yang terdeteksi untuk berkas ini.</span>
+            </div>
+          {:else}
+            <div class="diff-placeholder">
+              <span class="placeholder-icon">📄</span>
+              <p>Pilih salah satu berkas dari panel kiri untuk melihat perbandingannya.</p>
+            </div>
+          {/if}
         </div>
       </div>
     {:else}
       <div class="no-selection-state">
         <span class="big-icon">📦</span>
         <h3>Pilih Stash dari panel kiri</h3>
-        <p>Kamu dapat menerapkan seluruh berkas, atau men-cherry pick berkas tertentu saja ke working tree.</p>
+        <p>Kamu dapat menerapkan seluruh berkas (Apply All), mem-pop stash, atau men-cherry pick berkas tertentu saja ke working tree.</p>
       </div>
     {/if}
   </div>
@@ -332,7 +408,7 @@
 
   /* Left Sidebar: Stash List */
   .stash-sidebar {
-    width: 320px;
+    width: 290px;
     flex-shrink: 0;
     border-right: 1px solid #23252a;
     display: flex;
@@ -455,7 +531,7 @@
     text-overflow: ellipsis;
   }
 
-  /* Right Column: Master Details */
+  /* Right Area: Master Details */
   .stash-detail-main {
     flex: 1;
     display: flex;
@@ -463,13 +539,14 @@
     min-width: 0;
   }
   .detail-header-bar {
-    padding: 10px 16px;
+    padding: 8px 16px;
     background: #17181c;
     border-bottom: 1px solid #23252a;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    flex-shrink: 0;
   }
   .stash-headline {
     display: flex;
@@ -548,12 +625,15 @@
     flex: 1;
     min-height: 0;
   }
+
+  /* Foldering Files Pane */
   .stash-files-pane {
-    width: 380px;
+    width: 320px;
     border-right: 1px solid #23252a;
     display: flex;
     flex-direction: column;
     background: #131417;
+    flex-shrink: 0;
   }
   .pane-title-bar {
     height: 32px;
@@ -582,25 +662,76 @@
     overflow-y: auto;
     padding: 4px;
   }
+
+  /* Folder Header */
+  .folder-group-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s ease;
+  }
+  .folder-group-row:hover {
+    background: #1a1c22;
+    color: #e2e8f0;
+  }
+  .folder-chevron {
+    font-size: 9px;
+    color: #64748b;
+    transition: transform 0.12s ease;
+  }
+  .folder-chevron.expanded {
+    transform: rotate(90deg);
+  }
+  .folder-icon {
+    font-size: 12px;
+  }
+  .folder-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .folder-count {
+    font-size: 10px;
+    color: #64748b;
+    background: #1e2025;
+    padding: 1px 5px;
+    border-radius: 8px;
+  }
+  .folder-children.indented {
+    padding-left: 12px;
+  }
+
   .file-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 8px;
+    gap: 6px;
+    padding: 4px 6px;
     border-radius: 4px;
     font-size: 11.5px;
     cursor: pointer;
     transition: background 0.1s ease;
+    margin-bottom: 1px;
   }
   .file-row:hover {
     background: #1a1c22;
   }
   .file-row.selected {
-    background: #21293a;
+    background: #1e2a40;
+    color: #ffffff;
   }
   .file-status {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
     width: 14px;
     text-align: center;
@@ -614,9 +745,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #e2e8f0;
+    color: #cbd5e1;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
+  }
+  .file-row.selected .file-path-text {
+    color: #ffffff;
+    font-weight: 500;
   }
   .cherry-pick-btn {
     opacity: 0;
@@ -640,64 +775,43 @@
     color: #ffffff;
   }
 
-  /* Diff Pane */
+  /* Full DiffView Integration Pane */
   .stash-diff-pane {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
     background: #101114;
+    overflow: hidden;
   }
-  .diff-header-bar {
-    height: 32px;
-    padding: 0 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid #202227;
-    background: #16171b;
-    font-size: 11px;
-    color: #a0a4ad;
-  }
-  .diff-header-bar strong {
-    color: #93c5fd;
-    font-family: 'JetBrains Mono', monospace;
-  }
-  .diff-cherry-btn {
-    background: #1e3a2e;
-    border: 1px solid #10b981;
-    color: #6ee7b7;
-    border-radius: 4px;
-    font-size: 10.5px;
-    font-weight: 600;
-    padding: 2px 8px;
-    cursor: pointer;
-  }
-  .diff-cherry-btn:hover {
-    background: #10b981;
-    color: #ffffff;
-  }
-  .diff-body {
-    flex: 1;
-    overflow: auto;
-    padding: 12px;
-  }
-  .diff-loading,
+  .diff-loading-state,
   .diff-placeholder {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 12px;
     padding: 40px;
     text-align: center;
-    color: #6b7280;
-    font-size: 12px;
   }
-  .diff-pre {
-    margin: 0;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    line-height: 1.5;
-    color: #cbd5e1;
-    white-space: pre-wrap;
-    word-break: break-all;
+  .loading-spin {
+    font-size: 20px;
+    animation: spin 1s infinite linear;
+    margin-bottom: 8px;
+    display: inline-block;
   }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .placeholder-icon {
+    font-size: 36px;
+    margin-bottom: 10px;
+    opacity: 0.6;
+  }
+
   .no-selection-state {
     flex: 1;
     display: flex;

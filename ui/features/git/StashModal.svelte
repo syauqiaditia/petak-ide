@@ -15,7 +15,7 @@
 
   let mode = $state<'push' | 'list'>(initialMode);
   let stashMessage = $state('');
-  let includeUntracked = $state(true);
+  let includeUntracked = $state(false);
   let stashes = $state<GitStashEntry[]>([]);
   let loading = $state(false);
   let actionFeedback = $state<string | null>(null);

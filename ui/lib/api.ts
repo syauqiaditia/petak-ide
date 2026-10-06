@@ -1501,6 +1501,15 @@ export const api = {
     }
   },
 
+  async gitStashDiff(root: string, index: number, path?: string): Promise<GitDiffFile[]> {
+    try {
+      return await invoke<GitDiffFile[]>('git_stash_diff', { root, index, path: path ?? null });
+    } catch (e: any) {
+      console.warn('git_stash_diff fallback:', e);
+      return [];
+    }
+  },
+
   async gitCompareBranch(root: string, base: string, target: string, path?: string): Promise<GitCompareResult> {
     try {
       return await invoke<GitCompareResult>('git_compare_branch', { root, base, target, path: path ?? null });

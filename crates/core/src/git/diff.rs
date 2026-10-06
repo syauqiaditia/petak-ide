@@ -100,6 +100,31 @@ pub fn diff_commit(
     Ok(parse_diff(&stdout))
 }
 
+pub fn diff_stash(
+    exec: &dyn Exec,
+    repo: &Path,
+    index: usize,
+    path: Option<&Path>,
+    ignore_ws: bool,
+) -> Result<Vec<DiffFile>, GitError> {
+    let parent = format!("stash@{{{}}}^1", index);
+    let target = format!("stash@{{{}}}", index);
+    let mut args = vec!["diff", "--no-color", "--no-ext-diff", "-U3"];
+    if ignore_ws {
+        args.push("-w");
+    }
+    args.push(&parent);
+    args.push(&target);
+    let p_str;
+    if let Some(p) = path {
+        p_str = p.to_str().unwrap_or("").to_string();
+        args.push("--");
+        args.push(&p_str);
+    }
+    let stdout = git(exec, repo, &args)?;
+    Ok(parse_diff(&stdout))
+}
+
 pub fn commit_files(
     exec: &dyn Exec,
     repo: &Path,

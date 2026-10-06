@@ -1167,6 +1167,22 @@ pub async fn git_stash_file_diff(root: String, index: usize, file_path: String) 
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn git_stash_diff(
+    root: String,
+    index: usize,
+    path: Option<String>,
+) -> Result<Vec<petak_core::git::DiffFile>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exec = petak_core::exec::SystemExec;
+        let repo = std::path::Path::new(&root);
+        let p = path.as_deref().map(std::path::Path::new);
+        petak_core::git::diff_stash(&exec, repo, index, p, false).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ──────────── Batch 3 Ghost-text suggest & Settings ────────────
 
 

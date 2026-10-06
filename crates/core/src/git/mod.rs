@@ -17,8 +17,8 @@ pub use conflict::{
     resolve_block,
 };
 pub use diff::{
-    commit_files, compare_branch, diff_between_refs, diff_commit, diff_staged, diff_worktree,
-    parse_diff, parse_name_status, CompareBranchResult, CompareFileEntry,
+    commit_files, compare_branch, diff_between_refs, diff_commit, diff_stash, diff_staged,
+    diff_worktree, parse_diff, parse_name_status, CompareBranchResult, CompareFileEntry,
 };
 pub use graph::layout;
 pub use log::{

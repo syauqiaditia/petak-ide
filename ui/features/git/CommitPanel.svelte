@@ -26,9 +26,11 @@
   let isAmend = $state(false);
   let isCommitting = $state(false);
   let commitError = $state<string | null>(null);
+  let commitDropdownOpen = $state(false);
+  let commitActionKind = $state<'commit' | 'commit_and_push'>('commit');
 
   let changesExpanded = $state(true);
-  let unversionedExpanded = $state(true);
+  let unversionedExpanded = $state(false);
 
   let contextMenuOpen = $state(
     typeof window !== 'undefined' && window.location.search.includes('ctx-menu')
@@ -237,6 +239,13 @@
     }
   }
 
+  async function doCommitAndPush() {
+    await doCommit();
+    if (!commitError && gitStore.root) {
+      gitStore.openPushModal();
+    }
+  }
+
   function getStatusLetter(entry: GitStatusEntry, inStaged: boolean): { char: string; color: string } {
     if (entry.conflicted) {
       return { char: '!', color: '#e8b45a' };
@@ -270,7 +279,7 @@
   }
 </script>
 
-<svelte:window onclick={() => { contextMenuOpen = false; emptyContextMenuOpen = false; }} />
+<svelte:window onclick={() => { contextMenuOpen = false; emptyContextMenuOpen = false; commitDropdownOpen = false; }} />
 
 <div class="commit-panel">
   <!-- Select All Bar (F3 / Feature C) -->
@@ -504,13 +513,58 @@
         ✨ Write with agent
       </button>
 
-      <button
-        class="commit-btn"
-        disabled={!canCommit}
-        onclick={doCommit}
-      >
-        {commitBtnLabel}
-      </button>
+      <!-- Split Commit & Push Button -->
+      <div class="commit-split-btn-group">
+        <button
+          class="commit-btn"
+          disabled={!canCommit}
+          onclick={commitActionKind === 'commit_and_push' ? doCommitAndPush : doCommit}
+        >
+          {commitActionKind === 'commit_and_push' ? `${commitBtnLabel} & Push` : commitBtnLabel}
+        </button>
+
+        <button
+          class="commit-dropdown-trigger"
+          disabled={!canCommit}
+          onclick={(e) => {
+            e.stopPropagation();
+            commitDropdownOpen = !commitDropdownOpen;
+          }}
+          title="Pilih opsi: Commit atau Commit and Push"
+        >
+          ▾
+        </button>
+
+        {#if commitDropdownOpen}
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <div class="commit-dropdown-menu" onclick={(e) => e.stopPropagation()}>
+            <button
+              class="dropdown-menu-item"
+              class:selected={commitActionKind === 'commit'}
+              onclick={() => {
+                commitActionKind = 'commit';
+                commitDropdownOpen = false;
+                doCommit();
+              }}
+            >
+              <span>{commitBtnLabel}</span>
+              <span class="item-shortcut">⌘⏎</span>
+            </button>
+            <button
+              class="dropdown-menu-item"
+              class:selected={commitActionKind === 'commit_and_push'}
+              onclick={() => {
+                commitActionKind = 'commit_and_push';
+                commitDropdownOpen = false;
+                doCommitAndPush();
+              }}
+            >
+              <span>{commitBtnLabel} and Push…</span>
+              <span class="item-shortcut">⌥⌘⏎</span>
+            </button>
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -988,5 +1042,80 @@
     background: #23252b;
     border-color: #2c2e34;
     color: #8b8f98;
+  }
+
+  .commit-split-btn-group {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+  }
+  .commit-split-btn-group .commit-btn {
+    margin-left: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+  }
+  .commit-dropdown-trigger {
+    background: #2a3a55;
+    border: 1px solid #3c5278;
+    border-left: 1px solid #1f2a3d;
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+    color: #ffffff;
+    padding: 6px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .commit-dropdown-trigger:hover:not(:disabled) {
+    background: #364b6e;
+  }
+  .commit-dropdown-trigger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #23252b;
+    border-color: #2c2e34;
+    color: #8b8f98;
+  }
+  .commit-dropdown-menu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    width: 210px;
+    background: #1c1d22;
+    border: 1px solid #2d3139;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    padding: 4px;
+    z-index: 100;
+  }
+  .dropdown-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.1s;
+  }
+  .dropdown-menu-item:hover {
+    background: #282b34;
+    color: #ffffff;
+  }
+  .dropdown-menu-item.selected {
+    color: #60a5fa;
+    font-weight: 600;
+  }
+  .item-shortcut {
+    font-size: 10.5px;
+    color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
   }
 </style>

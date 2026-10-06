@@ -15,6 +15,11 @@
   // Pull dropdown & Push modal state
   let pullDropdownOpen = $state(false);
   let pushModalOpen = $state(false);
+  let isPushOpen = $derived(pushModalOpen || gitStore.isPushModalOpen);
+  function closePush() {
+    pushModalOpen = false;
+    gitStore.closePushModal();
+  }
   let pushRemoteName = $state('origin');
   let pushBranchName = $state('');
   let pushSetUpstream = $state(false);
@@ -210,18 +215,6 @@
         Stash
       </button>
 
-      <!-- Unstash Action -->
-      <button
-        class="remote-btn unstash-btn"
-        onclick={() => gitStore.openUnstash()}
-        title="Unstash Changes (Terapkan atau Pop stash tersimpan)"
-      >
-        <span>Unstash</span>
-        {#if gitStore.stashCount > 0}
-          <span class="stash-badge">{gitStore.stashCount}</span>
-        {/if}
-      </button>
-
       <button
         class="remote-btn push-btn"
         onclick={openPushModal}
@@ -314,14 +307,14 @@
   {/if}
 
   <!-- Push Modal Dialog -->
-  {#if pushModalOpen}
-    <div class="push-modal-backdrop" onclick={() => (pushModalOpen = false)} role="presentation">
+  {#if isPushOpen}
+    <div class="push-modal-backdrop" onclick={closePush} role="presentation">
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div class="push-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
         <div class="push-modal-header">
           <span>Push to Remote</span>
-          <button class="push-close" onclick={() => (pushModalOpen = false)}>✕</button>
+          <button class="push-close" onclick={closePush}>✕</button>
         </div>
 
         {#if pushError}

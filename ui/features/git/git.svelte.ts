@@ -35,10 +35,10 @@ class GitStore {
   checkedPathsByRepo = $state<Record<string, Record<string, boolean>>>({});
 
   isPathChecked(filePath: string): boolean {
-    if (!this.root) return true;
+    if (!this.root) return false;
     const repoMap = this.checkedPathsByRepo[this.root];
     if (!repoMap || repoMap[filePath] === undefined) {
-      return true; // default checked
+      return false; // default unchecked
     }
     return repoMap[filePath];
   }
@@ -126,6 +126,17 @@ class GitStore {
 
   closeStash() {
     this.isStashModalOpen = false;
+  }
+
+  // Push modal state
+  isPushModalOpen = $state<boolean>(false);
+
+  openPushModal() {
+    this.isPushModalOpen = true;
+  }
+
+  closePushModal() {
+    this.isPushModalOpen = false;
   }
 
   // Active sub tab ('commit' | 'log' | 'stash' | 'conflict')
