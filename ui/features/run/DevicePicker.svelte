@@ -30,8 +30,15 @@
   }
 
   onMount(() => {
+    runStore.refreshDevices().catch(() => {});
     if (typeof window !== 'undefined' && window.location.search.includes('picker-open')) {
       popupStore.open('device');
+    }
+  });
+
+  $effect(() => {
+    if (connectedPhysical.length > 0 && (!runStore.selectedDeviceId || !activeItem)) {
+      runStore.selectDevice(connectedPhysical[0].id);
     }
   });
 

@@ -177,6 +177,41 @@ export function groupDevices(
       physicalDevices.push(phys);
     }
 
+    // Merge any physical devices from legacyDevices that are missing in snapshot.physical
+    for (const dev of legacyDevices) {
+      if (
+        (dev.kind === 'physical' || (dev as any).kind === 'ios-physical') &&
+        !physicalDevices.some((p) => p.id === dev.id)
+      ) {
+        const isWifi = dev.id.includes(':') || dev.id.includes('wireless') || (dev as any).transport === 'wifi';
+        const rawTransport = (dev as any).transport;
+        const transport = rawTransport || (isWifi ? 'wifi' : 'wired');
+        const connState =
+          (dev as any).connState ||
+          ((dev as any).state === 'online'
+            ? transport === 'wired'
+              ? 'connected_usb'
+              : 'connected_wifi'
+            : 'disconnected');
+        const connection: DeviceConnection =
+          (dev as any).connection ||
+          (connState === 'locked' ? 'paired' : dev.state === 'online' ? 'connected' : 'offline');
+        physicalDevices.push({
+          id: dev.id,
+          name: dev.name,
+          platform: dev.platform,
+          transport,
+          connection,
+          connState,
+          tunnelState: (dev as any).tunnelState ?? null,
+          pairingState: (dev as any).pairingState ?? null,
+          state: dev.state,
+          sdk: dev.sdk ?? undefined,
+          flutterId: dev.state === 'online' && connection === 'connected' ? dev.id : null,
+        });
+      }
+    }
+
     for (const other of snapshot.others || []) {
       if (other.group === 'desktop') {
         desktopDevices.push(other);

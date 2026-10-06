@@ -42,6 +42,12 @@
   } from './formatLogic';
   import { popupStore } from '../../shell/popupStore.svelte';
   import { triggerCodeActions, queueLightbulbCheck } from './lsp/codeAction.svelte';
+  import {
+    createBreakpointExtension,
+    setBreakpointsEffect,
+    toggleBreakpointAtCursor,
+  } from './breakpointExtension';
+  import { breakpointStore } from './breakpoints.svelte';
   import CodeActionPopup from './lsp/CodeActionPopup.svelte';
   import { applyWorkspaceEdit } from './lsp/applyEdit';
   import ContextMenu, { type MenuItem } from '../../shell/ContextMenu.svelte';
@@ -526,12 +532,20 @@
         EditorState.allowMultipleSelections.of(true),
         vimCompartment.of(editorSettings.vimMode ? vim() : []),
         blameCompartment.of([]),
+        createBreakpointExtension(() => currentSwappedPath),
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightActiveLine(),
         drawSelection(),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        keymap.of([
+          ...defaultKeymap,
+          ...historyKeymap,
+          {
+            key: 'Mod-F8',
+            run: (v) => toggleBreakpointAtCursor(v, () => currentSwappedPath),
+          },
+        ]),
         petakTheme,
         highlightTheme,
         filenameFacet.of(filename),
@@ -852,6 +866,12 @@
 
     if (active) {
       applyStoredDiagnosticsToView(view, active.path);
+      const initialBps = breakpointStore.getBreakpoints(active.path);
+      if (initialBps.length > 0) {
+        view.dispatch({
+          effects: setBreakpointsEffect.of(initialBps),
+        });
+      }
     }
 
     setDiagnosticsEditorView(() => view);
@@ -946,6 +966,13 @@
 
         onTabOpen(active.path, active.savedContent);
         applyStoredDiagnosticsToView(view, active.path);
+
+        const tabBps = breakpointStore.getBreakpoints(active.path);
+        if (tabBps.length > 0) {
+          view.dispatch({
+            effects: setBreakpointsEffect.of(tabBps),
+          });
+        }
 
         if (annotateActive && folderPath) {
           const rel = getRelativePath(active.path, folderPath);
@@ -1197,6 +1224,44 @@
 </div>
 
 <style>
+  :global(.cm-breakpoint-gutter) {
+    width: 20px !important;
+    cursor: pointer !important;
+    background-color: transparent !important;
+    user-select: none !important;
+  }
+  :global(.cm-breakpoint-gutter .cm-gutterElement) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    position: relative !important;
+    cursor: pointer !important;
+    min-width: 20px !important;
+  }
+  :global(.cm-breakpoint-gutter .cm-gutterElement:hover::before) {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.45);
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
+    position: absolute;
+    pointer-events: none;
+  }
+  :global(.cm-breakpoint-dot) {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #ef4444;
+    border: 1.5px solid #b91c1c;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.95);
+    display: inline-block;
+  }
+  :global(.cm-breakpoint-line-highlight) {
+    background: rgba(239, 68, 68, 0.08) !important;
+  }
+
   :global(.cm-blame-gutter) {
     background-color: #17181c !important;
     border-right: 1px solid #26282d !important;
