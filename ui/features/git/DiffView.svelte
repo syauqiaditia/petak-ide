@@ -3,6 +3,8 @@
   import { gitStore } from './git.svelte.ts';
   import { hunkToSbs, type SbsHunk } from './sbs.ts';
   import type { GitDiffFile, GitHunk } from './types.ts';
+  import { tabsManager } from '../editor/tabs.svelte';
+  import { api } from '../../lib/api';
 
   let {
     diffFile = null,
@@ -133,6 +135,42 @@
     const dir = parts.join('/');
     return { name, dir };
   }
+
+  async function jumpToSource() {
+    if (!activePath) return;
+    const existing = tabsManager.tabs.find(
+      (t) =>
+        t.path === activePath ||
+        (gitStore.root && t.path === `${gitStore.root}/${activePath}`) ||
+        t.path.endsWith('/' + activePath)
+    );
+    if (existing) {
+      tabsManager.setActive(existing.path);
+    } else {
+      const fullPath =
+        !activePath.startsWith('/') && gitStore.root
+          ? `${gitStore.root}/${activePath}`
+          : activePath;
+      let content = '';
+      let targetPath = activePath;
+      try {
+        content = await api.readFile(fullPath);
+        targetPath = fullPath;
+      } catch {
+        try {
+          content = await api.readFile(activePath);
+          targetPath = activePath;
+        } catch (e) {
+          console.error('Failed to read file for editor tab:', e);
+        }
+      }
+      const filename = activePath.split('/').pop() || 'file';
+      tabsManager.openTab(targetPath, filename, content);
+    }
+    if (gitStore.centerDiff) {
+      gitStore.closeCenterDiff();
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -145,6 +183,14 @@
         {@const { name, dir } = formatPath(activePath)}
         <span class="file-icon">📄</span>
         <span class="file-name">{name}</span>
+        <button
+          class="jump-source-btn"
+          onclick={jumpToSource}
+          title="Buka berkas di editor"
+          aria-label="Buka berkas di editor"
+        >
+          ✏️
+        </button>
         {#if dir}
           <span class="file-dir">{dir}</span>
         {/if}
@@ -426,12 +472,14 @@
   }
 
   .diff-toolbar {
-    height: 38px;
+    min-height: 38px;
+    height: auto;
     flex-shrink: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
-    padding: 0 14px;
+    gap: 6px 10px;
+    padding: 5px 12px;
     background: #1e1f22;
     border-bottom: 1px solid #2b2d30;
     user-select: none;
@@ -442,9 +490,33 @@
   .file-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
     overflow: hidden;
+    flex-shrink: 1;
+  }
+
+  .jump-source-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #9da5b4;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .jump-source-btn:hover {
+    background: #2b2d30;
+    border-color: #3e4249;
+    color: #ffffff;
   }
 
   .file-icon {

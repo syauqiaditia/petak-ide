@@ -20,6 +20,11 @@
     getUnifiedStatusLetter,
     type FileContextAction,
   } from './commitSelectionLogic';
+  import {
+    buildStashTree,
+    flattenStashTree,
+    type FlatStashDisplayItem,
+  } from './stashTreeLogic';
   import StashModal from './StashModal.svelte';
   import { agentsStore } from '../agents/agents.svelte.ts';
 
@@ -47,6 +52,21 @@
   let stashFiles = $state<GitStashFileEntry[]>([]);
   let stashFilesLoading = $state(false);
   let selectedStashFilePath = $state<string | null>(null);
+  let collapsedStashFolders = $state<Set<string>>(new Set());
+  let stashTree = $derived(buildStashTree(stashFiles));
+  let flatStashFiles = $derived<FlatStashDisplayItem[]>(
+    flattenStashTree(stashTree, collapsedStashFolders)
+  );
+
+  function toggleStashFolder(folderPath: string) {
+    const next = new Set(collapsedStashFolders);
+    if (next.has(folderPath)) {
+      next.delete(folderPath);
+    } else {
+      next.add(folderPath);
+    }
+    collapsedStashFolders = next;
+  }
 
   let contextMenuOpen = $state(
     typeof window !== 'undefined' && window.location.search.includes('ctx-menu')
@@ -113,6 +133,7 @@
   async function selectStash(index: number) {
     selectedStashIndex = index;
     selectedStashFilePath = null;
+    collapsedStashFolders = new Set();
     const root = folderPath || gitStore.root;
     if (!root) return;
     stashFilesLoading = true;
@@ -923,28 +944,41 @@
                   {:else if stashFiles.length === 0}
                     <div class="files-loading-hint">Tidak ada berkas.</div>
                   {:else}
-                    <div class="stash-files-list">
-                      {#each stashFiles as file (file.path)}
-                        {@const isFileActive = file.path === selectedStashFilePath}
-                        {@const fName = file.path.split('/').pop() || file.path}
-                        {@const fDir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : ''}
-                        <div
-                          class="stash-file-row"
-                          class:active={isFileActive}
-                          onclick={() => handleStashFileClick(item.index, file.path)}
-                          role="button"
-                          tabindex="0"
-                          onkeydown={(e) => e.key === 'Enter' && handleStashFileClick(item.index, file.path)}
-                          title="Klik untuk membuka perbandingan diff di editor tengah"
-                        >
-                          <span class="stash-file-badge {file.status}">
-                            {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : 'M'}
-                          </span>
-                          <span class="stash-file-name">{fName}</span>
-                          {#if fDir}
-                            <span class="stash-file-dir">{fDir}</span>
-                          {/if}
-                        </div>
+                    <div class="stash-files-tree">
+                      {#each flatStashFiles as treeItem (treeItem.id)}
+                        {#if treeItem.type === 'folder'}
+                          <div
+                            class="stash-tree-folder-row"
+                            style="padding-left: {treeItem.depth * 14 + 6}px;"
+                            onclick={() => toggleStashFolder(treeItem.path)}
+                            role="button"
+                            tabindex="0"
+                            onkeydown={(e) => e.key === 'Enter' && toggleStashFolder(treeItem.path)}
+                            title="Folder {treeItem.name}: {treeItem.totalFiles} berkas (klik untuk lipat/buka)"
+                          >
+                            <span class="stash-folder-chevron">{treeItem.isExpanded ? '▼' : '▶'}</span>
+                            <span class="stash-folder-icon">📁</span>
+                            <span class="stash-folder-name">{treeItem.name}</span>
+                            <span class="stash-folder-badge">{treeItem.totalFiles}</span>
+                          </div>
+                        {:else if treeItem.file}
+                          {@const isFileActive = treeItem.file.path === selectedStashFilePath}
+                          <div
+                            class="stash-file-row"
+                            class:active={isFileActive}
+                            style="padding-left: {treeItem.depth * 14 + 6}px;"
+                            onclick={() => handleStashFileClick(item.index, treeItem.file!.path)}
+                            role="button"
+                            tabindex="0"
+                            onkeydown={(e) => e.key === 'Enter' && handleStashFileClick(item.index, treeItem.file!.path)}
+                            title="Klik untuk membuka perbandingan diff di editor tengah: {treeItem.file.path}"
+                          >
+                            <span class="stash-file-badge {treeItem.file.status}">
+                              {treeItem.file.status === 'added' ? 'A' : treeItem.file.status === 'deleted' ? 'D' : 'M'}
+                            </span>
+                            <span class="stash-file-name">{treeItem.name}</span>
+                          </div>
+                        {/if}
                       {/each}
                     </div>
                   {/if}
@@ -1324,12 +1358,51 @@
     color: #6c7283;
     padding: 4px 0;
   }
-  .stash-files-list {
+  .stash-files-list,
+  .stash-files-tree {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    max-height: 180px;
+    max-height: 220px;
     overflow-y: auto;
+  }
+  .stash-tree-folder-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    cursor: pointer;
+    user-select: none;
+    color: #cbd5e1;
+    transition: background 0.1s;
+  }
+  .stash-tree-folder-row:hover {
+    background: #1e222c;
+    color: #f1f5f9;
+  }
+  .stash-folder-chevron {
+    font-size: 8px;
+    color: #64748b;
+    width: 10px;
+    display: inline-block;
+  }
+  .stash-folder-icon {
+    font-size: 11px;
+    opacity: 0.85;
+  }
+  .stash-folder-name {
+    font-weight: 500;
+  }
+  .stash-folder-badge {
+    font-size: 10px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: #1e2430;
+    color: #60a5fa;
+    border: 1px solid #2d3748;
+    margin-left: auto;
   }
   .stash-file-row {
     display: flex;

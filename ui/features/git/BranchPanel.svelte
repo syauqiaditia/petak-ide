@@ -377,26 +377,6 @@
     >
       Log
     </button>
-    <button
-      class="panel-tab"
-      class:active={gitStore.activeSubTab === 'commit'}
-      onclick={() => onSelectTab?.('commit')}
-    >
-      Commit
-      {#if totalChanges > 0}
-        <span class="commit-count">{totalChanges}</span>
-      {/if}
-    </button>
-    <button
-      class="panel-tab"
-      class:active={gitStore.activeSubTab === 'stash'}
-      onclick={() => onSelectTab?.('stash')}
-    >
-      Stash
-      {#if gitStore.stashCount > 0}
-        <span class="commit-count">{gitStore.stashCount}</span>
-      {/if}
-    </button>
   </div>
 
   <!-- Branch Search Filter -->
