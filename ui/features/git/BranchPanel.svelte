@@ -129,12 +129,82 @@
   let restoreBackupModalOpen = $state(false);
   let targetBackup = $state<GitBackupRef | null>(null);
 
+  let currentBranchName = $derived(
+    gitStore.branch?.head || localBranches.find((b) => b.isCurrent)?.name || 'HEAD'
+  );
+
+  // Auto-expand parent folders of current branch
+  $effect(() => {
+    if (currentBranchName) {
+      const parts = currentBranchName.split('/');
+      if (parts.length > 1) {
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc += parts[i] + '/';
+          expandedFolders.add(acc);
+        }
+      }
+    }
+  });
+
+  let rebaseOntoCurrentModalOpen = $state(false);
+  let rebaseOntoCurrentBranch = $state('');
+
+  function openRebaseOntoCurrent(branchName: string) {
+    branchContextMenuVisible = false;
+    rebaseOntoCurrentBranch = branchName;
+    rebaseOntoCurrentModalOpen = true;
+  }
+
+  async function submitRebaseOntoCurrent() {
+    rebaseOntoCurrentModalOpen = false;
+    if (!rebaseOntoCurrentBranch) return;
+    const current = currentBranchName;
+    try {
+      await gitStore.branchCheckout(rebaseOntoCurrentBranch, true);
+      await gitStore.rebaseOnto(current);
+    } catch (e: any) {
+      gitStore.showToast(`Rebase failed: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
   let compareModalOpen = $state(false);
   let targetCompareBranch = $state('');
+  let compareModalTitle = $state('Compare with Current');
+  let compareBaseBranch = $state('HEAD');
+
+  function openCompareWithCurrent(branchName: string) {
+    branchContextMenuVisible = false;
+    targetCompareBranch = branchName;
+    compareBaseBranch = currentBranchName;
+    compareModalTitle = `Compare '${branchName}' with Current ('${currentBranchName}')`;
+    compareModalOpen = true;
+  }
+
+  function openDiffWithWorkingTree(branchName: string) {
+    branchContextMenuVisible = false;
+    targetCompareBranch = branchName;
+    compareBaseBranch = 'HEAD';
+    compareModalTitle = `Diff '${branchName}' with Working Tree`;
+    compareModalOpen = true;
+  }
+
+  async function handleUpdateBranch(b: LocalBranch) {
+    branchContextMenuVisible = false;
+    try {
+      if (!b.isCurrent) {
+        await gitStore.branchCheckout(b.name, true);
+      }
+      await gitStore.fetchRemote();
+      await gitStore.pullRemote('merge');
+      gitStore.showToast(`Branch '${b.name}' updated successfully`, { type: 'success' });
+    } catch (e: any) {
+      gitStore.showToast(`Update failed: ${e?.message || e}`, { type: 'error' });
+    }
+  }
 
   function openCompareWithBranch(branchName: string) {
-    targetCompareBranch = branchName;
-    compareModalOpen = true;
+    openCompareWithCurrent(branchName);
   }
 
   function filterByBranch(name: string) {
@@ -283,6 +353,21 @@
 </script>
 
 <div class="branch-panel">
+  <!-- Current Branch Header -->
+  <div class="current-branch-header" title="Current Active Branch: {currentBranchName}">
+    <span class="current-branch-dot"></span>
+    <svg class="current-branch-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="6" y1="3" x2="6" y2="15"></line>
+      <circle cx="18" cy="6" r="3"></circle>
+      <circle cx="6" cy="18" r="3"></circle>
+      <path d="M18 9a9 9 0 0 1-9 9"></path>
+    </svg>
+    <div class="current-branch-text">
+      <span class="current-branch-caption">Current Branch:</span>
+      <span class="current-branch-title">{currentBranchName}</span>
+    </div>
+  </div>
+
   <!-- Sub-tab switcher -->
   <div class="panel-tabs">
     <button
@@ -524,7 +609,7 @@
     {/if}
   </div>
 
-  <!-- Branch Context Menu -->
+  <!-- Branch Context Menu (8 Aksi Lengkap ala Android Studio) -->
   {#if branchContextMenuVisible && selectedBranch}
     <div
       class="branch-context-menu"
@@ -533,6 +618,7 @@
       tabindex="-1"
     >
       <div class="b-menu-title">{selectedBranch.name}</div>
+      <!-- 1. Checkout -->
       <button
         class="b-menu-item"
         disabled={selectedBranch.isCurrent}
@@ -540,49 +626,69 @@
       >
         <span>Checkout</span>
       </button>
-      <button
-        class="b-menu-item"
-        disabled={selectedBranch.isCurrent}
-        onclick={() => handleMerge(selectedBranch!.name)}
-      >
-        <span>Merge into current</span>
-      </button>
-      <button
-        class="b-menu-item"
-        disabled={selectedBranch.isCurrent}
-        onclick={() => handleRebaseOnto(selectedBranch!.name)}
-      >
-        <span>Rebase current onto</span>
-      </button>
-      <button
-        class="b-menu-item"
-        onclick={() => openNewBranchFrom(selectedBranch!.name)}
-      >
-        <span>New Branch from…</span>
-      </button>
-      <button
-        class="b-menu-item"
-        onclick={() => openRenameBranch(selectedBranch!)}
-      >
-        <span>Rename…</span>
-      </button>
+
+      <!-- 2. Push... -->
       <button
         class="b-menu-item"
         onclick={() => {
-          const b = selectedBranch!.name;
-          contextMenuOpen = false;
-          openCompareWithBranch(b);
+          branchContextMenuVisible = false;
+          gitStore.openPushModal();
         }}
       >
-        <span>Compare with Current…</span>
+        <span>Push…</span>
       </button>
-      <div class="b-menu-sep"></div>
+
+      <!-- 3. Delete -->
       <button
         class="b-menu-item danger"
         disabled={selectedBranch.isCurrent}
         onclick={() => openDeleteBranch(selectedBranch!)}
       >
-        <span>Delete Branch</span>
+        <span>Delete</span>
+      </button>
+
+      <!-- 4. New Branch from Selected... -->
+      <button
+        class="b-menu-item"
+        onclick={() => openNewBranchFrom(selectedBranch!.name)}
+      >
+        <span>New Branch from Selected…</span>
+      </button>
+
+      <div class="b-menu-sep"></div>
+
+      <!-- 5. Rebase onto Current... -->
+      <button
+        class="b-menu-item"
+        disabled={selectedBranch.isCurrent}
+        onclick={() => openRebaseOntoCurrent(selectedBranch!.name)}
+      >
+        <span>Rebase onto Current…</span>
+      </button>
+
+      <!-- 6. Compare with Current... -->
+      <button
+        class="b-menu-item"
+        disabled={selectedBranch.isCurrent}
+        onclick={() => openCompareWithCurrent(selectedBranch!.name)}
+      >
+        <span>Compare with Current…</span>
+      </button>
+
+      <!-- 7. Show Diff with Working Tree -->
+      <button
+        class="b-menu-item"
+        onclick={() => openDiffWithWorkingTree(selectedBranch!.name)}
+      >
+        <span>Show Diff with Working Tree</span>
+      </button>
+
+      <!-- 8. Update -->
+      <button
+        class="b-menu-item"
+        onclick={() => handleUpdateBranch(selectedBranch!)}
+      >
+        <span>Update</span>
       </button>
     </div>
   {/if}
@@ -768,11 +874,37 @@
     </div>
   {/if}
 
+  {#if rebaseOntoCurrentModalOpen}
+    <div class="bp-modal-backdrop" onclick={() => (rebaseOntoCurrentModalOpen = false)} role="presentation">
+      <div class="bp-modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+        <div class="bp-modal-header">
+          <span>Rebase onto Current</span>
+          <button class="bp-close" onclick={() => (rebaseOntoCurrentModalOpen = false)}>✕</button>
+        </div>
+        <div class="bp-modal-body">
+          <p class="bp-msg">
+            Rebase branch <strong>'{rebaseOntoCurrentBranch}'</strong> onto current branch <strong>'{currentBranchName}'</strong>?
+          </p>
+          <div class="bp-warn">
+            Branch '{rebaseOntoCurrentBranch}' akan di-checkout dan di-rebase di atas '{currentBranchName}'.
+          </div>
+        </div>
+        <div class="bp-modal-footer">
+          <button class="bp-btn cancel" onclick={() => (rebaseOntoCurrentModalOpen = false)}>Cancel</button>
+          <button class="bp-btn confirm" onclick={submitRebaseOntoCurrent}>
+            Rebase
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if compareModalOpen && gitStore.root}
     <CompareBranchModal
       root={gitStore.root}
-      baseBranch={gitStore.headBranch || 'HEAD'}
+      baseBranch={compareBaseBranch}
       targetBranch={targetCompareBranch}
+      title={compareModalTitle}
       onclose={() => (compareModalOpen = false)}
     />
   {/if}
@@ -794,6 +926,58 @@
     user-select: none;
     height: 100%;
     overflow: hidden;
+  }
+
+  .current-branch-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #121317;
+    border-bottom: 1px solid #1e2027;
+    min-height: 34px;
+    box-sizing: border-box;
+    flex-shrink: 0;
+  }
+
+  .current-branch-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #56c989;
+    box-shadow: 0 0 8px rgba(86, 201, 137, 0.7);
+    flex-shrink: 0;
+  }
+
+  .current-branch-icon {
+    color: #6ea8ff;
+    flex-shrink: 0;
+  }
+
+  .current-branch-text {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .current-branch-caption {
+    font-size: 10px;
+    font-weight: 500;
+    color: #8b8f98;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+  }
+
+  .current-branch-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #cfe0ff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .panel-tabs {
