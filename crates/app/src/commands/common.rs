@@ -116,6 +116,7 @@ pub fn test_env(name: String) -> Option<String> {
             return std::env::var(&name).ok();
         }
     }
+    let _ = &name;
     None
 }
 

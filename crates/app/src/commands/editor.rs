@@ -1,3 +1,4 @@
+use tauri::Manager;
 use super::*;
 
 pub type AppRegistry = std::sync::Arc<petak_core::lsp::Registry>;
