@@ -109,6 +109,25 @@ class GitStore {
   // Remotes
   remotes = $state<GitRemote[]>([]);
 
+  // Stash state
+  stashCount = $state<number>(0);
+  isStashModalOpen = $state<boolean>(false);
+  stashModalMode = $state<'push' | 'list'>('push');
+
+  openStash() {
+    this.stashModalMode = 'push';
+    this.isStashModalOpen = true;
+  }
+
+  openUnstash() {
+    this.stashModalMode = 'list';
+    this.isStashModalOpen = true;
+  }
+
+  closeStash() {
+    this.isStashModalOpen = false;
+  }
+
   // Active sub tab ('commit' | 'log' | 'conflict')
   activeSubTab = $state<'commit' | 'log' | 'conflict'>(
     typeof window !== 'undefined' && (window.location.search.includes('log') || window.location.search.includes('sub=log'))
@@ -217,6 +236,13 @@ class GitStore {
       const res = await api.gitStatus(rootPath);
       this.status = res;
       this.error = null;
+
+      // Realtime stash count update
+      api.gitStashList(rootPath).then((stashes) => {
+        this.stashCount = stashes.length;
+      }).catch(() => {
+        this.stashCount = 0;
+      });
 
       if (this.selectedFile) {
         const stillPresent = res.entries.some((e) => e.path === this.selectedFile?.path);

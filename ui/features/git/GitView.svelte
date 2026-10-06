@@ -7,6 +7,7 @@
   import LogView from './LogView.svelte';
   import CommitDetail from './CommitDetail.svelte';
   import ConflictView from './ConflictView.svelte';
+  import StashModal from './StashModal.svelte';
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
 
@@ -187,6 +188,27 @@
           </div>
         {/if}
       </div>
+
+      <!-- Stash Action -->
+      <button
+        class="remote-btn stash-btn"
+        onclick={() => gitStore.openStash()}
+        title="Stash Changes (Simpan perubahan working tree sementara)"
+      >
+        Stash
+      </button>
+
+      <!-- Unstash Action -->
+      <button
+        class="remote-btn unstash-btn"
+        onclick={() => gitStore.openUnstash()}
+        title="Unstash Changes (Terapkan atau Pop stash tersimpan)"
+      >
+        <span>Unstash</span>
+        {#if gitStore.stashCount > 0}
+          <span class="stash-badge">{gitStore.stashCount}</span>
+        {/if}
+      </button>
 
       <button
         class="remote-btn push-btn"
@@ -390,6 +412,15 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  <!-- Stash & Unstash Modal Dialog -->
+  {#if gitStore.isStashModalOpen && gitStore.root}
+    <StashModal
+      root={gitStore.root}
+      initialMode={gitStore.stashModalMode}
+      onclose={() => gitStore.closeStash()}
+    />
   {/if}
 </div>
 
@@ -634,6 +665,16 @@
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
+  }
+
+  .stash-badge {
+    background: #1f2a3d;
+    color: #9cc3ff;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 2px;
   }
 
   .pull-dropdown-wrapper {

@@ -80,6 +80,14 @@
           case 'open-settings':
             settingsStore.open();
             break;
+          case 'stash':
+          case 'stash_changes':
+            gitStore.openStash();
+            break;
+          case 'unstash':
+          case 'unstash_changes':
+            gitStore.openUnstash();
+            break;
         }
       });
     } catch {

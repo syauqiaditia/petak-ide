@@ -33,9 +33,7 @@
   }
 
   onMount(() => {
-    if (mode === 'list') {
-      loadStashes();
-    }
+    loadStashes();
   });
 
   async function handlePush() {
@@ -130,7 +128,7 @@
             loadStashes();
           }}
         >
-          Stash List {stashes.length > 0 ? `(${stashes.length})` : ''}
+          Unstash Changes {stashes.length > 0 ? `(${stashes.length})` : ''}
         </button>
       </div>
 
@@ -191,11 +189,11 @@
                 </div>
 
                 <div class="stash-actions">
-                  <button class="btn-sm" onclick={() => handleApply(stash.index)} title="Apply stash changes and keep in stash list">
-                    Apply
+                  <button class="btn-sm pop" onclick={() => handlePop(stash.index)} title="Unstash and remove from list (Pop)">
+                    Unstash (Pop)
                   </button>
-                  <button class="btn-sm pop" onclick={() => handlePop(stash.index)} title="Apply stash and remove from list">
-                    Pop
+                  <button class="btn-sm" onclick={() => handleApply(stash.index)} title="Apply stash changes and keep in stash list">
+                    Apply (Keep)
                   </button>
                   <button class="btn-sm drop" onclick={() => handleDrop(stash.index)} title="Delete this stash">
                     Drop

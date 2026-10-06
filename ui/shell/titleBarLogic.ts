@@ -127,7 +127,8 @@ export const MENU_CATEGORIES: MenuCategory[] = [
       { isDivider: true, label: '' },
       { id: 'branches', label: 'Branches Switcher' },
       { id: 'gitlab-mr', label: 'GitLab Merge Requests', shortcut: '⌘5' },
-      { id: 'stash', label: 'Stash Changes' },
+      { id: 'stash', label: 'Stash Changes…' },
+      { id: 'unstash', label: 'Unstash Changes…' },
     ],
   },
   {

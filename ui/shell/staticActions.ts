@@ -1,3 +1,5 @@
+import { gitStore } from '../features/git/git.svelte';
+
 export interface ActionContext {
   handlePickFolder: () => Promise<void>;
   editorComponent?: any;
@@ -90,6 +92,16 @@ export function buildStaticActions(ctx: ActionContext) {
       label: 'Find Usages',
       shortcut: '⌥F7',
       run: () => ctx.editorComponent?.handleFindUsages(),
+    },
+    {
+      id: 'git-stash',
+      label: 'Git: Stash Changes…',
+      run: () => gitStore.openStash(),
+    },
+    {
+      id: 'git-unstash',
+      label: 'Git: Unstash Changes…',
+      run: () => gitStore.openUnstash(),
     },
   ];
 }

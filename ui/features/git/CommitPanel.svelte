@@ -280,6 +280,36 @@
         />
         <span class="select-all-text">Select All ({checkedCount}/{totalFiles})</span>
       </label>
+
+      <div class="stash-quick-actions">
+        <button
+          type="button"
+          class="btn-quick-stash"
+          onclick={() => gitStore.openStash()}
+          title="Stash Changes (Simpan perubahan sementara)"
+        >
+          Stash…
+        </button>
+        <button
+          type="button"
+          class="btn-quick-stash"
+          onclick={() => gitStore.openUnstash()}
+          title="Unstash Changes (Terapkan perubahan yang distash)"
+        >
+          Unstash{gitStore.stashCount > 0 ? ` (${gitStore.stashCount})` : ''}
+        </button>
+      </div>
+    </div>
+  {:else if gitStore.stashCount > 0}
+    <div class="stash-prompt-banner">
+      <span>📦 {gitStore.stashCount} stash tersimpan</span>
+      <button
+        type="button"
+        class="btn-quick-stash highlight"
+        onclick={() => gitStore.openUnstash()}
+      >
+        Unstash…
+      </button>
     </div>
   {/if}
 
@@ -540,11 +570,14 @@
   {/if}
 
   <!-- Stash Modal Dialog -->
-  {#if stashModalOpen && gitStore.root}
+  {#if (stashModalOpen || gitStore.isStashModalOpen) && gitStore.root}
     <StashModal
       root={gitStore.root}
-      initialMode={stashModalMode}
-      onclose={() => (stashModalOpen = false)}
+      initialMode={gitStore.isStashModalOpen ? gitStore.stashModalMode : stashModalMode}
+      onclose={() => {
+        stashModalOpen = false;
+        gitStore.closeStash();
+      }}
     />
   {/if}
 </div>
@@ -585,6 +618,44 @@
   }
   .select-all-text {
     letter-spacing: 0.2px;
+  }
+  .stash-quick-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .btn-quick-stash {
+    background: transparent;
+    border: 1px solid #2e3037;
+    border-radius: 4px;
+    color: #9cc3ff;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 2px 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-quick-stash:hover {
+    background: #232a36;
+    border-color: #3b82f6;
+    color: #ffffff;
+  }
+  .btn-quick-stash.highlight {
+    background: #1e2638;
+    border-color: #3b82f6;
+    color: #9cc3ff;
+    padding: 3px 8px;
+  }
+  .stash-prompt-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #171c26;
+    border-bottom: 1px solid #232d3f;
+    font-size: 11px;
+    color: #9cc3ff;
   }
   .group-header-label {
     display: flex;
