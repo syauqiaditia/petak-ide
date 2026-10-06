@@ -58,6 +58,9 @@
   }
 
   $effect(() => {
+    if (gitStore.activeSubTab === 'conflict' && activeRailTab !== 'git') {
+      activeRailTab = 'git';
+    }
     if (activeRailTab === 'git' && !GitViewComponent) {
       import('./features/git/GitView.svelte').then((m) => (GitViewComponent = m.default));
     }

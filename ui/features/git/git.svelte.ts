@@ -1047,23 +1047,27 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitRebaseOnto(this.root, upstream);
-      if (res.ok) {
-        if (res.stashConflict) {
-          this.showToast(
-            'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
-            { type: 'warning' }
-          );
-        } else {
-          this.showToast(`Rebased onto '${upstream}'`, { type: 'success', backupRef: res.backupRef });
-        }
-      } else {
-        this.showToast('Rebase stopped: conflicts detected', { type: 'warning' });
-        await this.loadConflicts();
-        this.activeSubTab = 'conflict';
-      }
       await this.refresh();
+      await this.loadOpState();
+      await this.loadConflicts();
+
+      this.closeRebaseModal();
+
+      if (!res.ok || res.stashConflict || this.conflicts.length > 0 || this.opState?.kind === 'rebase') {
+        this.activeSubTab = 'conflict';
+        this.showToast('Rebase terdapat konflik berkas. Dialihkan ke menu Conflicts.', { type: 'warning' });
+      } else {
+        this.showToast(`Rebased onto '${upstream}'`, { type: 'success', backupRef: res.backupRef });
+      }
       return res;
     } catch (e: any) {
+      await this.refresh().catch(() => {});
+      await this.loadOpState().catch(() => {});
+      await this.loadConflicts().catch(() => {});
+      this.closeRebaseModal();
+      if (this.conflicts.length > 0 || this.opState?.kind === 'rebase') {
+        this.activeSubTab = 'conflict';
+      }
       this.showToast(`Rebase failed: ${e}`, { type: 'error' });
       throw e;
     }

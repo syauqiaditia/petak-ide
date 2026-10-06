@@ -67,11 +67,11 @@
     isRebasing = true;
     try {
       await gitStore.rebaseOnto(selectedBranch);
-      onClose();
     } catch {
       // Toast error handled inside gitStore
     } finally {
       isRebasing = false;
+      onClose();
     }
   }
 
