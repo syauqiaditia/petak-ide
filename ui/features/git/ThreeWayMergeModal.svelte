@@ -14,77 +14,58 @@
     onResolved?: () => void;
   }>();
 
-  let editableContent = $state('');
-  let history = $state<string[]>([]);
+  // Model a synchronized row/hunk across 3 panes
+  interface MergeHunk {
+    id: number;
+    kind: 'clean' | 'conflict';
+    cleanLines: string[];
+    oursLines: string[];
+    theirsLines: string[];
+    baseLines: string[];
+    // Resolution state for this hunk:
+    resolution: 'unresolved' | 'ours' | 'theirs' | 'both' | 'discarded' | 'custom';
+    resultLines: string[];
+    isEditing?: boolean;
+  }
+
+  let hunks = $state<MergeHunk[]>([]);
+  let history = $state<MergeHunk[][]>([]);
   let historyIdx = $state(0);
   let isSaving = $state(false);
-  let viewMode = $state<'visual' | 'raw'>('visual');
+  let activeHunkIdx = $state(0);
 
-  $effect(() => {
-    editableContent = file.merged;
-    history = [file.merged];
-    historyIdx = 0;
-  });
-
-  let yoursScrollEl: HTMLDivElement | null = null;
-  let resultScrollEl: HTMLDivElement | null = null;
-  let theirsScrollEl: HTMLDivElement | null = null;
-  let isSyncingScroll = false;
-
-  function pushHistory(newContent: string) {
-    if (newContent === editableContent) return;
-    history = history.slice(0, historyIdx + 1);
-    history.push(newContent);
-    historyIdx = history.length - 1;
-    editableContent = newContent;
-  }
-
-  function handleUndo() {
-    if (historyIdx > 0) {
-      historyIdx--;
-      editableContent = history[historyIdx];
-    }
-  }
-
-  function handleRedo() {
-    if (historyIdx < history.length - 1) {
-      historyIdx++;
-      editableContent = history[historyIdx];
-    }
-  }
-
-  let canUndo = $derived(historyIdx > 0);
-  let canRedo = $derived(historyIdx < history.length - 1);
-
-  interface ParsedSection {
-    type: 'clean' | 'conflict';
-    lines: string[];
-    blockIndex?: number;
-    ours?: string[];
-    theirs?: string[];
-    customEdit?: string;
-  }
-
-  let parsedSections = $derived.by<ParsedSection[]>(() => {
-    const lines = editableContent.split('\n');
-    const sections: ParsedSection[] = [];
+  // Parse file.merged into synchronized hunks
+  function parseMergedIntoHunks(mergedText: string, baseText?: string | null): MergeHunk[] {
+    const lines = mergedText.split('\n');
+    const result: MergeHunk[] = [];
     let currentClean: string[] = [];
-    let state: 'normal' | 'ours' | 'base' | 'theirs' = 'normal';
+    let state: 'clean' | 'ours' | 'base' | 'theirs' = 'clean';
     let oursLines: string[] = [];
     let theirsLines: string[] = [];
-    let blockIndex = 0;
+    let baseLines: string[] = [];
+    let hunkId = 0;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (state === 'normal') {
+      if (state === 'clean') {
         if (line.startsWith('<<<<<<<')) {
           if (currentClean.length > 0) {
-            sections.push({ type: 'clean', lines: currentClean });
+            result.push({
+              id: hunkId++,
+              kind: 'clean',
+              cleanLines: currentClean,
+              oursLines: [],
+              theirsLines: [],
+              baseLines: [],
+              resolution: 'clean' as any,
+              resultLines: [...currentClean],
+            });
             currentClean = [];
           }
           state = 'ours';
           oursLines = [];
           theirsLines = [];
+          baseLines = [];
         } else {
           currentClean.push(line);
         }
@@ -99,109 +80,183 @@
       } else if (state === 'base') {
         if (line.startsWith('=======')) {
           state = 'theirs';
+        } else {
+          baseLines.push(line);
         }
       } else if (state === 'theirs') {
         if (line.startsWith('>>>>>>>')) {
-          sections.push({
-            type: 'conflict',
-            lines: [],
-            blockIndex,
-            ours: [...oursLines],
-            theirs: [...theirsLines],
+          // If in rebase, git puts target branch (HEAD) at top and incoming at bottom.
+          // In Android Studio, Left = incoming commit, Right = target branch.
+          // We provide base if available, else empty in center
+          const initialResult = baseLines.length > 0 ? [...baseLines] : [];
+          result.push({
+            id: hunkId++,
+            kind: 'conflict',
+            cleanLines: [],
+            oursLines: [...oursLines],
+            theirsLines: [...theirsLines],
+            baseLines: [...baseLines],
+            resolution: 'unresolved',
+            resultLines: initialResult,
           });
-          blockIndex++;
-          state = 'normal';
+          state = 'clean';
         } else {
           theirsLines.push(line);
         }
       }
     }
+
     if (currentClean.length > 0) {
-      sections.push({ type: 'clean', lines: currentClean });
+      result.push({
+        id: hunkId++,
+        kind: 'clean',
+        cleanLines: currentClean,
+        oursLines: [],
+        theirsLines: [],
+        baseLines: [],
+        resolution: 'clean' as any,
+        resultLines: [...currentClean],
+      });
     }
-    return sections;
+
+    return result;
+  }
+
+  function cloneHunks(source: MergeHunk[]): MergeHunk[] {
+    return source.map((h) => ({
+      ...h,
+      cleanLines: [...h.cleanLines],
+      oursLines: [...h.oursLines],
+      theirsLines: [...h.theirsLines],
+      baseLines: [...h.baseLines],
+      resultLines: [...h.resultLines],
+    }));
+  }
+
+  function pushHistory(newHunks: MergeHunk[]) {
+    history = history.slice(0, historyIdx + 1);
+    history.push(cloneHunks(newHunks));
+    historyIdx = history.length - 1;
+    hunks = newHunks;
+  }
+
+  function handleUndo() {
+    if (historyIdx > 0) {
+      historyIdx--;
+      hunks = cloneHunks(history[historyIdx]);
+    }
+  }
+
+  function handleRedo() {
+    if (historyIdx < history.length - 1) {
+      historyIdx++;
+      hunks = cloneHunks(history[historyIdx]);
+    }
+  }
+
+  let canUndo = $derived(historyIdx > 0);
+  let canRedo = $derived(historyIdx < history.length - 1);
+
+  // Initialize
+  $effect(() => {
+    const initial = parseMergedIntoHunks(file.merged, file.base);
+    hunks = initial;
+    history = [cloneHunks(initial)];
+    historyIdx = 0;
   });
 
-  let conflictCount = $derived(
-    parsedSections.filter((s) => s.type === 'conflict').length
+  // Conflict statistics
+  let conflictHunks = $derived(hunks.filter((h) => h.kind === 'conflict'));
+  let unresolvedCount = $derived(
+    conflictHunks.filter((h) => h.resolution === 'unresolved').length
   );
+  let totalConflicts = $derived(conflictHunks.length);
 
-  let oursLines = $derived(file.ours ? file.ours.split('\n') : []);
-  let theirsLines = $derived(file.theirs ? file.theirs.split('\n') : []);
-
-  let oursLabel = $derived(gitStore.currentBranch || 'Yours');
-  let theirsLabel = $derived(gitStore.opState?.ontoName || 'Theirs');
-
-  async function resolveBlock(blockIndex: number, choice: 'ours' | 'theirs' | 'both') {
-    try {
-      const resolved = await api.gitResolveBlock(editableContent, blockIndex, choice);
-      pushHistory(resolved);
-    } catch (e: any) {
-      gitStore.showToast(`Gagal resolve blok: ${e?.message || e}`, { type: 'error' });
-    }
+  // Gutter actions per hunk
+  function acceptLeftHunk(hunkId: number) {
+    const next = cloneHunks(hunks);
+    const target = next.find((h) => h.id === hunkId);
+    if (!target) return;
+    target.resolution = 'ours';
+    target.resultLines = [...target.oursLines];
+    pushHistory(next);
   }
 
-  async function handleAcceptAllOurs() {
-    let content = editableContent;
-    while (true) {
-      const bCount = content.split('\n').filter((l: string) => l.startsWith('<<<<<<<')).length;
-      if (bCount === 0) break;
-      content = await api.gitResolveBlock(content, 0, 'ours');
-    }
-    pushHistory(content);
+  function acceptRightHunk(hunkId: number) {
+    const next = cloneHunks(hunks);
+    const target = next.find((h) => h.id === hunkId);
+    if (!target) return;
+    target.resolution = 'theirs';
+    target.resultLines = [...target.theirsLines];
+    pushHistory(next);
   }
 
-  async function handleAcceptAllTheirs() {
-    let content = editableContent;
-    while (true) {
-      const bCount = content.split('\n').filter((l: string) => l.startsWith('<<<<<<<')).length;
-      if (bCount === 0) break;
-      content = await api.gitResolveBlock(content, 0, 'theirs');
-    }
-    pushHistory(content);
+  function discardLeftHunk(hunkId: number) {
+    const next = cloneHunks(hunks);
+    const target = next.find((h) => h.id === hunkId);
+    if (!target) return;
+    target.resolution = 'theirs';
+    target.resultLines = [...target.theirsLines];
+    pushHistory(next);
   }
 
-  async function handleApply() {
-    if (isSaving) return;
-    if (conflictCount > 0) {
-      if (!window.confirm(`Masih ada ${conflictCount} blok konflik yang belum diselesaikan. Tetap simpan?`)) {
-        return;
+  function discardRightHunk(hunkId: number) {
+    const next = cloneHunks(hunks);
+    const target = next.find((h) => h.id === hunkId);
+    if (!target) return;
+    target.resolution = 'ours';
+    target.resultLines = [...target.oursLines];
+    pushHistory(next);
+  }
+
+  function acceptBothHunk(hunkId: number) {
+    const next = cloneHunks(hunks);
+    const target = next.find((h) => h.id === hunkId);
+    if (!target) return;
+    target.resolution = 'both';
+    target.resultLines = [...target.oursLines, ...target.theirsLines];
+    pushHistory(next);
+  }
+
+  function updateHunkResultText(hunkId: number, text: string) {
+    const next = cloneHunks(hunks);
+    const target = next.find((h) => h.id === hunkId);
+    if (!target) return;
+    target.resolution = 'custom';
+    target.resultLines = text.split('\n');
+    pushHistory(next);
+  }
+
+  // Bulk actions
+  function handleAcceptAllLeft() {
+    const next = cloneHunks(hunks);
+    for (const h of next) {
+      if (h.kind === 'conflict') {
+        h.resolution = 'ours';
+        h.resultLines = [...h.oursLines];
       }
     }
-    isSaving = true;
-    try {
-      await api.gitConflictWrite(gitStore.root, file.path, editableContent);
-      await gitStore.stageFiles([file.path]);
-      gitStore.showToast(`${file.path} berhasil diselesaikan dan di-stage!`, { type: 'success' });
-      await gitStore.loadConflicts();
-      await gitStore.loadOpState();
-      onResolved();
-      onClose();
-    } catch (e: any) {
-      gitStore.showToast(`Gagal menyimpan file: ${e?.message || e}`, { type: 'error' });
-    } finally {
-      isSaving = false;
+    pushHistory(next);
+  }
+
+  function handleAcceptAllRight() {
+    const next = cloneHunks(hunks);
+    for (const h of next) {
+      if (h.kind === 'conflict') {
+        h.resolution = 'theirs';
+        h.resultLines = [...h.theirsLines];
+      }
     }
+    pushHistory(next);
   }
 
-  function handleSyncScroll(source: HTMLDivElement | null) {
-    if (!source || isSyncingScroll) return;
-    isSyncingScroll = true;
-    const top = source.scrollTop;
-    if (yoursScrollEl && yoursScrollEl !== source) yoursScrollEl.scrollTop = top;
-    if (resultScrollEl && resultScrollEl !== source) resultScrollEl.scrollTop = top;
-    if (theirsScrollEl && theirsScrollEl !== source) theirsScrollEl.scrollTop = top;
-    requestAnimationFrame(() => {
-      isSyncingScroll = false;
-    });
-  }
-
+  // Keyboard navigation & shortcuts
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       onClose();
       return;
     }
-    const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
     const isCmd = isMac ? e.metaKey : e.ctrlKey;
     if (isCmd && !e.shiftKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
@@ -211,241 +266,326 @@
       handleRedo();
     }
   }
+
+  // Synchronized scrolling across all 3 columns
+  let scrollContainerEl: HTMLDivElement | null = null;
+
+  function scrollToNextConflict() {
+    const conflicts = hunks.filter((h) => h.kind === 'conflict');
+    if (conflicts.length === 0) return;
+    activeHunkIdx = (activeHunkIdx + 1) % conflicts.length;
+    const targetEl = document.getElementById(`hunk-row-${conflicts[activeHunkIdx].id}`);
+    targetEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function scrollToPrevConflict() {
+    const conflicts = hunks.filter((h) => h.kind === 'conflict');
+    if (conflicts.length === 0) return;
+    activeHunkIdx = (activeHunkIdx - 1 + conflicts.length) % conflicts.length;
+    const targetEl = document.getElementById(`hunk-row-${conflicts[activeHunkIdx].id}`);
+    targetEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // Apply resolution to disk
+  async function handleApply() {
+    if (!gitStore.root || isSaving) return;
+    if (unresolvedCount > 0) {
+      const ok = confirm(`Masih ada ${unresolvedCount} konflik yang belum diselesaikan. Yakin simpan?`);
+      if (!ok) return;
+    }
+
+    isSaving = true;
+    try {
+      const fullContent = hunks
+        .flatMap((h) => (h.kind === 'clean' ? h.cleanLines : h.resultLines))
+        .join('\n');
+
+      await api.gitConflictWrite(gitStore.root, file.path, fullContent);
+      await api.gitStage(gitStore.root, file.path);
+
+      gitStore.showToast(`Berhasil menyelesaikan konflik: ${file.path}`, { type: 'success' });
+      onResolved();
+      onClose();
+    } catch (e: any) {
+      gitStore.showToast(`Gagal menyimpan: ${e?.message || e}`, { type: 'error' });
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  // Header branch metadata
+  let leftBranch = $derived(gitStore.opState?.headName ?? gitStore.currentBranch ?? 'Yours');
+  let rightBranch = $derived(gitStore.opState?.ontoName ?? 'Theirs');
+  let stoppedCommit = $derived(gitStore.opState?.currentCommit?.slice(0, 8) ?? '');
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="merge-modal-backdrop" role="dialog" aria-modal="true" tabindex="-1">
-  <div class="merge-modal-window">
-    <!-- Top Bar with Undo / Redo & Stats -->
-    <div class="merge-top-bar">
-      <div class="top-file-info">
+<div class="three-way-backdrop" role="presentation">
+  <div class="three-way-dialog" role="dialog" aria-modal="true" tabindex="-1">
+    <!-- Top Window Title Bar (macOS / IDE style) -->
+    <div class="dialog-top-bar">
+      <div class="top-title-group">
         <span class="file-icon">📄</span>
-        <span class="file-path-title" title={file.path}>{file.path}</span>
-        {#if conflictCount > 0}
-          <span class="conflict-badge warn">{conflictCount} konflik tersisa</span>
-        {:else}
-          <span class="conflict-badge clean">Semua konflik terselesaikan ✓</span>
-        {/if}
+        <span class="window-title">Merge Revisions for <strong>{file.path}</strong></span>
       </div>
+      <div class="top-close-btn" onclick={onClose} role="button" tabindex="0">✕</div>
+    </div>
 
-      <!-- Center History Toolbar (Undo / Redo ala Android Studio) -->
-      <div class="history-controls">
+    <!-- Toolbar Bar (ala Android Studio / IntelliJ) -->
+    <div class="dialog-toolbar">
+      <div class="toolbar-left-group">
+        <!-- Navigation -->
+        <button class="tool-btn" onclick={scrollToPrevConflict} title="Previous Difference (↑)">
+          <span class="icon">↑</span>
+        </button>
+        <button class="tool-btn" onclick={scrollToNextConflict} title="Next Difference (↓)">
+          <span class="icon">↓</span>
+        </button>
+
+        <span class="toolbar-sep"></span>
+
+        <!-- Undo & Redo (⌘Z / ⇧⌘Z) -->
         <button
-          class="hist-btn"
-          onclick={handleUndo}
+          class="tool-btn undo-btn"
           disabled={!canUndo}
-          title="Undo perubahan konflik terakhir (⌘Z)"
+          onclick={handleUndo}
+          title="Undo (⌘Z)"
         >
-          <span class="hist-icon">↶</span>
+          <span class="icon">↶</span>
           <span>Undo</span>
         </button>
         <button
-          class="hist-btn"
-          onclick={handleRedo}
+          class="tool-btn redo-btn"
           disabled={!canRedo}
-          title="Redo perubahan konflik (⇧⌘Z)"
+          onclick={handleRedo}
+          title="Redo (⇧⌘Z)"
         >
-          <span class="hist-icon">↷</span>
+          <span class="icon">↷</span>
           <span>Redo</span>
         </button>
 
-        <div class="hist-sep"></div>
+        <span class="toolbar-sep"></span>
 
+        <!-- Bulk Apply Controls -->
+        <span class="toolbar-label">Apply non-conflicting:</span>
         <button
-          class="mode-toggle-btn"
-          class:active={viewMode === 'visual'}
-          onclick={() => (viewMode = 'visual')}
-          title="Tampilan blok konflik interaktif ala Android Studio"
+          class="tool-btn bulk-btn"
+          onclick={handleAcceptAllLeft}
+          title="Apply Non-Conflicting Changes from Left"
         >
-          Interactive
+          <span>»</span>
         </button>
         <button
-          class="mode-toggle-btn"
-          class:active={viewMode === 'raw'}
-          onclick={() => (viewMode = 'raw')}
-          title="Tampilan raw text editor"
+          class="tool-btn bulk-btn"
+          onclick={handleAcceptAllRight}
+          title="Apply Non-Conflicting Changes from Right"
         >
-          Raw Text
+          <span>«</span>
         </button>
       </div>
 
-      <div class="top-actions">
-        <button class="btn-top-close" onclick={onClose} title="Tutup">✕</button>
+      <!-- Right Summary Counter -->
+      <div class="toolbar-right-group">
+        <span class="counter-badge" class:has-conflicts={unresolvedCount > 0}>
+          {#if unresolvedCount > 0}
+            ⚠️ {unresolvedCount} conflict{unresolvedCount > 1 ? 's' : ''} remaining
+          {:else}
+            ✓ All conflicts resolved
+          {/if}
+        </span>
       </div>
     </div>
 
-    <!-- 3-Way Panes Header Bar -->
-    <div class="panes-header-bar">
-      <div class="pane-header left">
-        <span class="tag yours">Yours</span>
-        <span class="branch-name">{oursLabel}</span>
+    <!-- 3-Way Column Headers -->
+    <div class="pane-headers-row">
+      <div class="col-header left-header">
+        <span class="lock-icon">🔒</span>
+        <span class="header-title">
+          {#if stoppedCommit}
+            Rebasing {stoppedCommit} from <strong>{leftBranch}</strong>
+          {:else}
+            <strong>{leftBranch}</strong> (Yours)
+          {/if}
+        </span>
       </div>
-      <div class="pane-header center">
-        <span class="tag result">Result</span>
-        <span class="branch-name">Hasil Penggabungan</span>
+
+      <div class="gutter-header gutter-left-header"></div>
+
+      <div class="col-header center-header">
+        <span class="header-title">
+          Result <strong>{file.path.split('/').pop()}</strong>
+        </span>
       </div>
-      <div class="pane-header right">
-        <span class="tag theirs">Theirs</span>
-        <span class="branch-name">{theirsLabel}</span>
+
+      <div class="gutter-header gutter-right-header"></div>
+
+      <div class="col-header right-header">
+        <span class="lock-icon">🔒</span>
+        <span class="header-title">
+          Commits from <strong>{rightBranch}</strong> (Theirs)
+        </span>
       </div>
     </div>
 
-    <!-- 3-Way Panes Content Area -->
-    <div class="panes-content-area">
-      <!-- Left Column: Yours -->
-      <div
-        class="merge-column col-yours"
-        bind:this={yoursScrollEl}
-        onscroll={() => handleSyncScroll(yoursScrollEl)}
-      >
-        <div class="code-viewport mono">
-          {#each oursLines as line, idx}
-            <div class="code-row">
-              <span class="line-num">{idx + 1}</span>
-              <span class="line-code">{line || ' '}</span>
+    <!-- 3-Way Editor Viewport (Synchronized Rows Grid) -->
+    <div class="editor-viewport" bind:this={scrollContainerEl}>
+      <div class="sync-grid mono">
+        {#each hunks as hunk (hunk.id)}
+          <div
+            class="hunk-row"
+            class:is-conflict={hunk.kind === 'conflict'}
+            class:is-unresolved={hunk.kind === 'conflict' && hunk.resolution === 'unresolved'}
+            class:is-resolved={hunk.kind === 'conflict' && hunk.resolution !== 'unresolved'}
+            id={`hunk-row-${hunk.id}`}
+          >
+            <!-- 1. LEFT PANE (Yours) -->
+            <div class="hunk-pane pane-left">
+              {#if hunk.kind === 'clean'}
+                {#each hunk.cleanLines as line}
+                  <div class="code-line clean-line">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {:else}
+                {#each hunk.oursLines as line}
+                  <div class="code-line conflict-diff-line ours-line">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {/if}
             </div>
-          {/each}
-        </div>
-      </div>
 
-      <!-- Center Column: Result (Interactive Conflict Resolver or Raw Editor) -->
-      <div
-        class="merge-column col-result"
-        bind:this={resultScrollEl}
-        onscroll={() => handleSyncScroll(resultScrollEl)}
-      >
-        {#if viewMode === 'raw'}
-          <textarea
-            class="result-raw-editor mono"
-            bind:value={editableContent}
-            oninput={(e) => pushHistory((e.target as HTMLTextAreaElement).value)}
-            spellcheck="false"
-          ></textarea>
-        {:else}
-          <div class="interactive-result-list mono">
-            {#each parsedSections as section, sIdx}
-              {#if section.type === 'clean'}
-                <div class="clean-lines-block">
-                  {#each section.lines as line}
-                    <div class="code-row clean">
-                      <span class="line-code">{line || ' '}</span>
-                    </div>
-                  {/each}
-                </div>
-              {:else if section.type === 'conflict' && section.blockIndex !== undefined}
-                <!-- Prominent Interactive Conflict Card -->
-                <div class="conflict-card-widget">
-                  <div class="widget-header-bar">
-                    <div class="widget-title-badge">
-                      <span class="swords-icon">⚔️</span>
-                      <span>Konflik #{section.blockIndex + 1}</span>
-                    </div>
-
-                    <!-- Direct Selection Buttons -->
-                    <div class="widget-actions-group">
-                      <button
-                        class="widget-btn pick-yours"
-                        onclick={() => resolveBlock(section.blockIndex!, 'ours')}
-                        title="Ambil seluruh baris dari Yours ({oursLabel})"
-                      >
-                        « Accept Left (Yours)
-                      </button>
-                      <button
-                        class="widget-btn pick-both"
-                        onclick={() => resolveBlock(section.blockIndex!, 'both')}
-                        title="Gabungkan kedua sisi (Yours lalu Theirs)"
-                      >
-                        Accept Both
-                      </button>
-                      <button
-                        class="widget-btn pick-theirs"
-                        onclick={() => resolveBlock(section.blockIndex!, 'theirs')}
-                        title="Ambil seluruh baris dari Theirs ({theirsLabel})"
-                      >
-                        Accept Right (Theirs) »
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Side-by-Side Diff Preview within the card -->
-                  <div class="widget-diff-split">
-                    <div class="snippet-box yours-snippet">
-                      <div class="snippet-title yours-color">
-                        <span>Yours ({oursLabel}):</span>
-                      </div>
-                      <div class="snippet-code-lines">
-                        {#each section.ours || [] as line}
-                          <div class="snippet-row hl-yours">+ {line || ' '}</div>
-                        {/each}
-                      </div>
-                    </div>
-
-                    <div class="snippet-box theirs-snippet">
-                      <div class="snippet-title theirs-color">
-                        <span>Theirs ({theirsLabel}):</span>
-                      </div>
-                      <div class="snippet-code-lines">
-                        {#each section.theirs || [] as line}
-                          <div class="snippet-row hl-theirs">+ {line || ' '}</div>
-                        {/each}
-                      </div>
-                    </div>
-                  </div>
+            <!-- 2. GUTTER LEFT-TO-CENTER (» and ✕) -->
+            <div class="hunk-gutter gutter-left">
+              {#if hunk.kind === 'conflict'}
+                <div class="gutter-actions-stack">
+                  <button
+                    class="gutter-action-btn accept-left"
+                    onclick={() => acceptLeftHunk(hunk.id)}
+                    title="Accept Left change into Result (»)"
+                  >
+                    »
+                  </button>
+                  <button
+                    class="gutter-action-btn discard-btn"
+                    onclick={() => discardLeftHunk(hunk.id)}
+                    title="Discard Left change (✕)"
+                  >
+                    ✕
+                  </button>
                 </div>
               {/if}
-            {/each}
-          </div>
-        {/if}
-      </div>
-
-      <!-- Right Column: Theirs -->
-      <div
-        class="merge-column col-theirs"
-        bind:this={theirsScrollEl}
-        onscroll={() => handleSyncScroll(theirsScrollEl)}
-      >
-        <div class="code-viewport mono">
-          {#each theirsLines as line, idx}
-            <div class="code-row">
-              <span class="line-num">{idx + 1}</span>
-              <span class="line-code">{line || ' '}</span>
             </div>
-          {/each}
-        </div>
+
+            <!-- 3. CENTER PANE (Result - Editable Buffer) -->
+            <div class="hunk-pane pane-center">
+              {#if hunk.kind === 'clean'}
+                {#each hunk.cleanLines as line}
+                  <div class="code-line clean-line">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {:else}
+                {#if hunk.resolution === 'unresolved'}
+                  <div class="unresolved-zone">
+                    <div class="unresolved-banner">
+                      <span class="unresolved-title">⚠️ Conflict</span>
+                      <div class="banner-quick-actions">
+                        <button onclick={() => acceptLeftHunk(hunk.id)} class="btn-micro">Accept Left</button>
+                        <button onclick={() => acceptBothHunk(hunk.id)} class="btn-micro">Both</button>
+                        <button onclick={() => acceptRightHunk(hunk.id)} class="btn-micro">Accept Right</button>
+                      </div>
+                    </div>
+                    {#if hunk.resultLines.length > 0}
+                      {#each hunk.resultLines as line}
+                        <div class="code-line base-preview-line">
+                          <span class="line-content">{line || ' '}</span>
+                        </div>
+                      {/each}
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="resolved-zone">
+                    <textarea
+                      class="inline-result-editor mono"
+                      value={hunk.resultLines.join('\n')}
+                      oninput={(e) => updateHunkResultText(hunk.id, (e.target as HTMLTextAreaElement).value)}
+                      rows={Math.max(1, hunk.resultLines.length)}
+                      spellcheck="false"
+                    ></textarea>
+                  </div>
+                {/if}
+              {/if}
+            </div>
+
+            <!-- 4. GUTTER CENTER-TO-RIGHT (« and ✕) -->
+            <div class="hunk-gutter gutter-right">
+              {#if hunk.kind === 'conflict'}
+                <div class="gutter-actions-stack">
+                  <button
+                    class="gutter-action-btn accept-right"
+                    onclick={() => acceptRightHunk(hunk.id)}
+                    title="Accept Right change into Result («)"
+                  >
+                    «
+                  </button>
+                  <button
+                    class="gutter-action-btn discard-btn"
+                    onclick={() => discardRightHunk(hunk.id)}
+                    title="Discard Right change (✕)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- 5. RIGHT PANE (Theirs) -->
+            <div class="hunk-pane pane-right">
+              {#if hunk.kind === 'clean'}
+                {#each hunk.cleanLines as line}
+                  <div class="code-line clean-line">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {:else}
+                {#each hunk.theirsLines as line}
+                  <div class="code-line conflict-diff-line theirs-line">
+                    <span class="line-content">{line || ' '}</span>
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          </div>
+        {/each}
       </div>
     </div>
 
-    <!-- Bottom Action Bar -->
-    <div class="merge-bottom-bar">
-      <div class="bottom-stats">
-        {#if conflictCount > 0}
-          <span class="stat-pill warn">⚠️ {conflictCount} blok konflik perlu dipilih</span>
-        {:else}
-          <span class="stat-pill clean">✓ Semua konflik terselesaikan! Siap disimpan ke file.</span>
-        {/if}
+    <!-- Bottom Action Bar (ala Android Studio) -->
+    <div class="dialog-bottom-bar">
+      <div class="bottom-left-group">
+        <button class="btn-secondary" onclick={handleAcceptAllLeft}>
+          Accept Left
+        </button>
+        <button class="btn-secondary" onclick={handleAcceptAllRight}>
+          Accept Right
+        </button>
       </div>
 
-      <div class="bottom-buttons">
-        <button class="btn-subtle" onclick={handleAcceptAllOurs} title="Ambil semua perubahan Yours sekaligus">
-          Accept All Left ({oursLabel})
-        </button>
-        <button class="btn-subtle" onclick={handleAcceptAllTheirs} title="Ambil semua perubahan Theirs sekaligus">
-          Accept All Right ({theirsLabel})
-        </button>
-        <button class="btn-secondary" onclick={onClose} disabled={isSaving}>
-          Batal
+      <div class="bottom-right-group">
+        <button class="btn-cancel" onclick={onClose}>
+          Cancel
         </button>
         <button
-          class="btn-primary-apply"
+          class="btn-apply-primary"
           onclick={handleApply}
           disabled={isSaving}
         >
           {#if isSaving}
-            <span class="spin">↻</span>
-            <span>Menyimpan…</span>
+            Saving…
           {:else}
-            <span>Apply</span>
+            Apply
           {/if}
         </button>
       </div>
@@ -454,510 +594,437 @@
 </div>
 
 <style>
-  .merge-modal-backdrop {
+  .three-way-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 100000;
-    background: rgba(10, 11, 14, 0.82);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 16px;
-    user-select: none;
-    -webkit-user-select: none;
-    animation: fadeIn 0.15s ease-out;
   }
 
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .merge-modal-window {
-    width: 100%;
-    height: 100%;
-    max-width: 1460px;
-    max-height: 920px;
-    background: #14161a;
-    border: 1px solid #2a2e37;
-    border-radius: 10px;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* Top Bar */
-  .merge-top-bar {
-    height: 42px;
-    padding: 0 16px;
-    background: #111215;
-    border-bottom: 1px solid #23262e;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-    gap: 12px;
-  }
-
-  .top-file-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .file-icon {
-    font-size: 14px;
-  }
-
-  .file-path-title {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: #e2e8f0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 440px;
-  }
-
-  .conflict-badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 10px;
-  }
-  .conflict-badge.warn {
-    background: #3b1d1f;
-    color: #f87171;
-    border: 1px solid #7f1d1d;
-  }
-  .conflict-badge.clean {
-    background: #132e22;
-    color: #4ade80;
-    border: 1px solid #14532d;
-  }
-
-  /* History Controls (Undo / Redo) */
-  .history-controls {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .hist-btn {
-    height: 26px;
-    padding: 0 9px;
-    background: #1e222a;
-    border: 1px solid #2c323e;
-    color: #cbd5e1;
-    border-radius: 5px;
-    font-size: 11.5px;
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    transition: all 0.12s ease;
-  }
-  .hist-btn:hover:not(:disabled) {
-    background: #2a303d;
-    color: #ffffff;
-    border-color: #3b82f6;
-  }
-  .hist-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .hist-icon {
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .hist-sep {
-    width: 1px;
-    height: 16px;
-    background: #272a33;
-    margin: 0 4px;
-  }
-
-  .mode-toggle-btn {
-    height: 26px;
-    padding: 0 10px;
-    background: #16181d;
-    border: 1px solid #242831;
-    color: #8b92a0;
-    border-radius: 5px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.12s ease;
-  }
-  .mode-toggle-btn.active {
-    background: #1e293b;
-    border-color: #3b82f6;
-    color: #60a5fa;
-  }
-
-  .btn-top-close {
-    background: none;
-    border: none;
-    color: #8b8f98;
-    cursor: pointer;
-    font-size: 15px;
-    padding: 4px;
-  }
-  .btn-top-close:hover {
-    color: #ffffff;
-  }
-
-  /* Panes Header */
-  .panes-header-bar {
-    height: 32px;
-    display: flex;
-    background: #16181e;
-    border-bottom: 1px solid #23262e;
-    flex-shrink: 0;
-  }
-
-  .pane-header {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 14px;
-    font-size: 11.5px;
-  }
-  .pane-header.left { border-right: 1px solid #23262e; }
-  .pane-header.center {
-    border-right: 1px solid #23262e;
-    background: #13151a;
-  }
-
-  .tag {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 1px 6px;
-    border-radius: 4px;
-  }
-  .tag.yours { background: #1e293b; color: #60a5fa; }
-  .tag.result { background: #1f2a24; color: #34d399; }
-  .tag.theirs { background: #2d2417; color: #fbbf24; }
-
-  .branch-name {
-    color: #94a3b8;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /* Panes Body */
-  .panes-content-area {
-    flex: 1;
-    display: flex;
-    min-height: 0;
-    background: #0f1115;
-  }
-
-  .merge-column {
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    overflow-y: auto;
-    position: relative;
-  }
-
-  .col-yours {
-    background: #101216;
-    border-right: 1px solid #1f222a;
-  }
-  .col-result {
-    background: #0d0f13;
-    border-right: 1px solid #1f222a;
-  }
-  .col-theirs {
-    background: #101216;
-  }
-
-  .code-viewport {
-    padding: 8px 0;
-    font-size: 12px;
-    line-height: 20px;
-  }
-
-  .code-row {
-    display: flex;
-    padding: 0 10px;
-    white-space: pre;
-  }
-  .code-row:hover {
-    background: #181b22;
-  }
-
-  .line-num {
-    width: 38px;
-    color: #475569;
-    font-size: 11px;
-    user-select: none;
-    text-align: right;
-    padding-right: 12px;
-    flex-shrink: 0;
-  }
-
-  .line-code {
-    flex: 1;
-    color: #cbd5e1;
-  }
-
-  /* Interactive Center View */
-  .interactive-result-list {
-    padding: 10px;
-    font-size: 12px;
-    line-height: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .clean-lines-block {
-    background: #111317;
-    border-radius: 4px;
-    padding: 4px 0;
-  }
-  .code-row.clean {
-    padding: 0 12px;
-  }
-
-  /* Conflict Card Widget (The Heart of Android Studio Merge Tool) */
-  .conflict-card-widget {
-    background: #191c24;
-    border: 1px solid #3b82f6;
+  .three-way-dialog {
+    width: 98vw;
+    height: 94vh;
+    max-width: 1720px;
+    background: #1e1f22;
+    border: 1px solid #383a40;
     border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    animation: widgetIn 0.15s ease-out;
-  }
-
-  @keyframes widgetIn {
-    from { transform: translateY(4px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-
-  .widget-header-bar {
-    padding: 8px 12px;
-    background: #12141a;
-    border-bottom: 1px solid #232834;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .widget-title-badge {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #f1f5f9;
-  }
-  .swords-icon {
+    color: #bcbec4;
     font-size: 13px;
   }
 
-  .widget-actions-group {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .widget-btn {
-    height: 25px;
-    padding: 0 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: all 0.12s ease;
-  }
-
-  .widget-btn.pick-yours {
-    background: #1e293b;
-    border-color: #3b82f6;
-    color: #93c5fd;
-  }
-  .widget-btn.pick-yours:hover {
-    background: #3b82f6;
-    color: #ffffff;
-  }
-
-  .widget-btn.pick-both {
-    background: #241c30;
-    border-color: #a855f7;
-    color: #d8b4fe;
-  }
-  .widget-btn.pick-both:hover {
-    background: #a855f7;
-    color: #ffffff;
-  }
-
-  .widget-btn.pick-theirs {
-    background: #2d2315;
-    border-color: #f59e0b;
-    color: #fde68a;
-  }
-  .widget-btn.pick-theirs:hover {
-    background: #f59e0b;
-    color: #000000;
-  }
-
-  /* Widget Diff Split */
-  .widget-diff-split {
-    display: flex;
-    background: #0f1116;
-  }
-
-  .snippet-box {
-    flex: 1;
-    min-width: 0;
-    padding: 8px 12px;
-  }
-  .snippet-box.yours-snippet {
-    border-right: 1px solid #1f232c;
-    background: rgba(59, 130, 246, 0.04);
-  }
-  .snippet-box.theirs-snippet {
-    background: rgba(245, 158, 11, 0.04);
-  }
-
-  .snippet-title {
-    font-size: 11px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-  .yours-color { color: #60a5fa; }
-  .theirs-color { color: #fbbf24; }
-
-  .snippet-code-lines {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
+  .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, Menlo, Monaco, monospace;
+    font-size: 12px;
     line-height: 19px;
   }
 
-  .snippet-row.hl-yours {
-    color: #bfdbfe;
-  }
-  .snippet-row.hl-theirs {
-    color: #fef08a;
-  }
-
-  /* Raw Editor */
-  .result-raw-editor {
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    resize: none;
-    padding: 12px;
-    font-size: 12px;
-    line-height: 20px;
-    color: #f1f5f9;
-    white-space: pre;
-    tab-size: 2;
-  }
-
-  /* Bottom Bar */
-  .merge-bottom-bar {
-    height: 48px;
-    padding: 0 16px;
-    background: #111215;
-    border-top: 1px solid #23262e;
+  /* Top Window Title Bar */
+  .dialog-top-bar {
+    height: 38px;
+    background: #141518;
+    border-bottom: 1px solid #2b2d30;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-shrink: 0;
+    padding: 0 14px;
+    user-select: none;
   }
 
-  .stat-pill {
-    font-size: 11.5px;
+  .top-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #e6e7eb;
+  }
+
+  .top-close-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #8b8f98;
+    font-size: 13px;
+  }
+
+  .top-close-btn:hover {
+    background: #2b2d30;
+    color: #ffffff;
+  }
+
+  /* Toolbar */
+  .dialog-toolbar {
+    height: 36px;
+    background: #25272a;
+    border-bottom: 1px solid #2b2d30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    user-select: none;
+  }
+
+  .toolbar-left-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .toolbar-sep {
+    width: 1px;
+    height: 16px;
+    background: #3c3f41;
+    margin: 0 4px;
+  }
+
+  .toolbar-label {
+    font-size: 11px;
+    color: #8b8f98;
+    margin-right: 2px;
+  }
+
+  .tool-btn {
+    height: 24px;
+    padding: 0 8px;
+    background: #2e3136;
+    border: 1px solid #3c3f41;
+    border-radius: 4px;
+    color: #bcbec4;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .tool-btn:hover:not(:disabled) {
+    background: #393b40;
+    color: #ffffff;
+  }
+
+  .tool-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .counter-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 500;
+    background: #1e3a29;
+    color: #4ade80;
+    border: 1px solid #2e5c3e;
   }
-  .stat-pill.warn { color: #f87171; }
-  .stat-pill.clean { color: #4ade80; }
 
-  .bottom-buttons {
+  .counter-badge.has-conflicts {
+    background: #3f1f1d;
+    color: #f87171;
+    border-color: #632926;
+  }
+
+  /* Pane Headers */
+  .pane-headers-row {
+    height: 32px;
+    background: #1e1f22;
+    border-bottom: 1px solid #2b2d30;
+    display: grid;
+    grid-template-columns: 1fr 34px 1fr 34px 1fr;
+    user-select: none;
+  }
+
+  .col-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    font-size: 11.5px;
+    color: #8b8f98;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .col-header strong {
+    color: #e6e7eb;
+  }
+
+  .lock-icon {
+    font-size: 11px;
+    opacity: 0.7;
+  }
+
+  .gutter-header {
+    background: #1e1f22;
+  }
+
+  /* Editor Viewport & Grid */
+  .editor-viewport {
+    flex: 1;
+    overflow: auto;
+    background: #1e1f22;
+  }
+
+  .sync-grid {
+    display: flex;
+    flex-direction: column;
+    min-width: 100%;
+  }
+
+  .hunk-row {
+    display: grid;
+    grid-template-columns: 1fr 34px 1fr 34px 1fr;
+    border-bottom: 1px solid #232529;
+  }
+
+  .hunk-row.is-conflict.is-unresolved {
+    background: rgba(72, 46, 44, 0.45);
+    border-top: 1px solid #78350f;
+    border-bottom: 1px solid #78350f;
+  }
+
+  .hunk-row.is-conflict.is-resolved {
+    background: rgba(30, 41, 59, 0.35);
+  }
+
+  .hunk-pane {
+    padding: 4px 10px;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .pane-left {
+    border-right: 1px solid #2b2d30;
+  }
+
+  .pane-center {
+    background: #1a1b1e;
+    border-left: 1px solid #2b2d30;
+    border-right: 1px solid #2b2d30;
+  }
+
+  .pane-right {
+    border-left: 1px solid #2b2d30;
+  }
+
+  .code-line {
+    min-height: 19px;
+    color: #d1d5db;
+  }
+
+  .clean-line {
+    color: #a1a1aa;
+  }
+
+  .conflict-diff-line {
+    color: #ffffff;
+  }
+
+  .ours-line {
+    background: rgba(46, 67, 94, 0.6);
+  }
+
+  .theirs-line {
+    background: rgba(72, 46, 44, 0.7);
+  }
+
+  .base-preview-line {
+    background: rgba(72, 46, 44, 0.4);
+    color: #fca5a5;
+  }
+
+  /* Gutters & Action Buttons */
+  .hunk-gutter {
+    background: #222427;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 4px;
+    user-select: none;
+  }
+
+  .gutter-actions-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    position: sticky;
+    top: 4px;
+  }
+
+  .gutter-action-btn {
+    width: 22px;
+    height: 20px;
+    border-radius: 3px;
+    border: none;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.08s;
+  }
+
+  .gutter-action-btn:hover {
+    transform: scale(1.15);
+  }
+
+  .accept-left,
+  .accept-right {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .discard-btn {
+    background: #374151;
+    color: #9ca3af;
+  }
+
+  .discard-btn:hover {
+    background: #ef4444;
+    color: #ffffff;
+  }
+
+  /* Center Zone */
+  .unresolved-zone {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .unresolved-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 6px;
+    background: #7f1d1d;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #fecaca;
+    user-select: none;
+  }
+
+  .banner-quick-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .btn-micro {
+    padding: 1px 6px;
+    font-size: 10px;
+    background: #991b1b;
+    border: 1px solid #b91c1c;
+    color: #ffffff;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .btn-micro:hover {
+    background: #b91c1c;
+  }
+
+  .resolved-zone {
+    width: 100%;
+  }
+
+  .inline-result-editor {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #e5e7eb;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    padding: 0;
+    display: block;
+  }
+
+  /* Bottom Bar */
+  .dialog-bottom-bar {
+    height: 48px;
+    background: #141518;
+    border-top: 1px solid #2b2d30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    user-select: none;
+  }
+
+  .bottom-left-group,
+  .bottom-right-group {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .btn-subtle {
-    background: #181b22;
-    border: 1px solid #2a2e38;
-    color: #94a3b8;
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 11.5px;
+  .btn-secondary {
+    height: 28px;
+    padding: 0 12px;
+    background: #2b2d30;
+    border: 1px solid #3c3f41;
+    border-radius: 4px;
+    color: #d1d5db;
+    font-size: 12px;
     cursor: pointer;
-    transition: all 0.12s ease;
-  }
-  .btn-subtle:hover {
-    background: #232732;
-    color: #e2e8f0;
   }
 
-  .btn-secondary {
-    background: #1e2128;
-    border: 1px solid #2e333d;
-    color: #cbd5e1;
-    border-radius: 6px;
-    padding: 6px 14px;
+  .btn-secondary:hover {
+    background: #393b40;
+    color: #ffffff;
+  }
+
+  .btn-cancel {
+    height: 28px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid #3c3f41;
+    border-radius: 4px;
+    color: #9ca3af;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .btn-cancel:hover {
+    background: #2b2d30;
+    color: #ffffff;
+  }
+
+  .btn-apply-primary {
+    height: 28px;
+    padding: 0 18px;
+    background: #3574f0;
+    border: 1px solid #2563eb;
+    border-radius: 4px;
+    color: #ffffff;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-  }
-  .btn-secondary:hover:not(:disabled) {
-    background: #2a2e38;
-    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   }
 
-  .btn-primary-apply {
+  .btn-apply-primary:hover:not(:disabled) {
     background: #2563eb;
-    border: 1px solid #3b82f6;
-    color: #ffffff;
-    border-radius: 6px;
-    padding: 6px 20px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.12s ease;
   }
-  .btn-primary-apply:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-  .btn-primary-apply:disabled,
-  .btn-secondary:disabled {
+
+  .btn-apply-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .spin {
-    display: inline-block;
-    animation: spin 1s infinite linear;
-  }
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
   }
 </style>
