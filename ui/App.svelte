@@ -5,6 +5,7 @@
   import Rail from './shell/Rail.svelte';
   import FileTree from './shell/FileTree.svelte';
   import StatusBar from './shell/StatusBar.svelte';
+  import GitCheckoutProgressOverlay from './shell/GitCheckoutProgressOverlay.svelte';
   import Editor from './features/editor/Editor.svelte';
   import { tabsManager } from './features/editor/tabs.svelte';
   import { isImageFile } from './features/editor/imageUtils';
@@ -666,6 +667,7 @@
 </script>
 
 <div class="app-layout">
+  <GitCheckoutProgressOverlay />
   <TitleBar
     projectName={currentFolderPath ? currentFolderPath.split('/').filter(Boolean).pop() || 'Petak' : 'Petak'}
     branchName={gitStore.currentBranch || branchName}

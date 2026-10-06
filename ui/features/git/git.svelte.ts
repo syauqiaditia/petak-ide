@@ -17,11 +17,20 @@ import {
   type GitResetMode,
 } from '../../lib/api';
 
+export interface GitCheckoutProgress {
+  active: boolean;
+  target: string;
+  step: string;
+  command: string;
+  startTime: number;
+}
+
 class GitStore {
   root = $state<string>('');
   status = $state<GitRepoStatus | null>(null);
   loading = $state<boolean>(false);
   error = $state<string | null>(null);
+  checkoutProgress = $state<GitCheckoutProgress | null>(null);
 
   selectedFile = $state<{ path: string; kind: 'worktree' | 'staged' } | null>(null);
   diffFiles = $state<GitDiffFile[]>([]);
@@ -309,6 +318,7 @@ class GitStore {
   }
 
   handleFsChanged(_paths: string[]) {
+    if (this.checkoutProgress?.active) return;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -751,16 +761,55 @@ class GitStore {
 
   async branchCheckout(name: string, autoStash: boolean = true): Promise<void> {
     if (!this.root) return;
+    const cleanName = name.startsWith('origin/') ? name.slice(7) : name;
+
+    this.checkoutProgress = {
+      active: true,
+      target: name,
+      step: autoStash ? 'Menyimpan perubahan lokal (Auto-stash)…' : 'Memeriksa commit & working tree…',
+      command: `git checkout ${name}`,
+      startTime: Date.now(),
+    };
+
+    // Give browser event loop time to render the frosted glass HUD
+    await new Promise((r) => setTimeout(r, 60));
+
+    const stepTimer = setTimeout(() => {
+      if (this.checkoutProgress) {
+        this.checkoutProgress.step = `Mengalihkan working tree ke '${cleanName}'…`;
+      }
+    }, 400);
+
+    const stepTimer2 = setTimeout(() => {
+      if (this.checkoutProgress) {
+        this.checkoutProgress.step = `Menyinkronkan status berkas proyek di disk…`;
+      }
+    }, 1200);
+
     try {
       const res = await api.gitCheckout(this.root, name, autoStash);
-      const cleanName = name.startsWith('origin/') ? name.slice(7) : name;
+      clearTimeout(stepTimer);
+      clearTimeout(stepTimer2);
+
+      if (this.checkoutProgress) {
+        this.checkoutProgress.step = res.stashed
+          ? 'Memulihkan perubahan lokal (Stash pop)…'
+          : 'Selesai beralih cabang.';
+      }
+
       this.currentBranch = cleanName;
       const stashMsg = res.stashed ? (res.stashPopped ? ' (changes auto-stashed & restored)' : ' (changes stashed)') : '';
-      this.showToast(`Switched to branch '${cleanName}'${stashMsg}`, { type: 'success' });
+      
+      await new Promise((r) => setTimeout(r, 180));
       await this.refresh();
       await this.loadBranches();
+      this.showToast(`Switched to branch '${cleanName}'${stashMsg}`, { type: 'success' });
     } catch (e: any) {
+      clearTimeout(stepTimer);
+      clearTimeout(stepTimer2);
       this.showToast(`Checkout failed: ${e}`, { type: 'error' });
+    } finally {
+      this.checkoutProgress = null;
     }
   }
 
