@@ -119,6 +119,9 @@ class GitStore {
   // Remotes
   remotes = $state<GitRemote[]>([]);
 
+  // Operation running state
+  opLoading = $state<boolean>(false);
+
   // Stash state
   stashCount = $state<number>(0);
   isStashModalOpen = $state<boolean>(false);
@@ -670,6 +673,7 @@ class GitStore {
 
   async opContinue(): Promise<GitOpResult> {
     if (!this.root) throw new Error('No repository open');
+    this.opLoading = true;
     try {
       const res = await api.gitOpContinue(this.root);
       if (res.ok) {
@@ -689,6 +693,8 @@ class GitStore {
     } catch (e: any) {
       this.showToast(`Continue failed: ${e}`, { type: 'error' });
       throw e;
+    } finally {
+      this.opLoading = false;
     }
   }
 

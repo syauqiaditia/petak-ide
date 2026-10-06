@@ -28,6 +28,18 @@
   let totalHunks = $derived(hunks.length);
   let currentHunkIdx = $state(0);
 
+  let diffStats = $derived.by(() => {
+    let adds = 0;
+    let dels = 0;
+    for (const h of hunks) {
+      for (const line of h.lines) {
+        if (line.kind === 'add') adds++;
+        else if (line.kind === 'del') dels++;
+      }
+    }
+    return { adds, dels };
+  });
+
   let sbsHunks = $derived<SbsHunk[]>(hunks.map(hunkToSbs));
 
   let hunkElements = $state<HTMLElement[]>([]);
@@ -127,9 +139,20 @@
     <div class="file-info">
       {#if activePath}
         {@const { name, dir } = formatPath(activePath)}
+        <span class="file-icon">📄</span>
         <span class="file-name">{name}</span>
         {#if dir}
           <span class="file-dir">{dir}</span>
+        {/if}
+        {#if diffStats.adds > 0 || diffStats.dels > 0}
+          <div class="diff-stats-group">
+            {#if diffStats.adds > 0}
+              <span class="diff-stat-pill add">+{diffStats.adds}</span>
+            {/if}
+            {#if diffStats.dels > 0}
+              <span class="diff-stat-pill del">-{diffStats.dels}</span>
+            {/if}
+          </div>
         {/if}
         {#if activeFile?.binary}
           <span class="binary-badge">BINARY</span>
@@ -386,20 +409,20 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    background: #1a1b1f;
+    background: #1e1f22;
     user-select: text;
     -webkit-user-select: text;
   }
 
   .diff-toolbar {
-    height: 40px;
+    height: 38px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 0 14px;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
+    background: #1e1f22;
+    border-bottom: 1px solid #2b2d30;
     user-select: none;
     -webkit-user-select: none;
     font-size: 12px;
@@ -413,9 +436,14 @@
     overflow: hidden;
   }
 
+  .file-icon {
+    font-size: 13px;
+    opacity: 0.8;
+  }
+
   .file-name {
-    font-weight: 500;
-    color: #d8d9dc;
+    font-weight: 600;
+    color: #e6edf3;
     white-space: nowrap;
   }
 
@@ -424,14 +452,43 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 11.5px;
+  }
+
+  .diff-stats-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 2px;
+  }
+
+  .diff-stat-pill {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+    line-height: 14px;
+  }
+
+  .diff-stat-pill.add {
+    background: rgba(46, 160, 67, 0.2);
+    color: #4ade80;
+    border: 1px solid rgba(46, 160, 67, 0.4);
+  }
+
+  .diff-stat-pill.del {
+    background: rgba(248, 81, 73, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(248, 81, 73, 0.4);
   }
 
   .binary-badge {
     font-size: 10px;
     color: #e8b45a;
     background: rgba(232, 180, 90, 0.2);
-    padding: 1px 4px;
-    border-radius: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
   }
 
   .empty-path {
@@ -654,7 +711,7 @@
     overflow-y: scroll;
     overflow-x: auto;
     white-space: pre;
-    background: #1a1b1f;
+    background: #1e1f22;
   }
 
   .sbs-content-inner {
@@ -666,7 +723,7 @@
 
   .sbs-vertical-divider {
     width: 1px;
-    background: #26282d;
+    background: #2b2d30;
     flex-shrink: 0;
   }
 
@@ -678,8 +735,8 @@
 
   .sbs-row {
     display: flex;
-    height: 22px;
-    line-height: 22px;
+    height: 21px;
+    line-height: 21px;
     width: 100%;
     white-space: pre;
   }
@@ -697,54 +754,63 @@
     min-width: 0;
     white-space: pre;
     overflow: visible;
+    padding-left: 8px;
     padding-right: 40px;
+    color: #dfe1e5;
   }
 
   .gutter {
     display: inline-block;
-    width: 44px;
+    width: 46px;
     flex-shrink: 0;
     text-align: right;
-    padding-right: 14px;
-    color: #5b5f68;
+    padding-right: 12px;
+    color: #6e7681;
     user-select: none;
     position: sticky;
     left: 0;
-    background: inherit;
+    background: #1e1f22;
+    border-right: 1px solid #2b2d30;
     z-index: 2;
   }
 
   .divider {
     width: 1px;
-    background: #26282d;
+    background: #2b2d30;
     flex-shrink: 0;
   }
 
   .add {
-    background: #1b2b20;
+    background: rgba(46, 160, 67, 0.15);
+    border-left: 3px solid #2ea043;
+    color: #e6edf3;
   }
 
   .addw {
-    background: #24452d;
+    background: rgba(46, 160, 67, 0.4);
     border-radius: 2px;
-    padding: 0 1px;
+    padding: 0 2px;
+    color: #ffffff;
   }
 
   .del {
-    background: #2c1d1f;
+    background: rgba(248, 81, 73, 0.15);
+    border-left: 3px solid #f85149;
+    color: #e6edf3;
   }
 
   .delw {
-    background: #4a2629;
+    background: rgba(248, 81, 73, 0.4);
     border-radius: 2px;
-    padding: 0 1px;
+    padding: 0 2px;
+    color: #ffffff;
   }
 
   .filler {
     background: repeating-linear-gradient(
       135deg,
-      #17181b 0 6px,
-      #1a1b1f 6px 12px
+      #18191c 0 6px,
+      #1c1d20 6px 12px
     );
   }
 
@@ -756,23 +822,29 @@
 
   .unified-row {
     display: flex;
-    height: 22px;
-    line-height: 22px;
+    height: 21px;
+    line-height: 21px;
     white-space: pre;
   }
 
   .unified-row.add {
-    background: #1b2b20;
+    background: rgba(46, 160, 67, 0.15);
+    border-left: 3px solid #2ea043;
+    color: #e6edf3;
   }
 
   .unified-row.del {
-    background: #2c1d1f;
+    background: rgba(248, 81, 73, 0.15);
+    border-left: 3px solid #f85149;
+    color: #e6edf3;
   }
 
   .gutter.old,
   .gutter.new {
-    width: 36px;
+    width: 40px;
     padding-right: 8px;
+    background: #1e1f22;
+    border-right: 1px solid #2b2d30;
   }
 
   .sign {

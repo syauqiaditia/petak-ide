@@ -58,24 +58,48 @@
     }
   }
 
+  let isContinuing = $state(false);
+  let isAborting = $state(false);
+
   async function handleContinue() {
+    if (isContinuing) return;
+    isContinuing = true;
     try {
-      await gitStore.opContinue();
-      if (onClose) onClose();
+      // 1. Pastikan semua file yang resolved sudah di-stage sebelum continue
+      if (gitStore.root) {
+        await api.gitStagePaths(gitStore.root, []).catch(() => {});
+      }
+      const res = await gitStore.opContinue();
+      // 2. Jika rebase berhasil selesai sepenuhnya -> arahkan kembali ke tab log / commit
+      if (res.ok) {
+        gitStore.activeSubTab = 'log';
+        if (onClose) onClose();
+      } else {
+        // Rebase berhenti di commit berikutnya (ada konflik baru pada commit selanjutnya)
+        await gitStore.loadConflicts();
+        await gitStore.loadOpState();
+      }
     } catch {
       // handled inside gitStore
+    } finally {
+      isContinuing = false;
     }
   }
 
   async function handleAbort() {
+    if (isAborting) return;
     if (!window.confirm(`Batalkan ${opName}? Seluruh perubahan rebase akan dikembalikan ke state awal.`)) {
       return;
     }
+    isAborting = true;
     try {
       await gitStore.opAbort();
+      gitStore.activeSubTab = 'commit';
       if (onClose) onClose();
     } catch {
       // handled inside gitStore
+    } finally {
+      isAborting = false;
     }
   }
 </script>
@@ -198,9 +222,13 @@
       <button
         class="btn-continue"
         onclick={handleContinue}
-        disabled={conflictFiles.length > 0}
+        disabled={conflictFiles.length > 0 || isContinuing}
       >
-        Continue {opName}
+        {#if isContinuing}
+          ↻ Melanjutkan…
+        {:else}
+          Continue {opName}
+        {/if}
       </button>
     </div>
   </div>

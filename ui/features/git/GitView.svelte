@@ -263,8 +263,8 @@
           Open Conflicts
         </button>
       {/if}
-      <button class="banner-btn continue" onclick={() => gitStore.opContinue()}>
-        Continue
+      <button class="banner-btn continue" onclick={() => gitStore.opContinue()} disabled={gitStore.opLoading}>
+        {#if gitStore.opLoading}↻ Melanjutkan…{:else}Continue{/if}
       </button>
     </div>
   {/if}
@@ -443,14 +443,14 @@
   }
 
   .git-top-bar {
-    height: 36px;
+    height: 38px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 0 14px;
-    background: #111215;
-    border-bottom: 1px solid #26282d;
+    background: #1e1f22;
+    border-bottom: 1px solid #2b2d30;
     user-select: none;
     -webkit-user-select: none;
   }
@@ -458,6 +458,7 @@
   .tabs-group {
     display: flex;
     gap: 4px;
+    align-items: center;
   }
 
   .tab-btn {
@@ -465,7 +466,7 @@
     padding: 0 12px;
     border-radius: 6px;
     font-size: 12.5px;
-    color: #8b8f98;
+    color: #9da5b4;
     background: transparent;
     display: flex;
     align-items: center;
@@ -475,27 +476,30 @@
   }
 
   .tab-btn:hover {
-    color: #d8d9dc;
-    background: #1a1b1f;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .tab-btn.active {
-    background: #23252b;
-    color: #e6e7ea;
-    font-weight: 500;
+    background: #2b2d30;
+    color: #ffffff;
+    font-weight: 600;
   }
 
   .count-badge {
     font-size: 11px;
     font-weight: 600;
     color: #6ea8ff;
-    background: #1f2a3d;
-    padding: 1px 6px;
+    background: rgba(59, 130, 246, 0.18);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    padding: 1px 7px;
     border-radius: 10px;
+    line-height: 14px;
   }
   .count-badge.stash {
     color: #93c5fd;
-    background: #1e2638;
+    background: rgba(147, 197, 253, 0.18);
+    border-color: rgba(147, 197, 253, 0.35);
   }
 
   .spacer {

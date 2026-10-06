@@ -735,8 +735,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    border-right: 1px solid #26282d;
+    background: #18191c;
+    border-right: 1px solid #2b2d30;
     height: 100%;
     overflow: hidden;
     user-select: none;
@@ -745,12 +745,12 @@
   }
 
   .select-all-bar {
-    height: 30px;
+    height: 32px;
     display: flex;
     align-items: center;
     padding: 0 12px;
-    background: #17181c;
-    border-bottom: 1px solid #23252a;
+    background: #18191c;
+    border-bottom: 1px solid #2b2d30;
     flex-shrink: 0;
   }
   .select-all-label {
@@ -939,23 +939,25 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 0 10px;
+    padding: 0 8px;
+    margin: 1px 4px;
+    border-radius: 4px;
     cursor: pointer;
     transition: background 0.1s;
     font-size: 12.5px;
   }
 
   .file-row:hover {
-    background: #1a1b1f;
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .file-row.selected {
-    background: #1f2a3d;
+    background: #232d3f;
     color: #cfe0ff;
   }
 
   .file-row.conflicted {
-    background: rgba(232, 180, 90, 0.12);
+    background: rgba(232, 180, 90, 0.14);
   }
 
   .status-badge {
@@ -978,11 +980,12 @@
   .file-dir {
     margin-left: auto;
     font-size: 11px;
-    color: #7a7e85;
+    color: #71757e;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 110px;
+    max-width: 130px;
+    padding-left: 6px;
   }
 
   .conflict-tag {
@@ -992,14 +995,14 @@
     text-transform: uppercase;
     color: #e8b45a;
     background: rgba(232, 180, 90, 0.2);
-    padding: 1px 4px;
-    border-radius: 3px;
+    padding: 1px 6px;
+    border-radius: 4px;
   }
 
   /* Commit Box */
   .commit-box {
-    border-top: 1px solid #26282d;
-    background: #141518;
+    border-top: 1px solid #2b2d30;
+    background: #18191c;
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -1036,18 +1039,21 @@
     font-family: 'Geist', system-ui, sans-serif;
     font-size: 12.5px;
     line-height: 1.4;
-    color: #d8d9dc;
-    background: #1a1b1f;
-    border: 1px solid #2c2e34;
+    color: #dfe1e5;
+    background: #1e1f22;
+    border: 1px solid #383a40;
     border-radius: 6px;
     padding: 8px 10px;
     resize: vertical;
     min-height: 70px;
     outline: none;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: border-color 0.15s;
   }
 
   .message-input:focus {
-    border-color: #6ea8ff;
+    border-color: #3574f0;
+    box-shadow: 0 0 0 1px #3574f0;
   }
 
   .hint-warning {
