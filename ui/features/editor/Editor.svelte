@@ -64,6 +64,7 @@
   import { createDiffFileFromTexts } from '../../shell/diffUtils';
   import { gitStore } from '../git/git.svelte.ts';
   import type { GitDiffFile, GitBlameLine } from '../git/types';
+  import DiffView from '../git/DiffView.svelte';
   import { createCodeFoldingExtension, saveFileFoldState, restoreFileFoldState } from './folding';
   import FindReplaceBar from './FindReplaceBar.svelte';
   import ImagePreview from './ImagePreview.svelte';
@@ -103,6 +104,14 @@
 
   let findReplaceOpen = $state(false);
   let findReplaceMode = $state<'find' | 'replace'>('find');
+
+  let isCenterDiffActive = $state(true);
+
+  $effect(() => {
+    if (gitStore.centerDiff) {
+      isCenterDiffActive = true;
+    }
+  });
 
   const petakTheme = EditorView.theme(
     {
@@ -997,19 +1006,25 @@
   <!-- Tab bar (36px) -->
   <div class="tabs-bar" oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); }}>
     {#each tabsManager.tabs as tab, idx (tab.path)}
-      {@const isActive = tab.path === tabsManager.activePath}
+      {@const isActive = !isCenterDiffActive && tab.path === tabsManager.activePath}
       {@const tabColor = getTabColor(tab)}
       <div
         class="tab"
         class:active={isActive}
         class:dirty={tab.dirty}
         class:modified={tabColor === '#58a6ff'}
-        onclick={() => tabsManager.setActive(tab.path)}
+        onclick={() => {
+          isCenterDiffActive = false;
+          tabsManager.setActive(tab.path);
+        }}
         oncontextmenu={(e) => handleTabContextMenu(e, tab, idx)}
         role="button"
         tabindex="0"
         onkeydown={(e) => {
-          if (e.key === 'Enter') tabsManager.setActive(tab.path);
+          if (e.key === 'Enter') {
+            isCenterDiffActive = false;
+            tabsManager.setActive(tab.path);
+          }
         }}
       >
         <span class="tab-title" style={tabColor ? `color: ${tabColor};` : ''}>{tab.name}</span>
@@ -1029,9 +1044,68 @@
         </button>
       </div>
     {/each}
+
+    {#if gitStore.centerDiff}
+      <div
+        class="tab diff-center-tab"
+        class:active={isCenterDiffActive}
+        onclick={() => (isCenterDiffActive = true)}
+        role="button"
+        tabindex="0"
+        onkeydown={(e) => { if (e.key === 'Enter') isCenterDiffActive = true; }}
+      >
+        <span class="diff-tab-icon">🔀</span>
+        <span class="tab-title" style="color: #60a5fa;">{gitStore.centerDiff.title || `Diff: ${gitStore.centerDiff.filePath.split('/').pop()}`}</span>
+        <button
+          class="tab-close-btn"
+          onclick={(e) => {
+            e.stopPropagation();
+            gitStore.closeCenterDiff();
+            isCenterDiffActive = false;
+          }}
+          title="Tutup tab perbandingan diff"
+        >
+          <span class="tab-x">×</span>
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- Breadcrumbs (28px) -->
+  {#if gitStore.centerDiff && isCenterDiffActive}
+    <div class="center-editor-diff-panel">
+      <div class="center-diff-header">
+        <div class="diff-header-info">
+          <span class="diff-tag">DIFF</span>
+          <span class="diff-path">{gitStore.centerDiff.filePath}</span>
+          <span class="diff-comparison-badge">
+            <span class="left-comp">{gitStore.centerDiff.leftLabel}</span>
+            <span class="comp-vs">vs</span>
+            <span class="right-comp">{gitStore.centerDiff.rightLabel}</span>
+          </span>
+        </div>
+        <button
+          class="diff-close-action-btn"
+          onclick={() => {
+            gitStore.closeCenterDiff();
+            isCenterDiffActive = false;
+          }}
+          title="Tutup perbandingan diff (kembali ke editor berkas)"
+        >
+          ✕ Close Diff
+        </button>
+      </div>
+      <div class="center-diff-body">
+        <DiffView
+          diffFile={gitStore.centerDiff.diffFile}
+          filePath={gitStore.centerDiff.filePath}
+          leftLabel={gitStore.centerDiff.leftLabel}
+          rightLabel={gitStore.centerDiff.rightLabel}
+          sourceKind={gitStore.centerDiff.sourceKind || 'commit'}
+        />
+      </div>
+    </div>
+  {:else}
   <div class="breadcrumbs">
     {#if tabsManager.activeTab}
       <span>{tabsManager.activeTab.path}</span>
@@ -1120,6 +1194,7 @@
         </div>
       </div>
     </div>
+  {/if}
   {/if}
 
   {#if tabContextMenuVisible}
@@ -1281,6 +1356,91 @@
     min-height: 0;
     background: #1a1b1f;
     position: relative;
+    overflow: hidden;
+  }
+  .center-editor-diff-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    background: #141518;
+  }
+  .center-diff-header {
+    height: 36px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #18191c;
+    border-bottom: 1px solid #282a30;
+    flex-shrink: 0;
+  }
+  .diff-header-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    overflow: hidden;
+  }
+  .diff-tag {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #60a5fa;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .diff-path {
+    font-weight: 600;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .diff-comparison-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #1e2430;
+    border: 1px solid #2d3748;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .left-comp {
+    color: #9cc3ff;
+  }
+  .comp-vs {
+    color: #718096;
+    font-size: 10px;
+    font-style: italic;
+  }
+  .right-comp {
+    color: #68d391;
+  }
+  .diff-close-action-btn {
+    background: #22252c;
+    border: 1px solid #2d3039;
+    border-radius: 4px;
+    color: #9ca3af;
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .diff-close-action-btn:hover {
+    background: #2b303c;
+    color: #ffffff;
+    border-color: #4b5563;
+  }
+  .center-diff-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    min-width: 0;
     overflow: hidden;
   }
   .tabs-bar {

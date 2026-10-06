@@ -118,6 +118,7 @@
     try {
       const diffs = await api.gitStashDiff(gitStore.root, selectedIndex, path);
       activeDiffFile = diffs[0] ?? null;
+      await gitStore.openStashFileDiff(selectedIndex, path);
     } catch {
       activeDiffFile = null;
     } finally {

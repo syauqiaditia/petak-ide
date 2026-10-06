@@ -8,10 +8,14 @@
     diffFile = null,
     sourceKind = 'worktree',
     filePath = '',
+    leftLabel = '',
+    rightLabel = '',
   } = $props<{
     diffFile?: GitDiffFile | null;
     sourceKind?: 'worktree' | 'staged' | 'commit';
     filePath?: string;
+    leftLabel?: string;
+    rightLabel?: string;
   }>();
 
   let activeFile = $derived(diffFile ?? gitStore.currentDiffFile);
@@ -157,6 +161,13 @@
         {#if activeFile?.binary}
           <span class="binary-badge">BINARY</span>
         {/if}
+        {#if leftLabel && rightLabel}
+          <span class="compare-badge">
+            <span class="badge-left">{leftLabel}</span>
+            <span class="badge-sep">vs</span>
+            <span class="badge-right">{rightLabel}</span>
+          </span>
+        {/if}
       {:else}
         <span class="empty-path">Select a file to view diff</span>
       {/if}
@@ -236,11 +247,11 @@
       {#if gitStore.diffMode === 'sbs'}
         <div class="sbs-columns-header">
           <span class="col-title left">
-            {activeKind === 'staged' ? 'HEAD (Committed)' : 'Index (Staged)'}
+            {leftLabel || (activeKind === 'staged' ? 'HEAD (Committed)' : 'Index (Staged)')}
           </span>
           <div class="divider"></div>
           <span class="col-title right">
-            {activeKind === 'staged' ? 'Index (Staged)' : 'Working Tree'}
+            {rightLabel || (activeKind === 'staged' ? 'Index (Staged)' : 'Working Tree')}
           </span>
         </div>
 
@@ -489,6 +500,27 @@
     background: rgba(232, 180, 90, 0.2);
     padding: 1px 6px;
     border-radius: 4px;
+  }
+
+  .compare-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: #1e2430;
+    border: 1px solid #2d3748;
+    color: #9cc3ff;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .compare-badge .badge-sep {
+    color: #718096;
+    font-size: 10px;
+    font-style: italic;
+  }
+  .compare-badge .badge-right {
+    color: #68d391;
   }
 
   .empty-path {

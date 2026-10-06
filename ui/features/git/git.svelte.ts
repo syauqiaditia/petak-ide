@@ -25,6 +25,16 @@ export interface GitCheckoutProgress {
   startTime: number;
 }
 
+export interface GitCenterDiff {
+  diffFile: GitDiffFile | null;
+  filePath: string;
+  leftLabel: string;
+  rightLabel: string;
+  sourceKind?: 'worktree' | 'staged' | 'commit';
+  title?: string;
+  stashIndex?: number;
+}
+
 class GitStore {
   root = $state<string>('');
   status = $state<GitRepoStatus | null>(null);
@@ -121,6 +131,42 @@ class GitStore {
 
   // Operation running state
   opLoading = $state<boolean>(false);
+
+  // Center editor diff viewer state (ala Android Studio)
+  centerDiff = $state<GitCenterDiff | null>(null);
+
+  openCenterDiff(diff: GitCenterDiff) {
+    this.centerDiff = diff;
+  }
+
+  closeCenterDiff() {
+    this.centerDiff = null;
+  }
+
+  async openStashFileDiff(stashIndex: number, filePath: string) {
+    if (!this.root) return;
+    this.diffLoading = true;
+    this.diffError = null;
+    try {
+      const diffs = await api.gitStashDiff(this.root, stashIndex, filePath);
+      const diffFile = diffs && diffs.length > 0 ? diffs[0] : null;
+      const fileName = filePath.split('/').pop() || filePath;
+      this.centerDiff = {
+        diffFile,
+        filePath,
+        leftLabel: `stash@{${stashIndex}}`,
+        rightLabel: 'Working Tree',
+        sourceKind: 'commit',
+        title: `${fileName} (stash@{${stashIndex}} vs Working Tree)`,
+        stashIndex,
+      };
+    } catch (err: any) {
+      this.diffError = String(err);
+      this.showToast(`Gagal memuat diff stash: ${err?.message || err}`, { type: 'error' });
+    } finally {
+      this.diffLoading = false;
+    }
+  }
 
   // Stash state
   stashCount = $state<number>(0);

@@ -58,6 +58,13 @@
     } else if ((e.metaKey || e.ctrlKey) && e.key === '1') {
       e.preventDefault();
       onToggleProjectTree?.();
+    } else if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K') && !e.shiftKey) {
+      e.preventDefault();
+      if (activeTab === 'commit') {
+        selectTab('project');
+      } else {
+        selectTab('commit');
+      }
     }
   }
 </script>
@@ -70,10 +77,24 @@
     class:active={activeTab === 'project'}
     onclick={() => selectTab('project')}
     aria-label="Project"
-    title="Project"
+    title="Project (⌘1)"
   >
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
       <path d="M3 5h7l2 2h9v12H3z"></path>
+    </svg>
+  </button>
+
+  <button
+    class="rail-btn"
+    class:active={activeTab === 'commit'}
+    onclick={() => selectTab('commit')}
+    aria-label="Commit"
+    title="Commit & Stashes (⌘K)"
+  >
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"></circle>
+      <line x1="3" y1="12" x2="9" y2="12"></line>
+      <line x1="15" y1="12" x2="21" y2="12"></line>
     </svg>
   </button>
 
@@ -145,6 +166,12 @@
           <span class="tw-emoji">📁</span>
           <span class="tw-name">Project Explorer</span>
           <span class="tw-kbd">⌘1</span>
+        </button>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('commit'); }}>
+          <span class="tw-shortcut-badge">K</span>
+          <span class="tw-emoji">📦</span>
+          <span class="tw-name">Commit & Stashes</span>
+          <span class="tw-kbd">⌘K</span>
         </button>
         <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('git'); }}>
           <span class="tw-shortcut-badge">2</span>

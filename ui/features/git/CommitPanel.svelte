@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { gitStore } from './git.svelte.ts';
-  import { api } from '../../lib/api';
+  import { api, type GitStashEntry, type GitStashFileEntry } from '../../lib/api';
   import type { GitStatusEntry } from './types.ts';
   import {
     isAllSelected,
@@ -23,6 +23,12 @@
   import StashModal from './StashModal.svelte';
   import { agentsStore } from '../agents/agents.svelte.ts';
 
+  let { folderPath = '' } = $props<{ folderPath?: string }>();
+
+  let activePanelTab = $state<'changes' | 'stashes'>('changes');
+  let panelWidth = $state<number>(320);
+  let isResizing = $state(false);
+
   let commitMessage = $state('');
   let isAmend = $state(false);
   let isCommitting = $state(false);
@@ -33,6 +39,14 @@
 
   let changesExpanded = $state(true);
   let unversionedExpanded = $state(false);
+
+  // Stashes state
+  let stashes = $state<GitStashEntry[]>([]);
+  let stashesLoading = $state(false);
+  let selectedStashIndex = $state<number | null>(null);
+  let stashFiles = $state<GitStashFileEntry[]>([]);
+  let stashFilesLoading = $state(false);
+  let selectedStashFilePath = $state<string | null>(null);
 
   let contextMenuOpen = $state(
     typeof window !== 'undefined' && window.location.search.includes('ctx-menu')
@@ -64,10 +78,134 @@
       const res = await api.gitStashPop(gitStore.root, 0);
       gitStore.showToast(res || 'Popped latest stash', { type: 'success' });
       await gitStore.refresh();
+      await loadStashes();
     } catch (e: any) {
       gitStore.showToast(`Failed to pop stash: ${e?.message || e}`, { type: 'error' });
     }
   }
+
+  async function loadStashes() {
+    const root = folderPath || gitStore.root;
+    if (!root) return;
+    stashesLoading = true;
+    try {
+      stashes = await api.gitStashList(root);
+      gitStore.stashCount = stashes.length;
+      if (stashes.length > 0) {
+        if (selectedStashIndex === null || !stashes.some((s) => s.index === selectedStashIndex)) {
+          await selectStash(stashes[0].index);
+        } else {
+          await selectStash(selectedStashIndex);
+        }
+      } else {
+        selectedStashIndex = null;
+        stashFiles = [];
+        selectedStashFilePath = null;
+      }
+    } catch {
+      stashes = [];
+      gitStore.stashCount = 0;
+    } finally {
+      stashesLoading = false;
+    }
+  }
+
+  async function selectStash(index: number) {
+    selectedStashIndex = index;
+    selectedStashFilePath = null;
+    const root = folderPath || gitStore.root;
+    if (!root) return;
+    stashFilesLoading = true;
+    try {
+      stashFiles = await api.gitStashFiles(root, index);
+    } catch {
+      stashFiles = [];
+    } finally {
+      stashFilesLoading = false;
+    }
+  }
+
+  async function handleStashFileClick(stashIndex: number, path: string) {
+    selectedStashFilePath = path;
+    await gitStore.openStashFileDiff(stashIndex, path);
+  }
+
+  async function handleApplyStash(index: number) {
+    const root = folderPath || gitStore.root;
+    if (!root) return;
+    try {
+      const res = await api.gitStashApply(root, index);
+      gitStore.showToast(res || `Stash@{${index}} diterapkan ke working tree`, { type: 'success' });
+      await gitStore.refresh();
+      await loadStashes();
+    } catch (e: any) {
+      gitStore.showToast(`Gagal apply stash: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
+  async function handlePopStash(index: number) {
+    const root = folderPath || gitStore.root;
+    if (!root) return;
+    try {
+      const res = await api.gitStashPop(root, index);
+      gitStore.showToast(res || `Stash@{${index}} berhasil di-pop (unstash)`, { type: 'success' });
+      await gitStore.refresh();
+      await loadStashes();
+    } catch (e: any) {
+      gitStore.showToast(`Gagal pop stash: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
+  async function handleDropStash(index: number) {
+    const root = folderPath || gitStore.root;
+    if (!root) return;
+    if (!window.confirm(`Hapus stash@{${index}}? Tindakan ini tidak dapat dibatalkan.`)) return;
+    try {
+      const res = await api.gitStashDrop(root, index);
+      gitStore.showToast(res || `Stash@{${index}} dihapus`, { type: 'info' });
+      await gitStore.refresh();
+      await loadStashes();
+    } catch (e: any) {
+      gitStore.showToast(`Gagal drop stash: ${e?.message || e}`, { type: 'error' });
+    }
+  }
+
+  async function handleSelectChangeFile(path: string, kind: 'worktree' | 'staged') {
+    await gitStore.selectFile(path, kind);
+    const fileName = path.split('/').pop() || path;
+    gitStore.openCenterDiff({
+      diffFile: gitStore.currentDiffFile,
+      filePath: path,
+      leftLabel: kind === 'staged' ? 'HEAD (Committed)' : 'Index (Staged)',
+      rightLabel: kind === 'staged' ? 'Index (Staged)' : 'Working Tree',
+      sourceKind: kind,
+      title: `${fileName} (${kind === 'staged' ? 'HEAD vs Index' : 'Working Tree'})`,
+    });
+  }
+
+  function startResize(e: MouseEvent) {
+    e.preventDefault();
+    isResizing = true;
+    const startX = e.clientX;
+    const startW = panelWidth;
+
+    function onMouseMove(ev: MouseEvent) {
+      panelWidth = Math.min(Math.max(startW + (ev.clientX - startX), 200), 650);
+    }
+
+    function onMouseUp() {
+      isResizing = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  onMount(() => {
+    loadStashes();
+  });
 
   $effect(() => {
     if (contextMenuOpen && !contextTargetEntry && gitStore.status.entries.length > 0) {
@@ -362,7 +500,43 @@
 
 <svelte:window onclick={() => { contextMenuOpen = false; emptyContextMenuOpen = false; commitDropdownOpen = false; }} />
 
-<div class="commit-panel">
+<div
+  class="commit-panel"
+  style:width="{panelWidth}px"
+  style:min-width="{panelWidth}px"
+>
+  <!-- Segmented Tab Switcher [ Changes ] and [ Stashes ] -->
+  <div class="panel-header-tabs">
+    <div class="tab-segments">
+      <button
+        class="segment-btn"
+        class:active={activePanelTab === 'changes'}
+        onclick={() => (activePanelTab = 'changes')}
+        type="button"
+      >
+        <span>Changes</span>
+        {#if totalFiles > 0}
+          <span class="count-badge">{totalFiles}</span>
+        {/if}
+      </button>
+      <button
+        class="segment-btn"
+        class:active={activePanelTab === 'stashes'}
+        onclick={() => {
+          activePanelTab = 'stashes';
+          loadStashes();
+        }}
+        type="button"
+      >
+        <span>Stashes</span>
+        {#if stashes.length > 0 || gitStore.stashCount > 0}
+          <span class="count-badge stash">{stashes.length || gitStore.stashCount}</span>
+        {/if}
+      </button>
+    </div>
+  </div>
+
+  {#if activePanelTab === 'changes'}
   <!-- Select All Bar (F3 / Feature C) -->
   {#if totalFiles > 0}
     <div class="select-all-bar">
@@ -452,12 +626,12 @@
                 class="file-row"
                 class:selected={isSelected}
                 class:conflicted={entry.conflicted}
-                onclick={() => gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree')}
+                onclick={() => handleSelectChangeFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree')}
                 oncontextmenu={(e) => handleRowContextMenu(e, entry, isEntryStaged(entry))}
                 role="button"
                 tabindex="0"
                 onkeydown={(e) => {
-                  if (e.key === 'Enter') gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree');
+                  if (e.key === 'Enter') handleSelectChangeFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree');
                 }}
               >
                 <input
@@ -519,12 +693,12 @@
                 class="file-row"
                 class:selected={isSelected}
                 class:conflicted={entry.conflicted}
-                onclick={() => gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree')}
+                onclick={() => handleSelectChangeFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree')}
                 oncontextmenu={(e) => handleRowContextMenu(e, entry, isEntryStaged(entry))}
                 role="button"
                 tabindex="0"
                 onkeydown={(e) => {
-                  if (e.key === 'Enter') gitStore.selectFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree');
+                  if (e.key === 'Enter') handleSelectChangeFile(entry.path, isEntryStaged(entry) ? 'staged' : 'worktree');
                 }}
               >
                 <input
@@ -654,6 +828,134 @@
       </div>
     </div>
   </div>
+  {/if}
+
+  {#if activePanelTab === 'stashes'}
+    <!-- Stashes Tab: Compact List & Files -->
+    <div class="stashes-container">
+      <div class="stash-toolbar">
+        <span class="toolbar-title">STASHED CHANGES</span>
+        <div class="toolbar-actions">
+          <button
+            type="button"
+            class="btn-stash-action"
+            onclick={() => gitStore.openStash()}
+            title="Stash changes working tree saat ini"
+          >
+            + Stash…
+          </button>
+          <button
+            type="button"
+            class="btn-stash-refresh"
+            onclick={loadStashes}
+            title="Muat ulang daftar stash"
+          >
+            ↻
+          </button>
+        </div>
+      </div>
+
+      {#if stashesLoading && stashes.length === 0}
+        <div class="stash-empty-box">Memuat riwayat stash…</div>
+      {:else if stashes.length === 0}
+        <div class="stash-empty-box">
+          <span class="empty-stash-icon">📦</span>
+          <p>Belum ada stash tersimpan</p>
+          <button class="btn-create-stash-primary" onclick={() => gitStore.openStash()}>
+            + Stash Changes Sekarang
+          </button>
+        </div>
+      {:else}
+        <div class="stash-cards-scroll">
+          {#each stashes as item (item.index)}
+            {@const isSelected = item.index === selectedStashIndex}
+            <div
+              class="compact-stash-card"
+              class:selected={isSelected}
+              onclick={() => selectStash(item.index)}
+              role="button"
+              tabindex="0"
+              onkeydown={(e) => e.key === 'Enter' && selectStash(item.index)}
+            >
+              <div class="card-meta-line">
+                <span class="stash-index-pill">stash@&#123;{item.index}&#125;</span>
+                {#if item.branch}
+                  <span class="stash-branch-tag">[{item.branch}]</span>
+                {/if}
+                <span class="stash-date">{item.date.split(' ')[0]}</span>
+              </div>
+              <div class="card-msg-line">{item.message || '(tanpa pesan)'}</div>
+
+              {#if isSelected}
+                <!-- Compact Actions Bar for Selected Stash -->
+                <div class="selected-stash-actions" onclick={(e) => e.stopPropagation()}>
+                  <button
+                    class="stash-act-btn apply"
+                    onclick={() => handleApplyStash(item.index)}
+                    title="Apply: Terapkan perubahan ke working tree, pertahankan stash"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    class="stash-act-btn pop"
+                    onclick={() => handlePopStash(item.index)}
+                    title="Pop: Terapkan perubahan dan hapus dari stash"
+                  >
+                    Pop
+                  </button>
+                  <button
+                    class="stash-act-btn drop"
+                    onclick={() => handleDropStash(item.index)}
+                    title="Drop: Hapus stash ini"
+                  >
+                    Drop
+                  </button>
+                </div>
+
+                <!-- List of modified files in this stash -->
+                <div class="selected-stash-files-section">
+                  <div class="files-header-line">
+                    <span>BERKAS ({stashFiles.length})</span>
+                    <span class="click-hint">Klik berkas untuk diff</span>
+                  </div>
+                  {#if stashFilesLoading}
+                    <div class="files-loading-hint">Membaca berkas…</div>
+                  {:else if stashFiles.length === 0}
+                    <div class="files-loading-hint">Tidak ada berkas.</div>
+                  {:else}
+                    <div class="stash-files-list">
+                      {#each stashFiles as file (file.path)}
+                        {@const isFileActive = file.path === selectedStashFilePath}
+                        {@const fName = file.path.split('/').pop() || file.path}
+                        {@const fDir = file.path.includes('/') ? file.path.substring(0, file.path.lastIndexOf('/')) : ''}
+                        <div
+                          class="stash-file-row"
+                          class:active={isFileActive}
+                          onclick={() => handleStashFileClick(item.index, file.path)}
+                          role="button"
+                          tabindex="0"
+                          onkeydown={(e) => e.key === 'Enter' && handleStashFileClick(item.index, file.path)}
+                          title="Klik untuk membuka perbandingan diff di editor tengah"
+                        >
+                          <span class="stash-file-badge {file.status}">
+                            {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : 'M'}
+                          </span>
+                          <span class="stash-file-name">{fName}</span>
+                          {#if fDir}
+                            <span class="stash-file-dir">{fDir}</span>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Context Menu (F3) -->
   {#if contextMenuOpen}
@@ -727,11 +1029,21 @@
       }}
     />
   {/if}
+
+  <!-- Commit Panel Horizontal Resize Handle -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="commit-resize-handle"
+    onmousedown={startResize}
+    role="separator"
+    aria-label="Resize Commit Panel"
+    title="Geser untuk mengubah lebar panel commit"
+  ></div>
 </div>
 
 <style>
   .commit-panel {
-    width: 320px;
+    position: relative;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -742,6 +1054,342 @@
     user-select: none;
     -webkit-user-select: none;
     font-size: 13px;
+  }
+
+  .panel-header-tabs {
+    height: 38px;
+    padding: 4px 10px;
+    background: #141518;
+    border-bottom: 1px solid #26282d;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .tab-segments {
+    display: flex;
+    background: #1c1d22;
+    padding: 2px;
+    border-radius: 6px;
+    border: 1px solid #282a30;
+    width: 100%;
+    gap: 2px;
+  }
+  .segment-btn {
+    flex: 1;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #8b8f98;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .segment-btn:hover {
+    color: #d8d9dc;
+  }
+  .segment-btn.active {
+    background: #2b2d35;
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .count-badge {
+    font-size: 10px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: #363a45;
+    color: #9cc3ff;
+    line-height: 14px;
+  }
+  .count-badge.stash {
+    background: #2b3345;
+    color: #70b0ff;
+  }
+
+  .stashes-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: #151619;
+  }
+  .stash-toolbar {
+    height: 32px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #18191c;
+    border-bottom: 1px solid #26282d;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #8b8f98;
+  }
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-stash-action {
+    background: #1e2430;
+    border: 1px solid #2e3a50;
+    border-radius: 4px;
+    color: #9cc3ff;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-stash-action:hover {
+    background: #28354d;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+  .btn-stash-refresh {
+    background: transparent;
+    border: none;
+    color: #8b8f98;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .btn-stash-refresh:hover {
+    color: #fff;
+  }
+  .stash-empty-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 16px;
+    text-align: center;
+    color: #6c707e;
+    font-size: 12px;
+    gap: 10px;
+  }
+  .empty-stash-icon {
+    font-size: 32px;
+    opacity: 0.6;
+  }
+  .btn-create-stash-primary {
+    background: #2563eb;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-create-stash-primary:hover {
+    background: #1d4ed8;
+  }
+  .stash-cards-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .compact-stash-card {
+    background: #191b20;
+    border: 1px solid #262931;
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .compact-stash-card:hover {
+    background: #1e2128;
+    border-color: #383c48;
+  }
+  .compact-stash-card.selected {
+    background: #1c222e;
+    border-color: #3b82f6;
+  }
+  .card-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .stash-index-pill {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #60a5fa;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .stash-branch-tag {
+    color: #8b8f98;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+  }
+  .stash-date {
+    margin-left: auto;
+    color: #626674;
+    font-size: 10px;
+  }
+  .card-msg-line {
+    font-size: 12px;
+    color: #d1d5db;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .selected-stash-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #2b3346;
+  }
+  .stash-act-btn {
+    flex: 1;
+    height: 24px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.12s;
+  }
+  .stash-act-btn.apply {
+    background: #1e3a2f;
+    border-color: #276749;
+    color: #48bb78;
+  }
+  .stash-act-btn.apply:hover {
+    background: #22543d;
+    color: #68d391;
+  }
+  .stash-act-btn.pop {
+    background: #1e2a44;
+    border-color: #2b4372;
+    color: #60a5fa;
+  }
+  .stash-act-btn.pop:hover {
+    background: #25395f;
+    color: #93c5fd;
+  }
+  .stash-act-btn.drop {
+    background: #3d1f24;
+    border-color: #632832;
+    color: #f87171;
+  }
+  .stash-act-btn.drop:hover {
+    background: #52222a;
+    color: #fca5a5;
+  }
+  .selected-stash-files-section {
+    margin-top: 8px;
+    background: #14161b;
+    border-radius: 4px;
+    padding: 6px 8px;
+    border: 1px solid #232732;
+  }
+  .files-header-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    font-weight: 600;
+    color: #7e8494;
+    margin-bottom: 6px;
+  }
+  .click-hint {
+    font-size: 9.5px;
+    color: #555b6a;
+    font-style: italic;
+  }
+  .files-loading-hint {
+    font-size: 11px;
+    color: #6c7283;
+    padding: 4px 0;
+  }
+  .stash-files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .stash-file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .stash-file-row:hover {
+    background: #1e222c;
+  }
+  .stash-file-row.active {
+    background: #232d3f;
+    color: #93c5fd;
+  }
+  .stash-file-badge {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    width: 14px;
+    text-align: center;
+  }
+  .stash-file-badge.modified {
+    color: #60a5fa;
+  }
+  .stash-file-badge.added {
+    color: #4ade80;
+  }
+  .stash-file-badge.deleted {
+    color: #f87171;
+  }
+  .stash-file-name {
+    font-weight: 500;
+    color: #e2e8f0;
+  }
+  .stash-file-dir {
+    color: #64748b;
+    font-size: 10.5px;
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+  }
+  .commit-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  .commit-resize-handle:hover {
+    background: #3b82f6;
   }
 
   .select-all-bar {

@@ -24,6 +24,7 @@
   import { settingsStore } from './features/settings/settingsStore.svelte';
   import SettingsModal from './features/settings/SettingsModal.svelte';
   import RebaseBranchModal from './features/git/RebaseBranchModal.svelte';
+  import CommitPanel from './features/git/CommitPanel.svelte';
   import DashboardView from './features/dashboard/DashboardView.svelte';
   import RightDock from './shell/RightDock.svelte';
   import { handlePreviewQueryParams } from './shell/previewUrlHandler';
@@ -259,10 +260,9 @@
   }
 
   function handleOpenCommitPanel(path?: string) {
-    activeRailTab = 'git';
-    gitStore.activeSubTab = 'commit';
+    activeRailTab = 'commit';
     if (path) {
-      gitStore.selectedFile = { path, kind: 'worktree' };
+      gitStore.selectFile(path, 'worktree');
     }
   }
 
@@ -660,6 +660,14 @@
         e.preventDefault();
         toggleAgentsPanel();
       }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K') && !e.shiftKey) {
+        e.preventDefault();
+        if (activeRailTab === 'commit') {
+          activeRailTab = 'project';
+        } else {
+          activeRailTab = 'commit';
+        }
+      }
     };
     window.addEventListener('keydown', handleKeydownMirror);
     window.addEventListener('beforeunload', () => mirrorStore.stop());
@@ -697,108 +705,120 @@
   />
 
   <div class="main-body">
-    {#if currentFolderPath}
-      {#if !showDashboard}
-        <Rail
-          bind:activeTab={activeRailTab}
-          onToggleAgents={toggleAgentsPanel}
-          isAgentsOpen={isAgentPanelOpen}
-          onOpenTerminal={handleOpenTerminal}
-          onOpenRun={openRun}
+    <!-- Top Workspace Area (Horizontal: Rail + LeftToolWindow + Editor + RightDock + RightRail) -->
+    <div class="top-workspace-area">
+      {#if currentFolderPath}
+        {#if !showDashboard}
+          <Rail
+            bind:activeTab={activeRailTab}
+            onToggleAgents={toggleAgentsPanel}
+            isAgentsOpen={isAgentPanelOpen}
+            onOpenTerminal={handleOpenTerminal}
+            onOpenRun={openRun}
+            onOpenLogcat={openLogcat}
+            onOpenProblems={openProblems}
+            onToggleDevices={() => panelStore.toggleRightPanel('devices')}
+            onToggleMirror={() => mirrorStore.toggle()}
+            onSelectRailTab={(t) => (activeRailTab = t)}
+            onToggleProjectTree={() => fileTreeComponent?.toggleCollapse()}
+          />
+        {/if}
+      {/if}
+      <div class="center-area">
+        {#if showDashboard}
+          <DashboardView
+            onOpenFolder={handlePickFolder}
+            onSelectProject={async (path) => {
+              isDashboardOpen = false;
+              await openFolder(path);
+            }}
+            onOpenSettings={() => settingsStore.open()}
+          />
+        {:else}
+          <div class="workspace-area" class:hidden-view={activeRailTab !== 'project' && activeRailTab !== 'commit'}>
+            {#if activeRailTab === 'project'}
+              <FileTree
+                bind:this={fileTreeComponent}
+                {rootEntries}
+                folderPath={currentFolderPath}
+                {activeFilePath}
+                {recentFolders}
+                onPickFolder={handlePickFolder}
+                onSelectFile={handleSelectFile}
+                onOpenRecent={openFolder}
+                onOpenTerminal={handleOpenTerminal}
+                onOpenSearch={handleOpenSearch}
+                onOpenGitLog={handleOpenGitLog}
+                onOpenCommitPanel={handleOpenCommitPanel}
+                onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
+              />
+            {:else if activeRailTab === 'commit'}
+              <CommitPanel
+                folderPath={currentFolderPath}
+              />
+            {/if}
+            <Editor
+              bind:this={editorComponent}
+              folderPath={currentFolderPath}
+              onReady={onEditorReady}
+              onCursorChange={(c) => (cursorInfo = c)}
+              onStatusChange={(s) => (statusText = s)}
+              onOpenUsages={openUsages}
+              onTabSave={handleTabSave}
+              onSelectInTree={(p) => fileTreeComponent?.selectOpenedFile(p)}
+              onOpenTerminal={handleOpenTerminal}
+              onOpenSearch={handleOpenSearch}
+              onOpenGitLog={handleOpenGitLog}
+              onOpenCommitPanel={handleOpenCommitPanel}
+            />
+          </div>
+
+          {#if activeRailTab === 'git' && GitViewComponent}
+            <GitViewComponent folderPath={currentFolderPath} />
+          {/if}
+
+          {#if activeRailTab === 'mr' && MrViewComponent}
+            <MrViewComponent folderPath={currentFolderPath} />
+          {/if}
+
+          {#if activeRailTab === 'tests' && TestsPanelComponent}
+            <TestsPanelComponent folderPath={currentFolderPath} />
+          {/if}
+        {/if}
+      </div>
+
+      <!-- Right Tool Window Dock (Mutual Exclusivity: Agent OR Memory OR Mirror OR Devices) -->
+      {#if !showDashboard && panelStore.activeRightPanel}
+        <RightDock
+          {AgentsPanelComponent}
+          {DeviceMirrorPanelComponent}
+          {DevicesPanelComponent}
           onOpenLogcat={openLogcat}
-          onOpenProblems={openProblems}
-          onToggleDevices={() => panelStore.toggleRightPanel('devices')}
-          onToggleMirror={() => mirrorStore.toggle()}
-          onSelectRailTab={(t) => (activeRailTab = t)}
-          onToggleProjectTree={() => fileTreeComponent?.toggleCollapse()}
         />
       {/if}
-    {/if}
-    <div class="center-area">
-      {#if showDashboard}
-        <DashboardView
-          onOpenFolder={handlePickFolder}
-          onSelectProject={async (path) => {
-            isDashboardOpen = false;
-            await openFolder(path);
-          }}
-          onOpenSettings={() => settingsStore.open()}
+
+      <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
+      {#if !showDashboard}
+        <RightRail
+          activeRight={panelStore.activeRightPanel}
+          onToggleAgent={toggleAgentsPanel}
+          onToggleMemory={toggleMemoryPanel}
+          onToggleMirror={toggleMirrorPanel}
+          onToggleDevices={toggleDevicesPanel}
         />
-      {:else}
-        <div class="workspace-area" class:hidden-view={activeRailTab !== 'project'}>
-          <FileTree
-            bind:this={fileTreeComponent}
-            {rootEntries}
-            folderPath={currentFolderPath}
-            {activeFilePath}
-            {recentFolders}
-            onPickFolder={handlePickFolder}
-            onSelectFile={handleSelectFile}
-            onOpenRecent={openFolder}
-            onOpenTerminal={handleOpenTerminal}
-            onOpenSearch={handleOpenSearch}
-            onOpenGitLog={handleOpenGitLog}
-            onOpenCommitPanel={handleOpenCommitPanel}
-            onToggleAnnotate={() => editorComponent?.toggleAnnotate()}
-          />
-          <Editor
-            bind:this={editorComponent}
-            folderPath={currentFolderPath}
-            onReady={onEditorReady}
-            onCursorChange={(c) => (cursorInfo = c)}
-            onStatusChange={(s) => (statusText = s)}
-            onOpenUsages={openUsages}
-            onTabSave={handleTabSave}
-            onSelectInTree={(p) => fileTreeComponent?.selectOpenedFile(p)}
-            onOpenTerminal={handleOpenTerminal}
-            onOpenSearch={handleOpenSearch}
-            onOpenGitLog={handleOpenGitLog}
-            onOpenCommitPanel={handleOpenCommitPanel}
-          />
-        </div>
-
-        {#if activeRailTab === 'git' && GitViewComponent}
-          <GitViewComponent folderPath={currentFolderPath} />
-        {/if}
-
-        {#if activeRailTab === 'mr' && MrViewComponent}
-          <MrViewComponent folderPath={currentFolderPath} />
-        {/if}
-
-        {#if activeRailTab === 'tests' && TestsPanelComponent}
-          <TestsPanelComponent folderPath={currentFolderPath} />
-        {/if}
-
-        {#if terminalOpen && TerminalPanelComponent}
-          <TerminalPanelComponent
-            bind:this={terminalComponent}
-            folderPath={currentFolderPath}
-            onClose={() => (terminalOpen = false)}
-            onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
-          />
-        {/if}
       {/if}
     </div>
 
-    <!-- Right Tool Window Dock (Mutual Exclusivity: Agent OR Memory OR Mirror OR Devices) -->
-    {#if !showDashboard && panelStore.activeRightPanel}
-      <RightDock
-        {AgentsPanelComponent}
-        {DeviceMirrorPanelComponent}
-        {DevicesPanelComponent}
-        onOpenLogcat={openLogcat}
-      />
-    {/if}
-
-    <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
-    {#if !showDashboard}
-      <RightRail
-        activeRight={panelStore.activeRightPanel}
-        onToggleAgent={toggleAgentsPanel}
-        onToggleMemory={toggleMemoryPanel}
-        onToggleMirror={toggleMirrorPanel}
-        onToggleDevices={toggleDevicesPanel}
-      />
+    <!-- Bottom Dock (Melebar PENUH 100% dari ujung kiri ke kanan, di bawah container atas) -->
+    {#if !showDashboard && terminalOpen && TerminalPanelComponent}
+      <div class="bottom-dock-container">
+        <TerminalPanelComponent
+          bind:this={terminalComponent}
+          folderPath={currentFolderPath}
+          onClose={() => (terminalOpen = false)}
+          onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
+        />
+      </div>
     {/if}
   </div>
 
@@ -855,7 +875,16 @@
   .main-body {
     flex: 1;
     display: flex;
+    flex-direction: column;
     min-height: 0;
+    overflow: hidden;
+  }
+  .top-workspace-area {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
+    min-width: 0;
     overflow: hidden;
   }
   .center-area {
@@ -870,7 +899,15 @@
     flex: 1;
     display: flex;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
+  }
+  .bottom-dock-container {
+    width: 100%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
   }
   .hidden-view {
     display: none !important;
