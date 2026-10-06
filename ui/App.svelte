@@ -23,6 +23,7 @@
   import { toolchainStore } from './features/toolchain/toolchainStore.svelte';
   import { settingsStore } from './features/settings/settingsStore.svelte';
   import SettingsModal from './features/settings/SettingsModal.svelte';
+  import RebaseBranchModal from './features/git/RebaseBranchModal.svelte';
   import DashboardView from './features/dashboard/DashboardView.svelte';
   import RightDock from './shell/RightDock.svelte';
   import { handlePreviewQueryParams } from './shell/previewUrlHandler';
@@ -818,6 +819,10 @@
       root={currentFolderPath}
       onclose={() => settingsStore.close()}
     />
+  {/if}
+
+  {#if gitStore.isRebaseModalOpen}
+    <RebaseBranchModal onClose={() => gitStore.closeRebaseModal()} />
   {/if}
 </div>
 

@@ -96,9 +96,7 @@
             break;
           case 'git_rebase':
           case 'rebase':
-            panelStore.activeLeftSidebar = 'git';
-            gitStore.activeSubTab = 'log';
-            gitStore.showToast('Pilih commit atau branch di Git Log untuk rebase', { type: 'info' });
+            gitStore.openRebaseModal();
             break;
           case 'git_stash':
           case 'stash':

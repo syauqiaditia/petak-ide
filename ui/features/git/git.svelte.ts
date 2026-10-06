@@ -149,6 +149,17 @@ class GitStore {
     this.isPushModalOpen = false;
   }
 
+  // Rebase branch modal state (ala Android Studio)
+  isRebaseModalOpen = $state<boolean>(false);
+
+  openRebaseModal() {
+    this.isRebaseModalOpen = true;
+  }
+
+  closeRebaseModal() {
+    this.isRebaseModalOpen = false;
+  }
+
   // Active sub tab ('commit' | 'log' | 'stash' | 'conflict')
   activeSubTab = $state<'commit' | 'log' | 'stash' | 'conflict'>(
     typeof window !== 'undefined' && (window.location.search.includes('log') || window.location.search.includes('sub=log'))
