@@ -14,6 +14,7 @@ class TabsManager {
   tabs = $state<TabItem[]>([]);
   activePath = $state<string>('');
   recentFiles = $state<string[]>([]); // in-memory, newest in front
+  openToken = $state<number>(0); // incremented on open/activate to switch focus from diff
 
   get activeTab(): TabItem | undefined {
     return this.tabs.find((t) => t.path === this.activePath);
@@ -26,6 +27,7 @@ class TabsManager {
   openTab(path: string, name: string, content: string, state?: EditorState): TabItem {
     const existing = this.tabs.find((t) => t.path === path);
     this.recordRecentFile(path);
+    this.openToken += 1;
     if (existing) {
       this.activePath = path;
       return existing;
@@ -47,6 +49,7 @@ class TabsManager {
     const tab = this.tabs.find((t) => t.path === path);
     if (tab) {
       this.activePath = path;
+      this.openToken += 1;
       this.recordRecentFile(path);
     }
   }

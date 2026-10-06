@@ -216,3 +216,19 @@ test('git polish 6: gitStore openCommitDiff sets centerDiff with commit vs paren
     'CommitDetail must trigger gitStore.openCommitDiff when clicked'
   );
 });
+
+test('git polish 7: opening any file via tabsManager resets isCenterDiffActive to focus the file', () => {
+  const tabsCode = fs.readFileSync(path.join(uiRoot, 'features/editor/tabs.svelte.ts'), 'utf8');
+  assert.ok(tabsCode.includes('openToken'), 'tabsManager must declare openToken');
+  assert.ok(tabsCode.includes('this.openToken +='), 'tabsManager must increment openToken on open/activate');
+
+  const editorCode = fs.readFileSync(path.join(uiRoot, 'features/editor/Editor.svelte'), 'utf8');
+  assert.ok(
+    editorCode.includes('tabsManager.openToken'),
+    'Editor.svelte must listen to tabsManager.openToken'
+  );
+  assert.ok(
+    editorCode.includes('isCenterDiffActive = false'),
+    'Editor.svelte must set isCenterDiffActive to false when file is opened'
+  );
+});

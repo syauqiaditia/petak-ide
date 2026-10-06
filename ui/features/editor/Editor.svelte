@@ -105,11 +105,28 @@
   let findReplaceOpen = $state(false);
   let findReplaceMode = $state<'find' | 'replace'>('find');
 
-  let isCenterDiffActive = $state(true);
+  let isCenterDiffActive = $state(false);
 
+  let lastCenterDiffId = '';
   $effect(() => {
     if (gitStore.centerDiff) {
-      isCenterDiffActive = true;
+      const curId = `${gitStore.centerDiff.filePath}:${gitStore.centerDiff.leftLabel}:${gitStore.centerDiff.rightLabel}`;
+      if (curId !== lastCenterDiffId) {
+        lastCenterDiffId = curId;
+        isCenterDiffActive = true;
+      }
+    } else {
+      lastCenterDiffId = '';
+      isCenterDiffActive = false;
+    }
+  });
+
+  let lastOpenToken = 0;
+  $effect(() => {
+    const token = tabsManager.openToken;
+    if (token > 0 && token !== lastOpenToken) {
+      lastOpenToken = token;
+      isCenterDiffActive = false;
     }
   });
 
