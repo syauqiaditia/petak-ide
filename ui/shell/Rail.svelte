@@ -8,6 +8,8 @@
     onTabChange,
     onToggleAgents,
     isAgentsOpen = false,
+    onOpenGit,
+    isGitOpen = false,
     onOpenTerminal,
     onOpenRun,
     onOpenLogcat,
@@ -21,6 +23,8 @@
     onTabChange?: (tab: string) => void;
     onToggleAgents?: () => void;
     isAgentsOpen?: boolean;
+    onOpenGit?: () => void;
+    isGitOpen?: boolean;
     onOpenTerminal?: () => void;
     onOpenRun?: () => void;
     onOpenLogcat?: () => void;
@@ -100,10 +104,10 @@
 
   <button
     class="rail-btn"
-    class:active={activeTab === 'git'}
-    onclick={() => selectTab('git')}
+    class:active={isGitOpen}
+    onclick={() => onOpenGit?.()}
     aria-label="Git"
-    title="Git"
+    title="Git (⌘9)"
   >
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
       <circle cx="6" cy="5" r="2"></circle>
@@ -173,11 +177,11 @@
           <span class="tw-name">Commit & Stashes</span>
           <span class="tw-kbd">⌘K</span>
         </button>
-        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('git'); }}>
-          <span class="tw-shortcut-badge">2</span>
+        <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; if (onOpenGit) { onOpenGit(); } else { selectTab('git'); } }}>
+          <span class="tw-shortcut-badge">9</span>
           <span class="tw-emoji">🌿</span>
           <span class="tw-name">Git Source Control</span>
-          <span class="tw-kbd">⌘2</span>
+          <span class="tw-kbd">⌘9</span>
         </button>
         <button class="tw-menu-btn" onclick={() => { isToolWindowsOpen = false; selectTab('tests'); }}>
           <span class="tw-shortcut-badge">4</span>
