@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak IDE — Official Workspace Showcase</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    :root {
+      --bg-base: #0f1013;
+      --bg-surface: #14151a;
+      --bg-workspace: #18191f;
+      --bg-elevated: #1f2128;
+      --bg-hover: #262832;
+      --bg-active: #2d303c;
+
+      --border-default: #23252d;
+      --border-subtle: rgba(255, 255, 255, 0.07);
+      --border-focus: rgba(110, 168, 255, 0.5);
+
+      --text-main: #d8d9dc;
+      --text-muted: #8b8f98;
+      --text-dim: #60646c;
+      --accent: #6ea8ff;
+      --accent-subtle: rgba(110, 168, 255, 0.12);
+
+      --git-clean: #7fc98f;
+      --git-modified: #6ea8ff;
+      --git-untracked: #56c271;
+      --git-conflict: #f07a74;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background: #090a0d;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    /* Window Wrapper */
+    .mac-window {
+      width: 1440px;
+      height: 920px;
+      background: var(--bg-base);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 32px 100px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    /* ── Cockpit Titlebar (38px) ── */
+    .titlebar {
+      height: 38px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 10px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 7px;
+      margin-right: 6px;
+    }
+    .traffic-light {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .tl-close { background: #ff5f56; }
+    .tl-min { background: #ffbd2e; }
+    .tl-max { background: #27c93f; }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #ffffff;
+    }
+    .brand-logo {
+      width: 18px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 4px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+      padding: 3px;
+    }
+    .brand-cell { background: #111215; border-radius: 1px; }
+    .brand-cell.dim { opacity: 0.4; }
+
+    .brand-version-badge {
+      font-size: 10px;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+
+    .tb-divider {
+      width: 1px;
+      height: 16px;
+      background: var(--border-default);
+      margin: 0 2px;
+    }
+
+    .project-pill, .branch-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 26px;
+      padding: 0 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: var(--text-main);
+      background: transparent;
+      border: 1px solid transparent;
+      font-weight: 500;
+    }
+    .project-pill:hover, .branch-pill:hover {
+      background: var(--bg-elevated);
+      border-color: var(--border-subtle);
+    }
+    .branch-pill {
+      color: #9eccff;
+    }
+    .branch-ahead {
+      font-size: 10px;
+      color: var(--git-clean);
+      font-weight: 600;
+    }
+
+    .spacer { flex: 1; }
+
+    /* Center Cockpit Controls */
+    .cockpit-group {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 5px;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 7px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    .config-tag {
+      font-size: 9.5px;
+      font-weight: 700;
+      background: #6ea8ff;
+      color: #0b0f19;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .config-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-left: 2px;
+    }
+    .device-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-main);
+      padding: 0 6px;
+    }
+    .dot-online {
+      width: 6px;
+      height: 6px;
+      background: #7fc98f;
+      border-radius: 50%;
+    }
+
+    .cockpit-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 5px;
+      display: grid;
+      place-items: center;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .cockpit-btn.run {
+      background: #1f3325;
+      color: #7fc98f;
+    }
+    .cockpit-btn.reload {
+      background: #232219;
+      color: #e8b45a;
+    }
+    .cockpit-btn.restart {
+      background: #1a2936;
+      color: #6ea8ff;
+    }
+    .cockpit-btn.stop {
+      color: #f07a74;
+    }
+
+    /* Right Titlebar Items */
+    .search-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-default);
+      background: #16171d;
+      color: var(--text-muted);
+      font-size: 12px;
+      width: 170px;
+    }
+    .search-shortcut {
+      margin-left: auto;
+      font-size: 10px;
+      color: #666a73;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 13px;
+      background: #2a3a55;
+      color: #9cc3ff;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* ── Workspace Main ── */
+    .workspace-main {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      background: var(--bg-base);
+    }
+
+    /* Left Activity Rail (44px) */
+    .activity-rail {
+      width: 44px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .rail-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      color: var(--text-muted);
+      position: relative;
+    }
+    .rail-btn.active {
+      color: var(--accent);
+      background: var(--accent-subtle);
+    }
+    .rail-badge {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      background: #3574f0;
+      color: #fff;
+      font-size: 9px;
+      font-weight: 700;
+      border-radius: 6px;
+      padding: 0 4px;
+    }
+
+    /* Left Project Tree (230px) */
+    .sidebar-project {
+      width: 230px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .sidebar-header {
+      height: 32px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-subtle);
+      letter-spacing: 0.5px;
+    }
+    .tree-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+      font-size: 12.5px;
+    }
+    .tree-node {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 25px;
+      padding: 0 12px;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .tree-node.active {
+      background: #1f2a3d;
+      color: #ffffff;
+      font-weight: 500;
+    }
+    .tree-node.modified {
+      color: var(--git-modified);
+    }
+    .tree-node.untracked {
+      color: var(--git-untracked);
+    }
+    .tree-icon {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    /* Workspace Content Area (Center + Bottom) */
+    .center-column {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-right: 1px solid var(--border-default);
+    }
+
+    /* Editor Tabs (34px) */
+    .editor-tabs-bar {
+      height: 34px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+      gap: 2px;
+    }
+    .tab-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 5px 5px 0 0;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .tab-item.active {
+      background: var(--bg-workspace);
+      color: #ffffff;
+      font-weight: 500;
+      border-color: var(--border-default) var(--border-default) transparent var(--border-default);
+    }
+    .tab-item.diff {
+      color: #60a5fa;
+    }
+    .tab-close {
+      font-size: 11px;
+      opacity: 0.6;
+    }
+
+    /* Breadcrumbs */
+    .editor-breadcrumbs {
+      height: 26px;
+      background: var(--bg-workspace);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 11.5px;
+      color: var(--text-dim);
+      gap: 6px;
+    }
+    .bc-sep { opacity: 0.5; }
+    .bc-file { color: var(--text-muted); font-weight: 500; }
+
+    /* Code Area */
+    .code-canvas {
+      flex: 1;
+      background: var(--bg-workspace);
+      display: flex;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 21px;
+      overflow: hidden;
+    }
+    .gutter {
+      width: 48px;
+      padding: 10px 0;
+      text-align: right;
+      color: #4b5263;
+      user-select: none;
+      background: var(--bg-workspace);
+      border-right: 1px solid rgba(255, 255, 255, 0.04);
+      position: relative;
+    }
+    .gutter-line {
+      padding-right: 12px;
+      position: relative;
+    }
+    .bp-dot {
+      width: 9px;
+      height: 9px;
+      background: #e06c75;
+      border-radius: 50%;
+      position: absolute;
+      left: 10px;
+      top: 6px;
+      box-shadow: 0 0 6px rgba(224, 108, 117, 0.8);
+    }
+    .code-lines {
+      flex: 1;
+      padding: 10px 16px;
+      color: #abb2bf;
+      white-space: pre;
+    }
+    .kw { color: #c678dd; font-weight: 500; }
+    .cls { color: #e5c07b; }
+    .fn { color: #61afef; }
+    .str { color: #98c379; }
+    .prop { color: #e06c75; }
+    .cm { color: #5c6370; font-style: italic; }
+
+    /* ── Bottom Dock (Git Log ⌘9) 260px ── */
+    .bottom-dock {
+      height: 255px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .dock-tabs-bar {
+      height: 30px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+    }
+    .dock-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 9px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .dock-tab.active {
+      color: #ffffff;
+      background: var(--bg-elevated);
+      font-weight: 600;
+    }
+    .dock-tab-badge {
+      font-size: 10px;
+      background: #3574f0;
+      color: #fff;
+      padding: 0 5px;
+      border-radius: 8px;
+    }
+
+    .git-toolbar {
+      height: 28px;
+      padding: 0 10px;
+      background: #121318;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+    }
+    .git-cur-branch-tag {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .git-cur-branch-val {
+      color: #60a5fa;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    /* 3-Column Git Workstation */
+    .git-workstation {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      background: var(--bg-base);
+    }
+
+    /* Branch Tree Col */
+    .git-col-branches {
+      width: 210px;
+      background: #131419;
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      padding: 6px 0;
+      font-size: 11.5px;
+    }
+    .branch-sec-hdr {
+      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #6b7280;
+      letter-spacing: 0.5px;
+    }
+    .branch-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 22px;
+      padding: 0 12px;
+      color: var(--text-main);
+    }
+    .branch-row.current {
+      background: #1c2b40;
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    /* Git Log Graph Col */
+    .git-col-graph {
+      flex: 1;
+      background: var(--bg-base);
+      border-right: 1px solid var(--border-default);
+      display: flex;
+      flex-direction: column;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      min-width: 0;
+    }
+    .graph-hdr {
+      height: 24px;
+      background: #121317;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: #6b7280;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .graph-row {
+      display: flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      gap: 8px;
+    }
+    .graph-row.selected {
+      background: #1e2638;
+    }
+    .graph-rails {
+      width: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .rail-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .c-blue { background: #60a5fa; box-shadow: 0 0 5px #60a5fa; }
+    .c-green { background: #34d399; }
+    .c-purple { background: #c084fc; }
+
+    .graph-sha { color: #f59e0b; font-size: 10.5px; width: 62px; }
+    .graph-msg {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+    }
+    .graph-author { color: #9ca3af; font-size: 11px; width: 90px; }
+    .graph-date { color: #6b7280; font-size: 10.5px; width: 75px; text-align: right; }
+
+    /* Commit Inspector Col */
+    .git-col-inspector {
+      width: 250px;
+      background: #131419;
+      display: flex;
+      flex-direction: column;
+      padding: 8px 12px;
+      font-size: 11.5px;
+      gap: 6px;
+    }
+    .insp-hdr {
+      font-size: 10px;
+      font-weight: 700;
+      color: #6b7280;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .insp-title {
+      font-weight: 600;
+      color: #ffffff;
+      line-height: 16px;
+    }
+    .insp-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .insp-files-box {
+      margin-top: 4px;
+      flex: 1;
+      background: var(--bg-base);
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+    }
+
+    /* ── Right Dock (Device Mirror) 280px ── */
+    .dock-device-mirror {
+      width: 280px;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .mirror-hdr {
+      height: 32px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-default);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .fps-badge {
+      font-size: 9.5px;
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-weight: 700;
+    }
+    .phone-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      background: #0e0f14;
+    }
+    /* Phone Bezel */
+    .phone-bezel {
+      width: 240px;
+      height: 500px;
+      background: #000000;
+      border-radius: 38px;
+      border: 4px solid #333640;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), inset 0 0 0 2px #1f2129;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .dynamic-island {
+      width: 70px;
+      height: 18px;
+      background: #000;
+      border-radius: 12px;
+      align-self: center;
+      margin-top: 8px;
+      z-index: 10;
+    }
+
+    /* Flutter App Screen Inside Phone */
+    .mobile-app-screen {
+      flex: 1;
+      background: #0d121f;
+      display: flex;
+      flex-direction: column;
+      padding: 14px 14px 8px 14px;
+      color: #ffffff;
+      font-size: 11px;
+      gap: 10px;
+    }
+    .app-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .bank-card {
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+    }
+    .card-label { font-size: 9.5px; opacity: 0.8; text-transform: uppercase; }
+    .card-bal { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .card-num { font-size: 10px; font-family: 'JetBrains Mono', monospace; opacity: 0.9; margin-top: 4px; }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .q-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 9px;
+      font-weight: 500;
+    }
+    .q-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #1e2638;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+    }
+
+    .recent-tx-hdr {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-top: 6px;
+    }
+    .tx-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #131a2a;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+    .tx-desc { font-weight: 500; font-size: 10px; }
+    .tx-val { font-size: 10px; font-weight: 700; color: #f87171; font-family: 'JetBrains Mono', monospace; }
+
+    .home-bar {
+      width: 80px;
+      height: 3px;
+      background: #64748b;
+      border-radius: 3px;
+      align-self: center;
+      margin-top: auto;
+      margin-bottom: 2px;
+    }
+
+    /* ── Status Bar (24px) ── */
+    .statusbar {
+      height: 24px;
+      background: #0f1013;
+      border-top: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 14px;
+      font-size: 11px;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    .sb-item { display: flex; align-items: center; gap: 5px; }
+    .sb-item.ok { color: #34d399; }
+    .sb-item.highlight { color: #9eccff; font-weight: 500; }
+  </style>
+</head>
+<body>
+
+  <!-- macOS Window Container -->
+  <div class="mac-window">
+
+    <!-- 1. Top Cockpit Titlebar (38px) -->
+    <div class="titlebar">
+      <div class="traffic-lights">
+        <div class="traffic-light tl-close"></div>
+        <div class="traffic-light tl-min"></div>
+        <div class="traffic-light tl-max"></div>
+      </div>
+
+      <div class="brand-group">
+        <div class="brand-logo">
+          <div class="brand-cell"></div>
+          <div class="brand-cell dim"></div>
+          <div class="brand-cell dim"></div>
+          <div class="brand-cell"></div>
+        </div>
+        <span>Petak</span>
+        <span class="brand-version-badge">v0.9.0</span>
+      </div>
+
+      <div class="tb-divider"></div>
+
+      <!-- Project Picker -->
+      <div class="project-pill">
+        <span>jatim-ist-mb-flutter</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+
+      <!-- Git Branch Picker -->
+      <div class="branch-pill">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>
+        <span>fix/flazz-upgrade-v3.0.3</span>
+        <span class="branch-ahead">↑2</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- Center Cockpit Run Group -->
+      <div class="cockpit-group">
+        <div style="display: flex; align-items: center; padding: 0 4px; gap: 4px;">
+          <span class="config-tag">FLT</span>
+          <span class="config-label">main</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+
+        <button class="cockpit-btn" title="Run Config Settings"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+
+        <div class="tb-divider"></div>
+
+        <div class="device-pill">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="3"/><path d="M11 18h2"/></svg>
+          <span>iPhone 17 Pro (iOS 26.5)</span>
+          <span class="dot-online"></span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8b8f98" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+
+        <div class="tb-divider"></div>
+
+        <button class="cockpit-btn run" title="Run Application"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+        <button class="cockpit-btn" title="Debug Application"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="7" width="8" height="12" rx="4"/><path d="M12 7V4M4 13h4M16 13h4M5 8l3 2M19 8l-3 2M5 18l3-2M19 18l-3-2"/></svg></button>
+        <button class="cockpit-btn reload" title="Hot Reload (r)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>
+        <button class="cockpit-btn restart" title="Hot Restart (R)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+        <button class="cockpit-btn stop" title="Stop Process"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <!-- Search Everywhere & User -->
+      <button class="search-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+        <span>Search everywhere</span>
+        <span class="search-shortcut">⇧⇧</span>
+      </button>
+
+      <button class="cockpit-btn" title="Settings (⌘,)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <div class="avatar">U</div>
+    </div>
+
+    <!-- 2. Main Workspace Body -->
+    <div class="workspace-main">
+
+      <!-- Left Activity Rail (44px) -->
+      <div class="activity-rail">
+        <div class="rail-btn active" title="Project Files (⌘1)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5h7l2 2h9v12H3z"/></svg></div>
+        <div class="rail-btn" title="Commit & Git (⌘K)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>
+          <span class="rail-badge">3</span>
+        </div>
+        <div class="rail-btn" title="Test Suites (⌘4)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg></div>
+        <div class="rail-btn" title="GitLab Merge Requests (⌘5)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/></svg></div>
+        <div class="rail-btn" title="AI Agents Team"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 15h.01M16 15h.01"/></svg></div>
+      </div>
+
+      <!-- Project Explorer (230px) -->
+      <div class="sidebar-project">
+        <div class="sidebar-header">
+          <span>PROJECT</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+        </div>
+        <div class="tree-scroll">
+          <div class="tree-node" style="font-weight: 600;"><span class="tree-icon">▾ 📁</span> jatim-ist-mb-flutter</div>
+          <div class="tree-node" style="padding-left: 22px;"><span class="tree-icon">▸ 📁</span> android</div>
+          <div class="tree-node" style="padding-left: 22px;"><span class="tree-icon">▸ 📁</span> ios</div>
+          <div class="tree-node" style="padding-left: 22px;"><span class="tree-icon">▾ 📁</span> lib</div>
+          <div class="tree-node" style="padding-left: 34px;"><span class="tree-icon">▸ 📁</span> core</div>
+          <div class="tree-node" style="padding-left: 34px;"><span class="tree-icon">▾ 📁</span> features</div>
+          <div class="tree-node" style="padding-left: 46px;"><span class="tree-icon">▸ 📁</span> after_login</div>
+          <div class="tree-node" style="padding-left: 46px;"><span class="tree-icon">▾ 📁</span> flazz</div>
+          <div class="tree-node modified" style="padding-left: 58px;"><span class="tree-icon">📄</span> flazz_view.dart</div>
+          <div class="tree-node" style="padding-left: 58px;"><span class="tree-icon">📄</span> flazz_bloc.dart</div>
+          <div class="tree-node" style="padding-left: 46px;"><span class="tree-icon">▸ 📁</span> qris</div>
+          <div class="tree-node active" style="padding-left: 34px;"><span class="tree-icon">📄</span> main.dart</div>
+          <div class="tree-node" style="padding-left: 22px;"><span class="tree-icon">▾ 📁</span> packagenfc</div>
+          <div class="tree-node modified" style="padding-left: 34px;"><span class="tree-icon">📄</span> BCAdllE.h</div>
+          <div class="tree-node" style="padding-left: 22px;"><span class="tree-icon">📄</span> pubspec.yaml</div>
+        </div>
+      </div>
+
+      <!-- Center Workspace Column (Editor + Bottom Dock) -->
+      <div class="center-column">
+
+        <!-- Editor Tabs -->
+        <div class="editor-tabs-bar">
+          <div class="tab-item"><span style="color:#6ea8ff">⚡</span> flazz_view.dart <span class="tab-close">×</span></div>
+          <div class="tab-item active"><span style="color:#6ea8ff">⚡</span> main.dart <span class="tab-close">×</span></div>
+          <div class="tab-item diff"><span style="color:#60a5fa">🔀</span> Diff: BCAdllE.h (c8b2508 vs parent) <span class="tab-close">×</span></div>
+        </div>
+
+        <!-- Breadcrumbs -->
+        <div class="editor-breadcrumbs">
+          <span>jatim-ist-mb-flutter</span> <span class="bc-sep">›</span>
+          <span>lib</span> <span class="bc-sep">›</span>
+          <span class="bc-file">main.dart</span>
+        </div>
+
+        <!-- Code Editor Area -->
+        <div class="code-canvas">
+          <div class="gutter">
+            <div class="gutter-line">1</div>
+            <div class="gutter-line">2</div>
+            <div class="gutter-line">3</div>
+            <div class="gutter-line">4</div>
+            <div class="gutter-line">5</div>
+            <div class="gutter-line">6</div>
+            <div class="gutter-line">7</div>
+            <div class="gutter-line">8</div>
+            <div class="gutter-line">9</div>
+            <div class="gutter-line">10</div>
+            <div class="gutter-line">11</div>
+            <div class="gutter-line">12</div>
+            <div class="gutter-line">13</div>
+            <div class="gutter-line"><div class="bp-dot"></div>14</div>
+            <div class="gutter-line">15</div>
+            <div class="gutter-line">16</div>
+            <div class="gutter-line">17</div>
+            <div class="gutter-line">18</div>
+          </div>
+          <div class="code-lines">
+<span class="kw">import</span> <span class="str">'package:flutter/material.dart'</span>;
+<span class="kw">import</span> <span class="str">'package:flutter_bloc/flutter_bloc.dart'</span>;
+<span class="kw">import</span> <span class="str">'package:jatim_ist_mb/app/app.dart'</span>;
+<span class="kw">import</span> <span class="str">'package:jatim_ist_mb/features/flazz/flazz_view.dart'</span>;
+
+<span class="cm">/// Bank Jatim Mobile Banking (JConnect) Main Entry</span>
+<span class="kw">void</span> <span class="fn">main</span>() <span class="kw">async</span> {
+  <span class="cls">WidgetsFlutterBinding</span>.<span class="fn">ensureInitialized</span>();
+  <span class="kw">await</span> <span class="cls">FlazzDoktekBridge</span>.<span class="fn">init</span>(); <span class="cm">// BCA Flazz v3.0.3 Lib</span>
+
+  <span class="fn">runApp</span>(
+    <span class="cls">MultiBlocProvider</span>(
+      <span class="prop">providers</span>: [
+        <span class="cls">BlocProvider</span>(<span class="prop">create</span>: (_) =&gt; <span class="cls">FlazzBloc</span>()..<span class="fn">add</span>(<span class="kw">const</span> <span class="cls">InitFlazzEvent</span>())),
+      ],
+      <span class="prop">child</span>: <span class="kw">const</span> <span class="cls">JConnectApplication</span>(),
+    ),
+  );
+}</div>
+        </div>
+
+        <!-- 3. Bottom Dock (Git VCS Log ala Android Studio ⌘9) -->
+        <div class="bottom-dock">
+          <!-- Dock Tabs -->
+          <div class="dock-tabs-bar">
+            <div class="dock-tab active">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>
+              <span>Git</span>
+              <span class="dock-tab-badge">9</span>
+            </div>
+            <div class="dock-tab"><span>Terminal</span></div>
+            <div class="dock-tab"><span>Run</span></div>
+            <div class="dock-tab"><span>Logcat</span></div>
+            <div class="dock-tab"><span>Build</span></div>
+            <div class="dock-tab"><span>Problems</span> <span style="opacity: 0.6;">0</span></div>
+          </div>
+
+          <!-- Git Toolbar -->
+          <div class="git-toolbar">
+            <span class="git-cur-branch-tag">CURRENT BRANCH:</span>
+            <span class="git-cur-branch-val">fix/flazz-upgrade-v3.0.3</span>
+            <div class="tb-divider" style="height: 12px;"></div>
+            <span style="color:#60a5fa; font-weight: 600;">Log (All Commits)</span>
+            <span style="color: var(--text-dim); margin-left: auto;">Filter: Text, Author, Branch</span>
+          </div>
+
+          <!-- 3-Column Git Workstation -->
+          <div class="git-workstation">
+            <!-- Branch Tree -->
+            <div class="git-col-branches">
+              <div class="branch-sec-hdr">LOCAL (267)</div>
+              <div class="branch-row current"><span>★ fix/flazz-upgrade-v3.0.3</span></div>
+              <div class="branch-row"><span>▾ 📁 fix/</span></div>
+              <div class="branch-row" style="padding-left: 20px;"><span>fix/sonny/event-download</span></div>
+              <div class="branch-row"><span>▾ 📁 canary/</span></div>
+              <div class="branch-row" style="padding-left: 20px;"><span>canary/dev/1.10.0</span></div>
+              <div class="branch-row" style="padding-left: 20px;"><span>canary/prod/1.9.1</span></div>
+              <div class="branch-sec-hdr" style="margin-top: 4px;">REMOTE (origin)</div>
+            </div>
+
+            <!-- Commit Tree Graph -->
+            <div class="git-col-graph">
+              <div class="graph-hdr">
+                <span style="width: 32px;"></span>
+                <span style="width: 62px;">Commit</span>
+                <span style="flex: 1;">Description</span>
+                <span style="width: 90px;">Author</span>
+                <span style="width: 75px; text-align: right;">Date</span>
+              </div>
+              <div class="graph-row selected">
+                <div class="graph-rails"><div class="rail-dot c-blue"></div></div>
+                <span class="graph-sha">c8b2508</span>
+                <span class="graph-msg" style="font-weight: 600;">fix (flazz): upgrade flazz lib v3.0.3</span>
+                <span class="graph-author">syauqi1717</span>
+                <span class="graph-date">9 hours ago</span>
+              </div>
+              <div class="graph-row">
+                <div class="graph-rails"><div class="rail-dot c-blue"></div></div>
+                <span class="graph-sha">380d6c1</span>
+                <span class="graph-msg">tes</span>
+                <span class="graph-author">syauqi1717</span>
+                <span class="graph-date">13 hours ago</span>
+              </div>
+              <div class="graph-row">
+                <div class="graph-rails"><div class="rail-dot c-green"></div><div class="rail-dot c-blue"></div></div>
+                <span class="graph-sha">c4a8253</span>
+                <span class="graph-msg">fix: change nominal transaction to equivalent</span>
+                <span class="graph-author">syauqi1717</span>
+                <span class="graph-date">32 hours ago</span>
+              </div>
+              <div class="graph-row">
+                <div class="graph-rails"><div class="rail-dot c-green"></div></div>
+                <span class="graph-sha">161de41</span>
+                <span class="graph-msg">[PROD] Update CHANGELOG.md and version 1.9.1+35</span>
+                <span class="graph-author">Christopher Sonny</span>
+                <span class="graph-date">5 days ago</span>
+              </div>
+              <div class="graph-row">
+                <div class="graph-rails"><div class="rail-dot c-purple"></div></div>
+                <span class="graph-sha">998f5ca</span>
+                <span class="graph-msg">[PROD] Update CHANGELOG.md and version 1.9.1+35</span>
+                <span class="graph-author">Christopher Sonny</span>
+                <span class="graph-date">5 days ago</span>
+              </div>
+              <div class="graph-row">
+                <div class="graph-rails"><div class="rail-dot c-blue"></div></div>
+                <span class="graph-sha">ec13226</span>
+                <span class="graph-msg">[PROD] Update CHANGELOG.md and version 1.9.0+34</span>
+                <span class="graph-author">Christopher Sonny</span>
+                <span class="graph-date">3 weeks ago</span>
+              </div>
+              <div class="graph-row">
+                <div class="graph-rails"><div class="rail-dot c-blue"></div></div>
+                <span class="graph-sha">7a0d966</span>
+                <span class="graph-msg">fix (ios): upgrade minimum os from 13 to 14</span>
+                <span class="graph-author">syauqi1717</span>
+                <span class="graph-date">7 weeks ago</span>
+              </div>
+            </div>
+
+            <!-- Commit Detail Inspector -->
+            <div class="git-col-inspector">
+              <div class="insp-hdr">COMMIT DETAIL</div>
+              <div class="insp-title">fix (flazz): upgrade flazz lib v3.0.3</div>
+              <div class="insp-meta">
+                <span>SHA: <code style="color:#f59e0b">c8b2508aee</code></span>
+                <span>Author: syauqi1717</span>
+                <span style="color:#7fc98f">● Pushed to origin/fix/flazz-upgrade-v3.0.3</span>
+              </div>
+              <div class="insp-files-box">
+                <span style="color:#94a3b8; font-weight: 600;">CHANGES (6 FILES):</span>
+                <span style="color:#60a5fa">M BCAdllE.h</span>
+                <span style="color:#60a5fa">M libBCAdllE.a (arm64)</span>
+                <span style="color:#60a5fa">M libBCAdllE.a (x86_64)</span>
+                <span style="color:#60a5fa">M Podfile.lock</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 4. Right Dock (Embedded Device Mirroring 280px) -->
+      <div class="dock-device-mirror">
+        <div class="mirror-hdr">
+          <span style="display: flex; align-items: center; gap: 5px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M12 18h.01"/></svg>
+            iPhone 17 Pro
+          </span>
+          <span class="fps-badge">60 FPS • &lt;2ms</span>
+        </div>
+
+        <div class="phone-stage">
+          <!-- iPhone Bezel Container -->
+          <div class="phone-bezel">
+            <div class="dynamic-island"></div>
+
+            <!-- Live Flutter App UI -->
+            <div class="mobile-app-screen">
+              <div class="app-bar">
+                <span>Bank Jatim JConnect</span>
+                <span>🔔</span>
+              </div>
+
+              <!-- Gradient Card -->
+              <div class="bank-card">
+                <span class="card-label">Tabungan Utama</span>
+                <span class="card-bal">Rp 14.850.000</span>
+                <span class="card-num">•••• •••• •••• 4028</span>
+              </div>
+
+              <!-- Quick Action Tiles -->
+              <div class="quick-grid">
+                <div class="q-tile"><div class="q-icon" style="background:#1e3a5f; color:#60a5fa;">📷</div>QRIS</div>
+                <div class="q-tile"><div class="q-icon" style="background:#1f3325; color:#4ade80;">⇄</div>Transfer</div>
+                <div class="q-tile"><div class="q-icon" style="background:#312e81; color:#a78bfa;">💳</div>Flazz</div>
+                <div class="q-tile"><div class="q-icon" style="background:#3b2d18; color:#fbbf24;">📑</div>Mutasi</div>
+              </div>
+
+              <div class="recent-tx-hdr">Transaksi Terakhir</div>
+              <div class="tx-item">
+                <span class="tx-desc">Top-up Flazz Card</span>
+                <span class="tx-val">-Rp 100.000</span>
+              </div>
+              <div class="tx-item">
+                <span class="tx-desc">QRIS Indomaret</span>
+                <span class="tx-val">-Rp 45.500</span>
+              </div>
+
+              <div class="home-bar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 5. Status Bar (24px) -->
+    <div class="statusbar">
+      <div class="sb-item highlight"><span>⎇ fix/flazz-upgrade-v3.0.3</span></div>
+      <div class="sb-item ok"><span>● DART LSP: Ready</span></div>
+      <div class="sb-item ok"><span>● ScreenCaptureKit: 60 FPS</span></div>
+      <div class="sb-item"><span>macOS connected (M2)</span></div>
+      <div class="spacer"></div>
+      <div class="sb-item"><span>UTF-8</span></div>
+      <div class="sb-item"><span>Ln 14, Col 18</span></div>
+      <div class="sb-item"><span>Spaces: 2</span></div>
+      <div class="sb-item"><span>Dart</span></div>
+    </div>
+
+  </div>
+
+</body>
+</html>
