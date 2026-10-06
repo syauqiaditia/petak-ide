@@ -729,7 +729,8 @@
     user-select: none;
     -webkit-user-select: none;
     min-width: 0;
-    overflow: hidden;
+    position: relative;
+    z-index: 100;
   }
   .traffic-lights-spacer {
     width: 76px;
