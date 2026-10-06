@@ -10,26 +10,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uiRoot = path.resolve(__dirname, '../ui');
 
-test('git layout 1: App.svelte layout structure has full-width bottom dock below top-workspace-area', () => {
+test('git layout 1: App.svelte layout structure has bottom dock spanning workspace column and stopping at right dock', () => {
   const appFile = fs.readFileSync(path.join(uiRoot, 'App.svelte'), 'utf8');
 
-  // Verify top-workspace-area and bottom-dock-container exist
-  assert.ok(appFile.includes('class="top-workspace-area"'), 'App.svelte must contain top-workspace-area container');
+  // Verify workspace-column and bottom-dock-container exist
+  assert.ok(appFile.includes('class="workspace-column"'), 'App.svelte must contain workspace-column container');
   assert.ok(appFile.includes('class="bottom-dock-container"'), 'App.svelte must contain bottom-dock-container');
 
-  // Verify bottom dock is placed after top-workspace-area, outside center-area
-  const topIndex = appFile.indexOf('class="top-workspace-area"');
+  // Verify bottom dock is placed inside workspace-column below center-area
+  const workspaceColIndex = appFile.indexOf('class="workspace-column"');
+  const centerAreaIndex = appFile.indexOf('class="center-area"');
   const bottomIndex = appFile.indexOf('class="bottom-dock-container"');
-  assert.ok(topIndex !== -1 && bottomIndex !== -1 && bottomIndex > topIndex, 'bottom-dock-container must be placed below top-workspace-area');
+  assert.ok(workspaceColIndex !== -1 && centerAreaIndex !== -1 && bottomIndex !== -1, 'Containers must exist');
+  assert.ok(bottomIndex > centerAreaIndex && centerAreaIndex > workspaceColIndex, 'bottom-dock-container must be placed below center-area in workspace-column');
 
   // Verify TerminalPanelComponent is inside bottom-dock-container, not inside center-area
   const bottomDockSection = appFile.slice(bottomIndex);
   assert.ok(bottomDockSection.includes('<TerminalPanelComponent'), 'TerminalPanelComponent must be inside bottom-dock-container');
 
-  // Verify CSS styles for full-width bottom dock
+  // Verify RightDock and RightRail are outside workspace-column as siblings in main-body
+  const rightDockIndex = appFile.indexOf('<RightDock');
+  assert.ok(rightDockIndex > bottomIndex, 'RightDock must be placed as sibling after workspace-column');
+
+  // Verify CSS styles for flex layout
   assert.ok(appFile.includes('.main-body {'), 'Must have main-body styles');
-  assert.ok(appFile.includes('flex-direction: column;'), 'main-body must be flex-direction: column for vertical stacking');
-  assert.ok(appFile.includes('.top-workspace-area {'), 'Must have top-workspace-area styles');
+  assert.ok(appFile.includes('flex-direction: row;'), 'main-body must be flex-direction: row for horizontal layout');
+  assert.ok(appFile.includes('.workspace-column {'), 'Must have workspace-column styles');
   assert.ok(appFile.includes('.bottom-dock-container {'), 'Must have bottom-dock-container styles');
   assert.ok(appFile.includes('width: 100%;'), 'bottom-dock-container must span width: 100%');
 
@@ -37,6 +43,28 @@ test('git layout 1: App.svelte layout structure has full-width bottom dock below
   assert.equal(MIN_BOTTOM_PANEL_HEIGHT, 120);
   assert.equal(clampBottomPanelHeight(50, 1000), 120);
   assert.equal(clampBottomPanelHeight(240, 1000), 240);
+});
+
+test('git layout 1b: Left Rail Git icon toggles Bottom Dock on Git tab (⌘9) instead of full screen', () => {
+  const railFile = fs.readFileSync(path.join(uiRoot, 'shell/Rail.svelte'), 'utf8');
+  const appFile = fs.readFileSync(path.join(uiRoot, 'App.svelte'), 'utf8');
+
+  // Rail accepts onOpenGit and isGitOpen props
+  assert.ok(railFile.includes('onOpenGit?: () => void;'), 'Rail must declare onOpenGit callback prop');
+  assert.ok(railFile.includes('isGitOpen?: boolean;'), 'Rail must declare isGitOpen prop');
+
+  // Rail Git button triggers onOpenGit and shows active state & ⌘9 title
+  assert.ok(railFile.includes('onclick={() => onOpenGit?.()}'), 'Git button must call onOpenGit instead of selectTab');
+  assert.ok(railFile.includes('class:active={isGitOpen}'), 'Git button active state must bind isGitOpen');
+  assert.ok(railFile.includes('title="Git (⌘9)"'), 'Git button title must show Git (⌘9)');
+
+  // App.svelte wires onOpenGit and isGitOpen to Rail
+  assert.ok(appFile.includes('onOpenGit={openGit}'), 'App.svelte must pass onOpenGit={openGit} to Rail');
+  assert.ok(appFile.includes('isGitOpen={terminalOpen && terminalComponent?.getActiveSection?.() === \'git\'}'), 'App.svelte must pass isGitOpen condition to Rail');
+
+  // App.svelte openGit minimizes/closes dock when already open on git
+  assert.ok(appFile.includes("if (terminalOpen && terminalComponent?.getActiveSection?.() === 'git')"), 'openGit must check if already open on git');
+  assert.ok(appFile.includes('terminalOpen = false;'), 'openGit must toggle/minimize bottom dock');
 });
 
 test('git layout 2: Rail.svelte and App.svelte declare Commit tab with ⌘K shortcut', () => {

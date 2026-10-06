@@ -218,6 +218,9 @@
       TerminalPanelComponent = mod.default;
     }
     terminalOpen = true;
+    if (terminalComponent?.openGit) {
+      terminalComponent.openGit();
+    }
     setTimeout(() => {
       terminalComponent?.openGit?.();
     }, 20);
@@ -724,25 +727,27 @@
   />
 
   <div class="main-body">
-    <!-- Top Workspace Area (Horizontal: Rail + LeftToolWindow + Editor + RightDock + RightRail) -->
-    <div class="top-workspace-area">
-      {#if currentFolderPath}
-        {#if !showDashboard}
-          <Rail
-            bind:activeTab={activeRailTab}
-            onToggleAgents={toggleAgentsPanel}
-            isAgentsOpen={isAgentPanelOpen}
-            onOpenTerminal={handleOpenTerminal}
-            onOpenRun={openRun}
-            onOpenLogcat={openLogcat}
-            onOpenProblems={openProblems}
-            onToggleDevices={() => panelStore.toggleRightPanel('devices')}
-            onToggleMirror={() => mirrorStore.toggle()}
-            onSelectRailTab={(t) => (activeRailTab = t)}
-            onToggleProjectTree={() => fileTreeComponent?.toggleCollapse()}
-          />
-        {/if}
+    {#if currentFolderPath}
+      {#if !showDashboard}
+        <Rail
+          bind:activeTab={activeRailTab}
+          onOpenGit={openGit}
+          isGitOpen={terminalOpen && terminalComponent?.getActiveSection?.() === 'git'}
+          onToggleAgents={toggleAgentsPanel}
+          isAgentsOpen={isAgentPanelOpen}
+          onOpenTerminal={handleOpenTerminal}
+          onOpenRun={openRun}
+          onOpenLogcat={openLogcat}
+          onOpenProblems={openProblems}
+          onToggleDevices={() => panelStore.toggleRightPanel('devices')}
+          onToggleMirror={() => mirrorStore.toggle()}
+          onSelectRailTab={(t) => (activeRailTab = t)}
+          onToggleProjectTree={() => fileTreeComponent?.toggleCollapse()}
+        />
       {/if}
+    {/if}
+
+    <div class="workspace-column">
       <div class="center-area">
         {#if showDashboard}
           <DashboardView
@@ -806,38 +811,38 @@
         {/if}
       </div>
 
-      <!-- Right Tool Window Dock (Mutual Exclusivity: Agent OR Memory OR Mirror OR Devices) -->
-      {#if !showDashboard && panelStore.activeRightPanel}
-        <RightDock
-          {AgentsPanelComponent}
-          {DeviceMirrorPanelComponent}
-          {DevicesPanelComponent}
-          onOpenLogcat={openLogcat}
-        />
-      {/if}
-
-      <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
-      {#if !showDashboard}
-        <RightRail
-          activeRight={panelStore.activeRightPanel}
-          onToggleAgent={toggleAgentsPanel}
-          onToggleMemory={toggleMemoryPanel}
-          onToggleMirror={toggleMirrorPanel}
-          onToggleDevices={toggleDevicesPanel}
-        />
+      <!-- Bottom Dock (Melebar PENUH 100% di bawah workspace & left sidebar, berhenti di Right Dock) -->
+      {#if !showDashboard && terminalOpen && TerminalPanelComponent}
+        <div class="bottom-dock-container">
+          <TerminalPanelComponent
+            bind:this={terminalComponent}
+            folderPath={currentFolderPath}
+            onClose={() => (terminalOpen = false)}
+            onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
+          />
+        </div>
       {/if}
     </div>
 
-    <!-- Bottom Dock (Melebar PENUH 100% dari ujung kiri ke kanan, di bawah container atas) -->
-    {#if !showDashboard && terminalOpen && TerminalPanelComponent}
-      <div class="bottom-dock-container">
-        <TerminalPanelComponent
-          bind:this={terminalComponent}
-          folderPath={currentFolderPath}
-          onClose={() => (terminalOpen = false)}
-          onSelectProblem={(path, line, col) => handleOpenFile(path, line, col)}
-        />
-      </div>
+    <!-- Right Tool Window Dock (Mutual Exclusivity: Agent OR Memory OR Mirror OR Devices) -->
+    {#if !showDashboard && panelStore.activeRightPanel}
+      <RightDock
+        {AgentsPanelComponent}
+        {DeviceMirrorPanelComponent}
+        {DevicesPanelComponent}
+        onOpenLogcat={openLogcat}
+      />
+    {/if}
+
+    <!-- Right Activity Rail (seperti di kiri tapi di kanan) -->
+    {#if !showDashboard}
+      <RightRail
+        activeRight={panelStore.activeRightPanel}
+        onToggleAgent={toggleAgentsPanel}
+        onToggleMemory={toggleMemoryPanel}
+        onToggleMirror={toggleMirrorPanel}
+        onToggleDevices={toggleDevicesPanel}
+      />
     {/if}
   </div>
 
@@ -894,14 +899,15 @@
   .main-body {
     flex: 1;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     min-height: 0;
+    min-width: 0;
     overflow: hidden;
   }
-  .top-workspace-area {
+  .workspace-column {
     flex: 1;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
