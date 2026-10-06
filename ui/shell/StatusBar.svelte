@@ -10,6 +10,7 @@
   import { editorSettings } from '../features/editor/editorSettings.svelte';
   import { settingsStore } from '../features/settings/settingsStore.svelte';
   import { calcPatDaysLeft, patNeedsWarning, formatPatIndicator } from '../features/accounts/accountsExpiryLogic';
+  import { updateStore } from '../features/updater/updateStore.svelte';
 
   let {
     branchName = '',
@@ -261,6 +262,18 @@
         <span>GitLab</span>
       {/if}
     </span>
+  {/if}
+
+  {#if updateStore.updateAvailable}
+    <button
+      class="update-status-btn"
+      class:updating={updateStore.isUpdating}
+      onclick={() => updateStore.applyUpdate()}
+      title="Versi {updateStore.latestVersion} tersedia! Klik untuk update & restart"
+      disabled={updateStore.isUpdating}
+    >
+      <span>✨ {updateStore.isUpdating ? 'Updating…' : `Update v${updateStore.latestVersion}`}</span>
+    </button>
   {/if}
 
   <div class="spacer"></div>
@@ -555,5 +568,29 @@
   .gitlab-indicator.gitlab-warning:hover {
     background: #3a3019;
     color: #f5c76a;
+  }
+  .update-status-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    padding: 0 8px;
+    border-radius: 9px;
+    background: rgba(34, 197, 94, 0.16);
+    border: 1px solid rgba(52, 211, 153, 0.45);
+    color: #6ee7b7;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    margin-left: 6px;
+  }
+  .update-status-btn:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.35);
+    color: #ffffff;
+  }
+  .update-status-btn.updating {
+    opacity: 0.7;
+    cursor: wait;
   }
 </style>

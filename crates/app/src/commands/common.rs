@@ -444,6 +444,210 @@ pub async fn accounts_check_token_status() -> Result<petak_core::accounts::Token
         .map_err(|e| e.to_string())?
 }
 
+// ──────────── In-App Self-Updater ────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCheckResult {
+    pub update_available: bool,
+    pub current_version: String,
+    pub latest_version: String,
+    pub release_notes: String,
+    pub release_url: String,
+    pub download_url: Option<String>,
+}
+
+fn is_version_newer(latest: &str, current: &str) -> bool {
+    let parse_parts = |v: &str| -> Vec<u32> {
+        v.split('.')
+            .filter_map(|p| p.chars().take_while(|c| c.is_ascii_digit()).collect::<String>().parse().ok())
+            .collect()
+    };
+    let l_parts = parse_parts(latest);
+    let c_parts = parse_parts(current);
+    for (l, c) in l_parts.iter().zip(c_parts.iter()) {
+        if l > c { return true; }
+        if l < c { return false; }
+    }
+    l_parts.len() > c_parts.len()
+}
+
+#[tauri::command]
+pub async fn app_check_update() -> Result<UpdateCheckResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let current_version = "0.8.1".to_string();
+        let repo = "syauqiaditia/petak-ide";
+        let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+
+        let mut cmd = std::process::Command::new("curl");
+        cmd.args(["-sL", "-H", "User-Agent: Petak-IDE", "-H", "Accept: application/vnd.github.v3+json"]);
+
+        if let Ok(home) = std::env::var("HOME") {
+            let pat_path = std::path::Path::new(&home).join(".github-pat");
+            if let Ok(token) = std::fs::read_to_string(pat_path) {
+                let tok = token.trim();
+                if !tok.is_empty() {
+                    cmd.args(["-H", &format!("Authorization: token {}", tok)]);
+                }
+            }
+        }
+
+        cmd.arg(&url);
+
+        let output = cmd.output().map_err(|e| format!("Gagal menjalankan curl: {}", e))?;
+        if !output.status.success() {
+            return Err("Koneksi ke GitHub API gagal".to_string());
+        }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let val: serde_json::Value = serde_json::from_str(&json_str)
+            .map_err(|e| format!("Format respon GitHub tidak valid: {}", e))?;
+
+        let tag = val.get("tag_name")
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .trim_start_matches('v')
+            .to_string();
+
+        if tag.is_empty() {
+            return Ok(UpdateCheckResult {
+                update_available: false,
+                current_version: current_version.clone(),
+                latest_version: current_version.clone(),
+                release_notes: "".to_string(),
+                release_url: "".to_string(),
+                download_url: None,
+            });
+        }
+
+        let is_newer = is_version_newer(&tag, &current_version);
+        let release_url = val.get("html_url").and_then(|u| u.as_str()).unwrap_or("").to_string();
+        let release_notes = val.get("body").and_then(|b| b.as_str()).unwrap_or("").to_string();
+
+        let mut download_url = None;
+        if let Some(assets) = val.get("assets").and_then(|a| a.as_array()) {
+            #[cfg(target_os = "macos")]
+            let target_name = "Petak-macos-app.zip";
+            #[cfg(not(target_os = "macos"))]
+            let target_name = "petak-linux-x86_64";
+
+            for asset in assets {
+                let name = asset.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                if name == target_name {
+                    download_url = asset.get("browser_download_url").and_then(|u| u.as_str()).map(|s| s.to_string());
+                    break;
+                }
+            }
+        }
+
+        Ok(UpdateCheckResult {
+            update_available: is_newer,
+            current_version,
+            latest_version: tag,
+            release_notes,
+            release_url,
+            download_url,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn app_apply_update(download_url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let tmp_dir = std::env::temp_dir();
+
+        #[cfg(target_os = "macos")]
+        {
+            let zip_path = tmp_dir.join("Petak-update.zip");
+            let mut curl_cmd = std::process::Command::new("curl");
+            curl_cmd.args(["-fSL", &download_url, "-o", zip_path.to_str().unwrap()]);
+
+            if let Ok(home) = std::env::var("HOME") {
+                let pat_path = std::path::Path::new(&home).join(".github-pat");
+                if let Ok(token) = std::fs::read_to_string(pat_path) {
+                    let tok = token.trim();
+                    if !tok.is_empty() {
+                        curl_cmd.args(["-H", &format!("Authorization: token {}", tok)]);
+                    }
+                }
+            }
+
+            let res = curl_cmd.status().map_err(|e| format!("Gagal mengunduh update: {}", e))?;
+            if !res.success() {
+                return Err("Gagal mengunduh file rilis dari GitHub".to_string());
+            }
+
+            let extract_dir = tmp_dir.join("petak-extract");
+            let _ = std::fs::remove_dir_all(&extract_dir);
+            std::fs::create_dir_all(&extract_dir).map_err(|e| e.to_string())?;
+
+            let unzip_status = std::process::Command::new("unzip")
+                .args(["-q", "-o", zip_path.to_str().unwrap(), "-d", extract_dir.to_str().unwrap()])
+                .status()
+                .map_err(|e| format!("Gagal mengekstrak update: {}", e))?;
+
+            if !unzip_status.success() {
+                return Err("Gagal mengekstrak Petak.app".to_string());
+            }
+
+            let new_app = extract_dir.join("Petak.app");
+            let dest_app = std::path::Path::new("/Applications/Petak.app");
+
+            let script = format!(
+                r#"sleep 1
+rm -rf "{dest}"
+cp -R "{src}" "{dest}"
+open "{dest}"
+"#,
+                dest = dest_app.display(),
+                src = new_app.display()
+            );
+
+            let script_path = tmp_dir.join("petak_reopen.sh");
+            std::fs::write(&script_path, script).map_err(|e| e.to_string())?;
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755));
+            }
+
+            let _ = std::process::Command::new("sh")
+                .arg(&script_path)
+                .spawn();
+
+            std::process::exit(0);
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let bin_path = tmp_dir.join("petak-update-bin");
+            let mut curl_cmd = std::process::Command::new("curl");
+            curl_cmd.args(["-fSL", &download_url, "-o", bin_path.to_str().unwrap()]);
+            let res = curl_cmd.status().map_err(|e| format!("Gagal mengunduh update: {}", e))?;
+            if !res.success() {
+                return Err("Gagal mengunduh file rilis".to_string());
+            }
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755));
+            }
+
+            let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let _ = std::fs::copy(&bin_path, &current_exe);
+
+            let _ = std::process::Command::new(&current_exe).spawn();
+            std::process::exit(0);
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ──────────── Batch 11 Wi-Fi Pairing ────────────
 
 

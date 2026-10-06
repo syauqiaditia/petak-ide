@@ -13,6 +13,7 @@
   import RunConfigPicker from '../features/run/RunConfigPicker.svelte';
   import DevicePicker from '../features/run/DevicePicker.svelte';
   import RunConfigDialog from '../features/run/RunConfigDialog.svelte';
+  import { updateStore } from '../features/updater/updateStore.svelte';
 
   let isRunConfigModalOpen = $state(false);
   let unlistenMenuAction: UnlistenFn | null = null;
@@ -84,6 +85,10 @@
     } catch {
       // In web or test environment where Tauri event listener is not available
     }
+
+    setTimeout(() => {
+      updateStore.checkUpdate(true);
+    }, 2500);
   });
 
   onDestroy(() => {
@@ -597,6 +602,26 @@
 
   <!-- Right Cockpit Controls -->
   <div class="cockpit-right">
+    <!-- Sticky In-App Updater Pill (Psychological Call to Action) -->
+    {#if updateStore.updateAvailable}
+      <button
+        class="update-pill-badge"
+        class:updating={updateStore.isUpdating}
+        onclick={() => updateStore.applyUpdate()}
+        title="Versi {updateStore.latestVersion} tersedia! Klik untuk langsung update & restart otomatis"
+        disabled={updateStore.isUpdating}
+      >
+        {#if updateStore.isUpdating}
+          <span class="update-spin">↻</span>
+          <span class="update-text">{updateStore.updateStatus || 'Memperbarui…'}</span>
+        {:else}
+          <span class="update-sparkle">✨</span>
+          <span class="update-text">Update ke v{updateStore.latestVersion}</span>
+          <span class="update-arrow">↗</span>
+        {/if}
+      </button>
+    {/if}
+
     <!-- Search Everywhere (⇧⇧) -->
     <button
       class="search-btn search-everywhere-btn"
@@ -1227,5 +1252,56 @@
     place-items: center;
     font-size: 11px;
     font-weight: 600;
+  }
+
+  .update-pill-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(16, 185, 129, 0.28));
+    border: 1px solid rgba(52, 211, 153, 0.5);
+    border-radius: 14px;
+    color: #6ee7b7;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+    animation: updatePulse 3s infinite ease-in-out;
+    margin-right: 4px;
+  }
+  .update-pill-badge:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(16, 185, 129, 0.45));
+    border-color: #34d399;
+    color: #ffffff;
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.35);
+    transform: translateY(-1px);
+  }
+  .update-pill-badge.updating {
+    opacity: 0.85;
+    cursor: wait;
+    border-color: rgba(99, 102, 241, 0.6);
+    background: rgba(99, 102, 241, 0.2);
+    color: #c7d2fe;
+  }
+  .update-spin {
+    display: inline-block;
+    animation: spin 1s infinite linear;
+  }
+  .update-arrow {
+    font-size: 10px;
+    opacity: 0.7;
+  }
+  @keyframes updatePulse {
+    0%, 100% {
+      border-color: rgba(52, 211, 153, 0.4);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.12);
+    }
+    50% {
+      border-color: rgba(52, 211, 153, 0.85);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+    }
   }
 </style>
