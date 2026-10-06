@@ -3,7 +3,7 @@ use petak_core::git::model::DiffFile;
 use petak_core::git::ops::checkout_mr;
 use petak_core::gitlab::client::GitLabClient;
 use petak_core::gitlab::model::{
-    evaluate_merge_status, CreateMrParams, Discussion, GitLabUser, InlinePositionParams, JobInfo, MergeRequest,
+    evaluate_merge_status, Discussion, GitLabUser, InlinePositionParams, JobInfo, MergeRequest,
     MergeRequestParams, MergeStatusEvaluation, MrListQuery, Note, PaginatedList, PipelineInfo,
     TokenScopeMode,
 };

@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use petak_core::exec::Exec;
 use super::*;
 
