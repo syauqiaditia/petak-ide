@@ -1,6 +1,7 @@
 mod agent_commands;
 mod commands;
 mod menu;
+mod mr_commands;
 mod test_commands;
 
 use std::sync::Mutex;
