@@ -2,7 +2,7 @@ import { api, type UpdateCheckResult } from '../../lib/api';
 
 class UpdateStore {
   updateAvailable = $state(false);
-  currentVersion = $state('0.8.2');
+  currentVersion = $state('0.9.0');
   latestVersion = $state('');
   releaseNotes = $state('');
   releaseUrl = $state('');

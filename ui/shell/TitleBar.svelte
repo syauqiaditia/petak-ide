@@ -343,7 +343,7 @@
       <div class="grid-cell"></div>
     </div>
     <span class="brand-text">Petak</span>
-    <span class="brand-version-badge">v0.8.2</span>
+    <span class="brand-version-badge">v0.9.0</span>
   </div>
 
   {#if showDashboard}

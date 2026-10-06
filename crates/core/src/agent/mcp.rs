@@ -190,7 +190,7 @@ pub fn test_mcp_server(
     let mut guard = ChildGuard(Some(child));
 
     // Send MCP initialize handshake to stdin
-    let init_msg = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"petak-probe\",\"version\":\"0.8.2\"}}}\n";
+    let init_msg = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"petak-probe\",\"version\":\"0.9.0\"}}}\n";
     if let Some(mut sin) = stdin.take() {
         let _ = sin.write_all(init_msg.as_bytes());
         let _ = sin.flush();
