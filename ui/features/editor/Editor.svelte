@@ -524,7 +524,8 @@
     tabContextMenuVisible = true;
   }
 
-  function createEditorState(content: string, filename: string): EditorState {
+  function createEditorState(content: string, filename: string, filePath?: string): EditorState {
+    const initialBps = filePath ? breakpointStore.getBreakpoints(filePath) : [];
     return EditorState.create({
       doc: content,
       extensions: [
@@ -532,7 +533,7 @@
         EditorState.allowMultipleSelections.of(true),
         vimCompartment.of(editorSettings.vimMode ? vim() : []),
         blameCompartment.of([]),
-        createBreakpointExtension(() => currentSwappedPath),
+        createBreakpointExtension(() => currentSwappedPath, initialBps),
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightActiveLine(),
@@ -564,7 +565,7 @@
         }),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
-          if (active) {
+          if (active && active.path === currentSwappedPath) {
             active.state = update.state;
             if (update.docChanged) {
               const currentText = update.state.doc.toString();
@@ -846,7 +847,7 @@
 
     const active = tabsManager.activeTab;
     const initialState = active
-      ? createEditorState(active.savedContent, active.name)
+      ? createEditorState(active.savedContent, active.name, active.path)
       : createEditorState('', 'Untitled');
 
     if (active) {
@@ -866,12 +867,6 @@
 
     if (active) {
       applyStoredDiagnosticsToView(view, active.path);
-      const initialBps = breakpointStore.getBreakpoints(active.path);
-      if (initialBps.length > 0) {
-        view.dispatch({
-          effects: setBreakpointsEffect.of(initialBps),
-        });
-      }
     }
 
     setDiagnosticsEditorView(() => view);
@@ -957,8 +952,8 @@
       currentSwappedPath = activePath;
 
       if (active && !isImageFile(active.path)) {
-        if (!active.state) {
-          active.state = createEditorState(active.savedContent, active.name);
+        if (!active.state || (active.state.doc.length === 0 && active.savedContent.length > 0)) {
+          active.state = createEditorState(active.savedContent, active.name, active.path);
         }
         view.setState(active.state);
         restoreFileFoldState(active.path, view);
@@ -966,13 +961,6 @@
 
         onTabOpen(active.path, active.savedContent);
         applyStoredDiagnosticsToView(view, active.path);
-
-        const tabBps = breakpointStore.getBreakpoints(active.path);
-        if (tabBps.length > 0) {
-          view.dispatch({
-            effects: setBreakpointsEffect.of(tabBps),
-          });
-        }
 
         if (annotateActive && folderPath) {
           const rel = getRelativePath(active.path, folderPath);

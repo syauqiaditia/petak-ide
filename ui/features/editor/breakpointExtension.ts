@@ -1,9 +1,7 @@
 import {
   gutter,
   GutterMarker,
-  EditorView,
-  Decoration,
-  type DecorationSet,
+  type EditorView,
 } from '@codemirror/view';
 import {
   StateField,
@@ -29,94 +27,76 @@ class BreakpointDotMarker extends GutterMarker {
 
 const dotMarker = new BreakpointDotMarker();
 
-export const breakpointField = StateField.define<RangeSet<GutterMarker>>({
-  create() {
-    return RangeSet.empty;
-  },
-  update(markers, tr) {
-    markers = markers.map(tr.changes);
-    for (const e of tr.effects) {
-      if (e.is(setBreakpointsEffect)) {
-        const builder = new RangeSetBuilder<GutterMarker>();
-        const sorted = [...e.value].sort((a, b) => a - b);
-        for (const lineNum of sorted) {
-          if (lineNum >= 1 && lineNum <= tr.state.doc.lines) {
-            const line = tr.state.doc.line(lineNum);
-            builder.add(line.from, line.from, dotMarker);
-          }
+export function createBreakpointExtension(
+  getPath: () => string | null | undefined,
+  initialLines: number[] = []
+): Extension {
+  const breakpointField = StateField.define<RangeSet<GutterMarker>>({
+    create(state) {
+      if (!initialLines || initialLines.length === 0) return RangeSet.empty;
+      const builder = new RangeSetBuilder<GutterMarker>();
+      const sorted = [...initialLines].sort((a, b) => a - b);
+      for (const lineNum of sorted) {
+        if (lineNum >= 1 && lineNum <= state.doc.lines) {
+          const line = state.doc.line(lineNum);
+          builder.add(line.from, line.from, dotMarker);
         }
-        markers = builder.finish();
-      } else if (e.is(toggleBreakpointEffect)) {
-        const lineNum = Math.min(e.value.line, tr.state.doc.lines);
-        if (lineNum < 1) continue;
-        const line = tr.state.doc.line(lineNum);
-
-        let hasExisting = false;
-        markers.between(line.from, line.from, () => {
-          hasExisting = true;
-        });
-
-        const builder = new RangeSetBuilder<GutterMarker>();
-        if (hasExisting) {
-          markers.between(0, tr.state.doc.length, (from, to, val) => {
-            if (from !== line.from) {
-              builder.add(from, to, val);
-            }
-          });
-        } else {
-          let added = false;
-          markers.between(0, tr.state.doc.length, (from, to, val) => {
-            if (!added && from > line.from) {
+      }
+      return builder.finish();
+    },
+    update(markers, tr) {
+      markers = markers.map(tr.changes);
+      for (const e of tr.effects) {
+        if (e.is(setBreakpointsEffect)) {
+          const builder = new RangeSetBuilder<GutterMarker>();
+          const sorted = [...e.value].sort((a, b) => a - b);
+          for (const lineNum of sorted) {
+            if (lineNum >= 1 && lineNum <= tr.state.doc.lines) {
+              const line = tr.state.doc.line(lineNum);
               builder.add(line.from, line.from, dotMarker);
-              added = true;
             }
-            builder.add(from, to, val);
-          });
-          if (!added) {
-            builder.add(line.from, line.from, dotMarker);
           }
-        }
-        markers = builder.finish();
-      }
-    }
-    return markers;
-  },
-});
+          markers = builder.finish();
+        } else if (e.is(toggleBreakpointEffect)) {
+          const lineNum = Math.min(e.value.line, tr.state.doc.lines);
+          if (lineNum < 1) continue;
+          const line = tr.state.doc.line(lineNum);
 
-// Line background highlight decoration on breakpoint lines
-export const breakpointLineDecoField = StateField.define<DecorationSet>({
-  create() {
-    return Decoration.none;
-  },
-  update(deco, tr) {
-    deco = deco.map(tr.changes);
-    for (const e of tr.effects) {
-      if (e.is(setBreakpointsEffect) || e.is(toggleBreakpointEffect)) {
-        // Rebuild from breakpointField in next cycle or current state
-        const bpMarkers = tr.state.field(breakpointField, false);
-        if (bpMarkers) {
-          const builder = new RangeSetBuilder<Decoration>();
-          bpMarkers.between(0, tr.state.doc.length, (from) => {
-            builder.add(
-              from,
-              from,
-              Decoration.line({ attributes: { class: 'cm-breakpoint-line-highlight' } })
-            );
+          let hasExisting = false;
+          markers.between(line.from, line.from, () => {
+            hasExisting = true;
           });
-          return builder.finish();
+
+          const builder = new RangeSetBuilder<GutterMarker>();
+          if (hasExisting) {
+            markers.between(0, tr.state.doc.length, (from, to, val) => {
+              if (from !== line.from) {
+                builder.add(from, to, val);
+              }
+            });
+          } else {
+            let added = false;
+            markers.between(0, tr.state.doc.length, (from, to, val) => {
+              if (!added && from > line.from) {
+                builder.add(line.from, line.from, dotMarker);
+                added = true;
+              }
+              builder.add(from, to, val);
+            });
+            if (!added) {
+              builder.add(line.from, line.from, dotMarker);
+            }
+          }
+          markers = builder.finish();
         }
       }
-    }
-    return deco;
-  },
-  provide: (f) => EditorView.decorations.from(f),
-});
+      return markers;
+    },
+  });
 
-export function createBreakpointExtension(getPath: () => string | null | undefined): Extension {
   const breakpointGutter = gutter({
     class: 'cm-breakpoint-gutter',
     markers: (view) => view.state.field(breakpointField),
-    initialSpacer: () => dotMarker,
     domEventHandlers: {
       mousedown(view, line) {
         const lineNum = view.state.doc.lineAt(line.from).number;
@@ -138,7 +118,7 @@ export function createBreakpointExtension(getPath: () => string | null | undefin
     },
   });
 
-  return [breakpointField, breakpointGutter, breakpointLineDecoField];
+  return [breakpointField, breakpointGutter];
 }
 
 /**
