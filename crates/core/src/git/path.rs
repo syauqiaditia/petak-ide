@@ -75,7 +75,7 @@ pub fn path_history(
 ) -> Result<Vec<Commit>, GitError> {
     let mut args = vec![
         "log",
-        "--topo-order",
+        "--author-date-order",
         "--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%s%x1e",
     ];
 

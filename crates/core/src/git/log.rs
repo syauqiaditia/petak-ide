@@ -322,7 +322,7 @@ pub fn log_with_state(
         s
     } else if skip > 0 && candidate_shas.is_none() {
         // Replay preceding `skip` commits to recover active lanes
-        let mut replay_args = vec!["log", "--topo-order", "--format=%H%x00%P%x1e"];
+        let mut replay_args = vec!["log", "--author-date-order", "--format=%H%x00%P%x1e"];
 
         let skip_str = skip.to_string();
         replay_args.push("-n");
@@ -398,7 +398,7 @@ pub fn log_with_state(
     // Build main git log command
     let mut args = vec![
         "log",
-        "--topo-order",
+        "--author-date-order",
         "--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%s%x1e",
     ];
 
