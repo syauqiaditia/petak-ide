@@ -276,7 +276,7 @@ fn test_rebase_drop() {
         .collect();
     assert_eq!(expected_patch_ids.len(), 5);
 
-    let res = drop(&exec, repo.path(), &[&c4_sha]).unwrap();
+    let res = drop(&exec, repo.path(), &[&c4_sha], false).unwrap();
     assert!(res.ok);
     assert_eq!(commit_count(&repo), 5);
 
@@ -560,7 +560,7 @@ fn test_autostash_pop_conflict_reports_flag() {
 
     // Drop commit 2 -> rebase runs, drops c2. When autostash is popped on top of c1,
     // "modified locally dirty\n" conflicts with "base line\n" (because autostash patch was based on c2)
-    let res = drop(&exec, repo.path(), &[&c2_sha]).expect("drop runs");
+    let res = drop(&exec, repo.path(), &[&c2_sha], false).expect("drop runs");
     assert!(res.ok);
     assert!(res.stash_conflict, "expected stash_conflict to be true when autostash pop conflicts");
 
@@ -765,7 +765,7 @@ fn test_generate_no_data_loss_evidence_report() {
         let (repo, _) = setup_six_commit_repo();
         let old_head = head_sha(&repo);
         let c4 = repo.git(&["rev-parse", "HEAD~2"]).trim().to_string();
-        let res = drop(&exec, repo.path(), &[&c4]).unwrap();
+        let res = drop(&exec, repo.path(), &[&c4], false).unwrap();
         let new_head = head_sha(&repo);
         let restored = backup_restore(&exec, repo.path(), &res.backup_ref.unwrap(), false).unwrap();
         let clean = repo.git(&["status", "--porcelain"]).trim().is_empty();
