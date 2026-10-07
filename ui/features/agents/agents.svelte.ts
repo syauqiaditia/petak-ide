@@ -28,6 +28,8 @@ import {
   isCommandInAllowlist,
   extractChunkText,
   formatDomainMemoryForPrompt,
+  isWatchdogAbortedMessage,
+  formatWatchdogRecoveryText,
 } from './agentsLogic';
 import { settingsStore } from '../settings/settingsStore.svelte';
 import { skillsStore } from './skillsStore.svelte';
@@ -91,6 +93,31 @@ class AgentsStore {
   activeThought = $state<string>('');
   attachedReference = $state<CodeReference | null>(null);
   error = $state<string | null>(null);
+
+  isWatchdogAborted = $state(false);
+  watchdogRecoveryMessage = $state<string | null>(null);
+  lastPromptText = $state<string>('');
+
+  dismissWatchdogRecovery() {
+    this.isWatchdogAborted = false;
+    this.watchdogRecoveryMessage = null;
+  }
+
+  resetSlotToReady(slotId?: string) {
+    const targetId = slotId || this.activeSlotId;
+    this.isStreaming = false;
+    this.streamingContent = '';
+    this.activeToolCalls = [];
+    this.activeThought = '';
+    this.isWatchdogAborted = false;
+    this.watchdogRecoveryMessage = null;
+    if (targetId) {
+      const idx = this.slots.findIndex((s) => s.id === targetId);
+      if (idx !== -1) {
+        this.slots[idx] = { ...this.slots[idx], status: 'ready' };
+      }
+    }
+  }
 
   attachCodeReference(ref: CodeReference) {
     this.attachedReference = ref;
@@ -173,6 +200,18 @@ class AgentsStore {
       if (idx !== -1) {
         this.slots[idx] = { ...this.slots[idx], status };
       }
+      if (status === 'ready' || status === 'crashed' || status === 'error') {
+        this.isStreaming = false;
+      }
+    } else if (event.WatchdogAborted) {
+      const { slot_id, message } = event.WatchdogAborted;
+      this.isStreaming = false;
+      this.isWatchdogAborted = true;
+      this.watchdogRecoveryMessage = formatWatchdogRecoveryText(message);
+      const sIdx = this.slots.findIndex((s) => s.id === slot_id);
+      if (sIdx !== -1) {
+        this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
+      }
     } else if (event.Update) {
       const { slot_id, update } = event.Update;
       if (!update) return;
@@ -183,6 +222,15 @@ class AgentsStore {
         const text = extractChunkText(update.content !== undefined ? update.content : update);
         if (text) {
           this.streamingContent += text;
+          if (isWatchdogAbortedMessage(text)) {
+            this.isStreaming = false;
+            this.isWatchdogAborted = true;
+            this.watchdogRecoveryMessage = formatWatchdogRecoveryText(text);
+            const sIdx = this.slots.findIndex((s) => s.id === slot_id);
+            if (sIdx !== -1) {
+              this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
+            }
+          }
         }
       } else if (sessionUpdate === 'tool_call') {
         const toolName = update.title || update.kind || 'tool';
@@ -390,6 +438,9 @@ class AgentsStore {
     }
 
     const fullPromptText = `${refPrefix}${rawPrompt.trim()}`;
+    this.lastPromptText = rawPrompt.trim();
+    this.isWatchdogAborted = false;
+    this.watchdogRecoveryMessage = null;
 
     const formattedPrompt = applyDisciplineDirectives(
       fullPromptText,
@@ -429,6 +480,11 @@ class AgentsStore {
       const rawContent = response.message || this.streamingContent || 'Aksi selesai.';
       const cleanContent = typeof rawContent === 'string' ? rawContent : extractChunkText(rawContent);
 
+      if (isWatchdogAbortedMessage(cleanContent)) {
+        this.isWatchdogAborted = true;
+        this.watchdogRecoveryMessage = formatWatchdogRecoveryText(cleanContent);
+      }
+
       const agentMsg: ChatMessage = {
         id: `agent-${Date.now()}`,
         timestamp: Date.now(),
@@ -452,11 +508,16 @@ class AgentsStore {
       // Refresh proposals in case agent created diffs
       await this.loadProposals();
     } catch (e: any) {
+      const errText = e?.message || String(e);
+      if (isWatchdogAbortedMessage(errText)) {
+        this.isWatchdogAborted = true;
+        this.watchdogRecoveryMessage = formatWatchdogRecoveryText(errText);
+      }
       const errMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         timestamp: Date.now(),
         role: 'system',
-        content: `Error: ${e?.message || e}`,
+        content: `Error: ${errText}`,
       };
       this.chatHistory[slotId] = [...this.chatHistory[slotId], errMsg];
     } finally {
@@ -464,26 +525,34 @@ class AgentsStore {
       this.streamingContent = '';
       this.activeToolCalls = [];
       this.activeThought = '';
-      if (idx !== -1) {
-        this.slots[idx] = { ...this.slots[idx], status: 'ready' };
+      const sIdx = this.slots.findIndex((s) => s.id === slotId);
+      if (sIdx !== -1) {
+        this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
       }
     }
   }
 
   async cancelActivePrompt() {
-    if (!this.activeSlotId) return;
+    const slotId = this.activeSlotId;
+    if (!slotId) return;
     try {
-      await api.agentCancel(this.activeSlotId);
+      await api.agentCancel(slotId);
+    } catch (e: any) {
+      console.warn('Cancel failed:', e);
+    } finally {
       this.isStreaming = false;
       this.streamingContent = '';
       this.activeToolCalls = [];
       this.activeThought = '';
-      const idx = this.slots.findIndex((s) => s.id === this.activeSlotId);
-      if (idx !== -1) {
-        this.slots[idx] = { ...this.slots[idx], status: 'ready' };
+      this.isWatchdogAborted = false;
+      this.watchdogRecoveryMessage = null;
+      const sIdx = this.slots.findIndex((s) => s.id === slotId);
+      if (sIdx !== -1) {
+        this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
       }
-    } catch (e: any) {
-      console.warn('Cancel failed:', e);
+      try {
+        await this.loadSlots();
+      } catch (_) {}
     }
   }
 
