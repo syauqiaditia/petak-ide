@@ -1087,18 +1087,30 @@ impl SlotManager {
     }
 
     pub fn cancel_slot(&self, slot_id: &str) -> Result<(), String> {
-        let slots = self.slots.read().unwrap();
+        let mut slots = self.slots.write().unwrap();
         let slot = slots
-            .get(slot_id)
+            .get_mut(slot_id)
             .ok_or_else(|| format!("Slot '{slot_id}' not found"))?;
 
-        if let (Some(client), Some(session_id)) = (&slot.client, &slot.session_id) {
-            client
-                .session_cancel(session_id)
-                .map_err(|e| e.to_string())?;
+        if let (Some(client), Some(session_id)) = (slot.client.clone(), slot.session_id.clone()) {
+            let cancel_res = client
+                .session_cancel(&session_id)
+                .map_err(|e| e.to_string());
+            client.terminate_subprocesses();
+            slot.status = SlotStatus::Ready;
+            self.emit(SlotEvent::StatusChanged {
+                slot_id: slot_id.to_string(),
+                status: SlotStatus::Ready,
+            });
+            cancel_res?;
             Ok(())
         } else {
-            Err(format!("Slot '{slot_id}' tidak memiliki proses/sesi aktif"))
+            slot.status = SlotStatus::Ready;
+            self.emit(SlotEvent::StatusChanged {
+                slot_id: slot_id.to_string(),
+                status: SlotStatus::Ready,
+            });
+            Ok(())
         }
     }
 
@@ -1789,5 +1801,187 @@ mod tests {
         let openai = engines.iter().find(|e| e.id == "openai").unwrap();
         assert_eq!(openai.name, "OpenAI Codex");
         assert!(openai.allowed_models.contains(&"gpt-4o".to_string()));
+    }
+
+    #[test]
+    fn test_cancel_slot_resets_busy_status_when_no_client() {
+        let temp = tempfile::tempdir().unwrap();
+        let manager = SlotManager::with_defaults(Some(temp.path().to_path_buf()));
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = Arc::clone(&events);
+        manager.add_listener(move |event| {
+            events_clone.lock().unwrap().push(event);
+        });
+
+        let config = SlotConfig {
+            id: "idle-cancel".to_string(),
+            label: "Test Idle Cancel".to_string(),
+            kind: "acp-custom".to_string(),
+            engine: Some("acp-custom".to_string()),
+            command: None,
+            hermes_profile: None,
+            model: None,
+            fallback_model: None,
+            permission: "ask".to_string(),
+            cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
+        };
+        manager.add_slot(config).unwrap();
+
+        // Mark slot as Busy to simulate background work
+        {
+            let mut slots = manager.slots.write().unwrap();
+            let slot = slots.get_mut("idle-cancel").unwrap();
+            slot.status = SlotStatus::Busy;
+        }
+
+        assert_eq!(manager.list_slots()[0].status, SlotStatus::Busy);
+
+        // Cancel slot must reset to Ready and emit event
+        let res = manager.cancel_slot("idle-cancel");
+        assert!(res.is_ok());
+
+        let slots = manager.list_slots();
+        assert_eq!(slots[0].status, SlotStatus::Ready);
+
+        let captured = events.lock().unwrap().clone();
+        let ready_event = captured.iter().any(|ev| match ev {
+            SlotEvent::StatusChanged { slot_id, status } => {
+                slot_id == "idle-cancel" && *status == SlotStatus::Ready
+            }
+            _ => false,
+        });
+        assert!(ready_event, "StatusChanged with SlotStatus::Ready must be emitted");
+    }
+
+    #[test]
+    fn test_cancel_slot_with_active_client_invokes_terminate_subprocesses_and_resets_ready() {
+        use std::thread;
+
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let script = manifest_dir
+            .join("tests")
+            .join("fixtures")
+            .join("fake_agent.mjs");
+        if !script.exists() {
+            return;
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let manager = Arc::new(SlotManager::with_defaults(Some(temp.path().to_path_buf())));
+
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let events_clone = Arc::clone(&events);
+        let child_pid_store = Arc::new(Mutex::new(None::<u32>));
+        let child_pid_clone = Arc::clone(&child_pid_store);
+
+        manager.add_listener(move |event| {
+            if let SlotEvent::Update { ref update, .. } = event {
+                if let Some(text) = update
+                    .get("content")
+                    .and_then(|c| c.get("text"))
+                    .and_then(|t| t.as_str())
+                {
+                    if let Some(rest) = text.strip_prefix("child_pid:") {
+                        if let Ok(pid) = rest.trim().parse::<u32>() {
+                            *child_pid_clone.lock().unwrap() = Some(pid);
+                        }
+                    }
+                }
+            }
+            events_clone.lock().unwrap().push(event);
+        });
+
+        let config = SlotConfig {
+            id: "active-cancel".to_string(),
+            label: "Test Active Cancel".to_string(),
+            kind: "acp-custom".to_string(),
+            engine: Some("acp-custom".to_string()),
+            command: Some(format!("node {}", script.to_string_lossy())),
+            hermes_profile: None,
+            model: Some("fake-model".to_string()),
+            fallback_model: None,
+            permission: "ask".to_string(),
+            cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
+        };
+        manager.add_slot(config).unwrap();
+
+        // Start prompt in background that spawns a child subprocess
+        let mgr_for_prompt = Arc::clone(&manager);
+        let prompt_handle = thread::spawn(move || {
+            mgr_for_prompt.prompt_slot("active-cancel", "subproc test")
+        });
+
+        // Wait until prompt is running, slot is Busy, and child subprocess is spawned
+        let start = Instant::now();
+        let mut found_child_pid = None;
+        while start.elapsed() < Duration::from_secs(5) {
+            if found_child_pid.is_none() {
+                found_child_pid = *child_pid_store.lock().unwrap();
+            }
+            if found_child_pid.is_some() && manager.list_slots()[0].status == SlotStatus::Busy {
+                break;
+            }
+            thread::sleep(Duration::from_millis(30));
+        }
+
+        let child_pid = found_child_pid.expect("Child subprocess PID should have been reported");
+        #[cfg(unix)]
+        unsafe {
+            assert_eq!(
+                libc::kill(child_pid as i32, 0),
+                0,
+                "Child subprocess should be running before cancel"
+            );
+        }
+
+        // Cancel slot
+        let cancel_res = manager.cancel_slot("active-cancel");
+        assert!(cancel_res.is_ok());
+
+        // Verify status was immediately reset to Ready
+        let slots = manager.list_slots();
+        assert_eq!(slots[0].status, SlotStatus::Ready);
+
+        // Verify SlotEvent::StatusChanged was emitted
+        let captured = events.lock().unwrap().clone();
+        let ready_event = captured.iter().any(|ev| match ev {
+            SlotEvent::StatusChanged { slot_id, status } => {
+                slot_id == "active-cancel" && *status == SlotStatus::Ready
+            }
+            _ => false,
+        });
+        assert!(ready_event, "StatusChanged with SlotStatus::Ready must be emitted");
+
+        // Verify terminate_subprocesses() terminated child subprocess
+        #[cfg(unix)]
+        {
+            let mut terminated = false;
+            let check_start = Instant::now();
+            while check_start.elapsed() < Duration::from_secs(3) {
+                unsafe {
+                    if libc::kill(child_pid as i32, 0) != 0 {
+                        terminated = true;
+                        break;
+                    }
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            assert!(
+                terminated,
+                "Child subprocess should be terminated by terminate_subprocesses()"
+            );
+        }
+
+        // Verify prompt returned with cancelled stop reason
+        let prompt_res = prompt_handle.join().unwrap().unwrap();
+        assert_eq!(prompt_res.stop_reason, "cancelled");
+
+        // Cleanup slot
+        let _ = manager.stop_slot("active-cancel");
     }
 }
