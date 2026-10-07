@@ -32,8 +32,10 @@ import type {
   MemoryItem,
   SkillSummary,
   Skill,
+  SupportedEngineInfo,
+  EnginePlatformOption,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill };
+export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo, EnginePlatformOption };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2129,6 +2131,54 @@ export const api = {
       return DEMO_HERMES_DETECTION;
     }
     return invoke<HermesDetectionResult>('agent_detect_hermes');
+  },
+
+  async agentGetSupportedEngines(): Promise<SupportedEngineInfo[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return [
+        {
+          id: 'hermes',
+          name: 'Hermes Agent',
+          available: true,
+          defaultModel: 'ag/gemini-3.8-flash-high',
+          models: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4-6-thinking', 'anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+          description: 'Daemon profil lokal Hermes CLI',
+        },
+        {
+          id: 'claude-code',
+          name: 'Claude Code CLI',
+          available: true,
+          defaultModel: 'claude-3-7-sonnet',
+          models: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'],
+          description: 'Anthropic Standalone CLI via ACP',
+        },
+        {
+          id: 'antigravity',
+          name: 'Antigravity (via 9Router)',
+          available: true,
+          defaultModel: 'ag/gemini-3.8-flash-high',
+          models: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'],
+          description: 'Google Gemini & Claude Opus via 9Router proxy',
+        },
+        {
+          id: 'codex',
+          name: 'OpenAI Codex',
+          available: true,
+          defaultModel: 'gpt-4o',
+          models: ['gpt-4o', 'o3-mini', 'o1'],
+          description: 'OpenAI Autonomous Agent via ACP',
+        },
+        {
+          id: 'acp-custom',
+          name: 'Custom ACP Command',
+          available: true,
+          defaultModel: 'custom-model',
+          models: ['custom-model'],
+          description: 'Perintah terminal bebas via stdio ACP',
+        },
+      ];
+    }
+    return invoke<SupportedEngineInfo[]>('agent_get_supported_engines');
   },
 
   async agentLoadTeam(): Promise<TeamConfig> {

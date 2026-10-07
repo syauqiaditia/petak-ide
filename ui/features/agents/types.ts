@@ -5,18 +5,44 @@
 
 export type PermissionMode = 'read' | 'ask' | 'auto' | 'full';
 
-export type AgentKind = 'claude-code' | 'hermes' | 'acp-custom' | 'openai';
+export type AgentKind = 'claude-code' | 'hermes' | 'acp-custom' | 'openai' | 'antigravity';
 
 export interface SlotConfig {
   id: string;
   label: string;
   kind: AgentKind | string;
+  engine?: string;
   command?: string | null;
   hermesProfile?: string | null;
   model?: string | null;
   fallbackModel?: string | null;
   permission: PermissionMode | string;
   cwd: string;
+}
+
+export interface SupportedEngineInfo {
+  id: string;
+  name: string;
+  available: boolean;
+  version?: string | null;
+  binaryPath?: string | null;
+  defaultModel?: string | null;
+  models?: string[];
+  description?: string;
+}
+
+export interface EnginePlatformOption {
+  id: string;
+  name: string;
+  badge: string;
+  desc: string;
+  defaultModel: string;
+  models: Array<{
+    id: string;
+    name: string;
+    desc?: string;
+    recommended?: boolean;
+  }>;
 }
 
 export type SlotStatus =

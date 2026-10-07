@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { formatUsageText, ALL_PRESET_MODELS, getModelDisplayName } from './agentsLogic';
+  import { formatUsageText, ALL_PRESET_MODELS, getModelDisplayName, formatEngineName } from './agentsLogic';
   import AgentChat from './AgentChat.svelte';
   import ProposedEdits from './ProposedEdits.svelte';
   import QuotaUsageView from './QuotaUsageView.svelte';
@@ -180,6 +180,14 @@
           class:ready={getProfileStatus(activeProfileId) === 'ready'}
           title="Runtime: {getProfileStatus(activeProfileId)}"
         ></span>
+      </div>
+
+      <!-- Engine Badge -->
+      <div
+        class="dynamic-engine-badge"
+        title="Engine: {formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}"
+      >
+        <span class="engine-pill-text">{formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}</span>
       </div>
 
       <!-- Dynamic Active Model Dropdown Selector (Interactive in-chat model switch) -->
@@ -404,6 +412,10 @@
   {#if activeSubTab === 'chat' || activeSubTab === 'diff'}
     <!-- Honest Usage Meter Footer (24px) -->
     <div class="usage-meter-footer">
+      <div class="footer-agent-badges">
+        <span class="footer-engine-badge">{formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}</span>
+        <span class="footer-model-badge">{currentModelName}</span>
+      </div>
       <span class="usage-text" class:unreported={!usageInfo.isReported}>
         {usageInfo.text}
       </span>
@@ -545,6 +557,24 @@
   @keyframes dotPulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  /* Dynamic Engine Badge */
+  .dynamic-engine-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    background: rgba(59, 130, 246, 0.08);
+    color: #60a5fa;
+    flex-shrink: 0;
+  }
+
+  .engine-pill-text {
+    line-height: 1;
   }
 
   /* Dynamic Active Model Badge */
@@ -973,6 +1003,7 @@
   .usage-meter-footer {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     height: 24px;
     padding: 0 10px;
     background: #111215;
@@ -980,6 +1011,22 @@
     font-size: 10px;
     font-family: monospace;
     flex-shrink: 0;
+  }
+
+  .footer-agent-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+  }
+
+  .footer-engine-badge {
+    color: #60a5fa;
+    font-weight: 600;
+  }
+
+  .footer-model-badge {
+    color: #a1a1aa;
   }
 
   .usage-text {
