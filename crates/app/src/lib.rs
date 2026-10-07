@@ -361,6 +361,10 @@ pub fn run() {
             commands::agent_skill_delete,
             commands::agent_prune_context,
             commands::agent_get_relevant_memory,
+            commands::agent_worktree_list,
+            commands::agent_worktree_create,
+            commands::agent_worktree_diff,
+            commands::agent_worktree_remove,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,
