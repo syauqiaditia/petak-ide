@@ -14,6 +14,7 @@
   import ProposedEdits from './ProposedEdits.svelte';
   import QuotaUsageView from './QuotaUsageView.svelte';
   import MemoryView from './MemoryView.svelte';
+  import WorktreeLanes from './WorktreeLanes.svelte';
   import TeamEditor from './TeamEditor.svelte';
   import FixWithAgentModal from './FixWithAgentModal.svelte';
   import { settingsStore } from '../settings/settingsStore.svelte';
@@ -24,7 +25,8 @@
     onClose?: () => void;
   }>();
 
-  let activeSubTab = $state<'chat' | 'diff' | 'quota' | 'memory'>('chat');
+  // Subtabs: 'chat' | 'diff' | 'quota' | 'memory' (legacy contract)
+  let activeSubTab = $state<'chat' | 'lanes' | 'diff' | 'quota' | 'memory'>('chat');
   const SAVED_PANEL_WIDTH_KEY = 'petak_agent_panel_width';
   let panelWidth = $state(
     typeof localStorage !== 'undefined' && localStorage.getItem(SAVED_PANEL_WIDTH_KEY)
@@ -297,17 +299,23 @@
         </button>
       {/if}
 
-      <!-- Concise Subtabs: Chat & Diff (with hunk count badge) -->
+      <!-- Concise Subtabs: Chat, Lanes & Diff (with hunk count badge) -->
       <div class="agent-subtab-group">
-        {#if activeSubTab === 'chat'}
-          <button
-            class="subtab-btn"
-            class:active={activeSubTab === 'chat'}
-            onclick={() => (activeSubTab = 'chat')}
-          >
-            Chat
-          </button>
-        {/if}
+        <button
+          class="subtab-btn"
+          class:active={activeSubTab === 'chat'}
+          onclick={() => (activeSubTab = 'chat')}
+        >
+          Chat
+        </button>
+        <button
+          class="subtab-btn lanes"
+          class:active={activeSubTab === 'lanes'}
+          onclick={() => (activeSubTab = 'lanes')}
+          title="Lanes Cockpit"
+        >
+          ⚡ Lanes Cockpit
+        </button>
         {#if pendingHunkCount > 0 || pendingProposalCount > 0 || activeSubTab === 'diff'}
           <button
             class="subtab-btn diff"
@@ -422,6 +430,8 @@
 
     {#if activeSubTab === 'chat'}
       <AgentChat />
+    {:else if activeSubTab === 'lanes'}
+      <WorktreeLanes />
     {:else if activeSubTab === 'diff'}
       <ProposedEdits />
     {:else if activeSubTab === 'quota'}
@@ -431,7 +441,7 @@
     {/if}
   </div>
 
-  {#if activeSubTab === 'chat' || activeSubTab === 'diff'}
+  {#if activeSubTab === 'chat' || activeSubTab === 'diff' || activeSubTab === 'lanes'}
     <!-- Honest Usage Meter Footer (24px) -->
     <div class="usage-meter-footer">
       <div class="footer-agent-badges">

@@ -14,6 +14,8 @@ import type {
   DiagnosticSnippet,
   PrunedContextResult,
   MemorySnippet,
+  WorktreeInfo,
+  SlotSummary,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
@@ -1268,6 +1270,131 @@ export function buildSmartContextPrompt(
   parts.push(rawPrompt.trim());
   return parts.join('\n\n');
 }
+
+/**
+ * Multi-Agent Worktree Lane Cockpit helpers (Phase 4)
+ */
+
+/**
+ * Formats elapsed seconds into mm:ss (or hh:mm:ss if >= 1 hour).
+ */
+export function formatRuntimeSeconds(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  if (mins >= 60) {
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hrs.toString().padStart(2, '0')}:${remMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Formats worktree created_at timestamp into live runtime string (mm:ss).
+ */
+export function formatWorktreeRuntime(createdAt: number, nowMs: number = Date.now()): string {
+  if (!createdAt || createdAt <= 0) return '00:00';
+  const createdMs = createdAt < 1e11 ? createdAt * 1000 : createdAt;
+  const elapsedSec = Math.max(0, Math.floor((nowMs - createdMs) / 1000));
+  return formatRuntimeSeconds(elapsedSec);
+}
+
+/**
+ * Resolves bot avatar, title, role and status for a worktree lane.
+ */
+export function resolveWorktreeBotInfo(
+  wt: WorktreeInfo,
+  slots?: SlotSummary[]
+): {
+  title: string;
+  avatar: string;
+  role: string;
+  status: 'RUNNING' | 'READY' | 'BLOCKED' | 'DONE';
+} {
+  const key = `${wt.task_id} ${wt.branch}`.toLowerCase();
+
+  // Try matching active slot first
+  if (slots && Array.isArray(slots)) {
+    const matchedSlot = slots.find(
+      (s) =>
+        s.id.toLowerCase() === wt.task_id.toLowerCase() ||
+        key.includes(s.label.toLowerCase()) ||
+        (s.config?.hermesProfile && key.includes(s.config.hermesProfile.toLowerCase()))
+    );
+    if (matchedSlot) {
+      const isRunning = matchedSlot.status === 'busy' || wt.is_dirty;
+      const status: 'RUNNING' | 'READY' | 'BLOCKED' | 'DONE' = isRunning
+        ? 'RUNNING'
+        : matchedSlot.status === 'ready'
+        ? 'READY'
+        : matchedSlot.status === 'stopped' || matchedSlot.status === 'crashed'
+        ? 'BLOCKED'
+        : 'READY';
+      const role = matchedSlot.config?.hermesProfile || matchedSlot.label.toLowerCase();
+      let avatar = '⚡';
+      if (role.includes('manager')) avatar = '👑';
+      else if (role.includes('techlead')) avatar = '🧠';
+      else if (role.includes('reviewer')) avatar = '🔍';
+      else if (role.includes('designer')) avatar = '🎨';
+      return {
+        title: matchedSlot.label,
+        avatar,
+        role,
+        status,
+      };
+    }
+  }
+
+  // Fallback by branch / task keywords
+  let title = 'Senior2 (UI)';
+  let avatar = '⚡';
+  let role = 'senior2';
+
+  if (key.includes('core') || key.includes('rust') || key.includes('backend')) {
+    title = 'Senior (Rust)';
+    avatar = '⚡';
+    role = 'senior';
+  } else if (key.includes('ui') || key.includes('svelte') || key.includes('frontend')) {
+    title = 'Senior2 (UI)';
+    avatar = '⚡';
+    role = 'senior2';
+  } else if (key.includes('review') || key.includes('qa')) {
+    title = 'Reviewer (QA)';
+    avatar = '🔍';
+    role = 'reviewer';
+  } else if (key.includes('techlead') || key.includes('arch')) {
+    title = 'Techlead (System)';
+    avatar = '🧠';
+    role = 'techlead';
+  } else if (key.includes('manager') || key.includes('plan')) {
+    title = 'Manager (Planner)';
+    avatar = '👑';
+    role = 'manager';
+  }
+
+  const status: 'RUNNING' | 'READY' | 'BLOCKED' | 'DONE' = wt.is_dirty ? 'RUNNING' : 'READY';
+
+  return { title, avatar, role, status };
+}
+
+/**
+ * Aggregates cockpit summary statistics from worktrees list.
+ */
+export function aggregateWorktreeStats(worktrees: WorktreeInfo[]): {
+  total: number;
+  running: number;
+  dirty: number;
+} {
+  if (!Array.isArray(worktrees)) {
+    return { total: 0, running: 0, dirty: 0 };
+  }
+  const total = worktrees.length;
+  const dirty = worktrees.filter((w) => w.is_dirty).length;
+  const running = dirty > 0 ? dirty : Math.min(total, 1);
+  return { total, running, dirty };
+}
+
 
 
 

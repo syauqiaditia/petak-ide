@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   UsageReport,
   TeamConfig,
+  WorktreeInfo,
 } from './types';
 
 export const DEMO_HERMES_DETECTION: HermesDetectionResult = {
@@ -362,3 +363,25 @@ export const DEMO_USAGE_REPORTS: Record<string, UsageReport> = {
     displayText: 'tidak melapor',
   },
 };
+
+export const DEMO_WORKTREES: WorktreeInfo[] = [
+  {
+    task_id: 't_29e9668a',
+    path: '/mnt/storage/uqi-projects/petak-p4m-wt-core',
+    branch: 'wt/worktree-cockpit-core',
+    base_branch: 'main',
+    head_sha: 'a5171cb',
+    is_dirty: false,
+    created_at: Date.now() - 1000 * 60 * 25,
+  },
+  {
+    task_id: 't_41ab160d',
+    path: '/mnt/storage/uqi-projects/petak-p4m-wt-ui',
+    branch: 'wt/worktree-cockpit-ui',
+    base_branch: 'main',
+    head_sha: '8264eda',
+    is_dirty: true,
+    created_at: Date.now() - 1000 * 60 * 12,
+  },
+];
+

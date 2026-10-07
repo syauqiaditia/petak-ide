@@ -318,4 +318,17 @@ export interface MemorySnippet {
   content: string;
 }
 
+// ── Multi-Agent Worktree Lane Cockpit Types (Phase 4) ─────────────────────────
+
+export interface WorktreeInfo {
+  task_id: string;
+  path: string;
+  branch: string;
+  base_branch: string;
+  head_sha: string;
+  is_dirty: boolean;
+  created_at: number;
+}
+
+
 
