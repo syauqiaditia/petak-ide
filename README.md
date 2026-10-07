@@ -89,7 +89,7 @@ Traditional mobile IDEs like Android Studio consume gigabytes of memory, suffer 
 
 ## Benchmarks & Performance Scorecard
 
-| Metric | Petak IDE v0.9.0 | Android Studio (Koala/Ladybug) | VS Code (with Mobile Extensions) |
+| Metric | Petak IDE v0.9.1 | Android Studio (Koala/Ladybug) | VS Code (with Mobile Extensions) |
 |---|---|---|---|
 | **RAM Usage (Idle)** | **~100–120 MB** | 1,800–3,500 MB | 650–1,200 MB |
 | **Binary Bundle Size** | **6.6 MB** | ~1,400 MB | ~350 MB |
@@ -146,7 +146,7 @@ curl -fsSL https://raw.githubusercontent.com/syauqiaditia/petak-ide/main/install
 ```
 
 Or download the pre-built application package from [GitHub Releases](https://github.com/syauqiaditia/petak-ide/releases/latest):
-- **macOS (Apple Silicon M1/M2/M3/M4):** [Petak_0.9.0_aarch64.dmg](https://github.com/syauqiaditia/petak-ide/releases/latest)
+- **macOS (Apple Silicon M1/M2/M3/M4):** [Petak_0.9.1_aarch64.dmg](https://github.com/syauqiaditia/petak-ide/releases/latest)
 - **Linux (x86_64):** [petak-linux-x86_64](https://github.com/syauqiaditia/petak-ide/releases/latest)
 
 ---
