@@ -39,6 +39,7 @@ import type {
   DiagnosticSnippet,
   PrunedContextResult,
   MemorySnippet,
+  WorktreeInfo,
 } from '../features/agents/types.ts';
 export type {
   ProviderQuotaInfo,
@@ -53,6 +54,7 @@ export type {
   DiagnosticSnippet,
   PrunedContextResult,
   MemorySnippet,
+  WorktreeInfo,
 };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
@@ -2502,6 +2504,39 @@ export const api = {
       activeFile: activeFile ?? null,
     });
   },
+
+  async agentWorktreeList(): Promise<WorktreeInfo[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockWorktreeStore.list();
+    }
+    return invoke<WorktreeInfo[]>('agent_worktree_list');
+  },
+
+  async agentWorktreeCreate(taskId: string, branch: string, baseBranch?: string): Promise<WorktreeInfo> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockWorktreeStore.create(taskId, branch, baseBranch);
+    }
+    return invoke<WorktreeInfo>('agent_worktree_create', {
+      taskId,
+      branch,
+      baseBranch: baseBranch ?? null,
+    });
+  },
+
+  async agentWorktreeDiff(taskId: string): Promise<string> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockWorktreeStore.diff(taskId);
+    }
+    return invoke<string>('agent_worktree_diff', { taskId });
+  },
+
+  async agentWorktreeRemove(taskId: string, deleteBranch: boolean): Promise<void> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      mockWorktreeStore.remove(taskId, deleteBranch);
+      return;
+    }
+    return invoke('agent_worktree_remove', { taskId, deleteBranch });
+  },
 };
 
 const mockFlowStore = {
@@ -2732,4 +2767,71 @@ const mockContextStore = {
     ];
   },
 };
+
+const mockWorktreeStore = {
+  worktrees: [
+    {
+      task_id: 't_29e9668a',
+      path: '/mnt/storage/uqi-projects/petak-p4m-wt-core',
+      branch: 'wt/worktree-cockpit-core',
+      base_branch: 'main',
+      head_sha: 'a5171cb',
+      is_dirty: false,
+      created_at: Date.now() - 1000 * 60 * 25,
+    },
+    {
+      task_id: 't_41ab160d',
+      path: '/mnt/storage/uqi-projects/petak-p4m-wt-ui',
+      branch: 'wt/worktree-cockpit-ui',
+      base_branch: 'main',
+      head_sha: '8264eda',
+      is_dirty: true,
+      created_at: Date.now() - 1000 * 60 * 12,
+    },
+  ] as WorktreeInfo[],
+
+  list(): WorktreeInfo[] {
+    return JSON.parse(JSON.stringify(this.worktrees));
+  },
+
+  create(taskId: string, branch: string, baseBranch?: string): WorktreeInfo {
+    const existing = this.worktrees.find((w) => w.task_id === taskId);
+    if (existing) return JSON.parse(JSON.stringify(existing));
+    const created: WorktreeInfo = {
+      task_id: taskId,
+      path: `/mnt/storage/uqi-projects/petak-wt/${taskId}`,
+      branch,
+      base_branch: baseBranch || 'main',
+      head_sha: '8264eda',
+      is_dirty: false,
+      created_at: Date.now(),
+    };
+    this.worktrees.push(created);
+    return JSON.parse(JSON.stringify(created));
+  },
+
+  diff(taskId: string): string {
+    const wt = this.worktrees.find((w) => w.task_id === taskId);
+    if (!wt) return '';
+    return [
+      `diff --git a/ui/features/agents/WorktreeLanes.svelte b/ui/features/agents/WorktreeLanes.svelte`,
+      `index a5171cb..8264eda 100644`,
+      `--- a/ui/features/agents/WorktreeLanes.svelte`,
+      `+++ b/ui/features/agents/WorktreeLanes.svelte`,
+      `@@ -1,5 +1,12 @@`,
+      `+// Worktree changes for ${taskId} (${wt.branch})`,
+      `+export interface WorktreeInfo {`,
+      `+  task_id: '${taskId}';`,
+      `+}`,
+    ].join('\n');
+  },
+
+  remove(taskId: string, _deleteBranch: boolean): void {
+    const idx = this.worktrees.findIndex((w) => w.task_id === taskId);
+    if (idx !== -1) {
+      this.worktrees.splice(idx, 1);
+    }
+  },
+};
+
 
