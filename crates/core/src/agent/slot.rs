@@ -41,6 +41,15 @@ pub struct SlotConfig {
     pub permission: String, // "read" | "ask" | "auto" | "full"
     #[serde(default = "default_cwd")]
     pub cwd: String, // "project"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(
+        rename = "customWhitelist",
+        alias = "custom_whitelist",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub custom_whitelist: Option<Vec<String>>,
 }
 
 impl SlotConfig {
@@ -60,12 +69,39 @@ impl SlotConfig {
         self.effective_engine()
     }
 
+    pub fn effective_role(&self) -> Option<&str> {
+        self.role.as_deref()
+    }
+
+    pub fn role_scope(&self) -> Option<super::policy::RoleToolScope> {
+        if let Some(ref r) = self.role {
+            Some(super::policy::RoleToolScope::for_role(r, self.custom_whitelist.clone()))
+        } else if self.custom_whitelist.is_some() {
+            Some(super::policy::RoleToolScope::for_role("custom", self.custom_whitelist.clone()))
+        } else {
+            None
+        }
+    }
+
     pub fn normalize(&mut self) {
         if self.engine.is_none() && !self.kind.is_empty() {
             self.engine = Some(self.kind.clone());
         }
         if self.kind.is_empty() {
             self.kind = self.effective_engine().to_string();
+        }
+        if let Some(ref r) = self.role {
+            if r.trim().is_empty() {
+                self.role = None;
+            } else {
+                self.role = Some(r.trim().to_lowercase());
+            }
+        }
+        if let Some(ref mut list) = self.custom_whitelist {
+            list.retain(|s| !s.trim().is_empty());
+            for item in list.iter_mut() {
+                *item = item.trim().to_string();
+            }
         }
     }
 }
@@ -274,6 +310,8 @@ impl SlotManager {
                         fallback_model: Some("gemini-2.5-pro".to_string()),
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("custom".to_string()),
+                        custom_whitelist: None,
                     },
                     SlotConfig {
                         id: "manager".to_string(),
@@ -286,6 +324,8 @@ impl SlotManager {
                         fallback_model: Some("gemini-2.5-pro".to_string()),
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("manager".to_string()),
+                        custom_whitelist: None,
                     },
                     SlotConfig {
                         id: "techlead".to_string(),
@@ -298,6 +338,8 @@ impl SlotManager {
                         fallback_model: Some("gemini-2.5-pro".to_string()),
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("techlead".to_string()),
+                        custom_whitelist: None,
                     },
                     SlotConfig {
                         id: "senior".to_string(),
@@ -310,6 +352,8 @@ impl SlotManager {
                         fallback_model: Some("gemini-2.5-pro".to_string()),
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("senior".to_string()),
+                        custom_whitelist: None,
                     },
                     SlotConfig {
                         id: "senior2".to_string(),
@@ -322,6 +366,8 @@ impl SlotManager {
                         fallback_model: None,
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("senior2".to_string()),
+                        custom_whitelist: None,
                     },
                     SlotConfig {
                         id: "reviewer".to_string(),
@@ -334,6 +380,8 @@ impl SlotManager {
                         fallback_model: None,
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("reviewer".to_string()),
+                        custom_whitelist: None,
                     },
                     SlotConfig {
                         id: "designer".to_string(),
@@ -346,6 +394,8 @@ impl SlotManager {
                         fallback_model: None,
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
+                        role: Some("custom".to_string()),
+                        custom_whitelist: None,
                     },
                 ];
 
@@ -600,6 +650,8 @@ impl SlotManager {
                     fallback_model: Some("gemini-2.5-pro".to_string()),
                     permission: "ask".to_string(),
                     cwd: ".".to_string(),
+                    role: Some(slot_id.to_string()),
+                    custom_whitelist: None,
                 };
                 let _ = self.add_slot(cfg);
             }
@@ -691,6 +743,7 @@ impl SlotManager {
         let slot_permission_str = config.permission.clone();
         let slot_id_for_req = slot_id.clone();
         let listeners_for_req = listeners.clone();
+        let slot_role_scope = config.role_scope();
 
         let client = AcpClient::spawn_with_handler(
             &cmd_str,
@@ -731,11 +784,12 @@ impl SlotManager {
                                 .unwrap_or("")
                                 .to_string();
 
-                            match perm_mgr.request_permission(
+                            match perm_mgr.request_permission_with_role(
                                 &slot_id_for_req,
                                 &sess_id,
                                 mode,
                                 &tool_call,
+                                slot_role_scope.as_ref(),
                                 Duration::from_secs(120),
                             ) {
                                 Ok(true) => Some(Ok(serde_json::json!({
@@ -744,10 +798,15 @@ impl SlotManager {
                                 Ok(false) => Some(Ok(serde_json::json!({
                                     "outcome": { "outcome": "denied" }
                                 }))),
-                                Err(e) => Some(Err((-32000, e))),
+                                Err(e) => Some(Err((-32003, e))),
                             }
                         }
                         "fs/read_text_file" => {
+                            if let Some(ref scope) = slot_role_scope {
+                                if let Err(e) = scope.check_permission("read_file") {
+                                    return Some(Err((-32003, e)));
+                                }
+                            }
                             let path = match params.get("path").and_then(|p| p.as_str()) {
                                 Some(p) => p,
                                 None => {
@@ -776,6 +835,11 @@ impl SlotManager {
                             }
                         }
                         "fs/write_text_file" => {
+                            if let Some(ref scope) = slot_role_scope {
+                                if let Err(e) = scope.check_permission("write_file") {
+                                    return Some(Err((-32003, e)));
+                                }
+                            }
                             let mode = PermissionMode::from_str_opt(&slot_permission_str);
                             if mode == PermissionMode::Read {
                                 return Some(Err((
@@ -826,6 +890,19 @@ impl SlotManager {
                                     "Proposal dibatalkan atau waktu tunggu habis".to_string(),
                                 ))),
                             }
+                        }
+                        "tools/call" => {
+                            let tool_name = params
+                                .get("name")
+                                .or_else(|| params.get("tool"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            if let Some(ref scope) = slot_role_scope {
+                                if let Err(e) = scope.check_permission(tool_name) {
+                                    return Some(Err((-32003, e)));
+                                }
+                            }
+                            None
                         }
                         _ => None,
                     }
@@ -1493,6 +1570,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
         let (cmd, args, _env) = resolve_slot_command(&hermes_cfg);
         assert!(cmd.contains("hermes"));
@@ -1512,6 +1591,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
         let (cmd, args, _env) = resolve_slot_command(&claude_cfg);
         assert_eq!(cmd, "npx");
@@ -1529,6 +1610,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
         let (cmd, args, env) = resolve_slot_command(&ag_cfg);
         assert_eq!(cmd, "antigravity");
@@ -1559,6 +1642,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
         let (cmd, args, _env) = resolve_slot_command(&openai_cfg);
         assert_eq!(cmd, "openai");
@@ -1576,6 +1661,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
         let (cmd, args, _env) = resolve_slot_command(&codex_cfg);
         assert_eq!(cmd, "codex");
@@ -1593,6 +1680,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: ".".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
         let (cmd, args, _env) = resolve_slot_command(&custom_cfg);
         assert_eq!(cmd, "custom-agent");

@@ -126,6 +126,8 @@ mod tests {
             fallback_model: Some("sonnet".to_string()),
             permission: "ask".to_string(),
             cwd: "project".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
 
         let team = TeamConfig {
@@ -161,6 +163,8 @@ mod tests {
             fallback_model: None,
             permission: "ask".to_string(),
             cwd: "project".to_string(),
+            role: Some("senior".to_string()),
+            custom_whitelist: None,
         };
 
         let s2 = SlotConfig {
@@ -174,6 +178,8 @@ mod tests {
             fallback_model: None,
             permission: "auto".to_string(),
             cwd: "project".to_string(),
+            role: Some("reviewer".to_string()),
+            custom_whitelist: None,
         };
 
         let s3 = SlotConfig {
@@ -187,6 +193,8 @@ mod tests {
             fallback_model: None,
             permission: "full".to_string(),
             cwd: "project".to_string(),
+            role: Some("custom".to_string()),
+            custom_whitelist: Some(vec!["terminal".to_string()]),
         };
 
         let original_team = TeamConfig {

@@ -10,6 +10,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+pub use super::policy::{filter_advertised_tools, filter_tool_schemas, filter_tools_list_response};
+
 pub type PendingResponseSender = Sender<Result<Value, AcpError>>;
 pub type PendingMap = Arc<Mutex<HashMap<i64, PendingResponseSender>>>;
 pub type UpdateCallback = Arc<dyn Fn(Value) + Send + Sync + 'static>;

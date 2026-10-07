@@ -25,6 +25,8 @@ fn make_fake_slot_config(id: &str, label: &str) -> SlotConfig {
         fallback_model: Some("fake-model-beta".to_string()),
         permission: "ask".to_string(),
         cwd: "project".to_string(),
+        role: None,
+        custom_whitelist: None,
     }
 }
 
