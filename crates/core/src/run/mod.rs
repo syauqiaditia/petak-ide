@@ -38,8 +38,8 @@ pub use ios::{
     simctl_shutdown,
 };
 pub use logs::{
-    filter, parse_ios_log_line, parse_logcat_line, stack_links, LogLine, LogLevel, Logcat,
-    StackLink,
+    filter, format_device_log_as_run_event, parse_ios_log_line, parse_logcat_line, stack_links,
+    LogLine, LogLevel, Logcat, StackLink,
 };
 pub use toolchain::{detect, Tool, Toolchain};
 pub use pairing::{
