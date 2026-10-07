@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Fake ACP agent for Petak tests: newline-delimited JSON-RPC 2.0 over stdio.
 import readline from 'node:readline';
+import { spawn } from 'node:child_process';
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -230,6 +231,31 @@ rl.on('line', (line) => {
             result: {
               stopReason: 'cancelled',
               usage: { inputTokens: 10, outputTokens: count },
+            },
+          });
+        }
+      };
+    } else if (promptText.startsWith('subproc')) {
+      const child = spawn('sleep', ['60']);
+      send({
+        jsonrpc: '2.0',
+        method: 'session/update',
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: `child_pid:${child.pid}` },
+          },
+        },
+      });
+      currentPromptResolve = (cancelled) => {
+        if (cancelled) {
+          send({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: {
+              stopReason: 'cancelled',
+              usage: { inputTokens: 5, outputTokens: 5 },
             },
           });
         }
