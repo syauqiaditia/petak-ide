@@ -224,19 +224,19 @@ test('accounts settings: expiry warning badge', () => {
 
 // ── 7. Version Bump ────────────────────────────────────────────────
 
-test('version bump: DashboardView shows v0.9.0', () => {
+test('version bump: DashboardView shows v0.9.1', () => {
   const src = fs.readFileSync(path.join(UI, 'features/dashboard/DashboardView.svelte'), 'utf-8');
-  assert.ok(src.includes("version: 'v0.9.0'"), 'v0.9.0 in DashboardView');
+  assert.ok(src.includes("version: 'v0.9.1'"), 'v0.9.1 in DashboardView');
 });
 
-test('version bump: package.json has 0.9.0', () => {
+test('version bump: package.json has 0.9.1', () => {
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
-  assert.equal(pkg.version, '0.9.0', 'package.json version is 0.9.0');
+  assert.equal(pkg.version, '0.9.1', 'package.json version is 0.9.1');
 });
 
-test('version bump: tauri.conf.json has 0.9.0', () => {
+test('version bump: tauri.conf.json has 0.9.1', () => {
   const conf = JSON.parse(fs.readFileSync('crates/app/tauri.conf.json', 'utf-8'));
-  assert.equal(conf.version, '0.9.0', 'tauri.conf.json version is 0.9.0');
+  assert.equal(conf.version, '0.9.1', 'tauri.conf.json version is 0.9.1');
 });
 
 // ── 8. Integration: Self-Improve & Obsidian loop not broken ────────
