@@ -34,8 +34,9 @@ import type {
   Skill,
   SupportedEngineInfo,
   EnginePlatformOption,
+  RoleScopeInfo,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo, EnginePlatformOption };
+export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo, EnginePlatformOption, RoleScopeInfo };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2205,6 +2206,19 @@ export const api = {
       ];
     }
     return invoke<SupportedEngineInfo[]>('agent_get_supported_engines');
+  },
+
+  async agentGetRoleScopes(): Promise<RoleScopeInfo[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { ROLE_SCOPE_DEFINITIONS } = await import('../features/agents/agentsLogic.ts');
+      return ROLE_SCOPE_DEFINITIONS;
+    }
+    try {
+      return await invoke<RoleScopeInfo[]>('agent_get_role_scopes');
+    } catch {
+      const { ROLE_SCOPE_DEFINITIONS } = await import('../features/agents/agentsLogic.ts');
+      return ROLE_SCOPE_DEFINITIONS;
+    }
   },
 
   async agentLoadTeam(): Promise<TeamConfig> {

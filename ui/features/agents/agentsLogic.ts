@@ -8,6 +8,8 @@ import type {
   TeamConfig,
   HermesProfileInfo,
   EnginePlatformOption,
+  RoleScopeInfo,
+  AgentRole,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
@@ -652,6 +654,7 @@ export function getStandardTeamPreset(cwd: string = 'project'): TeamConfig & Slo
       label: '👑 Manager',
       kind: 'antigravity',
       engine: 'antigravity',
+      role: 'manager',
       model: 'ag/claude-opus-4.1',
       fallbackModel: 'ag/claude-opus-4-6-thinking',
       permission: 'ask',
@@ -662,6 +665,7 @@ export function getStandardTeamPreset(cwd: string = 'project'): TeamConfig & Slo
       label: '⚡ Senior',
       kind: 'claude-code',
       engine: 'claude-code',
+      role: 'senior',
       model: 'claude-3-7-sonnet',
       fallbackModel: 'claude-3-5-sonnet',
       permission: 'ask',
@@ -672,6 +676,7 @@ export function getStandardTeamPreset(cwd: string = 'project'): TeamConfig & Slo
       label: '🔍 Reviewer',
       kind: 'antigravity',
       engine: 'antigravity',
+      role: 'reviewer',
       model: 'ag/gemini-3.8-flash-high',
       fallbackModel: null,
       permission: 'ask',
@@ -924,6 +929,198 @@ export function renderChatMarkdown(raw: string | null | undefined): string {
 
   return htmlParts.join('');
 }
+
+// ── Role-Based Tool Scoping (Phase 2 Least Privilege Gateway) ────────────────
+
+export const ROLE_SCOPE_BADGES: Record<string, string> = {
+  manager: 'Tools: Scoped (Read/Plan only)',
+  senior: 'Tools: Scoped (Implement & Build)',
+  senior2: 'Tools: Scoped (UI & Toolchain)',
+  techlead: 'Tools: Scoped (Architecture & Review)',
+  reviewer: 'Tools: Scoped (QA & Test runner only)',
+  custom: 'Tools: Scoped (Custom)',
+};
+
+export const DEFAULT_ROLE_WHITELISTS: Record<string, string[]> = {
+  manager: ['read_file', 'list_directory', 'search_files', 'kanban_create', 'kanban_list', 'kanban_show'],
+  senior: ['read_file', 'write_file', 'patch', 'search_files', 'terminal', 'git_worktree'],
+  senior2: ['read_file', 'write_file', 'patch', 'search_files', 'terminal', 'flutter_run'],
+  techlead: ['git_merge', 'git_checkout', 'review_diff', 'device_control', 'terminal', 'kanban_unblock'],
+  reviewer: ['read_file', 'search_files', 'git_diff', 'run_test', 'kanban_complete', 'kanban_request_changes'],
+  custom: [],
+};
+
+export const ROLE_BLACKLISTS: Record<string, string[]> = {
+  manager: ['write_file', 'patch', 'terminal', 'kanban_complete'],
+  senior: ['kanban_complete'],
+  senior2: ['kanban_complete'],
+  techlead: ['write_file', 'patch'],
+  reviewer: ['write_file', 'patch', 'terminal'],
+  custom: [],
+};
+
+export const ALL_AVAILABLE_TOOLS: string[] = [
+  'read_file',
+  'write_file',
+  'patch',
+  'search_files',
+  'list_directory',
+  'terminal',
+  'git_diff',
+  'git_checkout',
+  'git_merge',
+  'git_worktree',
+  'review_diff',
+  'device_control',
+  'run_test',
+  'flutter_run',
+  'kanban_create',
+  'kanban_list',
+  'kanban_show',
+  'kanban_complete',
+  'kanban_unblock',
+  'kanban_request_changes',
+];
+
+export const ROLE_SCOPE_DEFINITIONS: RoleScopeInfo[] = [
+  {
+    role: 'manager',
+    badge: 'Tools: Scoped (Read/Plan only)',
+    description: 'Least-privilege gateway aktif: peran Manager dibatasi ke operasi read, inspect & kanban plan.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.manager,
+    blacklist: ROLE_BLACKLISTS.manager,
+  },
+  {
+    role: 'senior',
+    badge: 'Tools: Scoped (Implement & Build)',
+    description: 'Least-privilege gateway aktif: peran Senior dibatasi ke read, code edit, cargo build & git worktree.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.senior,
+    blacklist: ROLE_BLACKLISTS.senior,
+  },
+  {
+    role: 'senior2',
+    badge: 'Tools: Scoped (UI & Toolchain)',
+    description: 'Least-privilege gateway aktif: peran Senior 2 dibatasi ke read, code edit, npm/vite build & flutter toolchain.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.senior2,
+    blacklist: ROLE_BLACKLISTS.senior2,
+  },
+  {
+    role: 'techlead',
+    badge: 'Tools: Scoped (Architecture & Review)',
+    description: 'Least-privilege gateway aktif: peran Techlead dibatasi ke git merge, review diff, device control & release build.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.techlead,
+    blacklist: ROLE_BLACKLISTS.techlead,
+  },
+  {
+    role: 'reviewer',
+    badge: 'Tools: Scoped (QA & Test runner only)',
+    description: 'Least-privilege gateway aktif: peran Reviewer dibatasi ke test runners, diff checks & review decisions.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.reviewer,
+    blacklist: ROLE_BLACKLISTS.reviewer,
+  },
+  {
+    role: 'custom',
+    badge: 'Tools: Scoped (Custom)',
+    description: 'Least-privilege gateway aktif: daftar tool ditentukan kustom oleh konfigurasi pengguna.',
+    defaultWhitelist: [],
+    blacklist: [],
+  },
+];
+
+/**
+ * Normalizes role string to standard identifier (manager, senior, senior2, techlead, reviewer, custom).
+ */
+export function normalizeRole(role?: string | null): string {
+  if (!role) return 'custom';
+  const r = role.trim().toLowerCase();
+  if (r === 'manager') return 'manager';
+  if (r === 'senior') return 'senior';
+  if (r === 'senior2' || r === 'senior-2' || r === 'senior_2' || r === 'senior 2') return 'senior2';
+  if (r === 'techlead' || r === 'tech-lead' || r === 'tech_lead' || r === 'tech lead') return 'techlead';
+  if (r === 'reviewer') return 'reviewer';
+  if (r === 'custom') return 'custom';
+  return r;
+}
+
+/**
+ * Infers role from slot properties (role field, hermesProfile, id, label).
+ */
+export function inferRoleFromSlot(slot?: Partial<SlotConfig> | null): string {
+  if (!slot) return 'custom';
+  if (slot.role) return normalizeRole(slot.role);
+  const candidate = `${slot.hermesProfile || ''} ${slot.id || ''} ${slot.label || ''}`.toLowerCase();
+  if (candidate.includes('senior2') || candidate.includes('senior 2') || candidate.includes('senior-2')) return 'senior2';
+  if (candidate.includes('senior')) return 'senior';
+  if (candidate.includes('manager')) return 'manager';
+  if (candidate.includes('techlead') || candidate.includes('tech lead')) return 'techlead';
+  if (candidate.includes('reviewer')) return 'reviewer';
+  return 'custom';
+}
+
+/**
+ * Returns role scoping label/badge for a given role or slot configuration.
+ */
+export function getRoleScopeBadge(roleOrSlot?: string | Partial<SlotConfig> | null): string {
+  let role = 'custom';
+  if (typeof roleOrSlot === 'string') {
+    role = normalizeRole(roleOrSlot);
+  } else if (roleOrSlot && typeof roleOrSlot === 'object') {
+    role = inferRoleFromSlot(roleOrSlot);
+  }
+  return ROLE_SCOPE_BADGES[role] || ROLE_SCOPE_BADGES.custom;
+}
+
+/**
+ * Returns default tool whitelist array for the specified role.
+ */
+export function getDefaultToolsForRole(role?: string | null): string[] {
+  const norm = normalizeRole(role);
+  return DEFAULT_ROLE_WHITELISTS[norm] ? [...DEFAULT_ROLE_WHITELISTS[norm]] : [];
+}
+
+/**
+ * Returns the effective tools whitelist for a slot, respecting customWhitelist overrides.
+ */
+export function getEffectiveToolsForSlot(slot: Partial<SlotConfig>): string[] {
+  if (Array.isArray(slot.customWhitelist) && slot.customWhitelist.length > 0) {
+    return [...slot.customWhitelist];
+  }
+  const role = inferRoleFromSlot(slot);
+  return getDefaultToolsForRole(role);
+}
+
+/**
+ * Checks whether a tool is allowed for the given slot.
+ */
+export function isToolAllowedForSlot(slot: Partial<SlotConfig>, toolName: string): boolean {
+  if (!toolName) return false;
+  const allowed = getEffectiveToolsForSlot(slot);
+  return allowed.includes(toolName.trim().toLowerCase());
+}
+
+/**
+ * Validates, trims, and deduplicates an arbitrary list of tool names.
+ */
+export function validateCustomWhitelist(tools: unknown): string[] {
+  if (!Array.isArray(tools)) return [];
+  const set = new Set<string>();
+  for (const item of tools) {
+    if (typeof item === 'string' && item.trim()) {
+      set.add(item.trim().toLowerCase());
+    }
+  }
+  return Array.from(set);
+}
+
+/**
+ * Returns descriptive human tooltip for the role scoping policy.
+ */
+export function getRoleScopeDescription(role?: string | null): string {
+  const norm = normalizeRole(role);
+  const def = ROLE_SCOPE_DEFINITIONS.find((d) => d.role === norm);
+  return def ? def.description : 'Least-privilege gateway aktif untuk slot agen ini.';
+}
+
 
 
 
