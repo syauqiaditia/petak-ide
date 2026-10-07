@@ -68,6 +68,16 @@ class SettingsStore {
       ? 'en'
       : 'id' // Default is 'id'
   );
+  lspContextPruning = $state<boolean>(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('petak.agents.lsp_pruning') !== 'false'
+      : true // Default is enabled
+  );
+  domainMemoryFiltering = $state<boolean>(
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('petak.agents.domain_memory') !== 'false'
+      : true // Default is enabled
+  );
 
   constructor() {
     this.applyTheme(this.theme);
@@ -141,6 +151,20 @@ class SettingsStore {
     this.reopenLastProjectOnLaunch = value;
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('petak.general.reopen_last', String(value));
+    }
+  }
+
+  setLspContextPruning(value: boolean) {
+    this.lspContextPruning = value;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('petak.agents.lsp_pruning', String(value));
+    }
+  }
+
+  setDomainMemoryFiltering(value: boolean) {
+    this.domainMemoryFiltering = value;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('petak.agents.domain_memory', String(value));
     }
   }
 

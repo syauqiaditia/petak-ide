@@ -35,8 +35,25 @@ import type {
   SupportedEngineInfo,
   EnginePlatformOption,
   RoleScopeInfo,
+  SymbolOutline,
+  DiagnosticSnippet,
+  PrunedContextResult,
+  MemorySnippet,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo, EnginePlatformOption, RoleScopeInfo };
+export type {
+  ProviderQuotaInfo,
+  LlmQuotaReport,
+  MemoryItem,
+  SkillSummary,
+  Skill,
+  SupportedEngineInfo,
+  EnginePlatformOption,
+  RoleScopeInfo,
+  SymbolOutline,
+  DiagnosticSnippet,
+  PrunedContextResult,
+  MemorySnippet,
+};
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2465,6 +2482,26 @@ export const api = {
     }
     return invoke<boolean>('agent_skill_delete', { name, root: root || null });
   },
+
+  async agentPruneContext(filePath: string, line?: number, symbol?: string): Promise<PrunedContextResult> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockContextStore.pruneContext(filePath, line, symbol);
+    }
+    return invoke<PrunedContextResult>('agent_prune_context', {
+      filePath,
+      line: line ?? null,
+      symbol: symbol ?? null,
+    });
+  },
+
+  async agentGetRelevantMemory(activeFile?: string): Promise<MemorySnippet[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockContextStore.getRelevantMemory(activeFile);
+    }
+    return invoke<MemorySnippet[]>('agent_get_relevant_memory', {
+      activeFile: activeFile ?? null,
+    });
+  },
 };
 
 const mockFlowStore = {
@@ -2645,3 +2682,54 @@ const mockSkillStore = {
     return true;
   },
 };
+
+const mockContextStore = {
+  pruneContext(filePath: string, line?: number, symbol?: string): PrunedContextResult {
+    const totalLines = 250;
+    const prunedLines = 175;
+    const estimatedTokensSaved = Math.round(prunedLines * 3.5);
+    const fileName = filePath.split('/').pop() || filePath;
+    return {
+      filePath,
+      totalLines,
+      prunedLines,
+      estimatedTokensSaved,
+      symbolOutline: [
+        {
+          name: fileName.replace(/\.[^.]+$/, ''),
+          kind: 'module',
+          line: line || 1,
+          signature: `export class ${fileName.replace(/\.[^.]+$/, '')}`,
+          children: [
+            {
+              name: symbol || 'execute',
+              kind: 'method',
+              line: line || 10,
+              signature: `${symbol || 'execute'}(): void`,
+            },
+          ],
+        },
+      ],
+      diagnostics: [],
+      compactSummary: `Outline for ${fileName}: 1 class, 1 method. Pruned ${prunedLines}/${totalLines} lines (~70% token saved).`,
+    };
+  },
+
+  getRelevantMemory(activeFile?: string): MemorySnippet[] {
+    const ext = activeFile ? activeFile.split('.').pop()?.toLowerCase() : '';
+    let domain = 'general';
+    if (ext === 'dart') domain = 'flutter';
+    else if (ext === 'rs') domain = 'rust';
+    else if (ext === 'svelte' || ext === 'ts' || ext === 'js') domain = 'frontend';
+
+    return [
+      {
+        domain,
+        sourceFile: `${domain}-rules.md`,
+        title: `${domain.toUpperCase()} Conventions`,
+        content: `Standard conventions and best practices for domain ${domain}.`,
+      },
+    ];
+  },
+};
+

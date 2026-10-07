@@ -1,8 +1,15 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { truncateToolOutput, extractChunkText, renderChatMarkdown } from './agentsLogic';
-  import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
+  import {
+    truncateToolOutput,
+    extractChunkText,
+    renderChatMarkdown,
+    formatTokenSavingsPill,
+    formatPrunedContextForPrompt,
+    formatDomainMemoryForPrompt,
+  } from './agentsLogic';
+  import type { ChatMessage, PendingPermissionRequest, PermissionMode, PrunedContextResult, MemorySnippet } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
   import { skillsStore } from './skillsStore.svelte';
@@ -21,6 +28,11 @@
   let isSearchingFiles = $state(false);
   let isSkillPickerOpen = $state(false);
   let skillSearch = $state('');
+
+  let prunedContext = $state<PrunedContextResult | null>(null);
+  let isPruning = $state(false);
+  let relevantMemorySnippets = $state<MemorySnippet[]>([]);
+  let isPrunedPopoverOpen = $state(false);
 
   let isMentionPopupOpen = $state(false);
   let mentionQuery = $state('');
@@ -103,6 +115,33 @@
     mentionResults = [];
   }
 
+  async function triggerSmartContextPruning(filePath: string, line?: number) {
+    if (settingsStore.lspContextPruning) {
+      isPruning = true;
+      try {
+        prunedContext = await api.agentPruneContext(filePath, line);
+      } catch (err) {
+        console.warn('Context pruning failed:', err);
+        prunedContext = null;
+      } finally {
+        isPruning = false;
+      }
+    } else {
+      prunedContext = null;
+    }
+
+    if (settingsStore.domainMemoryFiltering) {
+      try {
+        relevantMemorySnippets = await api.agentGetRelevantMemory(filePath);
+      } catch (err) {
+        console.warn('Relevant domain memory retrieval failed:', err);
+        relevantMemorySnippets = [];
+      }
+    } else {
+      relevantMemorySnippets = [];
+    }
+  }
+
   function applyMention(item: { name: string; path: string }) {
     if (!textareaEl) return;
     const val = textareaEl.value;
@@ -116,6 +155,8 @@
     isMentionPopupOpen = false;
     mentionResults = [];
     attachedContextLabel = item.name;
+
+    triggerSmartContextPruning(item.path);
 
     tick().then(() => {
       if (textareaEl) {
@@ -161,9 +202,29 @@
 
   async function handleSubmit() {
     if (!promptText.trim() || isBusy) return;
-    const text = promptText;
+    let text = promptText;
+
+    // Inject pruned context if available and enabled
+    if (prunedContext && settingsStore.lspContextPruning) {
+      const prunedBlock = formatPrunedContextForPrompt(prunedContext);
+      if (prunedBlock) {
+        text = `${prunedBlock}\n\n${text}`;
+      }
+    }
+
+    // Inject domain memory conventions into outgoing prompt header
+    if (relevantMemorySnippets.length > 0 && settingsStore.domainMemoryFiltering) {
+      const memBlock = formatDomainMemoryForPrompt(relevantMemorySnippets);
+      if (memBlock) {
+        text = `${memBlock}\n\n${text}`;
+      }
+    }
+
     promptText = '';
     attachedContextLabel = null;
+    prunedContext = null;
+    relevantMemorySnippets = [];
+    isPrunedPopoverOpen = false;
     await agentsStore.sendPrompt(text);
     textareaEl?.focus();
   }
@@ -205,6 +266,7 @@
     const fileName = filePath.split('/').pop() || filePath;
     attachedContextLabel = fileName;
     promptText = (promptText ? promptText + ' ' : '') + `@${filePath} `;
+    triggerSmartContextPruning(filePath);
     textareaEl?.focus();
   }
 
@@ -216,11 +278,12 @@
 
     // Get current line if available from active editor view
     let lineSuffix = '';
+    let startLine: number | undefined;
     const view = (window as any).__PETAK_EDITOR_VIEW__;
     if (view) {
       try {
         const sel = view.state.selection.main;
-        const startLine = view.state.doc.lineAt(sel.from).number;
+        startLine = view.state.doc.lineAt(sel.from).number;
         const endLine = view.state.doc.lineAt(sel.to).number;
         lineSuffix = startLine === endLine ? `:${startLine}` : `:${startLine}-${endLine}`;
       } catch {
@@ -230,6 +293,7 @@
 
     attachedContextLabel = `${fileName}${lineSuffix}`;
     promptText = (promptText ? promptText + ' ' : '') + `@${path}${lineSuffix} `;
+    triggerSmartContextPruning(path, startLine);
     textareaEl?.focus();
   }
 
@@ -549,6 +613,39 @@
           <span class="pill-at">@</span>
           <span class="pill-label">{attachedContextLabel ? `Context (${attachedContextLabel})` : 'Context'}</span>
         </button>
+
+        <!-- Smart Context Pill: ⚡ Pruned (~70% token saved) -->
+        {#if prunedContext && settingsStore.lspContextPruning}
+          <div class="smart-context-pill-wrap">
+            <button
+              type="button"
+              class="context-pill smart-context-pill active"
+              onclick={() => (isPrunedPopoverOpen = !isPrunedPopoverOpen)}
+              title={`LSP Context Pruned: ${prunedContext.prunedLines}/${prunedContext.totalLines} baris (${prunedContext.estimatedTokensSaved} token dihemat). Klik untuk ringkasan.`}
+            >
+              <span>{formatTokenSavingsPill(prunedContext)}</span>
+            </button>
+            {#if isPrunedPopoverOpen}
+              <div class="pruned-summary-popover">
+                <div class="popover-header">
+                  <span class="popover-title">{formatTokenSavingsPill(prunedContext)}</span>
+                  <button type="button" class="close-picker-btn" onclick={() => (isPrunedPopoverOpen = false)}>✕</button>
+                </div>
+                <div class="popover-meta">
+                  <span>📄 {prunedContext.filePath}</span>
+                  <span>⚡ Hemat ~{prunedContext.estimatedTokensSaved} token ({prunedContext.prunedLines}/{prunedContext.totalLines} baris)</span>
+                </div>
+                {#if prunedContext.compactSummary}
+                  <div class="popover-summary">{prunedContext.compactSummary}</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {:else if isPruning}
+          <span class="context-pill smart-context-pill pruning-loading" title="Sedang memangkas konteks berkas...">
+            <span>⚡ Pruning…</span>
+          </span>
+        {/if}
 
         <!-- Permission Pill (Read, Ask, Auto, Full) -->
         <div class="permission-pill-wrap">
@@ -1197,6 +1294,75 @@
     border-color: rgba(59, 130, 246, 0.4);
     color: #93c5fd;
     font-weight: 600;
+  }
+
+  .smart-context-pill-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .context-pill.smart-context-pill {
+    color: #facc15;
+    border-color: rgba(250, 204, 21, 0.3);
+    background: rgba(250, 204, 21, 0.08);
+  }
+
+  .context-pill.smart-context-pill:hover,
+  .context-pill.smart-context-pill.active {
+    color: #fef08a;
+    border-color: rgba(250, 204, 21, 0.6);
+    background: rgba(250, 204, 21, 0.18);
+    font-weight: 600;
+  }
+
+  .context-pill.smart-context-pill.pruning-loading {
+    color: #eab308;
+    opacity: 0.8;
+    cursor: wait;
+  }
+
+  .pruned-summary-popover {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    width: 280px;
+    background: #18191f;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+    border-radius: var(--radius-sm, 6px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .pruned-summary-popover .popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    color: #fef08a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 4px;
+  }
+
+  .pruned-summary-popover .popover-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted, #8b949e);
+  }
+
+  .pruned-summary-popover .popover-summary {
+    color: var(--text-normal, #e6edf3);
+    line-height: 1.4;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 4px 6px;
+    border-radius: 4px;
+    max-height: 120px;
+    overflow-y: auto;
   }
 
   .pill-at {

@@ -10,6 +10,10 @@ import type {
   EnginePlatformOption,
   RoleScopeInfo,
   AgentRole,
+  SymbolOutline,
+  DiagnosticSnippet,
+  PrunedContextResult,
+  MemorySnippet,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
@@ -198,7 +202,8 @@ export function applyDisciplineDirectives(
   isCaveman: boolean,
   isSelfImprove: boolean = false,
   memoryContext: string = '',
-  skillsInjection: string = ''
+  skillsInjection: string = '',
+  domainMemoryInjection: string = ''
 ): string {
   const directives: string[] = [];
 
@@ -220,6 +225,10 @@ export function applyDisciplineDirectives(
 
   if (skillsInjection && skillsInjection.trim()) {
     directives.push(skillsInjection.trim());
+  }
+
+  if (domainMemoryInjection && domainMemoryInjection.trim()) {
+    directives.push(domainMemoryInjection.trim());
   }
 
   if (memoryContext && memoryContext.trim()) {
@@ -1120,6 +1129,146 @@ export function getRoleScopeDescription(role?: string | null): string {
   const def = ROLE_SCOPE_DEFINITIONS.find((d) => d.role === norm);
   return def ? def.description : 'Least-privilege gateway aktif untuk slot agen ini.';
 }
+
+// ── Smart Context & Semantic Memory Helpers (Phase 3) ───────────────────────
+
+/**
+ * Computes percentage of lines / tokens saved through smart pruning.
+ */
+export function calculateSavingsPercentage(totalLines: number, prunedLines: number): number {
+  if (totalLines <= 0) return 0;
+  const pct = Math.round((prunedLines / totalLines) * 100);
+  return Math.max(0, Math.min(100, pct));
+}
+
+export const computeTokenSavingsPercentage = calculateSavingsPercentage;
+
+/**
+ * Formats token savings badge / pill label.
+ * E.g. "⚡ Pruned (~70% token saved)"
+ */
+export function formatTokenSavingsPill(savings: number | PrunedContextResult): string {
+  let pct: number;
+  if (typeof savings === 'number') {
+    pct = Math.round(savings);
+  } else if (savings && typeof savings === 'object') {
+    pct = calculateSavingsPercentage(savings.totalLines, savings.prunedLines);
+  } else {
+    pct = 0;
+  }
+  return `⚡ Pruned (~${pct}% token saved)`;
+}
+
+/**
+ * Formats pruned context (symbols outline and diagnostics) into prompt text block.
+ */
+export function formatPrunedContextForPrompt(pruned: PrunedContextResult | null | undefined): string {
+  if (!pruned || !pruned.filePath) return '';
+  const parts: string[] = [];
+  parts.push(`[PRUNED LSP CONTEXT: ${pruned.filePath}]`);
+  if (pruned.compactSummary) {
+    parts.push(pruned.compactSummary);
+  }
+  if (Array.isArray(pruned.symbolOutline) && pruned.symbolOutline.length > 0) {
+    parts.push('Symbols Outline:');
+    const renderOutline = (items: SymbolOutline[], indent = '  ') => {
+      for (const s of items) {
+        parts.push(`${indent}- ${s.kind} ${s.name} (line ${s.line}): ${s.signature}`);
+        if (s.children && s.children.length > 0) {
+          renderOutline(s.children, indent + '  ');
+        }
+      }
+    };
+    renderOutline(pruned.symbolOutline);
+  }
+  if (Array.isArray(pruned.diagnostics) && pruned.diagnostics.length > 0) {
+    parts.push('Active Diagnostics:');
+    for (const d of pruned.diagnostics) {
+      parts.push(`  - [${d.severity.toUpperCase()}] Line ${d.line}: ${d.message}`);
+    }
+  }
+  parts.push('[/PRUNED LSP CONTEXT]');
+  return parts.join('\n');
+}
+
+/**
+ * Formats domain memory snippets into prompt header convention blocks:
+ * [PROJECT CONVENTIONS: <DOMAIN>]
+ */
+export function formatDomainMemoryForPrompt(snippets: MemorySnippet[] | null | undefined): string {
+  if (!snippets || !Array.isArray(snippets) || snippets.length === 0) return '';
+
+  const grouped: Record<string, MemorySnippet[]> = {};
+  for (const s of snippets) {
+    const domainKey = (s.domain || 'GENERAL').trim().toUpperCase();
+    if (!grouped[domainKey]) {
+      grouped[domainKey] = [];
+    }
+    grouped[domainKey].push(s);
+  }
+
+  const sections: string[] = [];
+  for (const [domain, list] of Object.entries(grouped)) {
+    const lines: string[] = [];
+    lines.push(`[PROJECT CONVENTIONS: ${domain}]`);
+    for (const item of list) {
+      if (item.title) {
+        lines.push(`### ${item.title}`);
+      }
+      if (item.content) {
+        lines.push(item.content.trim());
+      }
+    }
+    lines.push(`[/PROJECT CONVENTIONS: ${domain}]`);
+    sections.push(lines.join('\n'));
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Evaluates whether LSP context pruning is enabled from persisted storage value.
+ */
+export function isLspPruningEnabled(storageValue?: string | null): boolean {
+  return storageValue !== 'false';
+}
+
+/**
+ * Evaluates whether domain-aware memory filtering is enabled from persisted storage value.
+ */
+export function isDomainMemoryEnabled(storageValue?: string | null): boolean {
+  return storageValue !== 'false';
+}
+
+/**
+ * Builds prompt with smart context & domain memory with graceful fallback
+ * when pruning is disabled or backend fails.
+ */
+export function buildSmartContextPrompt(
+  rawPrompt: string,
+  pruned?: PrunedContextResult | null,
+  memory?: MemorySnippet[] | null
+): string {
+  const parts: string[] = [];
+
+  if (memory && Array.isArray(memory) && memory.length > 0) {
+    const memFormatted = formatDomainMemoryForPrompt(memory);
+    if (memFormatted) {
+      parts.push(memFormatted);
+    }
+  }
+
+  if (pruned && pruned.filePath) {
+    const prunedFormatted = formatPrunedContextForPrompt(pruned);
+    if (prunedFormatted) {
+      parts.push(prunedFormatted);
+    }
+  }
+
+  parts.push(rawPrompt.trim());
+  return parts.join('\n\n');
+}
+
 
 
 

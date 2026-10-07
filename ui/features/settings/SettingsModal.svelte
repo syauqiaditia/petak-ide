@@ -1463,6 +1463,32 @@
                     onchange={() => agentsStore.toggleSelfImprove()}
                   />
                 </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-meta">
+                    <span class="setting-label">LSP Context Pruning (Outline & Diagnostics)</span>
+                    <span class="setting-hint">Pangkas 60–80% token dengan mengekstrak signature simbol, fungsi, class outline, dan diagnostics aktif.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    class="toggle-checkbox"
+                    checked={settingsStore.lspContextPruning}
+                    onchange={(e) => settingsStore.setLspContextPruning((e.target as HTMLInputElement).checked)}
+                  />
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-meta">
+                    <span class="setting-label">Domain-Aware Memory Filtering</span>
+                    <span class="setting-hint">Saring aturan memori Obsidian berdasarkan domain berkas aktif dan suntikkan otomatis via header <code>[PROJECT CONVENTIONS: &lt;DOMAIN&gt;]</code>.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    class="toggle-checkbox"
+                    checked={settingsStore.domainMemoryFiltering}
+                    onchange={(e) => settingsStore.setDomainMemoryFiltering((e.target as HTMLInputElement).checked)}
+                  />
+                </div>
               </div>
 
               <!-- Section 5: Manajemen Skills & Disiplin -->
