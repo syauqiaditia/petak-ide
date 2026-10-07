@@ -48,6 +48,21 @@
     lspFailures.length + fileEntries.reduce((sum, f) => sum + f.diags.length, 0)
   );
 
+  let totalErrors = $derived(
+    lspFailures.length +
+      fileEntries.reduce(
+        (sum, f) => sum + f.diags.filter((d) => d.severity === 'error').length,
+        0
+      )
+  );
+
+  let totalWarnings = $derived(
+    fileEntries.reduce(
+      (sum, f) => sum + f.diags.filter((d) => d.severity === 'warning').length,
+      0
+    )
+  );
+
   let flatDiags = $derived.by(() => {
     const list: { path: string; line: number; col: number }[] = [];
     for (const f of fileEntries) {
@@ -91,14 +106,14 @@
         class:active={severityFilter === 'error'}
         onclick={() => (severityFilter = 'error')}
       >
-        Errors
+        Errors ({totalErrors})
       </button>
       <button
         class="pill-btn warning"
         class:active={severityFilter === 'warning'}
         onclick={() => (severityFilter = 'warning')}
       >
-        Warnings
+        Warnings ({totalWarnings})
       </button>
     </div>
 
@@ -219,7 +234,8 @@
                 </div>
 
                 <div class="problem-loc">
-                  {file.filename}:{diag.line}:{diag.col}
+                  <span class="problem-loc-badge">{file.filename}:{diag.line}:{diag.col}</span>
+                  <span class="jump-link-action" title="Jump to {file.filename}:{diag.line}">Jump ↗</span>
                 </div>
               </div>
             {/each}
@@ -243,11 +259,13 @@
     overflow: hidden;
   }
   .problems-toolbar {
-    height: 32px;
-    padding: 0 10px;
+    min-height: 32px;
+    height: auto;
+    padding: 4px 10px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     background: #111215;
     border-bottom: 1px solid #1f2127;
     flex-shrink: 0;
@@ -293,7 +311,10 @@
     font-size: 11px;
     color: #e0e2e8;
     outline: none;
-    width: 220px;
+    min-width: 140px;
+    flex-grow: 1;
+    max-width: 280px;
+    font-family: inherit;
   }
   .problems-search:focus {
     border-color: #569aff;
@@ -446,5 +467,34 @@
     color: #8b8f98;
     font-size: 11px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .problem-loc-badge {
+    background: #1a1c22;
+    border: 1px solid #282a32;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 10.5px;
+    color: #8f94a0;
+  }
+  .jump-link-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 10.5px;
+    color: #6ea8ff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(110, 168, 255, 0.08);
+    border: 1px solid rgba(110, 168, 255, 0.25);
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .problem-row:hover .jump-link-action {
+    background: rgba(110, 168, 255, 0.22);
+    border-color: #6ea8ff;
+    color: #b3d3ff;
   }
 </style>

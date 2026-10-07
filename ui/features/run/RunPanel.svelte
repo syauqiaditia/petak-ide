@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { runStore } from './runStore.svelte';
   import { formatAppState } from './logic';
+  import { findMatchingLineIndices, formatRunLogLineHtml } from './ansi';
 
   let outputContainer: HTMLDivElement;
   let userScrolledUp = false;
@@ -14,28 +15,40 @@
 
   let stateInfo = $derived(formatAppState(runStore.state));
 
-  let filteredLines = $derived.by(() => {
+  // Retain all output lines without filtering away
+  let allLines = $derived(runStore.outputLines);
+
+  let matchingLineIndices = $derived.by(() => {
     const q = searchQuery.trim();
-    if (!q) return runStore.outputLines;
-    try {
-      const pattern = isRegex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(pattern, caseSensitive ? '' : 'i');
-      return runStore.outputLines.filter((l) => re.test(l.line));
-    } catch {
-      return runStore.outputLines.filter((l) =>
-        caseSensitive ? l.line.includes(q) : l.line.toLowerCase().includes(q.toLowerCase())
-      );
+    if (!q) return [];
+    return findMatchingLineIndices(runStore.outputLines, q, { caseSensitive, isRegex });
+  });
+
+  $effect(() => {
+    // Clamp selectedMatchIdx when matches change
+    if (matchingLineIndices.length > 0 && selectedMatchIdx >= matchingLineIndices.length) {
+      selectedMatchIdx = 0;
     }
   });
 
   function handlePrevMatch() {
-    if (filteredLines.length === 0) return;
-    selectedMatchIdx = (selectedMatchIdx - 1 + filteredLines.length) % filteredLines.length;
+    if (matchingLineIndices.length === 0) return;
+    selectedMatchIdx = (selectedMatchIdx - 1 + matchingLineIndices.length) % matchingLineIndices.length;
+    scrollToMatch(matchingLineIndices[selectedMatchIdx]);
   }
 
   function handleNextMatch() {
-    if (filteredLines.length === 0) return;
-    selectedMatchIdx = (selectedMatchIdx + 1) % filteredLines.length;
+    if (matchingLineIndices.length === 0) return;
+    selectedMatchIdx = (selectedMatchIdx + 1) % matchingLineIndices.length;
+    scrollToMatch(matchingLineIndices[selectedMatchIdx]);
+  }
+
+  function scrollToMatch(lineIdx: number) {
+    if (!outputContainer) return;
+    const targetEl = outputContainer.querySelector(`[data-line-idx="${lineIdx}"]`) as HTMLElement;
+    if (targetEl) {
+      targetEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   }
 
   function handleScroll() {
@@ -64,7 +77,7 @@
 </script>
 
 <div class="run-panel">
-  <!-- Toolbar -->
+  <!-- Toolbar: Responsive & Compact -->
   <div class="toolbar">
     <div class="status-indicator">
       <span class="dot" style:background={stateInfo.dotColor}></span>
@@ -79,109 +92,109 @@
       {/if}
     </div>
 
-    <div class="spacer"></div>
+    <div class="toolbar-actions">
+      <label class="setting-toggle" title="Auto hot-reload when saving files">
+        <input
+          type="checkbox"
+          checked={runStore.hotReloadOnSave}
+          onchange={(e) => runStore.setHotReloadOnSave((e.target as HTMLInputElement).checked)}
+        />
+        <span>Reload on save</span>
+      </label>
 
-    <label class="setting-toggle" title="Auto hot-reload when saving files">
-      <input
-        type="checkbox"
-        checked={runStore.hotReloadOnSave}
-        onchange={(e) => runStore.setHotReloadOnSave((e.target as HTMLInputElement).checked)}
-      />
-      <span>Reload on save</span>
-    </label>
+      {#if runStore.devtoolsUri}
+        <button
+          class="devtools-btn"
+          onclick={() => runStore.openDevTools()}
+          title="Open Flutter DevTools in browser"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+          DevTools
+        </button>
+      {/if}
 
-    {#if runStore.devtoolsUri}
       <button
-        class="devtools-btn"
-        onclick={() => runStore.openDevTools()}
-        title="Open Flutter DevTools in browser"
+        class="action-btn restart-action-btn"
+        onclick={() => runStore.restartDaemon()}
+        title="Restart Flutter Daemon"
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-          <polyline points="15 3 21 3 21 9"></polyline>
-          <line x1="10" y1="14" x2="21" y2="3"></line>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
         </svg>
-        DevTools
-      </button>
-    {/if}
-
-    <button
-      class="action-btn restart-action-btn"
-      onclick={() => runStore.restartDaemon()}
-      title="Restart Flutter Daemon"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
-      </svg>
-      Restart Flutter Daemon
-    </button>
-
-    <button
-      class="action-btn restart-action-btn"
-      onclick={() => runStore.restartConnection()}
-      title="Restart connection"
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="23 4 23 10 17 10"></polyline>
-        <polyline points="1 20 1 14 7 14"></polyline>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-      </svg>
-      Restart connection
-    </button>
-
-    {#if runStore.state === 'running' || runStore.state === 'reloading'}
-      <button
-        class="action-btn reload-btn"
-        onclick={() => runStore.reload(false)}
-        title="Hot Reload"
-        disabled={runStore.isReloading}
-      >
-        ⚡ Reload
+        Daemon
       </button>
 
       <button
-        class="action-btn restart-btn"
-        onclick={() => runStore.hotRestart()}
-        title="Hot Restart"
-        disabled={runStore.isReloading}
+        class="action-btn restart-action-btn"
+        onclick={() => runStore.restartConnection()}
+        title="Restart connection"
       >
-        🔄 Hot Restart
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        Reconnect
+      </button>
+
+      {#if runStore.state === 'running' || runStore.state === 'reloading'}
+        <button
+          class="action-btn reload-btn"
+          onclick={() => runStore.reload(false)}
+          title="Hot Reload"
+          disabled={runStore.isReloading}
+        >
+          ⚡ Reload
+        </button>
+
+        <button
+          class="action-btn restart-btn"
+          onclick={() => runStore.hotRestart()}
+          title="Hot Restart"
+          disabled={runStore.isReloading}
+        >
+          🔄 Restart
+        </button>
+
+        <button
+          class="action-btn stop-btn"
+          onclick={() => runStore.stopRun()}
+          title="Stop"
+        >
+          ⏹ Stop
+        </button>
+      {/if}
+
+      <button
+        class="action-btn pause-toggle-btn"
+        class:is-paused={isPaused}
+        onclick={() => (isPaused = !isPaused)}
+        title={isPaused ? "Resume auto-scroll" : "Pause auto-scroll"}
+      >
+        {isPaused ? "▶ Resume" : "⏸ Pause"}
       </button>
 
       <button
-        class="action-btn stop-btn"
-        onclick={() => runStore.stopRun()}
-        title="Stop"
+        class="clear-btn"
+        onclick={() => runStore.clearOutput()}
+        title="Clear console output"
       >
-        ⏹ Stop
+        Clear
       </button>
-    {/if}
-
-    <button
-      class="action-btn"
-      class:is-paused={isPaused}
-      onclick={() => (isPaused = !isPaused)}
-      title={isPaused ? "Resume auto-scroll" : "Pause auto-scroll"}
-    >
-      {isPaused ? "▶ Resume" : "⏸ Pause"}
-    </button>
-
-    <button
-      class="clear-btn"
-      onclick={() => runStore.clearOutput()}
-      title="Clear console output"
-    >
-      Clear
-    </button>
+    </div>
   </div>
 
-  <!-- Search Filter Bar (Item 14) -->
+  <!-- Search Filter Bar (Full retention, jump to match) -->
   <div class="search-bar">
     <div class="search-input-group">
       <input
         type="text"
         class="search-input"
-        placeholder="Filter run logs…"
+        placeholder="Search run logs…"
         bind:value={searchQuery}
       />
       <button
@@ -204,33 +217,42 @@
 
     {#if searchQuery.trim()}
       <div class="match-info">
-        <span>{filteredLines.length} {filteredLines.length === 1 ? 'match' : 'matches'}</span>
-        <button class="arrow-btn" onclick={handlePrevMatch} title="Previous match">▲</button>
-        <button class="arrow-btn" onclick={handleNextMatch} title="Next match">▼</button>
+        <span>
+          {matchingLineIndices.length > 0 ? `${selectedMatchIdx + 1} of ${matchingLineIndices.length}` : '0 matches'}
+        </span>
+        <button class="arrow-btn" onclick={handlePrevMatch} title="Previous match (▲)" disabled={matchingLineIndices.length <= 1}>▲</button>
+        <button class="arrow-btn" onclick={handleNextMatch} title="Next match (▼)" disabled={matchingLineIndices.length <= 1}>▼</button>
       </div>
     {/if}
   </div>
 
-  <!-- Output console -->
+  <!-- Output console (all lines preserved) -->
   <div
     class="console-output"
     bind:this={outputContainer}
     onscroll={handleScroll}
   >
-    {#if filteredLines.length === 0}
+    {#if allLines.length === 0}
       <div class="empty-output">
-        {#if searchQuery.trim()}
-          No lines matching "{searchQuery}"
-        {:else if runStore.state === 'stopped'}
+        {#if runStore.state === 'stopped'}
           Console output is empty. Press Run to start the application.
         {:else}
           Waiting for application output...
         {/if}
       </div>
     {:else}
-      {#each filteredLines as line (line.id)}
-        <div class="log-line" class:stderr={line.stream === 'stderr'}>
-          <span class="line-content">{line.line}</span>
+      {#each allLines as line, idx (line.id || idx)}
+        <div
+          class="log-line"
+          class:stderr={line.stream === 'stderr'}
+          class:is-matched-line={matchingLineIndices.includes(idx)}
+          class:is-active-match={matchingLineIndices.length > 0 && matchingLineIndices[selectedMatchIdx] === idx}
+          data-line-idx={idx}
+        >
+          <span class="line-content">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            {@html formatRunLogLineHtml(line.line, line.stream, searchQuery, matchingLineIndices.length > 0 && matchingLineIndices[selectedMatchIdx] === idx, { caseSensitive, isRegex })}
+          </span>
         </div>
       {/each}
     {/if}
@@ -247,12 +269,15 @@
     overflow: hidden;
   }
   .toolbar {
-    height: 32px;
+    min-height: 32px;
+    height: auto;
     flex-shrink: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
-    padding: 0 12px;
+    justify-content: space-between;
+    gap: 6px 12px;
+    padding: 4px 10px;
     border-bottom: 1px solid #222428;
     background: #141518;
   }
@@ -261,6 +286,13 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
+    flex-wrap: wrap;
+  }
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
   }
   .dot {
     width: 6px;
@@ -281,9 +313,6 @@
     padding: 1px 6px;
     border-radius: 4px;
     font-weight: 500;
-  }
-  .spacer {
-    flex-grow: 1;
   }
   .setting-toggle {
     display: flex;
@@ -324,6 +353,18 @@
     cursor: pointer;
     border: none;
     transition: background 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .restart-action-btn {
+    background: #1e2025;
+    color: #c4c7cf;
+    border: 1px solid #2c2e35;
+  }
+  .restart-action-btn:hover {
+    background: #262930;
+    color: #ffffff;
   }
   .reload-btn {
     background: #1f3325;
@@ -348,6 +389,16 @@
   }
   .stop-btn:hover {
     background: #4a2629;
+  }
+  .pause-toggle-btn {
+    background: #1c1d22;
+    color: #8b8f98;
+    border: 1px solid #2c2e34;
+  }
+  .pause-toggle-btn.is-paused {
+    background: #3b2a1a;
+    color: #f59e0b;
+    border-color: #5c3e1e;
   }
   .action-btn:disabled {
     opacity: 0.5;
@@ -428,9 +479,13 @@
     font-size: 9px;
     cursor: pointer;
   }
-  .arrow-btn:hover {
+  .arrow-btn:hover:not(:disabled) {
     background: #252830;
     color: #ffffff;
+  }
+  .arrow-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
   .console-output {
     flex: 1;
@@ -453,9 +508,31 @@
     color: #d8d9dc;
     white-space: pre-wrap;
     word-break: break-all;
+    border-radius: 2px;
+    padding: 0 4px;
+    transition: background 0.1s ease;
   }
   .log-line.stderr {
     color: #f07a74;
     background: rgba(240, 122, 116, 0.08);
+  }
+  .log-line.is-matched-line {
+    background: rgba(234, 179, 8, 0.06);
+  }
+  .log-line.is-active-match {
+    background: rgba(234, 179, 8, 0.18);
+    border-left: 2px solid #f59e0b;
+    padding-left: 6px;
+  }
+  :global(.run-search-highlight) {
+    background: rgba(234, 179, 8, 0.35);
+    color: #ffffff;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  :global(.run-search-highlight.is-active) {
+    background: #f59e0b;
+    color: #000000;
+    font-weight: 600;
   }
 </style>

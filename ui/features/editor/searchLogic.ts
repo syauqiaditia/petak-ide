@@ -86,3 +86,13 @@ export function replaceAll(
   });
   return { newDocText, count };
 }
+
+/**
+ * Automatically populates search query from editor active selection.
+ * Single-line only (extracts the first line if multiline text is selected).
+ */
+export function getSearchQueryFromSelection(selectedText?: string | null): string {
+  if (!selectedText) return '';
+  const firstLine = selectedText.split(/\r?\n/)[0] ?? '';
+  return firstLine;
+}

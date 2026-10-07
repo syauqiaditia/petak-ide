@@ -236,6 +236,13 @@ const hoverKeymap = keymap.of([
   },
 ]);
 
+import {
+  shouldPlaceHoverAbove,
+  computeTooltipMaxWidth,
+} from './hoverLogic.ts';
+
+export { shouldPlaceHoverAbove, computeTooltipMaxWidth };
+
 export function createLspHoverExtension(getPath: () => string | null): Extension {
   return [
     hoverTooltip(
@@ -272,8 +279,11 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
 
           const visualPos = view.coordsAtPos(from);
           const editorRect = view.dom.getBoundingClientRect();
-          // Never place above if token is within top 240px of editor (avoids overlapping code near top)
-          const placeAbove = visualPos ? (visualPos.top - editorRect.top > 240) : false;
+          const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+          const bottomDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
+          const bottomDockTop = bottomDockEl ? bottomDockEl.getBoundingClientRect().top : null;
+
+          const placeAbove = shouldPlaceHoverAbove(visualPos, editorRect, viewportHeight, bottomDockTop);
 
           return {
             pos: from,
@@ -326,7 +336,7 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
                 const domRect = dom.getBoundingClientRect();
 
                 // Dynamic max width to always stay inside visible editor area
-                const maxAllowedWidth = Math.max(260, editorRect.width - 24);
+                const maxAllowedWidth = computeTooltipMaxWidth(editorRect.width, domRect.left, editorRect.right);
                 dom.style.maxWidth = `${maxAllowedWidth}px`;
 
                 // If right dock/panel causes tooltip to overflow right edge of visible editor
