@@ -18,6 +18,7 @@ fn make_fake_slot_config(id: &str, label: &str) -> SlotConfig {
         id: id.to_string(),
         label: label.to_string(),
         kind: "acp-custom".to_string(),
+        engine: Some("acp-custom".to_string()),
         command: Some(format!("node {}", script.to_string_lossy())),
         hermes_profile: None,
         model: Some("fake-model-alpha".to_string()),

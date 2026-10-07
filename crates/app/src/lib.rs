@@ -331,6 +331,7 @@ pub fn run() {
             commands::agent_cancel,
             commands::agent_stop,
             commands::agent_detect_hermes,
+            commands::agent_get_supported_engines,
             commands::agent_load_team,
             commands::agent_save_team,
             commands::agent_add_slot,

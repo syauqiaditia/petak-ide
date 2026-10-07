@@ -32,8 +32,9 @@ import type {
   MemoryItem,
   SkillSummary,
   Skill,
+  SupportedEngineInfo,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill };
+export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2129,6 +2130,19 @@ export const api = {
       return DEMO_HERMES_DETECTION;
     }
     return invoke<HermesDetectionResult>('agent_detect_hermes');
+  },
+
+  async agentGetSupportedEngines(): Promise<SupportedEngineInfo[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      return [
+        { id: 'hermes', name: 'Hermes Agent', detected: true, status: 'Hermes profiles found', allowedModels: ['ag/gemini-3.8-flash-high'], defaultModel: 'ag/gemini-3.8-flash-high' },
+        { id: 'claude-code', name: 'Claude Code', detected: true, status: 'npx found', allowedModels: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'], defaultModel: 'claude-3-7-sonnet' },
+        { id: 'antigravity', name: 'Antigravity', detected: true, status: '9Router online', allowedModels: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'], defaultModel: 'ag/gemini-3.8-flash-high' },
+        { id: 'openai', name: 'OpenAI Codex', detected: true, status: 'API key found', allowedModels: ['gpt-4o', 'o3-mini', 'o1'], defaultModel: 'gpt-4o' },
+        { id: 'acp-custom', name: 'Custom ACP', detected: true, status: 'Custom command', allowedModels: [], defaultModel: null },
+      ];
+    }
+    return invoke<SupportedEngineInfo[]>('agent_get_supported_engines');
   },
 
   async agentLoadTeam(): Promise<TeamConfig> {

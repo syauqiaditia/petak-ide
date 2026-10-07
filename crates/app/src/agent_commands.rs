@@ -1,7 +1,7 @@
 use petak_core::agent::{
     HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult, MemoryItem,
     PendingPermissionRequest, PromptResponse, Proposal, Skill, SkillSummary, SlotConfig,
-    SlotManager, SlotSummary, TeamConfig, UsageReport,
+    SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig, UsageReport,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -93,6 +93,22 @@ pub async fn agent_detect_hermes(
     let root = state.manager.project_root();
     tauri::async_runtime::spawn_blocking(move || {
         Ok(petak_core::agent::detect_hermes(root.as_deref()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Multi-Engine Detection ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_supported_engines(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<SupportedEngineInfo>, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::get_supported_engines(root.as_deref()))
     })
     .await
     .map_err(|e| e.to_string())?
