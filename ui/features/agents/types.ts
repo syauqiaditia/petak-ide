@@ -330,5 +330,29 @@ export interface WorktreeInfo {
   created_at: number;
 }
 
+// ── Self-Healing Loop & Ghost Diff Types (Phase 5) ─────────────────────────
+
+export type SelfHealPhase = 'idle' | 'hot_reloading' | 'testing' | 'passed' | 'failed' | 'paused';
+
+export interface SelfHealStatus {
+  task_id: string;
+  active_file: string;
+  status: SelfHealPhase;
+  attempt: number;
+  max_attempts: number;
+  error?: string;
+  last_verified_at?: number;
+}
+
+export interface SelfHealResult {
+  task_id: string;
+  success: boolean;
+  attempts: number;
+  status: SelfHealPhase;
+  message: string;
+  diagnosis_prompt?: string;
+}
+
+
 
 

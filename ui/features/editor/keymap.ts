@@ -16,6 +16,7 @@ import {
 import { indentMore, indentLess } from '@codemirror/commands';
 import { getCM } from '@replit/codemirror-vim';
 import { acceptGhostText, dismissGhostText } from './ghostText.ts';
+import { acceptGhostDiff, dismissGhostDiff } from './ghostDiff.ts';
 
 /**
  * Returns true if Vim mode is active AND NOT in insert mode (i.e. normal or visual mode).
@@ -77,7 +78,12 @@ export function createEditorKeyBindings(): KeyBinding[] {
           return true;
         }
 
-        // 2. Accept inline ghost text if present
+        // 2. Accept inline ghost diff if present
+        if (acceptGhostDiff(view)) {
+          return true;
+        }
+
+        // 3. Accept inline ghost text if present
         if (acceptGhostText(view)) {
           return true;
         }
@@ -143,7 +149,11 @@ export function createEditorKeyBindings(): KeyBinding[] {
         if (closeCompletion(view)) {
           return true;
         }
-        // 2. Dismiss inline ghost-text if active
+        // 2. Dismiss inline ghost diff if active
+        if (dismissGhostDiff(view)) {
+          return true;
+        }
+        // 3. Dismiss inline ghost-text if active
         if (dismissGhostText(view)) {
           return true;
         }

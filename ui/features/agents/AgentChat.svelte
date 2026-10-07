@@ -8,8 +8,18 @@
     formatTokenSavingsPill,
     formatPrunedContextForPrompt,
     formatDomainMemoryForPrompt,
+    formatSelfHealStatus,
   } from './agentsLogic';
-  import type { ChatMessage, PendingPermissionRequest, PermissionMode, PrunedContextResult, MemorySnippet } from './types';
+  import type {
+    ChatMessage,
+    PendingPermissionRequest,
+    PermissionMode,
+    PrunedContextResult,
+    MemorySnippet,
+    SelfHealStatus,
+    SelfHealResult,
+    SelfHealPhase,
+  } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
   import { skillsStore } from './skillsStore.svelte';
@@ -48,6 +58,29 @@
     ((activeSlot?.config?.permission as PermissionMode) || 'ask')
   );
 
+  let isSelfHealActive = $state(true);
+  let selfHealStatus = $state<SelfHealStatus | null>(null);
+  let selfHealInfo = $derived(
+    formatSelfHealStatus(
+      selfHealStatus?.status || 'idle',
+      selfHealStatus?.attempt || 0,
+      selfHealStatus?.max_attempts || 3
+    )
+  );
+
+  async function checkSelfHealStatus() {
+    if (!activeSlot) return;
+    try {
+      selfHealStatus = await api.agentGetSelfHealStatus(activeSlot.id);
+    } catch {
+      // ignore
+    }
+  }
+
+  function toggleSelfHeal() {
+    isSelfHealActive = !isSelfHealActive;
+  }
+
   $effect(() => {
     // Scroll to bottom on new messages or streaming changes
     if (messages.length || agentsStore.streamingContent) {
@@ -58,6 +91,7 @@
   onMount(() => {
     mcpStore.loadConfig();
     skillsStore.loadSkills();
+    checkSelfHealStatus();
   });
 
   async function scrollToBottom() {
@@ -491,6 +525,34 @@
         </div>
       </div>
     {/if}
+
+    <!-- Interactive Self-Healing Loop Verification Status -->
+    {#if selfHealStatus && selfHealStatus.status !== 'idle'}
+      <div class="self-heal-status-banner {selfHealInfo.cssClass}">
+        <div class="status-banner-content">
+          <span class="status-banner-icon">{selfHealInfo.icon}</span>
+          <span class="status-banner-text">{selfHealInfo.label}</span>
+          {#if selfHealStatus.active_file}
+            <code class="status-banner-file">{selfHealStatus.active_file}</code>
+          {/if}
+        </div>
+        {#if selfHealStatus.status === 'failed' || selfHealStatus.status === 'paused'}
+          <div class="status-banner-actions">
+            <button
+              type="button"
+              class="self-heal-retry-btn"
+              onclick={() => {
+                if (activeSlot) {
+                  api.agentTriggerSelfHeal(activeSlot.id, selfHealStatus?.active_file || 'lib/main.dart').then(() => checkSelfHealStatus());
+                }
+              }}
+            >
+              🔄 Retry Self-Heal
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <!-- Floating Context Composer with Interactive Context Pills -->
@@ -707,6 +769,17 @@
           title={`Model Context Protocol: ${mcpStore.activeCount} server aktif. Klik untuk buka pengaturan MCP.`}
         >
           <span>{formatMcpPillLabel(mcpStore.activeCount)}</span>
+        </button>
+
+        <!-- Self-Heal Context Pill: 🔄 Self-Heal: Auto (Hot Reload + Test) -->
+        <button
+          type="button"
+          class="context-pill self-heal"
+          class:active={isSelfHealActive}
+          onclick={toggleSelfHeal}
+          title="Self-Healing Loop: Otomatis Hot Reload dan Maestro verification flow setelah patch code"
+        >
+          <span>{isSelfHealActive ? '🔄 Self-Heal: Auto (Hot Reload + Test)' : '🔄 Self-Heal: OFF'}</span>
         </button>
 
         <!-- Custom Skills Context Pills (Render ONLY active custom skills to prevent badge flood) -->
@@ -1416,6 +1489,105 @@
     border-color: rgba(96, 165, 250, 0.4);
     background: rgba(96, 165, 250, 0.15);
     font-weight: 600;
+  }
+
+  .context-pill.self-heal {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .context-pill.self-heal.active {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.15);
+    font-weight: 600;
+  }
+
+  .self-heal-status-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 12px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #181a1f;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .status-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .status-banner-icon {
+    font-size: 13px;
+  }
+
+  .status-banner-text {
+    font-weight: 500;
+  }
+
+  .status-banner-file {
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    color: #94a3b8;
+  }
+
+  .status-banner-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .self-heal-retry-btn {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f1f5f9;
+    font-weight: 500;
+  }
+
+  .self-heal-retry-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .self-heal-status-banner.self-heal-hot-reloading {
+    border-color: rgba(234, 179, 8, 0.4);
+    background: rgba(234, 179, 8, 0.12);
+    color: #facc15;
+  }
+
+  .self-heal-status-banner.self-heal-testing {
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+  }
+
+  .self-heal-status-banner.self-heal-passed {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.12);
+    color: #4ade80;
+  }
+
+  .self-heal-status-banner.self-heal-failed {
+    border-color: rgba(249, 115, 22, 0.4);
+    background: rgba(249, 115, 22, 0.12);
+    color: #fb923c;
+  }
+
+  .self-heal-status-banner.self-heal-paused {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
   }
 
   .context-pill.custom-skill {
