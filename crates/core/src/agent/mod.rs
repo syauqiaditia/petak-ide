@@ -11,6 +11,7 @@ pub mod skills;
 pub mod slot;
 pub mod team;
 pub mod usage;
+pub mod worktree;
 
 pub use acp::{
     AcpClient, AcpError, AcpInitializeResult, AcpSessionNewResult, ModelOption, PromptResponse,
@@ -60,3 +61,7 @@ pub use slot::{
 };
 pub use team::{global_team_path, load_team, project_team_path, save_team, TeamConfig};
 pub use usage::{parse_usage, UsageReport};
+pub use worktree::{
+    create_worktree, get_worktree_diff, list_worktrees, remove_worktree, sanitize_branch_name,
+    sanitize_task_id, WorktreeInfo, WorktreeManager,
+};

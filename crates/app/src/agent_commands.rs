@@ -2,7 +2,7 @@ use petak_core::agent::{
     get_all_role_scopes, HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult,
     MemoryItem, MemorySnippet, PendingPermissionRequest, PromptResponse, Proposal,
     PrunedContextResult, RoleScopeInfo, Skill, SkillSummary, SlotConfig, SlotManager, SlotSummary,
-    SupportedEngineInfo, TeamConfig, UsageReport,
+    SupportedEngineInfo, TeamConfig, UsageReport, WorktreeInfo,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -533,6 +533,78 @@ pub async fn agent_get_relevant_memory(
             root.as_deref(),
             active_file.as_deref(),
         ))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Worktree Cockpit & Lane Management ──────────────────────────────────────
+
+fn resolve_worktree_root(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AgentState>,
+) -> Result<std::path::PathBuf, String> {
+    sync_project_root(app, &state.manager);
+    if let Some(r) = state.manager.project_root() {
+        return Ok(r);
+    }
+    if let Some(r) = resolve_effective_root(app, None) {
+        return Ok(r);
+    }
+    std::env::current_dir().map_err(|e| format!("Failed to determine working directory: {}", e))
+}
+
+#[tauri::command]
+pub async fn agent_worktree_list(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<WorktreeInfo>, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || petak_core::agent::list_worktrees(&root))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_worktree_create(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+    branch: String,
+    base_branch: Option<String>,
+) -> Result<WorktreeInfo, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::create_worktree(&root, &task_id, &branch, base_branch.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_worktree_diff(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+) -> Result<String, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::get_worktree_diff(&root, &task_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_worktree_remove(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+    delete_branch: bool,
+) -> Result<(), String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::remove_worktree(&root, &task_id, delete_branch)
     })
     .await
     .map_err(|e| e.to_string())?
