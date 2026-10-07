@@ -377,6 +377,11 @@ fn parse_domain_memory_snippets(filename: &str, content: &str) -> Vec<MemorySnip
     snippets
 }
 
+pub const CORE_MEMORY_ALLOWLIST: &[&str] =
+    &["conventions.md", "rules.md", "gotchas.md", "lessons.md"];
+
+pub const MAX_MEMORY_SNIPPET_BUDGET_CHARS: usize = 1500;
+
 pub fn get_domain_relevant_memory(
     project_root: Option<&Path>,
     active_file: Option<&str>,
@@ -391,27 +396,9 @@ pub fn get_domain_relevant_memory(
     }
 
     let mut files_to_read = Vec::new();
-    let priority_names = ["conventions.md", "gotchas.md", "lessons.md", "rules.md"];
-    for name in &priority_names {
+    for name in CORE_MEMORY_ALLOWLIST {
         if dir.join(name).is_file() {
             files_to_read.push(name.to_string());
-        }
-    }
-
-    if let Ok(entries) = fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            if let Ok(ft) = entry.file_type() {
-                if ft.is_file() {
-                    let fname = entry.file_name().to_string_lossy().to_string();
-                    if fname.to_ascii_lowercase().ends_with(".md")
-                        && !files_to_read.iter().any(|f| f.eq_ignore_ascii_case(&fname))
-                    {
-                        if validate_memory_filename(&fname).is_ok() {
-                            files_to_read.push(fname);
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -448,7 +435,33 @@ pub fn get_domain_relevant_memory(
             .then_with(|| a.title.cmp(&b.title))
     });
 
-    snippets
+    let mut budgeted_snippets = Vec::new();
+    let mut accumulated_len = 0;
+
+    for mut snippet in snippets {
+        if accumulated_len >= MAX_MEMORY_SNIPPET_BUDGET_CHARS {
+            break;
+        }
+
+        let remaining = MAX_MEMORY_SNIPPET_BUDGET_CHARS - accumulated_len;
+        if snippet.content.len() <= remaining {
+            accumulated_len += snippet.content.len();
+            budgeted_snippets.push(snippet);
+        } else {
+            let mut split_idx = remaining;
+            while split_idx > 0 && !snippet.content.is_char_boundary(split_idx) {
+                split_idx -= 1;
+            }
+            if split_idx > 0 {
+                let truncated = snippet.content[..split_idx].to_string();
+                snippet.content = truncated;
+                budgeted_snippets.push(snippet);
+            }
+            break;
+        }
+    }
+
+    budgeted_snippets
 }
 
 #[cfg(test)]
@@ -618,5 +631,127 @@ Always write tests before code commits.
         // Passing path traversal in active_file shouldn't panic or escape
         let snippets = get_domain_relevant_memory(Some(root), Some("../../../etc/passwd"));
         assert!(snippets.is_empty());
+    }
+
+    #[test]
+    fn test_domain_memory_strict_allowlist() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+
+        let mem_dir = root.join(".petak").join("memory");
+        fs::create_dir_all(&mem_dir).unwrap();
+
+        // Write allowed core files
+        fs::write(
+            mem_dir.join("conventions.md"),
+            "# General Conventions\nFollow naming conventions.",
+        )
+        .unwrap();
+        fs::write(
+            mem_dir.join("rules.md"),
+            "# Core Rules\nFollow project rules.",
+        )
+        .unwrap();
+        fs::write(
+            mem_dir.join("gotchas.md"),
+            "# Project Gotchas\nWatch out for race conditions.",
+        )
+        .unwrap();
+        fs::write(
+            mem_dir.join("lessons.md"),
+            "# Past Lessons\nAlways test error paths.",
+        )
+        .unwrap();
+
+        // Write non-allowlist feature documentation files
+        fs::write(
+            mem_dir.join("voip.md"),
+            "# VoIP Architecture\nArbitrary VoIP documentation details.",
+        )
+        .unwrap();
+        fs::write(
+            mem_dir.join("architecture.md"),
+            "# Architecture\nOverall system design.",
+        )
+        .unwrap();
+        fs::write(
+            mem_dir.join("overview.md"),
+            "# Overview\nProject overview document.",
+        )
+        .unwrap();
+        fs::write(
+            mem_dir.join("api.md"),
+            "# API Reference\nREST and gRPC endpoints.",
+        )
+        .unwrap();
+
+        let snippets = get_domain_relevant_memory(Some(root), None);
+
+        // Core allowlist files must be scanned
+        assert!(snippets.iter().any(|s| s.source_file == "conventions.md"));
+        assert!(snippets.iter().any(|s| s.source_file == "rules.md"));
+        assert!(snippets.iter().any(|s| s.source_file == "gotchas.md"));
+        assert!(snippets.iter().any(|s| s.source_file == "lessons.md"));
+
+        // Arbitrary documentation files must be strictly excluded
+        assert!(!snippets.iter().any(|s| s.source_file == "voip.md"));
+        assert!(!snippets.iter().any(|s| s.source_file == "architecture.md"));
+        assert!(!snippets.iter().any(|s| s.source_file == "overview.md"));
+        assert!(!snippets.iter().any(|s| s.source_file == "api.md"));
+
+        // UI viewer list_project_memory remains capable of listing all memory files
+        let all_mem_items = list_project_memory(Some(root)).unwrap();
+        assert!(all_mem_items.iter().any(|m| m.filename == "voip.md"));
+        assert!(all_mem_items.iter().any(|m| m.filename == "conventions.md"));
+    }
+
+    #[test]
+    fn test_domain_memory_budget_cap() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+
+        let mem_dir = root.join(".petak").join("memory");
+        fs::create_dir_all(&mem_dir).unwrap();
+
+        // 1. Multiple snippets exceeding 1,500 chars total
+        let chunk_a = "Rust safety guidelines and patterns. ".repeat(30); // ~1110 chars
+        let chunk_b = "More Rust memory rules and borrow tips. ".repeat(30); // ~1200 chars
+        let chunk_c = "General notes for developers. ".repeat(30); // ~900 chars
+
+        let content = format!(
+            "# Rust Safety\n{}\n\n# Rust Performance\n{}\n\n# General Notes\n{}",
+            chunk_a, chunk_b, chunk_c
+        );
+        fs::write(mem_dir.join("rules.md"), content).unwrap();
+
+        let snippets = get_domain_relevant_memory(Some(root), Some("crates/core/src/lib.rs"));
+        assert!(!snippets.is_empty());
+
+        let total_chars: usize = snippets.iter().map(|s| s.content.len()).sum();
+        assert!(
+            total_chars <= MAX_MEMORY_SNIPPET_BUDGET_CHARS,
+            "Total snippet content chars {} exceeded max {}",
+            total_chars,
+            MAX_MEMORY_SNIPPET_BUDGET_CHARS
+        );
+        // Domain matched items are prioritized
+        assert_eq!(snippets[0].domain, "rust");
+
+        // 2. Single massive snippet exceeding 1,500 chars is truncated to 1,500 chars
+        let single_massive = "A".repeat(3000);
+        fs::write(
+            mem_dir.join("conventions.md"),
+            format!("# Massive Snippet\n{}", single_massive),
+        )
+        .unwrap();
+
+        // Query conventions.md with no rules.md
+        fs::remove_file(mem_dir.join("rules.md")).unwrap();
+        let massive_snippets = get_domain_relevant_memory(Some(root), None);
+        assert_eq!(massive_snippets.len(), 1);
+        assert_eq!(
+            massive_snippets[0].content.len(),
+            MAX_MEMORY_SNIPPET_BUDGET_CHARS
+        );
     }
 }
