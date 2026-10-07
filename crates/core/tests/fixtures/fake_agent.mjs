@@ -234,6 +234,8 @@ rl.on('line', (line) => {
           });
         }
       };
+    } else if (promptText.startsWith('stuck') || promptText.startsWith('hang')) {
+      // Intentionally do nothing to simulate stuck process / idle timeout
     } else {
       // Normal quick prompt: stream chunks and usage, then finish
       send({
@@ -287,6 +289,8 @@ rl.on('line', (line) => {
       currentPromptResolve(true);
       currentPromptResolve = null;
     }
+  } else if (msg.method === 'test/hang') {
+    // Hang intentionally: do not reply to simulate hanging request
   } else if (msg.id !== undefined && msg.id !== null) {
     // Unhandled request
     send({

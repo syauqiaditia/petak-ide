@@ -8,7 +8,76 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+#[cfg(unix)]
+pub fn get_child_pids(parent_pid: u32) -> Vec<u32> {
+    let mut children = Vec::new();
+    let mut queue = vec![parent_pid];
+
+    while let Some(current_pid) = queue.pop() {
+        let mut found_for_current = Vec::new();
+
+        // 1. Linux fast path: /proc/{pid}/task/{pid}/children
+        let children_path = format!("/proc/{current_pid}/task/{current_pid}/children");
+        if let Ok(content) = std::fs::read_to_string(&children_path) {
+            for part in content.split_whitespace() {
+                if let Ok(cpid) = part.parse::<u32>() {
+                    found_for_current.push(cpid);
+                }
+            }
+        }
+
+        // 2. Fallback / macOS path: pgrep -P
+        if found_for_current.is_empty() {
+            if let Ok(output) = Command::new("pgrep")
+                .args(["-P", &current_pid.to_string()])
+                .output()
+            {
+                if let Ok(s) = std::str::from_utf8(&output.stdout) {
+                    for line in s.lines() {
+                        if let Ok(cpid) = line.trim().parse::<u32>() {
+                            found_for_current.push(cpid);
+                        }
+                    }
+                }
+            }
+        }
+
+        for cpid in found_for_current {
+            if !children.contains(&cpid) && cpid != parent_pid {
+                children.push(cpid);
+                queue.push(cpid);
+            }
+        }
+    }
+
+    children
+}
+
+#[cfg(unix)]
+pub fn terminate_child_subprocesses(parent_pid: u32) {
+    let child_pids = get_child_pids(parent_pid);
+    for pid in child_pids {
+        unsafe {
+            let pgid = libc::getpgid(pid as i32);
+            if pgid == pid as i32 {
+                libc::killpg(pgid, libc::SIGINT);
+                libc::killpg(pgid, libc::SIGTERM);
+            }
+            libc::kill(pid as i32, libc::SIGINT);
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+pub fn get_child_pids(_parent_pid: u32) -> Vec<u32> {
+    Vec::new()
+}
+
+#[cfg(not(unix))]
+pub fn terminate_child_subprocesses(_parent_pid: u32) {}
 
 pub use super::policy::{filter_advertised_tools, filter_tool_schemas, filter_tools_list_response};
 
@@ -119,6 +188,7 @@ pub struct AcpClient {
     child: Arc<Mutex<Option<Child>>>,
     pid: Option<u32>,
     pub stderr_log: Arc<Mutex<Vec<String>>>,
+    pub last_activity: Arc<Mutex<Instant>>,
     #[allow(dead_code)]
     reader_thread: Option<thread::JoinHandle<()>>,
     #[allow(dead_code)]
@@ -191,10 +261,13 @@ impl AcpClient {
         let stopping = Arc::new(AtomicBool::new(false));
         let child_arc = Arc::new(Mutex::new(Some(child)));
         let stderr_log = Arc::new(Mutex::new(Vec::new()));
+        let last_activity = Arc::new(Mutex::new(Instant::now()));
 
         let pending_clone = Arc::clone(&pending);
         let alive_clone = Arc::clone(&alive);
         let stopping_clone = Arc::clone(&stopping);
+        let last_activity_stdout = Arc::clone(&last_activity);
+        let last_activity_stderr = Arc::clone(&last_activity);
         let on_update_fn: UpdateCallback = Arc::new(on_update);
         let on_request_fn: Option<RequestCallback> =
             on_request.map(|h| Arc::new(h) as RequestCallback);
@@ -212,6 +285,9 @@ impl AcpClient {
                 if trimmed.is_empty() {
                     continue;
                 }
+                if let Ok(mut act) = last_activity_stdout.lock() {
+                    *act = Instant::now();
+                }
                 let msg: Value = match serde_json::from_str(trimmed) {
                     Ok(v) => v,
                     Err(_) => continue,
@@ -222,6 +298,9 @@ impl AcpClient {
                     if !id_val.is_null()
                         && (msg.get("result").is_some() || msg.get("error").is_some())
                     {
+                        if let Ok(mut act) = last_activity_stdout.lock() {
+                            *act = Instant::now();
+                        }
                         if let Some(id_num) = id_val.as_i64() {
                             let sender_opt = pending_clone.lock().unwrap().remove(&id_num);
                             if let Some(sender) = sender_opt {
@@ -253,6 +332,9 @@ impl AcpClient {
                 if let (Some(id_val), Some(method_val)) = (msg.get("id"), msg.get("method")) {
                     if let (Some(id_num), Some(method_str)) = (id_val.as_i64(), method_val.as_str())
                     {
+                        if let Ok(mut act) = last_activity_stdout.lock() {
+                            *act = Instant::now();
+                        }
                         let params_val = msg.get("params").cloned().unwrap_or(Value::Null);
                         if let Some(ref handler) = on_request_fn {
                             let handler_clone = Arc::clone(handler);
@@ -298,6 +380,9 @@ impl AcpClient {
                 // Check for notifications
                 if let Some(method) = msg.get("method").and_then(|m| m.as_str()) {
                     if method == "session/update" {
+                        if let Ok(mut act) = last_activity_stdout.lock() {
+                            *act = Instant::now();
+                        }
                         if let Some(params) = msg.get("params") {
                             on_update_fn(params.clone());
                         }
@@ -321,6 +406,9 @@ impl AcpClient {
                 let reader = BufReader::new(err_pipe);
                 for line_res in reader.lines() {
                     if let Ok(line) = line_res {
+                        if let Ok(mut act) = last_activity_stderr.lock() {
+                            *act = Instant::now();
+                        }
                         let mut log = stderr_log_clone.lock().unwrap();
                         if log.len() >= 100 {
                             log.remove(0);
@@ -342,6 +430,7 @@ impl AcpClient {
             child: child_arc,
             pid: Some(pid),
             stderr_log,
+            last_activity,
             reader_thread: Some(reader_thread),
             stderr_thread,
         })
@@ -353,6 +442,69 @@ impl AcpClient {
 
     pub fn pid(&self) -> Option<u32> {
         self.pid
+    }
+
+    pub fn last_activity(&self) -> Instant {
+        *self.last_activity.lock().unwrap()
+    }
+
+    pub fn touch_activity(&self) {
+        if let Ok(mut act) = self.last_activity.lock() {
+            *act = Instant::now();
+        }
+    }
+
+    pub fn record_activity(&self) {
+        self.touch_activity();
+    }
+
+    pub fn last_activity_elapsed(&self) -> Duration {
+        self.last_activity
+            .lock()
+            .map(|a| a.elapsed())
+            .unwrap_or_else(|_| Duration::ZERO)
+    }
+
+    pub fn pending_count(&self) -> usize {
+        self.pending.lock().unwrap().len()
+    }
+
+    pub fn drain_pending(&self, err: AcpError) {
+        let mut pending = self.pending.lock().unwrap();
+        for (_, sender) in pending.drain() {
+            let _ = sender.send(Err(err.clone()));
+        }
+    }
+
+    pub fn flush_pipes(&self) -> Result<(), AcpError> {
+        let mut writer = self
+            .writer
+            .lock()
+            .map_err(|e| AcpError::Io(e.to_string()))?;
+        writer.flush().map_err(|e| AcpError::Io(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn terminate_subprocesses(&self) {
+        if let Some(pid) = self.pid {
+            terminate_child_subprocesses(pid);
+        }
+    }
+
+    pub fn cancel_cleanup(&self) {
+        self.terminate_subprocesses();
+        self.drain_pending(AcpError::RpcError {
+            code: -32000,
+            message: "Request cancelled".to_string(),
+            data: None,
+        });
+        let _ = self.flush_pipes();
+    }
+
+    pub fn handle_idle_timeout(&self) {
+        self.terminate_subprocesses();
+        self.drain_pending(AcpError::Timeout);
+        let _ = self.flush_pipes();
     }
 
     fn send_raw(&self, val: &Value) -> Result<(), AcpError> {
@@ -403,6 +555,60 @@ impl AcpClient {
                 Err(AcpError::Timeout)
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => Err(AcpError::ProcessExited(None)),
+        }
+    }
+
+    pub fn send_request_with_watchdog(
+        &self,
+        method: &str,
+        params: Value,
+        idle_timeout: Duration,
+    ) -> Result<Value, AcpError> {
+        if !self.is_alive() {
+            return Err(AcpError::ProcessExited(None));
+        }
+
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let (tx, rx) = mpsc::channel();
+        {
+            let mut pending = self.pending.lock().unwrap();
+            pending.insert(id, tx);
+        }
+
+        let req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        });
+
+        self.touch_activity();
+        self.send_raw(&req)?;
+
+        let check_interval = Duration::from_millis(50);
+        loop {
+            match rx.recv_timeout(check_interval) {
+                Ok(res) => return res,
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(AcpError::ProcessExited(None));
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    if !self.is_alive() {
+                        let mut pending = self.pending.lock().unwrap();
+                        pending.remove(&id);
+                        return Err(AcpError::ProcessExited(None));
+                    }
+
+                    if self.last_activity_elapsed() >= idle_timeout {
+                        {
+                            let mut pending = self.pending.lock().unwrap();
+                            pending.remove(&id);
+                        }
+                        self.handle_idle_timeout();
+                        return Err(AcpError::Timeout);
+                    }
+                }
+            }
         }
     }
 
@@ -581,11 +787,11 @@ impl AcpClient {
         })
     }
 
-    pub fn session_prompt(
+    pub fn session_prompt_with_watchdog(
         &self,
         session_id: &str,
         text: &str,
-        timeout: Duration,
+        idle_timeout: Duration,
     ) -> Result<PromptResponse, AcpError> {
         let params = serde_json::json!({
             "sessionId": session_id,
@@ -597,7 +803,14 @@ impl AcpClient {
             ]
         });
 
-        let res = self.send_request("session/prompt", params, timeout)?;
+        let res = match self.send_request_with_watchdog("session/prompt", params, idle_timeout) {
+            Ok(r) => r,
+            Err(AcpError::Timeout) => {
+                let _ = self.session_cancel(session_id);
+                return Err(AcpError::Timeout);
+            }
+            Err(e) => return Err(e),
+        };
 
         let stop_reason = res
             .get("stopReason")
@@ -615,15 +828,28 @@ impl AcpClient {
         })
     }
 
+    pub fn session_prompt(
+        &self,
+        session_id: &str,
+        text: &str,
+        timeout: Duration,
+    ) -> Result<PromptResponse, AcpError> {
+        self.session_prompt_with_watchdog(session_id, text, timeout)
+    }
+
     pub fn session_cancel(&self, session_id: &str) -> Result<(), AcpError> {
         let params = serde_json::json!({
             "sessionId": session_id
         });
-        self.send_notification("session/cancel", params)
+        let res = self.send_notification("session/cancel", params);
+        self.terminate_subprocesses();
+        let _ = self.flush_pipes();
+        res
     }
 
     pub fn kill(&self) -> Result<(), AcpError> {
         self.stopping.store(true, Ordering::SeqCst);
+        self.terminate_subprocesses();
         let mut child_guard = self.child.lock().unwrap();
         if let Some(mut child) = child_guard.take() {
             let _ = child.kill();

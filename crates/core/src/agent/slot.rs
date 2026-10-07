@@ -938,7 +938,12 @@ impl SlotManager {
         Ok((client, sess_res.session_id, caps))
     }
 
-    pub fn prompt_slot(&self, slot_id: &str, text: &str) -> Result<PromptResponse, String> {
+    pub fn prompt_slot_with_watchdog(
+        &self,
+        slot_id: &str,
+        text: &str,
+        idle_timeout: Duration,
+    ) -> Result<PromptResponse, String> {
         // Lazy spawn: ensure slot is started and ready
         self.start_slot(slot_id)?;
 
@@ -989,7 +994,7 @@ impl SlotManager {
             (client, session_id)
         };
 
-        let prompt_result = client.session_prompt(&session_id, text, Duration::from_secs(120));
+        let prompt_result = client.session_prompt_with_watchdog(&session_id, text, idle_timeout);
 
         let mut slots = self.slots.write().unwrap();
         let slot = match slots.get_mut(slot_id) {
@@ -1028,6 +1033,42 @@ impl SlotManager {
 
                 Ok(resp)
             }
+            Err(AcpError::Timeout) => {
+                let recovery_msg = "⚠️ Perintah terminal macet dibatalkan otomatis karena tidak ada aktivitas selama 5 menit. Mencoba pemulihan...";
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                slot.history.push(ChatMessage {
+                    id: format!("agt_{}", now),
+                    timestamp: now,
+                    role: "agent".to_string(),
+                    content: recovery_msg.to_string(),
+                    stop_reason: Some("timeout".to_string()),
+                    metadata: None,
+                });
+
+                slot.status = SlotStatus::Ready;
+                self.emit(SlotEvent::StatusChanged {
+                    slot_id: slot_id.to_string(),
+                    status: SlotStatus::Ready,
+                });
+
+                self.emit(SlotEvent::Update {
+                    slot_id: slot_id.to_string(),
+                    session_id: session_id.clone(),
+                    update: serde_json::json!({
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": {
+                            "type": "text",
+                            "text": recovery_msg
+                        }
+                    }),
+                });
+
+                Err(recovery_msg.to_string())
+            }
             Err(e) => {
                 if !client.is_alive() {
                     slot.status = SlotStatus::Crashed;
@@ -1039,6 +1080,10 @@ impl SlotManager {
                 Err(format!("Prompt gagal: {e}"))
             }
         }
+    }
+
+    pub fn prompt_slot(&self, slot_id: &str, text: &str) -> Result<PromptResponse, String> {
+        self.prompt_slot_with_watchdog(slot_id, text, Duration::from_secs(300))
     }
 
     pub fn cancel_slot(&self, slot_id: &str) -> Result<(), String> {
