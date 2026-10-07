@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::exec::{Proc, ProcLine, Spawn};
 use crate::run::device::{is_valid_device_id, resolve_adb_binary};
+use crate::run::flutter::{OutputStream, RunEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum LogLevel {
@@ -56,6 +57,45 @@ pub struct LogLine {
     pub level: LogLevel,
     pub tag: String,
     pub msg: String,
+}
+
+impl LogLine {
+    pub fn output_stream(&self) -> OutputStream {
+        match self.level {
+            LogLevel::E | LogLevel::F => OutputStream::Stderr,
+            _ => OutputStream::Stdout,
+        }
+    }
+
+    pub fn to_run_event(&self) -> RunEvent {
+        RunEvent::Output {
+            stream: self.output_stream(),
+            line: format!("{} [{}/{}] {}", self.ts, self.level.as_str(), self.tag, self.msg),
+        }
+    }
+}
+
+/// Format a raw device log line or logcat threadtime line as a `RunEvent::Output`.
+/// Preserves ANSI escape sequences and maps error levels to OutputStream::Stderr.
+pub fn format_device_log_as_run_event(line: &str) -> RunEvent {
+    if let Some(log_line) = parse_logcat_line(line) {
+        log_line.to_run_event()
+    } else {
+        let is_stderr = line.contains(" E/")
+            || line.contains(" F/")
+            || line.starts_with("[STDERR]")
+            || line.starts_with("Error:")
+            || line.starts_with("FATAL EXCEPTION");
+        let stream = if is_stderr {
+            OutputStream::Stderr
+        } else {
+            OutputStream::Stdout
+        };
+        RunEvent::Output {
+            stream,
+            line: line.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -439,6 +479,66 @@ impl Logcat {
                         }
                         break;
                     }
+                }
+            }
+        });
+
+        Ok(Self {
+            proc,
+            _worker: Some(worker),
+        })
+    }
+
+    /// Start background logcat streaming directly to a RunEvent channel.
+    pub fn start_streaming_events(
+        spawn: &dyn Spawn,
+        device: &str,
+        pid: Option<u32>,
+        tx: Sender<RunEvent>,
+    ) -> io::Result<Self> {
+        if !is_valid_device_id(device) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid device ID: {}", device),
+            ));
+        }
+
+        let adb_cmd = resolve_adb_binary();
+        let (proc_tx, proc_rx) = std::sync::mpsc::channel();
+        let pid_arg = pid.map(|p| format!("--pid={}", p));
+
+        let mut args = vec!["-s", device, "logcat", "-v", "threadtime"];
+        if let Some(ref arg) = pid_arg {
+            args.push(arg.as_str());
+        }
+
+        let proc = spawn.spawn(
+            Path::new("."),
+            &adb_cmd,
+            &args,
+            &[],
+            proc_tx,
+        )?;
+
+        let worker = thread::spawn(move || {
+            while let Ok(line) = proc_rx.recv() {
+                match line {
+                    ProcLine::Stdout(text) => {
+                        let event = format_device_log_as_run_event(&text);
+                        if tx.send(event).is_err() {
+                            break;
+                        }
+                    }
+                    ProcLine::Stderr(text) => {
+                        let event = RunEvent::Output {
+                            stream: OutputStream::Stderr,
+                            line: text,
+                        };
+                        if tx.send(event).is_err() {
+                            break;
+                        }
+                    }
+                    ProcLine::Exit(_) => break,
                 }
             }
         });
