@@ -19,6 +19,8 @@ import type {
   SelfHealPhase,
   SelfHealStatus,
   SelfHealResult,
+  ChatMessage,
+  ChatSessionMeta,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
@@ -208,7 +210,8 @@ export function applyDisciplineDirectives(
   isSelfImprove: boolean = false,
   memoryContext: string = '',
   skillsInjection: string = '',
-  domainMemoryInjection: string = ''
+  domainMemoryInjection: string = '',
+  prunedContextInjection: string = ''
 ): string {
   const directives: string[] = [];
 
@@ -234,6 +237,10 @@ export function applyDisciplineDirectives(
 
   if (domainMemoryInjection && domainMemoryInjection.trim()) {
     directives.push(domainMemoryInjection.trim());
+  }
+
+  if (prunedContextInjection && prunedContextInjection.trim()) {
+    directives.push(prunedContextInjection.trim());
   }
 
   if (memoryContext && memoryContext.trim()) {
@@ -849,7 +856,9 @@ export function renderChatMarkdown(raw: string | null | undefined): string {
       }
       codeText = codeText.replace(/^\n+|\n+$/g, '');
       const escapedCode = escapeHtml(codeText);
-      const langHeader = lang ? `<div class="chat-code-header"><span class="chat-code-lang">${escapeHtml(lang)}</span></div>` : '';
+      const langSpan = lang ? `<span class="chat-code-lang">${escapeHtml(lang)}</span>` : `<span class="chat-code-lang">code</span>`;
+      const copyBtn = `<button class="code-copy-btn" type="button" title="Salin kode">📋 Salin</button>`;
+      const langHeader = `<div class="chat-code-header">${langSpan}${copyBtn}</div>`;
       const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : '';
       htmlParts.push(
         `<div class="chat-code-wrapper">${langHeader}<pre class="chat-code-block"><code${langClass}>${escapedCode}</code></pre></div>`
@@ -1502,6 +1511,111 @@ export function formatWatchdogRecoveryText(content?: string | null): string {
     return defaultText;
   }
   return trimmed.startsWith('⚠️') ? trimmed : `⚠️ ${trimmed}`;
+}
+
+/**
+ * Generates a unique session ID prefixed with sess-.
+ */
+export function generateSessionId(): string {
+  return `sess-${Date.now()}`;
+}
+
+/**
+ * Builds a clean prompt envelope separating user-visible text from backend LLM prompt payload.
+ */
+export interface CleanPromptEnvelope {
+  displayContent: string;
+  formattedPrompt: string;
+}
+
+export function buildCleanPromptEnvelope(
+  userInput: string,
+  options?: {
+    isPonytail?: boolean;
+    isCaveman?: boolean;
+    isSelfImprove?: boolean;
+    memoryContext?: string;
+    skillsInjection?: string;
+    domainMemoryInjection?: string;
+    prunedContextInjection?: string;
+    referencePrefix?: string;
+  }
+): CleanPromptEnvelope {
+  const cleanInput = (userInput || '').trim();
+  const refPrefix = options?.referencePrefix || '';
+  const fullPromptText = `${refPrefix}${cleanInput}`;
+  const formattedPrompt = applyDisciplineDirectives(
+    fullPromptText,
+    !!options?.isPonytail,
+    !!options?.isCaveman,
+    !!options?.isSelfImprove,
+    options?.memoryContext || '',
+    options?.skillsInjection || '',
+    options?.domainMemoryInjection || '',
+    options?.prunedContextInjection || ''
+  );
+  return {
+    displayContent: cleanInput,
+    formattedPrompt,
+  };
+}
+
+/**
+ * Routes an LLM agent response to either the active chat history or to savedSessions,
+ * preventing cross-talk into a newly created session.
+ */
+export function routePromptResponse(
+  dispatchSessionId: string,
+  activeSessionId: string,
+  agentMsg: ChatMessage,
+  currentActiveMessages: ChatMessage[],
+  savedSessions: ChatSessionMeta[]
+): {
+  isTargetActive: boolean;
+  updatedActiveMessages: ChatMessage[];
+  updatedSavedSessions: ChatSessionMeta[];
+} {
+  if (dispatchSessionId === activeSessionId) {
+    return {
+      isTargetActive: true,
+      updatedActiveMessages: [...currentActiveMessages, agentMsg],
+      updatedSavedSessions: savedSessions,
+    };
+  }
+
+  // Dispatched session is stale / backgrounded -> Route to savedSessions
+  const existingIndex = savedSessions.findIndex((s) => s.id === dispatchSessionId);
+  let updatedSaved: ChatSessionMeta[];
+  if (existingIndex !== -1) {
+    const session = savedSessions[existingIndex];
+    const newMsgs = [...session.messages, agentMsg];
+    const updatedMeta: ChatSessionMeta = {
+      ...session,
+      messages: newMsgs,
+      messageCount: newMsgs.length,
+    };
+    updatedSaved = [
+      ...savedSessions.slice(0, existingIndex),
+      updatedMeta,
+      ...savedSessions.slice(existingIndex + 1),
+    ];
+  } else {
+    const newSessionMeta: ChatSessionMeta = {
+      id: dispatchSessionId,
+      slotId: 'default',
+      title: (agentMsg.content || '').slice(0, 48),
+      createdAt: agentMsg.timestamp,
+      messageCount: 1,
+      messages: [agentMsg],
+    };
+    updatedSaved = [newSessionMeta, ...savedSessions].slice(0, 50);
+  }
+
+  return {
+    isTargetActive: false,
+    updatedActiveMessages: currentActiveMessages,
+    updatedSavedSessions: updatedSaved,
+  };
 }
 
 
