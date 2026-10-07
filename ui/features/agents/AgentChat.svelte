@@ -56,7 +56,7 @@
   let messages = $derived(agentsStore.activeMessages);
   let pendingPerm = $derived(agentsStore.activePendingPermission);
   let isBusy = $derived(
-    !agentsStore.isWatchdogAborted && (agentsStore.isStreaming || (activeSlot?.status === 'busy' && agentsStore.isStreaming))
+    !agentsStore.isWatchdogAborted && (agentsStore.isStreaming || activeSlot?.status === 'busy')
   );
   let activePermission = $derived<PermissionMode>(
     ((activeSlot?.config?.permission as PermissionMode) || 'ask')
@@ -569,8 +569,8 @@
     {/each}
 
     <!-- Live Streaming Bubble -->
-    {#if agentsStore.isStreaming}
-      <div class="message-row agent-row">
+    {#if isBusy}
+      <div class="message-row agent-row live-generating">
         <div class="message-bubble agent-bubble">
           <div class="message-bubble-header">
             <div class="message-role-label">
@@ -601,6 +601,11 @@
                 <div class="tool-call-card live">
                   <div class="tool-call-header">
                     <span class="tool-name">⚡ {tool.name}</span>
+                    {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
+                      <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
+                    {:else if tool.arguments?.command}
+                      <span class="tool-arg">{tool.arguments.command}</span>
+                    {/if}
                     {#if tool.status === 'completed'}
                       <span class="tool-badge-completed">✓ Selesai</span>
                     {:else if tool.status === 'failed'}
@@ -618,7 +623,10 @@
             {#if agentsStore.streamingContent}
               {@html renderChatMarkdown(agentsStore.streamingContent)}
             {:else}
-              <span class="status-placeholder">{agentsStore.activeToolCalls.length > 0 ? 'Menjalankan investigasi...' : 'Menyiapkan respons...'}</span>
+              <div class="investigating-indicator">
+                <span class="investigating-spinner"></span>
+                <span class="status-placeholder">Sedang menginvestigasi kode proyek...</span>
+              </div>
             {/if}
             <span class="cursor-blink">▌</span>
           </div>
@@ -1022,7 +1030,7 @@
       <div class="pills-right">
         {#if isBusy}
           <button type="button" class="cancel-prompt-btn" onclick={() => agentsStore.cancelActivePrompt()} title="Batalkan prompt aktif">
-            ■
+            ⏹ Stop
           </button>
         {:else}
           <button
@@ -1401,6 +1409,30 @@
   .status-placeholder {
     color: #8b949e;
     font-style: italic;
+  }
+
+  .investigating-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .investigating-spinner {
+    width: 11px;
+    height: 11px;
+    border: 2px solid rgba(59, 130, 246, 0.25);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .live-generating .agent-bubble {
+    border-color: rgba(59, 130, 246, 0.35);
   }
 
   .typing-indicator {
@@ -2184,17 +2216,24 @@
   }
 
   .cancel-prompt-btn {
-    width: 24px;
     height: 24px;
+    padding: 0 8px;
     border-radius: 4px;
     background: #ef4444;
     color: white;
     border: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
     cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .cancel-prompt-btn:hover {
+    background: #dc2626;
   }
 
   .context-picker-popup {

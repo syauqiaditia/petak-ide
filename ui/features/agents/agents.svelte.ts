@@ -92,6 +92,7 @@ class AgentsStore {
 
   isLoading = $state(false);
   isStreaming = $state(false);
+  isAwaitingPrompt = $state(false);
   streamingContent = $state('');
   activeToolCalls = $state<ToolCallData[]>([]);
   activeThought = $state<string>('');
@@ -195,7 +196,7 @@ class AgentsStore {
     this.initialized = false;
   }
 
-  private handleSlotEvent(event: any) {
+  handleSlotEvent(event: any) {
     if (!event) return;
 
     if (event.StatusChanged) {
@@ -204,7 +205,15 @@ class AgentsStore {
       if (idx !== -1) {
         this.slots[idx] = { ...this.slots[idx], status };
       }
-      if (status === 'ready' || status === 'crashed' || status === 'error') {
+      if (status === 'busy') {
+        if (slot_id === this.activeSlotId) {
+          this.isStreaming = true;
+        }
+      } else if (status === 'ready') {
+        if (!this.isAwaitingPrompt) {
+          this.isStreaming = false;
+        }
+      } else if (status === 'crashed' || status === 'error') {
         this.isStreaming = false;
       }
     } else if (event.WatchdogAborted) {
@@ -490,6 +499,7 @@ class AgentsStore {
     }
 
     this.isStreaming = true;
+    this.isAwaitingPrompt = true;
     this.streamingContent = '';
     this.activeToolCalls = [];
     this.activeThought = '';
@@ -549,6 +559,7 @@ class AgentsStore {
         this.appendMessageToSavedSession(dispatchSessionId, errMsg);
       }
     } finally {
+      this.isAwaitingPrompt = false;
       if (dispatchSessionId === this.activeSessionId) {
         this.isStreaming = false;
         this.streamingContent = '';
@@ -570,6 +581,7 @@ class AgentsStore {
     } catch (e: any) {
       console.warn('Cancel failed:', e);
     } finally {
+      this.isAwaitingPrompt = false;
       this.isStreaming = false;
       this.streamingContent = '';
       this.activeToolCalls = [];
@@ -821,9 +833,14 @@ class AgentsStore {
     }
   }
 
-  newSession(slotId?: string) {
+  async newSession(slotId?: string) {
     const targetSlotId = slotId || this.activeSlotId;
     if (!targetSlotId) return;
+
+    const currentSlot = this.slots.find((s) => s.id === targetSlotId) || this.activeSlot;
+    if (this.isStreaming || currentSlot?.status === 'busy') {
+      await this.cancelActivePrompt();
+    }
 
     // Archive current session if it has user/agent messages
     const currentMsgs = this.chatHistory[targetSlotId] || [];
