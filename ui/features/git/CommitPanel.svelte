@@ -27,6 +27,7 @@
   } from './stashTreeLogic';
   import StashModal from './StashModal.svelte';
   import { agentsStore } from '../agents/agents.svelte.ts';
+  import { portal } from '../../shell/portal';
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
 
@@ -995,6 +996,7 @@
   {#if contextMenuOpen}
     <div
       class="file-context-menu"
+      use:portal
       style:left="{contextMenuPos.x}px"
       style:top="{contextMenuPos.y}px"
       role="menu"
@@ -1017,6 +1019,7 @@
   {#if emptyContextMenuOpen}
     <div
       class="file-context-menu"
+      use:portal
       style:left="{emptyContextMenuPos.x}px"
       style:top="{emptyContextMenuPos.y}px"
       role="menu"
@@ -1548,7 +1551,7 @@
     border: 1px solid #34363d;
     border-radius: 6px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
-    z-index: 2000;
+    z-index: 99999;
     padding: 4px 0;
     display: flex;
     flex-direction: column;

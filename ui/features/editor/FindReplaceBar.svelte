@@ -5,6 +5,7 @@
     getActiveMatchIndex,
     replaceOne,
     replaceAll,
+    getSearchQueryFromSelection,
     type MatchRange,
     type SearchOptions,
   } from './searchLogic';
@@ -13,11 +14,13 @@
     view = null,
     isOpen = false,
     mode = 'find',
+    initialQuery = '',
     onClose = () => {},
   }: {
     view: EditorView | null;
     isOpen: boolean;
     mode: 'find' | 'replace';
+    initialQuery?: string;
     onClose: () => void;
   } = $props();
 
@@ -42,6 +45,23 @@
 
   $effect(() => {
     if (isOpen) {
+      if (initialQuery) {
+        query = initialQuery;
+      } else if (view) {
+        const { from, to } = view.state.selection.main;
+        if (from !== to) {
+          const selText = view.state.sliceDoc(from, to);
+          const autoQuery = getSearchQueryFromSelection(selText);
+          if (autoQuery) {
+            query = autoQuery;
+          }
+        }
+      }
+
+      requestAnimationFrame(() => {
+        searchInputEl?.focus();
+        searchInputEl?.select();
+      });
       setTimeout(() => {
         searchInputEl?.focus();
         searchInputEl?.select();

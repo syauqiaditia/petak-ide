@@ -9,6 +9,7 @@
   } from './branchTreeLogic';
   import { computeWindowing } from './windowingLogic';
   import CompareBranchModal from './CompareBranchModal.svelte';
+  import { portal } from '../../shell/portal';
 
   let { onSelectTab } = $props<{
     onSelectTab?: (tab: 'commit' | 'log' | 'conflict' | 'stash') => void;
@@ -609,6 +610,7 @@
   {#if branchContextMenuVisible && selectedBranch}
     <div
       class="branch-context-menu"
+      use:portal
       style="left: {branchContextMenuPos.x}px; top: {branchContextMenuPos.y}px;"
       role="menu"
       tabindex="-1"
@@ -693,6 +695,7 @@
   {#if remoteContextMenuVisible && selectedRemoteBranch}
     <div
       class="branch-context-menu"
+      use:portal
       style:left="{remoteContextMenuPos.x}px"
       style:top="{remoteContextMenuPos.y}px"
     >
@@ -1258,7 +1261,7 @@
   /* Context Menu */
   .branch-context-menu {
     position: fixed;
-    z-index: 1000;
+    z-index: 99999;
     background: #1e2025;
     border: 1px solid #34363d;
     border-radius: 8px;

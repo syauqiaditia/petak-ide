@@ -68,6 +68,7 @@
   import DiffView from '../git/DiffView.svelte';
   import { createCodeFoldingExtension, saveFileFoldState, restoreFileFoldState } from './folding';
   import FindReplaceBar from './FindReplaceBar.svelte';
+  import { getSearchQueryFromSelection } from './searchLogic';
   import ImagePreview from './ImagePreview.svelte';
   import { isImageFile } from './imageUtils';
 
@@ -105,6 +106,7 @@
 
   let findReplaceOpen = $state(false);
   let findReplaceMode = $state<'find' | 'replace'>('find');
+  let findReplaceInitialQuery = $state('');
 
   let isCenterDiffActive = $state(false);
 
@@ -882,11 +884,29 @@
       e.preventDefault();
       e.stopPropagation();
       findReplaceMode = 'find';
+      if (view) {
+        const { from, to } = view.state.selection.main;
+        if (from !== to) {
+          const selText = view.state.sliceDoc(from, to);
+          findReplaceInitialQuery = getSearchQueryFromSelection(selText);
+        } else {
+          findReplaceInitialQuery = '';
+        }
+      }
       findReplaceOpen = true;
     } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'r' || e.code === 'KeyR')) {
       e.preventDefault();
       e.stopPropagation();
       findReplaceMode = 'replace';
+      if (view) {
+        const { from, to } = view.state.selection.main;
+        if (from !== to) {
+          const selText = view.state.sliceDoc(from, to);
+          findReplaceInitialQuery = getSearchQueryFromSelection(selText);
+        } else {
+          findReplaceInitialQuery = '';
+        }
+      }
       findReplaceOpen = true;
     }
   }
@@ -1187,6 +1207,7 @@
       {view}
       isOpen={findReplaceOpen}
       mode={findReplaceMode}
+      initialQuery={findReplaceInitialQuery}
       onClose={() => {
         findReplaceOpen = false;
         view?.focus();

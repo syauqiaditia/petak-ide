@@ -123,136 +123,140 @@
 </script>
 
 <div class="logcat-panel">
-  <!-- Toolbar -->
+  <!-- Toolbar: Responsive Flex Wrap Layout -->
   <div class="toolbar">
-    <!-- Device / App info -->
-    <div class="info-pill" title="Target device and app">
-      <span class="device-name">{runStore.selectedDevice?.name || 'No Device'}</span>
-      <span class="info-divider">·</span>
-      <span class="app-identifier">
-        {runStore.appId || (runStore.pid ? `PID ${runStore.pid}` : 'all apps')}
-      </span>
-    </div>
+    <!-- Essential Controls Left -->
+    <div class="toolbar-left">
+      <!-- Device / App info -->
+      <div class="info-pill" title="Target device and app">
+        <span class="device-name">{runStore.selectedDevice?.name || 'No Device'}</span>
+        <span class="info-divider">·</span>
+        <span class="app-identifier">
+          {runStore.appId || (runStore.pid ? `PID ${runStore.pid}` : 'all apps')}
+        </span>
+      </div>
 
-    <!-- Toggle package:mine -->
-    <button
-      class="toggle-btn"
-      class:active={logcatStore.packageMine}
-      onclick={() => logcatStore.togglePackageMine()}
-      title="Filter logs to current app process"
-    >
-      package:mine
-    </button>
-
-    <!-- Min level filter -->
-    <div class="level-select-wrapper">
-      <label for="min-level-select" class="visually-hidden">Minimum Level</label>
-      <select
-        id="min-level-select"
-        class="level-select"
-        value={logcatStore.minLevel}
-        onchange={handleLevelChange}
-        title="Minimum log level"
+      <!-- Toggle package:mine -->
+      <button
+        class="toggle-btn"
+        class:active={logcatStore.packageMine}
+        onclick={() => logcatStore.togglePackageMine()}
+        title="Filter logs to current app process"
       >
-        <option value="V">Verbose (V)</option>
-        <option value="D">Debug (D)</option>
-        <option value="I">Info (I)</option>
-        <option value="W">Warn (W)</option>
-        <option value="E">Error (E)</option>
-      </select>
+        package:mine
+      </button>
+
+      <!-- Auto scroll button -->
+      <button
+        class="icon-action-btn"
+        class:active={logcatStore.autoScroll}
+        onclick={scrollToBottom}
+        title={logcatStore.autoScroll ? 'Auto-scroll enabled' : 'Scroll to bottom'}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+      </button>
+
+      <!-- Pause button -->
+      <button
+        class="action-btn"
+        class:is-paused={logcatStore.isPaused}
+        onclick={() => logcatStore.togglePause()}
+        title={logcatStore.isPaused ? 'Resume log rendering' : 'Pause log rendering'}
+      >
+        {logcatStore.isPaused ? '▶ Resume' : '⏸ Pause'}
+      </button>
+
+      <!-- Clear button -->
+      <button
+        class="action-btn clear-btn"
+        onclick={() => logcatStore.clear()}
+        title="Clear log buffer"
+      >
+        Clear
+      </button>
     </div>
 
-    <!-- Tag filter -->
-    <input
-      type="text"
-      class="text-filter tag-filter"
-      placeholder="Tag filter"
-      value={tagInput}
-      oninput={handleTagInput}
-      title="Filter by tag"
-    />
+    <!-- Level Selector, Tag Filter, Search & Stats Right -->
+    <div class="toolbar-right">
+      <!-- Min level filter -->
+      <div class="level-select-wrapper">
+        <label for="min-level-select" class="visually-hidden">Minimum Level</label>
+        <select
+          id="min-level-select"
+          class="level-select"
+          value={logcatStore.minLevel}
+          onchange={handleLevelChange}
+          title="Minimum log level"
+        >
+          <option value="V">Verbose (V)</option>
+          <option value="D">Debug (D)</option>
+          <option value="I">Info (I)</option>
+          <option value="W">Warn (W)</option>
+          <option value="E">Error (E)</option>
+        </select>
+      </div>
 
-    <!-- Text search (debounced 100ms) with Case/Regex/Next/Prev -->
-    <div class="search-input-wrapper">
+      <!-- Tag filter -->
       <input
         type="text"
-        class="text-filter search-filter"
-        placeholder="Search logs..."
-        value={searchInput}
-        oninput={handleSearchInput}
-        title="Filter by text (debounce 100ms)"
+        class="text-filter tag-filter"
+        placeholder="Tag filter"
+        value={tagInput}
+        oninput={handleTagInput}
+        title="Filter by tag"
       />
-      <button
-        class="opt-btn"
-        class:active={caseSensitive}
-        onclick={() => (caseSensitive = !caseSensitive)}
-        title="Match Case (Aa)"
-      >
-        Aa
-      </button>
-      <button
-        class="opt-btn"
-        class:active={isRegex}
-        onclick={() => (isRegex = !isRegex)}
-        title="Use Regular Expression (.*)"
-      >
-        .*
-      </button>
-      {#if searchInput.trim()}
-        <button class="nav-arrow" onclick={handlePrevMatch} title="Previous match">▲</button>
-        <button class="nav-arrow" onclick={handleNextMatch} title="Next match">▼</button>
-      {/if}
+
+      <!-- Text search (debounced 100ms) with Case/Regex/Next/Prev -->
+      <div class="search-input-wrapper">
+        <input
+          type="text"
+          class="text-filter search-filter"
+          placeholder="Search logs..."
+          value={searchInput}
+          oninput={handleSearchInput}
+          title="Filter by text (debounce 100ms)"
+        />
+        <button
+          class="opt-btn"
+          class:active={caseSensitive}
+          onclick={() => (caseSensitive = !caseSensitive)}
+          title="Match Case (Aa)"
+        >
+          Aa
+        </button>
+        <button
+          class="opt-btn"
+          class:active={isRegex}
+          onclick={() => (isRegex = !isRegex)}
+          title="Use Regular Expression (.*)"
+        >
+          .*
+        </button>
+        {#if searchInput.trim()}
+          <button class="nav-arrow" onclick={handlePrevMatch} title="Previous match">▲</button>
+          <button class="nav-arrow" onclick={handleNextMatch} title="Next match">▼</button>
+        {/if}
+      </div>
+
+      <!-- Stats & status badge -->
+      <div class="stats-wrapper">
+        {#if logcatStore.isPaused}
+          <span class="paused-badge">PAUSED</span>
+        {/if}
+        <span class="count-label">
+          {totalCount.toLocaleString()} {totalCount === 1 ? 'line' : 'lines'}
+        </span>
+        <span
+          class="buffer-cap-pill"
+          title="Ring buffer 50.000 baris memori hemat (&lt;150MB) & 60 FPS stabil. Log lama dibuang otomatis."
+        >
+          50k buffer ℹ
+        </span>
+      </div>
     </div>
-
-    <div class="spacer"></div>
-
-    <!-- Stats & status badge -->
-    <div class="stats-wrapper">
-      {#if logcatStore.isPaused}
-        <span class="paused-badge">PAUSED</span>
-      {/if}
-      <span class="count-label">
-        {totalCount.toLocaleString()} {totalCount === 1 ? 'line' : 'lines'}
-      </span>
-      <span
-        class="buffer-cap-pill"
-        title="Ring buffer 50.000 baris memori hemat (&lt;150MB) & 60 FPS stabil. Log lama dibuang otomatis."
-      >
-        50k buffer ℹ
-      </span>
-    </div>
-
-    <!-- Auto scroll button -->
-    <button
-      class="icon-action-btn"
-      class:active={logcatStore.autoScroll}
-      onclick={scrollToBottom}
-      title={logcatStore.autoScroll ? 'Auto-scroll enabled' : 'Scroll to bottom'}
-    >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <polyline points="19 12 12 19 5 12"></polyline>
-      </svg>
-    </button>
-
-    <!-- Pause button -->
-    <button
-      class="action-btn"
-      class:is-paused={logcatStore.isPaused}
-      onclick={() => logcatStore.togglePause()}
-      title={logcatStore.isPaused ? 'Resume log rendering' : 'Pause log rendering'}
-    >
-      {logcatStore.isPaused ? 'Resume' : 'Pause'}
-    </button>
-
-    <!-- Clear button -->
-    <button
-      class="action-btn clear-btn"
-      onclick={() => logcatStore.clear()}
-      title="Clear log buffer"
-    >
-      Clear
-    </button>
   </div>
 
   <!-- Virtual Scroll Viewport -->
@@ -346,15 +350,26 @@
   }
 
   .toolbar {
-    height: 36px;
+    min-height: 36px;
+    height: auto;
     flex-shrink: 0;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px;
+    justify-content: space-between;
+    gap: 8px 14px;
+    padding: 4px 12px;
     border-bottom: 1px solid #222428;
     background: #17181c;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .info-pill {
