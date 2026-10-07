@@ -1,4 +1,5 @@
 pub mod acp;
+pub mod context;
 pub mod hermes;
 pub mod mcp;
 pub mod memory;
@@ -15,6 +16,7 @@ pub use acp::{
     AcpClient, AcpError, AcpInitializeResult, AcpSessionNewResult, ModelOption, PromptResponse,
     RequestCallback, UpdateCallback,
 };
+pub use context::{prune_file_context, DiagnosticSnippet, PrunedContextResult, SymbolOutline};
 pub use hermes::{
     check_hermes_acp, check_hermes_version, detect_hermes, fallback_read_profiles,
     parse_kanban_json, parse_kanban_text, parse_profile_list_table, resolve_hermes,
@@ -25,8 +27,9 @@ pub use mcp::{
     McpConfig, McpServerConfig, McpTestResult,
 };
 pub use memory::{
-    extract_title, list_project_memory, read_project_memory, resolve_memory_dir,
-    save_project_memory, validate_memory_filename, MemoryItem,
+    detect_domain_from_path, extract_title, get_domain_relevant_memory, list_project_memory,
+    read_project_memory, resolve_memory_dir, save_project_memory, validate_memory_filename,
+    MemoryItem, MemorySnippet,
 };
 pub use perm::{
     default_allowlist, PendingPermissionRequest, PermissionDecision, PermissionManager,

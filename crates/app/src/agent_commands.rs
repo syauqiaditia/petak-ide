@@ -1,8 +1,8 @@
 use petak_core::agent::{
     get_all_role_scopes, HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult,
-    MemoryItem, PendingPermissionRequest, PromptResponse, Proposal, RoleScopeInfo, Skill,
-    SkillSummary, SlotConfig, SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig,
-    UsageReport,
+    MemoryItem, MemorySnippet, PendingPermissionRequest, PromptResponse, Proposal,
+    PrunedContextResult, RoleScopeInfo, Skill, SkillSummary, SlotConfig, SlotManager, SlotSummary,
+    SupportedEngineInfo, TeamConfig, UsageReport,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -499,6 +499,40 @@ pub async fn agent_skill_delete(
     let effective_root = resolve_effective_root(&app, root);
     tauri::async_runtime::spawn_blocking(move || {
         petak_core::agent::delete_skill(effective_root.as_deref(), &name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Smart Context & Memory ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_prune_context(
+    file_path: String,
+    line: Option<u32>,
+    symbol: Option<String>,
+) -> Result<PrunedContextResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&file_path);
+        petak_core::agent::prune_file_context(p, line, symbol)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_get_relevant_memory(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    active_file: Option<String>,
+) -> Result<Vec<MemorySnippet>, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::get_domain_relevant_memory(
+            root.as_deref(),
+            active_file.as_deref(),
+        ))
     })
     .await
     .map_err(|e| e.to_string())?

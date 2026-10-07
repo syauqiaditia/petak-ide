@@ -13,6 +13,15 @@ pub struct MemoryItem {
     pub updated_at: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemorySnippet {
+    pub domain: String,
+    pub source_file: String,
+    pub title: String,
+    pub content: String,
+}
+
 pub fn resolve_memory_dir(project_root: Option<&Path>) -> PathBuf {
     // 1. If {project_root}/.petak/memory exists (even as a symlink), prioritize it!
     if let Some(root) = project_root {
@@ -199,6 +208,249 @@ pub fn save_project_memory(
     fs::write(path, content)
 }
 
+pub fn detect_domain_from_path(file_path: &Path) -> &'static str {
+    let ext = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "dart" => "flutter",
+        "rs" => "rust",
+        "svelte" => "svelte",
+        "ts" | "tsx" | "js" | "jsx" => "typescript",
+        _ => "general",
+    }
+}
+
+fn detect_snippet_domain(title: &str, body: &str, default_domain: &'static str) -> String {
+    let lower_title = title.to_ascii_lowercase();
+    let lower_body = body.to_ascii_lowercase();
+
+    if lower_title.contains("flutter") || lower_title.contains("dart") {
+        return "flutter".to_string();
+    }
+    if lower_title.contains("rust") || lower_title.contains("cargo") {
+        return "rust".to_string();
+    }
+    if lower_title.contains("svelte") {
+        return "svelte".to_string();
+    }
+    if lower_title.contains("typescript")
+        || lower_title.contains("javascript")
+        || lower_title.contains(" ts ")
+        || lower_title.contains(" js ")
+    {
+        return "typescript".to_string();
+    }
+    if lower_title.contains("general") {
+        return "general".to_string();
+    }
+
+    if lower_body.contains("domain: flutter")
+        || lower_body.contains("[flutter]")
+        || lower_body.contains("tag: flutter")
+    {
+        return "flutter".to_string();
+    }
+    if lower_body.contains("domain: rust")
+        || lower_body.contains("[rust]")
+        || lower_body.contains("tag: rust")
+    {
+        return "rust".to_string();
+    }
+    if lower_body.contains("domain: svelte")
+        || lower_body.contains("[svelte]")
+        || lower_body.contains("tag: svelte")
+    {
+        return "svelte".to_string();
+    }
+    if lower_body.contains("domain: typescript")
+        || lower_body.contains("[typescript]")
+        || lower_body.contains("tag: typescript")
+    {
+        return "typescript".to_string();
+    }
+
+    let has_flutter = lower_body.contains("flutter") || lower_body.contains("dart");
+    let has_rust = lower_body.contains("rust") || lower_body.contains("cargo");
+    let has_svelte = lower_body.contains("svelte");
+    let has_ts = lower_body.contains("typescript");
+
+    let count = has_flutter as u32 + has_rust as u32 + has_svelte as u32 + has_ts as u32;
+    if count == 1 {
+        if has_flutter {
+            return "flutter".to_string();
+        }
+        if has_rust {
+            return "rust".to_string();
+        }
+        if has_svelte {
+            return "svelte".to_string();
+        }
+        if has_ts {
+            return "typescript".to_string();
+        }
+    }
+
+    if default_domain != "general" {
+        return default_domain.to_string();
+    }
+
+    "general".to_string()
+}
+
+fn detect_domain_from_name(filename: &str) -> &'static str {
+    let lower_name = filename.to_ascii_lowercase();
+    if lower_name.contains("flutter") || lower_name.contains("dart") {
+        "flutter"
+    } else if lower_name.contains("rust") || lower_name.contains("cargo") {
+        "rust"
+    } else if lower_name.contains("svelte") {
+        "svelte"
+    } else if lower_name.contains("typescript")
+        || lower_name.contains("javascript")
+        || lower_name.contains("ts_")
+        || lower_name.contains("js_")
+    {
+        "typescript"
+    } else {
+        "general"
+    }
+}
+
+fn parse_domain_memory_snippets(filename: &str, content: &str) -> Vec<MemorySnippet> {
+    let mut snippets = Vec::new();
+    let file_domain = detect_domain_from_name(filename);
+
+    let mut current_title: Option<String> = None;
+    let mut current_body_lines: Vec<&str> = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("# ") || trimmed.starts_with("## ") || trimmed.starts_with("### ") {
+            if let Some(title) = current_title.take() {
+                let body = current_body_lines.join("\n").trim().to_string();
+                if !body.is_empty() {
+                    let domain = detect_snippet_domain(&title, &body, file_domain);
+                    snippets.push(MemorySnippet {
+                        domain,
+                        source_file: filename.to_string(),
+                        title,
+                        content: body,
+                    });
+                }
+                current_body_lines.clear();
+            }
+            let title = trimmed.trim_start_matches('#').trim().to_string();
+            current_title = Some(title);
+        } else {
+            current_body_lines.push(line);
+        }
+    }
+
+    if let Some(title) = current_title {
+        let body = current_body_lines.join("\n").trim().to_string();
+        if !body.is_empty() {
+            let domain = detect_snippet_domain(&title, &body, file_domain);
+            snippets.push(MemorySnippet {
+                domain,
+                source_file: filename.to_string(),
+                title,
+                content: body,
+            });
+        }
+    } else {
+        let body = content.trim().to_string();
+        if !body.is_empty() {
+            let title = extract_title(content, filename);
+            let domain = detect_snippet_domain(&title, &body, file_domain);
+            snippets.push(MemorySnippet {
+                domain,
+                source_file: filename.to_string(),
+                title,
+                content: body,
+            });
+        }
+    }
+
+    snippets
+}
+
+pub fn get_domain_relevant_memory(
+    project_root: Option<&Path>,
+    active_file: Option<&str>,
+) -> Vec<MemorySnippet> {
+    let target_domain = active_file
+        .map(|f| detect_domain_from_path(Path::new(f)))
+        .unwrap_or("general");
+
+    let dir = resolve_memory_dir(project_root);
+    if !dir.exists() {
+        return Vec::new();
+    }
+
+    let mut files_to_read = Vec::new();
+    let priority_names = ["conventions.md", "gotchas.md", "lessons.md", "rules.md"];
+    for name in &priority_names {
+        if dir.join(name).is_file() {
+            files_to_read.push(name.to_string());
+        }
+    }
+
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if let Ok(ft) = entry.file_type() {
+                if ft.is_file() {
+                    let fname = entry.file_name().to_string_lossy().to_string();
+                    if fname.to_ascii_lowercase().ends_with(".md")
+                        && !files_to_read.iter().any(|f| f.eq_ignore_ascii_case(&fname))
+                    {
+                        if validate_memory_filename(&fname).is_ok() {
+                            files_to_read.push(fname);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut snippets = Vec::new();
+
+    for fname in files_to_read {
+        if validate_memory_filename(&fname).is_err() {
+            continue;
+        }
+        let file_path = dir.join(&fname);
+        let Ok(content) = fs::read_to_string(&file_path) else {
+            continue;
+        };
+
+        let file_snippets = parse_domain_memory_snippets(&fname, &content);
+        for snippet in file_snippets {
+            let matches_domain = if target_domain == "general" {
+                snippet.domain == "general"
+            } else {
+                snippet.domain == target_domain || snippet.domain == "general"
+            };
+            if matches_domain {
+                snippets.push(snippet);
+            }
+        }
+    }
+
+    snippets.sort_by(|a, b| {
+        let a_priority = if a.domain == target_domain { 0 } else { 1 };
+        let b_priority = if b.domain == target_domain { 0 } else { 1 };
+        a_priority
+            .cmp(&b_priority)
+            .then_with(|| a.source_file.cmp(&b.source_file))
+            .then_with(|| a.title.cmp(&b.title))
+    });
+
+    snippets
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,5 +525,98 @@ mod tests {
 
         let err_read = read_project_memory(Some(root), "../evil.md");
         assert!(err_read.is_err());
+    }
+
+    #[test]
+    fn test_detect_domain_from_path() {
+        assert_eq!(
+            detect_domain_from_path(Path::new("lib/main.dart")),
+            "flutter"
+        );
+        assert_eq!(detect_domain_from_path(Path::new("src/main.rs")), "rust");
+        assert_eq!(
+            detect_domain_from_path(Path::new("ui/App.svelte")),
+            "svelte"
+        );
+        assert_eq!(
+            detect_domain_from_path(Path::new("src/index.ts")),
+            "typescript"
+        );
+        assert_eq!(
+            detect_domain_from_path(Path::new("src/index.tsx")),
+            "typescript"
+        );
+        assert_eq!(
+            detect_domain_from_path(Path::new("src/index.js")),
+            "typescript"
+        );
+        assert_eq!(
+            detect_domain_from_path(Path::new("src/index.jsx")),
+            "typescript"
+        );
+        assert_eq!(
+            detect_domain_from_path(Path::new("scripts/test.py")),
+            "general"
+        );
+        assert_eq!(detect_domain_from_path(Path::new("README.md")), "general");
+    }
+
+    #[test]
+    fn test_domain_memory_filtering() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+
+        let mem_dir = root.join(".petak").join("memory");
+        fs::create_dir_all(&mem_dir).unwrap();
+
+        let rules_md = r#"
+# Flutter Conventions
+Always use const constructors and Riverpod providers.
+
+# Rust Rules
+Never use unwrap or panic in production code.
+
+# General Guidelines
+Always write tests before code commits.
+"#;
+        fs::write(mem_dir.join("rules.md"), rules_md).unwrap();
+
+        // 1. Query for .dart file -> matches flutter and general, excludes rust
+        let flutter_snippets =
+            get_domain_relevant_memory(Some(root), Some("lib/features/home.dart"));
+        assert_eq!(flutter_snippets.len(), 2);
+        assert!(flutter_snippets
+            .iter()
+            .any(|s| s.domain == "flutter" && s.title == "Flutter Conventions"));
+        assert!(flutter_snippets
+            .iter()
+            .any(|s| s.domain == "general" && s.title == "General Guidelines"));
+        assert!(!flutter_snippets.iter().any(|s| s.domain == "rust"));
+
+        // 2. Query for .rs file -> matches rust and general, excludes flutter
+        let rust_snippets = get_domain_relevant_memory(Some(root), Some("crates/core/src/lib.rs"));
+        assert_eq!(rust_snippets.len(), 2);
+        assert!(rust_snippets
+            .iter()
+            .any(|s| s.domain == "rust" && s.title == "Rust Rules"));
+        assert!(rust_snippets
+            .iter()
+            .any(|s| s.domain == "general" && s.title == "General Guidelines"));
+        assert!(!rust_snippets.iter().any(|s| s.domain == "flutter"));
+
+        // 3. Query with no active file (None) -> returns general rules
+        let general_snippets = get_domain_relevant_memory(Some(root), None);
+        assert_eq!(general_snippets.len(), 1);
+        assert_eq!(general_snippets[0].title, "General Guidelines");
+    }
+
+    #[test]
+    fn test_domain_memory_path_traversal() {
+        let tmp = tempdir().unwrap();
+        let root = tmp.path();
+
+        // Passing path traversal in active_file shouldn't panic or escape
+        let snippets = get_domain_relevant_memory(Some(root), Some("../../../etc/passwd"));
+        assert!(snippets.is_empty());
     }
 }
