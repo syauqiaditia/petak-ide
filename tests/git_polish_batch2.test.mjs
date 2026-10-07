@@ -232,3 +232,19 @@ test('git polish 7: opening any file via tabsManager resets isCenterDiffActive t
     'Editor.svelte must set isCenterDiffActive to false when file is opened'
   );
 });
+
+test('git polish 8: editor-container is kept persistently mounted without DOM destruction when diff active', () => {
+  const editorCode = fs.readFileSync(path.join(uiRoot, 'features/editor/Editor.svelte'), 'utf8');
+  assert.ok(
+    editorCode.includes('class="editor-main-area"'),
+    'Editor.svelte must wrap editor content in editor-main-area'
+  );
+  assert.ok(
+    editorCode.includes('class:hidden={gitStore.centerDiff && isCenterDiffActive}'),
+    'editor-main-area must toggle hidden class rather than unmounting editor-container'
+  );
+  assert.ok(
+    editorCode.includes('view.dom.parentElement !== container'),
+    'Editor.svelte must guarantee view.dom is attached to container'
+  );
+});

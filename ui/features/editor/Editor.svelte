@@ -130,6 +130,27 @@
     }
   });
 
+  // Ensure CodeMirror view is always attached to container, measured, and not blank
+  $effect(() => {
+    if (!isCenterDiffActive && view && container) {
+      if (view.dom.parentElement !== container) {
+        container.replaceChildren(view.dom);
+      }
+      const active = tabsManager.activeTab;
+      if (active && !isImageFile(active.path)) {
+        if (!active.state || (active.state.doc.length === 0 && active.savedContent.length > 0)) {
+          active.state = createEditorState(active.savedContent, active.name, active.path);
+        }
+        if (view.state !== active.state || (view.state.doc.length === 0 && active.savedContent.length > 0)) {
+          view.setState(active.state);
+        }
+        restoreFileFoldState(active.path, view);
+      }
+      view.requestMeasure();
+      view.focus();
+    }
+  });
+
   const petakTheme = EditorView.theme(
     {
       '&': {
@@ -970,7 +991,7 @@
       if (currentSwappedPath) {
         saveFileFoldState(currentSwappedPath, view.state);
         const prevTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
-        if (prevTab && view) {
+        if (prevTab && view && view.state.doc.length > 0) {
           prevTab.state = view.state;
         }
       }
@@ -1088,7 +1109,7 @@
     {/if}
   </div>
 
-  <!-- Breadcrumbs (28px) -->
+  <!-- Breadcrumbs & Center Area -->
   {#if gitStore.centerDiff && isCenterDiffActive}
     <div class="center-editor-diff-panel">
       <div class="center-diff-header">
@@ -1122,97 +1143,99 @@
         />
       </div>
     </div>
-  {:else}
-  <div class="breadcrumbs">
-    {#if tabsManager.activeTab}
-      <span>{tabsManager.activeTab.path}</span>
-    {:else}
-      <span>No file open</span>
-    {/if}
-  </div>
+  {/if}
 
-  <!-- External conflict bar if file changed on disk while dirty -->
-  {#if tabsManager.activeTab?.externalConflict}
-    <div class="conflict-bar">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e8b45a" stroke-width="2" stroke-linecap="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-      </svg>
-      <span>File berubah di disk — </span>
-      <button class="conflict-btn" onclick={handleReloadFromDisk}>Reload</button>
-      <span class="conflict-sep">/</span>
-      <button class="conflict-btn" onclick={handleKeepMine}>Keep mine</button>
+  <div class="editor-main-area" class:hidden={gitStore.centerDiff && isCenterDiffActive}>
+    <div class="breadcrumbs">
+      {#if tabsManager.activeTab}
+        <span>{tabsManager.activeTab.path}</span>
+      {:else}
+        <span>No file open</span>
+      {/if}
     </div>
-  {/if}
 
-  {#if activeIsImage && tabsManager.activeTab}
-    <ImagePreview filePath={tabsManager.activeTab.path} />
-  {/if}
-
-  <!-- Editor container -->
-  <div
-    class="editor-container"
-    bind:this={container}
-    oncontextmenu={handleEditorContextMenu}
-    class:hidden={tabsManager.tabs.length === 0 || activeIsImage}
-  ></div>
-
-  <FindReplaceBar
-    {view}
-    isOpen={findReplaceOpen}
-    mode={findReplaceMode}
-    onClose={() => {
-      findReplaceOpen = false;
-      view?.focus();
-    }}
-  />
-
-  {#if renameStore.visible}
-    <div
-      class="rename-popover"
-      style:left="{renameStore.x}px"
-      style:top="{renameStore.y}px"
-    >
-      <div class="rename-title">Rename symbol</div>
-      <input
-        class="rename-input"
-        type="text"
-        bind:value={renameStore.newName}
-        use:selectOnMount
-        onkeydown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            executeRename(view, onStatusChange);
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            renameStore.hide();
-            view?.focus();
-          }
-        }}
-      />
-      <div class="rename-hints">
-        <span><kbd>Enter</kbd> Rename</span>
-        <span><kbd>Esc</kbd> Cancel</span>
+    <!-- External conflict bar if file changed on disk while dirty -->
+    {#if tabsManager.activeTab?.externalConflict}
+      <div class="conflict-bar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e8b45a" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>File berubah di disk — </span>
+        <button class="conflict-btn" onclick={handleReloadFromDisk}>Reload</button>
+        <span class="conflict-sep">/</span>
+        <button class="conflict-btn" onclick={handleKeepMine}>Keep mine</button>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  <CodeActionPopup getView={() => view} />
+    {#if activeIsImage && tabsManager.activeTab}
+      <ImagePreview filePath={tabsManager.activeTab.path} />
+    {/if}
 
-  {#if tabsManager.tabs.length === 0}
-    <div class="empty-editor-overlay">
-      <div class="empty-editor-box">
-        <span class="empty-editor-title">No file open</span>
-        <span class="empty-editor-sub">Select a file from the project tree to start editing</span>
-        <div class="shortcut-hints">
-          <span class="shortcut"><kbd>⌘S</kbd> Save</span>
-          <span class="shortcut"><kbd>⌘W</kbd> Close Tab</span>
+    <!-- Editor container (always kept mounted in DOM to prevent CodeMirror view detachment) -->
+    <div
+      class="editor-container"
+      bind:this={container}
+      oncontextmenu={handleEditorContextMenu}
+      class:hidden={tabsManager.tabs.length === 0 || activeIsImage}
+    ></div>
+
+    <FindReplaceBar
+      {view}
+      isOpen={findReplaceOpen}
+      mode={findReplaceMode}
+      onClose={() => {
+        findReplaceOpen = false;
+        view?.focus();
+      }}
+    />
+
+    {#if renameStore.visible}
+      <div
+        class="rename-popover"
+        style:left="{renameStore.x}px"
+        style:top="{renameStore.y}px"
+      >
+        <div class="rename-title">Rename symbol</div>
+        <input
+          class="rename-input"
+          type="text"
+          bind:value={renameStore.newName}
+          use:selectOnMount
+          onkeydown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              executeRename(view, onStatusChange);
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              renameStore.hide();
+              view?.focus();
+            }
+          }}
+        />
+        <div class="rename-hints">
+          <span><kbd>Enter</kbd> Rename</span>
+          <span><kbd>Esc</kbd> Cancel</span>
         </div>
       </div>
-    </div>
-  {/if}
-  {/if}
+    {/if}
+
+    <CodeActionPopup getView={() => view} />
+
+    {#if tabsManager.tabs.length === 0}
+      <div class="empty-editor-overlay">
+        <div class="empty-editor-box">
+          <span class="empty-editor-title">No file open</span>
+          <span class="empty-editor-sub">Select a file from the project tree to start editing</span>
+          <div class="shortcut-hints">
+            <span class="shortcut"><kbd>⌘S</kbd> Save</span>
+            <span class="shortcut"><kbd>⌘W</kbd> Close Tab</span>
+          </div>
+        </div>
+      </div>
+    {/if}
+  </div>
 
   {#if tabContextMenuVisible}
     <ContextMenu
@@ -1374,6 +1397,17 @@
     background: #1a1b1f;
     position: relative;
     overflow: hidden;
+  }
+  .editor-main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .editor-main-area.hidden {
+    display: none !important;
   }
   .center-editor-diff-panel {
     flex: 1;

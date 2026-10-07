@@ -29,6 +29,12 @@ class TabsManager {
     this.recordRecentFile(path);
     this.openToken += 1;
     if (existing) {
+      if (content && (!existing.savedContent || existing.savedContent.length === 0)) {
+        existing.savedContent = content;
+      }
+      if (existing.state && existing.state.doc.length === 0 && existing.savedContent.length > 0) {
+        existing.state = undefined;
+      }
       this.activePath = path;
       return existing;
     }
