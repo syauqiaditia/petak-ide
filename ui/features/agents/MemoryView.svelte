@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '../../lib/api';
   import { agentsStore } from './agents.svelte';
+  import { settingsStore } from '../settings/settingsStore.svelte';
   import { sanitizeMemoryFilename, formatMemorySize, formatMemoryTime } from './agentsLogic';
   import type { MemoryItem } from './types';
 
@@ -96,13 +97,35 @@
       <span class="path-badge">.petak/memory/</span>
     </div>
 
-    <button
-      class="new-note-btn"
-      onclick={() => { isCreating = true; newFilename = ''; createError = null; }}
-      title="Buat berkas catatan markdown baru"
-    >
-      + Catatan Baru
-    </button>
+    <div class="memory-header-controls">
+      <label class="memory-toggle-pill" title="Saring aturan memori berdasarkan domain berkas aktif saat injeksi prompt">
+        <input
+          type="checkbox"
+          class="memory-toggle-cb"
+          checked={settingsStore.domainMemoryFiltering}
+          onchange={(e) => settingsStore.setDomainMemoryFiltering((e.target as HTMLInputElement).checked)}
+        />
+        <span>Domain-Aware Memory Filtering</span>
+      </label>
+
+      <label class="memory-toggle-pill" title="Pangkas token berkas dengan outline simbol LSP & diagnostics">
+        <input
+          type="checkbox"
+          class="memory-toggle-cb"
+          checked={settingsStore.lspContextPruning}
+          onchange={(e) => settingsStore.setLspContextPruning((e.target as HTMLInputElement).checked)}
+        />
+        <span>LSP Context Pruning</span>
+      </label>
+
+      <button
+        class="new-note-btn"
+        onclick={() => { isCreating = true; newFilename = ''; createError = null; }}
+        title="Buat berkas catatan markdown baru"
+      >
+        + Catatan Baru
+      </button>
+    </div>
   </div>
 
   <!-- Inline New Note Form -->
@@ -270,6 +293,37 @@
     padding: 1px 5px;
     border-radius: 4px;
     border: 1px solid #282a33;
+  }
+
+  .memory-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .memory-toggle-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted, #8b949e);
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: all 0.15s ease;
+  }
+
+  .memory-toggle-pill:hover {
+    color: var(--text-normal, #e6edf3);
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  .memory-toggle-cb {
+    cursor: pointer;
+    accent-color: #38bdf8;
   }
 
   .new-note-btn {

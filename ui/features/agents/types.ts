@@ -285,3 +285,37 @@ export interface ChatSessionMeta {
   modelId?: string | null;
 }
 
+// ── Smart Context & Semantic Memory Types (Phase 3) ─────────────────────────
+
+export interface SymbolOutline {
+  name: string;
+  kind: string;
+  line: number;
+  signature: string;
+  children?: SymbolOutline[];
+}
+
+export interface DiagnosticSnippet {
+  line: number;
+  message: string;
+  severity: string;
+}
+
+export interface PrunedContextResult {
+  filePath: string;
+  totalLines: number;
+  prunedLines: number;
+  estimatedTokensSaved: number;
+  symbolOutline: SymbolOutline[];
+  diagnostics: DiagnosticSnippet[];
+  compactSummary: string;
+}
+
+export interface MemorySnippet {
+  domain: string;
+  sourceFile: string;
+  title: string;
+  content: string;
+}
+
+

@@ -27,7 +27,9 @@ import {
   DEFAULT_ALLOWLIST,
   isCommandInAllowlist,
   extractChunkText,
+  formatDomainMemoryForPrompt,
 } from './agentsLogic';
+import { settingsStore } from '../settings/settingsStore.svelte';
 import { skillsStore } from './skillsStore.svelte';
 import { formatSkillsForPrompt } from './skillsLogic.ts';
 import {
@@ -364,6 +366,19 @@ class AgentsStore {
       console.warn('Failed to retrieve active skills for prompt:', err);
     }
 
+    let domainMemorySnippet = '';
+    if (settingsStore.domainMemoryFiltering) {
+      try {
+        const activeFile = this.attachedReference?.path || null;
+        const snippets = await api.agentGetRelevantMemory(activeFile || undefined);
+        if (snippets && snippets.length > 0) {
+          domainMemorySnippet = formatDomainMemoryForPrompt(snippets);
+        }
+      } catch (err) {
+        console.warn('Failed to retrieve domain memory for prompt:', err);
+      }
+    }
+
     let refPrefix = '';
     if (this.attachedReference) {
       const ref = this.attachedReference;
@@ -382,7 +397,8 @@ class AgentsStore {
       this.isCavemanActive,
       this.isSelfImproveActive,
       memorySnippet,
-      skillsInjection
+      skillsInjection,
+      domainMemorySnippet
     );
 
     const userMsg: ChatMessage = {
@@ -808,6 +824,22 @@ class AgentsStore {
 
   toggleSelfImprove() {
     this.isSelfImproveActive = !this.isSelfImproveActive;
+  }
+
+  get isLspPruningActive(): boolean {
+    return settingsStore.lspContextPruning;
+  }
+
+  get isDomainMemoryActive(): boolean {
+    return settingsStore.domainMemoryFiltering;
+  }
+
+  toggleLspPruning() {
+    settingsStore.setLspContextPruning(!settingsStore.lspContextPruning);
+  }
+
+  toggleDomainMemory() {
+    settingsStore.setDomainMemoryFiltering(!settingsStore.domainMemoryFiltering);
   }
 
   async getMemorySnippetForPrompt(): Promise<string> {
