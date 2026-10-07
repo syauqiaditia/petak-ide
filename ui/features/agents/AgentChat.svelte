@@ -73,6 +73,71 @@
   );
   let isWatchdogBannerDismissed = $state(false);
 
+  let copiedBubbleId = $state<string | null>(null);
+  let copyTimeoutId: any = null;
+
+  async function handleCopyBubble(id: string, text: string) {
+    if (!text) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      copiedBubbleId = id;
+      if (copyTimeoutId) clearTimeout(copyTimeoutId);
+      copyTimeoutId = setTimeout(() => {
+        if (copiedBubbleId === id) {
+          copiedBubbleId = null;
+        }
+      }, 2000);
+    } catch (err) {
+      console.warn('Failed to copy bubble:', err);
+    }
+  }
+
+  function handleContainerClick(e: MouseEvent) {
+    const target = e.target as HTMLElement | null;
+    const copyBtn = target?.closest('.code-copy-btn') as HTMLButtonElement | null;
+    if (copyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const codeWrapper = copyBtn.closest('.chat-code-wrapper');
+      const codeEl = codeWrapper?.querySelector('pre.chat-code-block code') || codeWrapper?.querySelector('pre code');
+      const codeText = codeEl?.textContent || '';
+      if (codeText) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(codeText);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = codeText;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = '✓ Tersalin!';
+        copyBtn.title = 'Tersalin!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => {
+          copyBtn.textContent = originalText || '📋 Salin';
+          copyBtn.title = 'Salin kode';
+          copyBtn.classList.remove('copied');
+        }, 2000);
+      }
+    }
+  }
+
   $effect(() => {
     if (agentsStore.isWatchdogAborted || lastMessageWatchdog) {
       isWatchdogBannerDismissed = false;
@@ -284,22 +349,20 @@
 
   async function handleSubmit() {
     if (!promptText.trim() || isBusy) return;
-    let text = promptText;
+    const text = promptText.trim();
 
-    // Inject pruned context if available and enabled
+    // Prepare extra context payload without polluting visible user message
+    const options: {
+      prunedContext?: PrunedContextResult | null;
+      domainMemorySnippets?: MemorySnippet[];
+    } = {};
+
     if (prunedContext && settingsStore.lspContextPruning) {
-      const prunedBlock = formatPrunedContextForPrompt(prunedContext);
-      if (prunedBlock) {
-        text = `${prunedBlock}\n\n${text}`;
-      }
+      options.prunedContext = prunedContext;
     }
 
-    // Inject domain memory conventions into outgoing prompt header
     if (relevantMemorySnippets.length > 0 && settingsStore.domainMemoryFiltering) {
-      const memBlock = formatDomainMemoryForPrompt(relevantMemorySnippets);
-      if (memBlock) {
-        text = `${memBlock}\n\n${text}`;
-      }
+      options.domainMemorySnippets = relevantMemorySnippets;
     }
 
     promptText = '';
@@ -307,7 +370,7 @@
     prunedContext = null;
     relevantMemorySnippets = [];
     isPrunedPopoverOpen = false;
-    await agentsStore.sendPrompt(text);
+    await agentsStore.sendPrompt(text, options);
     textareaEl?.focus();
   }
 
@@ -401,7 +464,7 @@
 
 <div class="agent-chat-wrapper">
   <!-- Messages Scroll Area -->
-  <div class="chat-messages" bind:this={messagesContainerEl}>
+  <div class="chat-messages" bind:this={messagesContainerEl} onclick={handleContainerClick}>
     {#if messages.length === 0 && !agentsStore.isStreaming}
       <!-- Empty Session Greeting & Quick Suggestions -->
       <div class="empty-chat-welcome">
@@ -453,8 +516,21 @@
     {#each messages as msg (msg.id)}
       <div class="message-row" class:user-row={msg.role === 'user'} class:system-row={msg.role === 'system'}>
         <div class="message-bubble" class:user-bubble={msg.role === 'user'} class:agent-bubble={msg.role === 'agent'} class:system-bubble={msg.role === 'system'}>
-          <div class="message-role-label">
-            {msg.role === 'user' ? 'Anda' : msg.role === 'agent' ? (activeSlot?.label || 'Agent') : 'Sistem'}
+          <div class="message-bubble-header">
+            <div class="message-role-label">
+              {msg.role === 'user' ? 'Anda' : msg.role === 'agent' ? (activeSlot?.label || 'Agent') : 'Sistem'}
+            </div>
+            {#if msg.role === 'user' || msg.role === 'agent'}
+              <button
+                type="button"
+                class="bubble-copy-btn"
+                class:copied={copiedBubbleId === msg.id}
+                title={copiedBubbleId === msg.id ? 'Tersalin!' : 'Salin pesan'}
+                onclick={() => handleCopyBubble(msg.id, typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || ''))}
+              >
+                {copiedBubbleId === msg.id ? '✓ Tersalin!' : '📋 Salin'}
+              </button>
+            {/if}
           </div>
           <div class="message-body chat-markdown">
             {@html renderChatMarkdown(typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || JSON.stringify(msg.content)))}
@@ -496,12 +572,25 @@
     {#if agentsStore.isStreaming}
       <div class="message-row agent-row">
         <div class="message-bubble agent-bubble">
-          <div class="message-role-label">
-            {activeSlot?.label || 'Agent'}
-            {#if agentsStore.activeThought}
-              <span class="typing-thought">💭 {agentsStore.activeThought}</span>
-            {:else}
-              <span class="typing-indicator">sedang berpikir...</span>
+          <div class="message-bubble-header">
+            <div class="message-role-label">
+              {activeSlot?.label || 'Agent'}
+              {#if agentsStore.activeThought}
+                <span class="typing-thought">💭 {agentsStore.activeThought}</span>
+              {:else}
+                <span class="typing-indicator">sedang berpikir...</span>
+              {/if}
+            </div>
+            {#if agentsStore.streamingContent}
+              <button
+                type="button"
+                class="bubble-copy-btn"
+                class:copied={copiedBubbleId === 'live-stream'}
+                title={copiedBubbleId === 'live-stream' ? 'Tersalin!' : 'Salin pesan'}
+                onclick={() => handleCopyBubble('live-stream', agentsStore.streamingContent)}
+              >
+                {copiedBubbleId === 'live-stream' ? '✓ Tersalin!' : '📋 Salin'}
+              </button>
             {/if}
           </div>
 
@@ -967,6 +1056,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .empty-chat-welcome {
@@ -1041,18 +1133,28 @@
     padding: 8px 12px;
     font-size: 12px;
     line-height: 1.45;
+    position: relative;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .user-bubble {
     background: #1e293b;
     border: 1px solid #334155;
     color: #f8fafc;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .agent-bubble {
     background: #16181d;
     border: 1px solid rgba(255, 255, 255, 0.07);
     color: #e2e8f0;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .system-bubble {
@@ -1062,11 +1164,55 @@
     font-style: italic;
   }
 
+  .message-bubble-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .bubble-copy-btn {
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .message-bubble:hover .bubble-copy-btn,
+  .bubble-copy-btn.copied {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .bubble-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #f8fafc;
+  }
+
+  .bubble-copy-btn.copied {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(52, 211, 153, 0.1);
+  }
+
   .message-role-label {
     font-size: 10px;
     font-weight: 600;
     color: #8b949e;
-    margin-bottom: 4px;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1077,6 +1223,9 @@
     font-size: 12px;
     line-height: 1.55;
     color: #e2e8f0;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .message-body :global(p) {
@@ -1103,6 +1252,9 @@
     padding: 1px 4px;
     border-radius: 3px;
     color: #38bdf8;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .message-body :global(.chat-code-wrapper) {
@@ -1115,10 +1267,48 @@
 
   .message-body :global(.chat-code-header) {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     padding: 2px 8px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .message-body :global(.code-copy-btn) {
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .message-body :global(.chat-code-wrapper:hover .code-copy-btn),
+  .message-body :global(.code-copy-btn.copied) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .message-body :global(.code-copy-btn:hover) {
+    background: rgba(255, 255, 255, 0.14);
+    color: #f8fafc;
+  }
+
+  .message-body :global(.code-copy-btn.copied) {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(52, 211, 153, 0.1);
   }
 
   .message-body :global(.chat-code-lang) {
@@ -1128,7 +1318,8 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
 
-  .message-body :global(pre.chat-code-block) {
+  .message-body :global(pre.chat-code-block),
+  .message-body :global(pre) {
     margin: 0;
     padding: 8px 10px;
     background: transparent;
@@ -1136,6 +1327,9 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     line-height: 1.45;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .message-body :global(pre.chat-code-block code) {

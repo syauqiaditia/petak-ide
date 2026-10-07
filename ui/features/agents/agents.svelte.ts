@@ -19,6 +19,8 @@ import type {
   ChatSessionMeta,
   ToolCallData,
   CodeReference,
+  PrunedContextResult,
+  MemorySnippet,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -28,8 +30,10 @@ import {
   isCommandInAllowlist,
   extractChunkText,
   formatDomainMemoryForPrompt,
+  formatPrunedContextForPrompt,
   isWatchdogAbortedMessage,
   formatWatchdogRecoveryText,
+  generateSessionId,
 } from './agentsLogic';
 import { settingsStore } from '../settings/settingsStore.svelte';
 import { skillsStore } from './skillsStore.svelte';
@@ -395,9 +399,16 @@ class AgentsStore {
     }
   }
 
-  async sendPrompt(rawPrompt: string) {
+  async sendPrompt(
+    rawPrompt: string,
+    options?: {
+      prunedContext?: PrunedContextResult | null;
+      domainMemorySnippets?: MemorySnippet[];
+    }
+  ) {
     if (!rawPrompt.trim() || !this.activeSlotId) return;
     const slotId = this.activeSlotId;
+    const dispatchSessionId = this.activeSessionId;
 
     let memorySnippet = '';
     if (this.isSelfImproveActive) {
@@ -415,7 +426,9 @@ class AgentsStore {
     }
 
     let domainMemorySnippet = '';
-    if (settingsStore.domainMemoryFiltering) {
+    if (options?.domainMemorySnippets && options.domainMemorySnippets.length > 0) {
+      domainMemorySnippet = formatDomainMemoryForPrompt(options.domainMemorySnippets);
+    } else if (settingsStore.domainMemoryFiltering) {
       try {
         const activeFile = this.attachedReference?.path || null;
         const snippets = await api.agentGetRelevantMemory(activeFile || undefined);
@@ -425,6 +438,11 @@ class AgentsStore {
       } catch (err) {
         console.warn('Failed to retrieve domain memory for prompt:', err);
       }
+    }
+
+    let prunedContextSnippet = '';
+    if (options?.prunedContext) {
+      prunedContextSnippet = formatPrunedContextForPrompt(options.prunedContext);
     }
 
     let refPrefix = '';
@@ -449,7 +467,8 @@ class AgentsStore {
       this.isSelfImproveActive,
       memorySnippet,
       skillsInjection,
-      domainMemorySnippet
+      domainMemorySnippet,
+      prunedContextSnippet
     );
 
     const userMsg: ChatMessage = {
@@ -480,11 +499,6 @@ class AgentsStore {
       const rawContent = response.message || this.streamingContent || 'Aksi selesai.';
       const cleanContent = typeof rawContent === 'string' ? rawContent : extractChunkText(rawContent);
 
-      if (isWatchdogAbortedMessage(cleanContent)) {
-        this.isWatchdogAborted = true;
-        this.watchdogRecoveryMessage = formatWatchdogRecoveryText(cleanContent);
-      }
-
       const agentMsg: ChatMessage = {
         id: `agent-${Date.now()}`,
         timestamp: Date.now(),
@@ -493,7 +507,17 @@ class AgentsStore {
         stop_reason: response.stopReason,
         toolCalls: this.activeToolCalls.length > 0 ? [...this.activeToolCalls] : undefined,
       };
-      this.chatHistory[slotId] = [...this.chatHistory[slotId], agentMsg];
+
+      if (dispatchSessionId === this.activeSessionId) {
+        if (isWatchdogAbortedMessage(cleanContent)) {
+          this.isWatchdogAborted = true;
+          this.watchdogRecoveryMessage = formatWatchdogRecoveryText(cleanContent);
+        }
+        this.chatHistory[slotId] = [...(this.chatHistory[slotId] || []), agentMsg];
+      } else {
+        // Dispatched session is stale / backgrounded -> Route to savedSessions
+        this.appendMessageToSavedSession(dispatchSessionId, agentMsg);
+      }
 
       // Auto-learn reflection: if agent formulated a lesson, append to project memory
       if (this.isSelfImproveActive && cleanContent) {
@@ -509,25 +533,31 @@ class AgentsStore {
       await this.loadProposals();
     } catch (e: any) {
       const errText = e?.message || String(e);
-      if (isWatchdogAbortedMessage(errText)) {
-        this.isWatchdogAborted = true;
-        this.watchdogRecoveryMessage = formatWatchdogRecoveryText(errText);
-      }
       const errMsg: ChatMessage = {
         id: `err-${Date.now()}`,
         timestamp: Date.now(),
         role: 'system',
         content: `Error: ${errText}`,
       };
-      this.chatHistory[slotId] = [...this.chatHistory[slotId], errMsg];
+      if (dispatchSessionId === this.activeSessionId) {
+        if (isWatchdogAbortedMessage(errText)) {
+          this.isWatchdogAborted = true;
+          this.watchdogRecoveryMessage = formatWatchdogRecoveryText(errText);
+        }
+        this.chatHistory[slotId] = [...(this.chatHistory[slotId] || []), errMsg];
+      } else {
+        this.appendMessageToSavedSession(dispatchSessionId, errMsg);
+      }
     } finally {
-      this.isStreaming = false;
-      this.streamingContent = '';
-      this.activeToolCalls = [];
-      this.activeThought = '';
-      const sIdx = this.slots.findIndex((s) => s.id === slotId);
-      if (sIdx !== -1) {
-        this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
+      if (dispatchSessionId === this.activeSessionId) {
+        this.isStreaming = false;
+        this.streamingContent = '';
+        this.activeToolCalls = [];
+        this.activeThought = '';
+        const sIdx = this.slots.findIndex((s) => s.id === slotId);
+        if (sIdx !== -1) {
+          this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
+        }
       }
     }
   }
@@ -815,9 +845,52 @@ class AgentsStore {
 
     // Reset current slot history & active session
     this.chatHistory[targetSlotId] = [];
-    this.activeSessionId = `sess-${Date.now()}`;
+    this.activeSessionId = generateSessionId();
     this.error = null;
     this.isHistoryOpen = false;
+
+    // Reset status and indicators so new session is ready for input immediately
+    this.isStreaming = false;
+    this.streamingContent = '';
+    this.activeToolCalls = [];
+    this.activeThought = '';
+    this.isWatchdogAborted = false;
+    this.watchdogRecoveryMessage = null;
+    const sIdx = this.slots.findIndex((s) => s.id === targetSlotId);
+    if (sIdx !== -1) {
+      this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
+    }
+  }
+
+  appendMessageToSavedSession(sessionId: string, msg: ChatMessage) {
+    const existingIndex = this.savedSessions.findIndex((s) => s.id === sessionId);
+    if (existingIndex !== -1) {
+      const session = this.savedSessions[existingIndex];
+      const updatedMessages = [...session.messages, msg];
+      const updatedSession: ChatSessionMeta = {
+        ...session,
+        messages: updatedMessages,
+        messageCount: updatedMessages.length,
+      };
+      this.savedSessions = [
+        ...this.savedSessions.slice(0, existingIndex),
+        updatedSession,
+        ...this.savedSessions.slice(existingIndex + 1),
+      ];
+      this.persistSavedSessions();
+    } else {
+      const newSessionMeta: ChatSessionMeta = {
+        id: sessionId,
+        slotId: this.activeSlotId || 'default',
+        title: msg.content.slice(0, 48),
+        createdAt: msg.timestamp,
+        messageCount: 1,
+        messages: [msg],
+        modelId: this.activeSlot?.config?.model,
+      };
+      this.savedSessions = [newSessionMeta, ...this.savedSessions].slice(0, 50);
+      this.persistSavedSessions();
+    }
   }
 
   loadSession(session: ChatSessionMeta) {
