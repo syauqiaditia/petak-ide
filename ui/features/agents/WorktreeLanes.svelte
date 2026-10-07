@@ -42,7 +42,8 @@
     isLoading = true;
     error = null;
     try {
-      worktrees = await api.agentWorktreeList();
+      const res = await api.agentWorktreeList();
+      worktrees = Array.isArray(res) ? res : [];
       await loadSelfHealStatuses();
     } catch (e: any) {
       error = e?.message || 'Gagal memuat daftar worktree lanes';

@@ -685,6 +685,30 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
           stopReason: 'end_turn',
         };
       }
+      if (cmd === 'agent_worktree_list') {
+        const { api } = await import('./lib/api');
+        return api.agentWorktreeList();
+      }
+      if (cmd === 'agent_get_self_heal_status') {
+        const { api } = await import('./lib/api');
+        return api.agentGetSelfHealStatus(args?.taskId);
+      }
+      if (cmd === 'agent_get_relevant_memory') {
+        const { api } = await import('./lib/api');
+        return api.agentGetRelevantMemory(args?.activeFile);
+      }
+      if (cmd === 'agent_prune_context') {
+        const { api } = await import('./lib/api');
+        return api.agentPruneContext(args?.filePath, args?.line, args?.symbol);
+      }
+      if (cmd === 'agent_get_supported_engines') {
+        const { api } = await import('./lib/api');
+        return api.agentGetSupportedEngines();
+      }
+      if (cmd === 'agent_get_role_scopes') {
+        const { api } = await import('./lib/api');
+        return api.agentGetRoleScopes();
+      }
       if (cmd.startsWith('agent_')) {
         return null;
       }
