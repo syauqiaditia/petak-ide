@@ -41,8 +41,12 @@ pub use skills::{
     validate_skill_name, Skill, SkillMetadata, SkillSummary, CORE_SKILLS,
 };
 pub use slot::{
+    get_allowed_models_for_engine, get_supported_engines, is_model_allowed_for_engine,
+    load_openai_api_key, probe_antigravity, probe_claude_code, probe_custom, probe_hermes,
+    probe_openai, resolve_slot_command, validate_engine_model, validate_engine_model_for_root,
     ChatMessage, RingBuffer, Slot, SlotCapabilities, SlotConfig, SlotEvent, SlotManager,
-    SlotStatus, SlotSummary, DEFAULT_IDLE_TIMEOUT, DEFAULT_MAX_ACTIVE_SLOTS,
+    SlotStatus, SlotSummary, SupportedEngineInfo, ANTIGRAVITY_MODELS, CLAUDE_CODE_MODELS,
+    DEFAULT_IDLE_TIMEOUT, DEFAULT_MAX_ACTIVE_SLOTS, OPENAI_MODELS,
 };
 pub use team::{global_team_path, load_team, project_team_path, save_team, TeamConfig};
 pub use usage::{parse_usage, UsageReport};
