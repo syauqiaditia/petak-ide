@@ -172,32 +172,169 @@
   <!-- Left resize handle -->
   <div class="resize-handle" onmousedown={startResize} role="separator" aria-label="Resize panel"></div>
 
-  <!-- Single Unified 38px Header (Anti-Cramp V2) -->
+  <!-- Clean Responsive 2-Row Header (Linear / Raycast Style) -->
   <div class="agent-unified-header panel-header">
-    <div class="header-left">
-      <!-- Hermes 6 Bot Profiles Dropdown Selector -->
-      <div class="bot-selector-wrap">
-        <select
-          class="bot-select-dropdown"
-          value={activeProfileId}
-          onchange={handleProfileSelect}
-          aria-label="Hermes Bot Profile Selector"
-        >
-          {#each HERMES_PROFILES as p}
-            {@const pStatus = getProfileStatus(p.id)}
-            <option value={p.id}>
-              {p.label} ({p.role}) · {pStatus === 'busy' ? '⚡ Busy' : '● Ready'}
-            </option>
-          {/each}
-        </select>
-        <span
-          class="runtime-status-dot"
-          class:busy={getProfileStatus(activeProfileId) === 'busy'}
-          class:ready={getProfileStatus(activeProfileId) === 'ready'}
-          title="Runtime: {getProfileStatus(activeProfileId)}"
-        ></span>
+    <!-- Baris 1: Top Navigation & Primary Actions -->
+    <div class="header-primary-row">
+      <div class="primary-left header-left">
+        <!-- Hermes Bot Profiles Dropdown Selector -->
+        <div class="bot-selector-wrap">
+          <select
+            class="bot-select-dropdown"
+            value={activeProfileId}
+            onchange={handleProfileSelect}
+            aria-label="Hermes Bot Profile Selector"
+          >
+            {#each HERMES_PROFILES as p}
+              {@const pStatus = getProfileStatus(p.id)}
+              <option value={p.id}>
+                {p.label} ({p.role}) · {pStatus === 'busy' ? '⚡ Busy' : '● Ready'}
+              </option>
+            {/each}
+          </select>
+          <span
+            class="runtime-status-dot"
+            class:busy={getProfileStatus(activeProfileId) === 'busy'}
+            class:ready={getProfileStatus(activeProfileId) === 'ready'}
+            title="Runtime: {getProfileStatus(activeProfileId)}"
+          ></span>
+        </div>
+
+        <!-- + New Chat & History Sessions Action Buttons -->
+        <div class="session-actions-group">
+          <button
+            type="button"
+            class="panel-icon-btn new-chat-btn"
+            onclick={() => agentsStore.newSession()}
+            title="Mulai percakapan baru (+ New Chat)"
+            aria-label="New Chat"
+          >
+            <span class="btn-icon">+</span>
+            <span class="btn-text">New</span>
+          </button>
+
+          <button
+            type="button"
+            class="panel-icon-btn history-btn"
+            class:active={agentsStore.isHistoryOpen}
+            onclick={() => agentsStore.toggleHistory()}
+            title="Lihat riwayat percakapan sebelumnya"
+            aria-label="History Sessions"
+          >
+            ⏱️
+            {#if agentsStore.savedSessions.length > 0}
+              <span class="history-count">{agentsStore.savedSessions.length}</span>
+            {/if}
+          </button>
+        </div>
       </div>
 
+      <div class="primary-right agent-header-actions">
+        <!-- Back to Chat when on secondary views -->
+        {#if activeSubTab !== 'chat'}
+          <button
+            class="subtab-btn back-chat"
+            onclick={() => (activeSubTab = 'chat')}
+            title="Kembali ke Chat"
+          >
+            ← Chat
+          </button>
+        {/if}
+
+        <!-- Concise Subtabs: Chat, Lanes & Diff (with hunk count badge) -->
+        <div class="agent-subtab-group">
+          <button
+            class="subtab-btn"
+            class:active={activeSubTab === 'chat'}
+            onclick={() => (activeSubTab = 'chat')}
+          >
+            Chat
+          </button>
+          <button
+            class="subtab-btn lanes"
+            class:active={activeSubTab === 'lanes'}
+            onclick={() => (activeSubTab = 'lanes')}
+            title="Lanes Cockpit"
+          >
+            ⚡ Lanes
+          </button>
+          {#if pendingHunkCount > 0 || pendingProposalCount > 0 || activeSubTab === 'diff'}
+            <button
+              class="subtab-btn diff"
+              class:active={activeSubTab === 'diff'}
+              onclick={() => (activeSubTab = 'diff')}
+              title="Proposed Edits"
+            >
+              Diff
+              {#if pendingHunkCount > 0}
+                <span class="diff-badge">{pendingHunkCount}</span>
+              {:else if pendingProposalCount > 0}
+                <span class="diff-badge">{pendingProposalCount}</span>
+              {/if}
+            </button>
+          {/if}
+        </div>
+
+        <!-- Action group kanan: ⋯ More menu (Quota, Memory, Settings) dan ✕ Close button -->
+        <div class="header-action-group">
+          <!-- More Menu Dropdown: Quota, Memory, Settings -->
+          <div class="more-menu-wrap">
+            <button
+              class="header-action-btn more-btn"
+              class:active={isMoreMenuOpen || activeSubTab === 'quota' || activeSubTab === 'memory'}
+              onclick={() => (isMoreMenuOpen = !isMoreMenuOpen)}
+              title="Menu Lainnya (Quota, Memory, Settings)"
+              aria-label="More Options"
+            >
+              ⋯
+            </button>
+
+            {#if isMoreMenuOpen}
+              <div class="more-menu-backdrop" onclick={() => (isMoreMenuOpen = false)} role="presentation"></div>
+              <div class="more-menu-dropdown" role="menu" onclick={() => (isMoreMenuOpen = false)}>
+                <button
+                  class="more-menu-item"
+                  class:active={activeSubTab === 'quota'}
+                  onclick={() => (activeSubTab = 'quota')}
+                  role="menuitem"
+                  title="Quota & Usage"
+                >
+                  <span class="item-icon">📊</span>
+                  <span>Quota & Usage</span>
+                </button>
+                <button
+                  class="more-menu-item"
+                  class:active={activeSubTab === 'memory'}
+                  onclick={() => (activeSubTab = 'memory')}
+                  role="menuitem"
+                  title="Memory"
+                >
+                  <span class="item-icon">📓</span>
+                  <span>Memory</span>
+                </button>
+                <div class="more-menu-divider"></div>
+                <button
+                  class="more-menu-item"
+                  onclick={() => settingsStore.open('agents')}
+                  role="menuitem"
+                >
+                  <span class="item-icon">⚙️</span>
+                  <span>Pengaturan AI Agents</span>
+                </button>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Close Panel Button -->
+          <button class="close-panel-btn" onclick={onClose} aria-label="Close Agents Panel" title="Tutup panel (⌘6)">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Baris 2: Context & Runtime Metadata Bar -->
+    <div class="header-meta-row">
       <!-- Engine Badge -->
       <div
         class="dynamic-engine-badge"
@@ -257,134 +394,6 @@
       >
         <span class="tool-scoping-text">🛡️ Tool Scoping: Active</span>
       </div>
-
-      <!-- + New Chat & History Sessions Action Buttons -->
-      <div class="session-actions-group">
-        <button
-          type="button"
-          class="panel-icon-btn new-chat-btn"
-          onclick={() => agentsStore.newSession()}
-          title="Mulai percakapan baru (+ New Chat)"
-          aria-label="New Chat"
-        >
-          <span class="btn-icon">+</span>
-          <span class="btn-text">New</span>
-        </button>
-
-        <button
-          type="button"
-          class="panel-icon-btn history-btn"
-          class:active={agentsStore.isHistoryOpen}
-          onclick={() => agentsStore.toggleHistory()}
-          title="Lihat riwayat percakapan sebelumnya"
-          aria-label="History Sessions"
-        >
-          ⏱️
-          {#if agentsStore.savedSessions.length > 0}
-            <span class="history-count">{agentsStore.savedSessions.length}</span>
-          {/if}
-        </button>
-      </div>
-    </div>
-
-    <div class="agent-header-actions">
-      <!-- Back to Chat when on secondary views -->
-      {#if activeSubTab !== 'chat'}
-        <button
-          class="subtab-btn back-chat"
-          onclick={() => (activeSubTab = 'chat')}
-          title="Kembali ke Chat"
-        >
-          ← Chat
-        </button>
-      {/if}
-
-      <!-- Concise Subtabs: Chat, Lanes & Diff (with hunk count badge) -->
-      <div class="agent-subtab-group">
-        <button
-          class="subtab-btn"
-          class:active={activeSubTab === 'chat'}
-          onclick={() => (activeSubTab = 'chat')}
-        >
-          Chat
-        </button>
-        <button
-          class="subtab-btn lanes"
-          class:active={activeSubTab === 'lanes'}
-          onclick={() => (activeSubTab = 'lanes')}
-          title="Lanes Cockpit"
-        >
-          ⚡ Lanes Cockpit
-        </button>
-        {#if pendingHunkCount > 0 || pendingProposalCount > 0 || activeSubTab === 'diff'}
-          <button
-            class="subtab-btn diff"
-            class:active={activeSubTab === 'diff'}
-            onclick={() => (activeSubTab = 'diff')}
-            title="Proposed Edits"
-          >
-            Diff
-            {#if pendingHunkCount > 0}
-              <span class="diff-badge">{pendingHunkCount}</span>
-            {:else if pendingProposalCount > 0}
-              <span class="diff-badge">{pendingProposalCount}</span>
-            {/if}
-          </button>
-        {/if}
-      </div>
-
-      <!-- More Menu Dropdown: Quota, Memory, Settings -->
-      <div class="more-menu-wrap">
-        <button
-          class="header-action-btn more-btn"
-          class:active={isMoreMenuOpen || activeSubTab === 'quota' || activeSubTab === 'memory'}
-          onclick={() => (isMoreMenuOpen = !isMoreMenuOpen)}
-          title="Menu Lainnya (Quota, Memory, Settings)"
-          aria-label="More Options"
-        >
-          ⋯
-        </button>
-
-        {#if isMoreMenuOpen}
-          <div class="more-menu-backdrop" onclick={() => (isMoreMenuOpen = false)} role="presentation"></div>
-          <div class="more-menu-dropdown" role="menu" onclick={() => (isMoreMenuOpen = false)}>
-            <button
-              class="more-menu-item"
-              class:active={activeSubTab === 'quota'}
-              onclick={() => (activeSubTab = 'quota')}
-              role="menuitem"
-              title="Quota & Usage"
-            >
-              <span class="item-icon">📊</span>
-              <span>Quota & Usage</span>
-            </button>
-            <button
-              class="more-menu-item"
-              class:active={activeSubTab === 'memory'}
-              onclick={() => (activeSubTab = 'memory')}
-              role="menuitem"
-              title="Memory"
-            >
-              <span class="item-icon">📓</span>
-              <span>Memory</span>
-            </button>
-            <div class="more-menu-divider"></div>
-            <button
-              class="more-menu-item"
-              onclick={() => settingsStore.open('agents')}
-              role="menuitem"
-            >
-              <span class="item-icon">⚙️</span>
-              <span>Pengaturan AI Agents</span>
-            </button>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Close Panel Button -->
-      <button class="close-panel-btn" onclick={onClose} aria-label="Close Agents Panel" title="Tutup panel (⌘6)">
-        ✕
-      </button>
     </div>
   </div>
 
@@ -514,29 +523,75 @@
     background: #6ea8ff;
   }
 
-  /* Single Unified 38px Header */
+  /* Clean Responsive 2-Row Header (Linear / Raycast Style) */
   .agent-unified-header,
   .panel-header {
+    display: flex;
+    flex-direction: column;
+    background: #121317;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  /* Baris 1: Top Navigation & Primary Actions */
+  .header-primary-row {
     height: 38px;
     min-height: 38px;
-    max-height: 38px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 6px;
     padding: 0 8px;
-    background: #121317;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
     box-sizing: border-box;
+    width: 100%;
   }
 
+  .primary-left,
   .header-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
-    flex-shrink: 1;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .primary-right,
+  .agent-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .header-action-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Baris 2: Context & Runtime Metadata Bar */
+  .header-meta-row {
+    height: 28px;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    box-sizing: border-box;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .header-meta-row::-webkit-scrollbar {
+    display: none;
   }
 
   /* Hermes Bot Dropdown Selector */
@@ -544,22 +599,27 @@
     position: relative;
     display: flex;
     align-items: center;
+    min-width: 0;
+    flex-shrink: 1;
+    max-width: 130px;
   }
 
   .bot-select-dropdown {
-    background: #18191f;
+    background: #181920;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     color: #f1f2f4;
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 20px 3px 5px;
-    max-width: 115px;
+    padding: 3px 18px 3px 6px;
+    width: 100%;
+    max-width: 130px;
     outline: none;
     cursor: pointer;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
+    transition: all 0.12s ease;
   }
 
   .bot-select-dropdown:hover {
@@ -569,7 +629,7 @@
 
   .runtime-status-dot {
     position: absolute;
-    right: 7px;
+    right: 6px;
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -604,10 +664,12 @@
     background: rgba(59, 130, 246, 0.08);
     color: #60a5fa;
     flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .engine-pill-text {
     line-height: 1;
+    white-space: nowrap;
   }
 
   /* Dynamic Active Model Badge */
@@ -616,7 +678,7 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    padding: 2px 5px;
+    padding: 2px 6px;
     border-radius: 4px;
     font-size: 10px;
     font-weight: 600;
@@ -624,6 +686,7 @@
     background: rgba(255, 255, 255, 0.04);
     color: #9da1ad;
     flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .dynamic-model-badge.interactive {
@@ -666,6 +729,7 @@
     color: #34d399;
     flex-shrink: 0;
     cursor: default;
+    white-space: nowrap;
   }
 
   .tool-scoping-text {
@@ -687,6 +751,7 @@
     display: flex;
     align-items: center;
     gap: 3px;
+    flex-shrink: 0;
   }
 
   .panel-icon-btn {
@@ -695,7 +760,7 @@
     gap: 3px;
     height: 22px;
     padding: 0 5px;
-    background: #18191f;
+    background: #181920;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     color: #c9cdd4;
@@ -703,6 +768,8 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .panel-icon-btn:hover {
@@ -739,7 +806,7 @@
 
   .sessions-dropdown-backdrop {
     position: absolute;
-    inset: 38px 0 0 0;
+    inset: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 50;
     display: flex;
@@ -1057,6 +1124,7 @@
   }
 
   .panel-view-area {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
