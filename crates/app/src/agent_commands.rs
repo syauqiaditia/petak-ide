@@ -1,8 +1,9 @@
 use petak_core::agent::{
     get_all_role_scopes, HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult,
     MemoryItem, MemorySnippet, PendingPermissionRequest, PromptResponse, Proposal,
-    PrunedContextResult, RoleScopeInfo, Skill, SkillSummary, SlotConfig, SlotManager, SlotSummary,
-    SupportedEngineInfo, TeamConfig, UsageReport, WorktreeInfo,
+    PrunedContextResult, RoleScopeInfo, SelfHealPhase, SelfHealResult, SelfHealStatus, Skill,
+    SkillSummary, SlotConfig, SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig,
+    UsageReport, WorktreeInfo,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -605,6 +606,58 @@ pub async fn agent_worktree_remove(
     let root = resolve_worktree_root(&app, &state)?;
     tauri::async_runtime::spawn_blocking(move || {
         petak_core::agent::remove_worktree(&root, &task_id, delete_branch)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Self-Healing Loop Management ────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_trigger_self_heal(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+    active_file: String,
+) -> Result<SelfHealResult, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+
+    if let Some(run_state) = app.try_state::<crate::commands::RunState>() {
+        if let Ok(runs) = run_state.inner.runs.lock() {
+            for (_, run) in runs.iter() {
+                if let crate::commands::ActiveRun::Flutter(fr) = run {
+                    petak_core::run::set_active_flutter_runner(Some(fr.clone()));
+                    break;
+                }
+            }
+        }
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::trigger_self_heal(&task_id, &active_file, Some(&root))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_get_self_heal_status(
+    _app: tauri::AppHandle,
+    _state: tauri::State<'_, AgentState>,
+    task_id: String,
+) -> Result<SelfHealStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::get_self_heal_status(&task_id).unwrap_or_else(|| {
+            SelfHealStatus {
+                task_id: task_id.clone(),
+                active_file: String::new(),
+                status: SelfHealPhase::Idle,
+                attempt: 0,
+                max_attempts: 3,
+                error: None,
+                last_verified_at: None,
+            }
+        }))
     })
     .await
     .map_err(|e| e.to_string())?

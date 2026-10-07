@@ -34,6 +34,6 @@ pub use agent::skills::{
 
 pub use run::flow;
 pub use run::flow::{
-    cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, save_flow, validate_flow_id,
-    Flow, FlowRunResult, FlowStep, FlowStepStatus, FlowStepStatusKind,
+    cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, run_flow_sync, save_flow,
+    validate_flow_id, Flow, FlowRunResult, FlowStep, FlowStepStatus, FlowStepStatusKind,
 };

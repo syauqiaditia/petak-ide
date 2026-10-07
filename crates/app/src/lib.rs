@@ -365,6 +365,8 @@ pub fn run() {
             commands::agent_worktree_create,
             commands::agent_worktree_diff,
             commands::agent_worktree_remove,
+            commands::agent_trigger_self_heal,
+            commands::agent_get_self_heal_status,
             // Phase 5 - GitLab MR
             commands::mr_get_token_scope,
             commands::mr_current_user,
