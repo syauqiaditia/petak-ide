@@ -1618,6 +1618,19 @@ export function routePromptResponse(
   };
 }
 
+/**
+ * Computes whether the agent interface is busy.
+ * Agent is busy if not aborted by watchdog, and either streaming is active or slot status is 'busy'.
+ */
+export function computeIsBusy(
+  isWatchdogAborted: boolean,
+  isStreaming: boolean,
+  slotStatus?: string | null
+): boolean {
+  return !isWatchdogAborted && (isStreaming || slotStatus === 'busy');
+}
+
+
 
 
 
