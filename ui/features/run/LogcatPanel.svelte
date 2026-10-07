@@ -204,7 +204,7 @@
         type="text"
         class="text-filter tag-filter"
         placeholder="Tag filter"
-        value={tagInput}
+        bind:value={tagInput}
         oninput={handleTagInput}
         title="Filter by tag"
       />
@@ -215,7 +215,7 @@
           type="text"
           class="text-filter search-filter"
           placeholder="Search logs..."
-          value={searchInput}
+          bind:value={searchInput}
           oninput={handleSearchInput}
           title="Filter by text (debounce 100ms)"
         />

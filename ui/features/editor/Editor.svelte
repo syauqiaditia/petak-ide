@@ -842,6 +842,11 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target && target.isContentEditable)) {
+      return;
+    }
+
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
       e.preventDefault();
       e.stopPropagation();
