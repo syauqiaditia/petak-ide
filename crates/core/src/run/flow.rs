@@ -145,24 +145,42 @@ fn flows_dir(root: Option<&Path>) -> PathBuf {
     }
 }
 
-/// Discover all flows in `.petak/flows/*.yaml` (and *.yml).
-pub fn list_flows(root: Option<&Path>) -> Result<Vec<Flow>, String> {
-    let dir = flows_dir(root);
-    if !dir.exists() {
-        return Ok(Vec::new());
-    }
+fn candidate_flow_dirs(root: Option<&Path>) -> Vec<PathBuf> {
+    let base = match root {
+        Some(r) => r.to_path_buf(),
+        None => PathBuf::from("."),
+    };
+    vec![
+        base.join(".petak").join("flows"),
+        base.join(".maestro"),
+    ]
+}
 
-    let entries = fs::read_dir(&dir).map_err(|e| format!("Failed to read flows directory: {}", e))?;
+/// Discover all flows in `.petak/flows/*.yaml` (and *.yml) or `.maestro/*.yaml` (and *.yml).
+pub fn list_flows(root: Option<&Path>) -> Result<Vec<Flow>, String> {
     let mut flows = Vec::new();
 
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                if ext == "yaml" || ext == "yml" {
-                    if let Ok(content) = fs::read_to_string(&path) {
-                        if let Ok(flow) = serde_yaml::from_str::<Flow>(&content) {
-                            flows.push(flow);
+    for dir in candidate_flow_dirs(root) {
+        if !dir.exists() {
+            continue;
+        }
+
+        let entries = match fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                    if ext == "yaml" || ext == "yml" {
+                        if let Ok(content) = fs::read_to_string(&path) {
+                            if let Ok(flow) = serde_yaml::from_str::<Flow>(&content) {
+                                if !flows.iter().any(|f: &Flow| f.id == flow.id) {
+                                    flows.push(flow);
+                                }
+                            }
                         }
                     }
                 }
@@ -379,16 +397,38 @@ pub async fn run_flow(
     flow_id: &str,
     device_serial: Option<&str>,
 ) -> Result<FlowRunResult, String> {
+    run_flow_sync(root, flow_id, device_serial)
+}
+
+/// Execute a flow synchronously against target device using Maestro CLI if available, or ADB fallback runner.
+pub fn run_flow_sync(
+    root: Option<&Path>,
+    flow_id: &str,
+    device_serial: Option<&str>,
+) -> Result<FlowRunResult, String> {
     validate_flow_id(flow_id)?;
     let dir = flows_dir(root);
 
-    // Locate flow file
-    let candidate = dir.join(format!("{}.yaml", flow_id));
-    let flow = if candidate.exists() {
-        let content = fs::read_to_string(&candidate)
+    // Locate flow file in .petak/flows or .maestro
+    let mut candidate = None;
+    for d in candidate_flow_dirs(root) {
+        let p1 = d.join(format!("{}.yaml", flow_id));
+        if p1.exists() {
+            candidate = Some(p1);
+            break;
+        }
+        let p2 = d.join(format!("{}.yml", flow_id));
+        if p2.exists() {
+            candidate = Some(p2);
+            break;
+        }
+    }
+
+    let flow = if let Some(cand) = candidate {
+        let content = fs::read_to_string(&cand)
             .map_err(|e| format!("Failed to read flow file: {}", e))?;
         serde_yaml::from_str::<Flow>(&content)
-            .map_err(|e| format!("Invalid flow YAML in '{}': {}", candidate.display(), e))?
+            .map_err(|e| format!("Invalid flow YAML in '{}': {}", cand.display(), e))?
     } else {
         // Fallback search across directory for matching flow.id
         let all = list_flows(root)?;

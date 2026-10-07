@@ -607,6 +607,11 @@ impl FlutterRun {
         })
     }
 
+    /// Trigger hot reload (`reload(false)`).
+    pub fn hot_reload(&mut self) -> Result<ReloadResult, FlutterRunError> {
+        self.reload(false)
+    }
+
     /// Trigger hot reload (`full == false`) or hot restart (`full == true`).
     pub fn reload(&mut self, full: bool) -> Result<ReloadResult, FlutterRunError> {
         if !self.shared.is_running.load(Ordering::SeqCst) {
@@ -719,6 +724,48 @@ impl Drop for FlutterRun {
             let _ = self.stop();
         }
     }
+}
+
+static ACTIVE_FLUTTER_RUNNER: OnceLock<Mutex<Option<Arc<Mutex<FlutterRun>>>>> = OnceLock::new();
+
+/// Set the currently active Flutter runner instance.
+pub fn set_active_flutter_runner(runner: Option<Arc<Mutex<FlutterRun>>>) {
+    let lock = ACTIVE_FLUTTER_RUNNER.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = lock.lock() {
+        *guard = runner;
+    }
+}
+
+/// Check if a Flutter runner is active and running.
+pub fn is_flutter_runner_active() -> bool {
+    let lock = ACTIVE_FLUTTER_RUNNER.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = lock.lock() {
+        if let Some(ref runner) = *guard {
+            if let Ok(r) = runner.lock() {
+                return r.is_running();
+            }
+        }
+    }
+    false
+}
+
+/// Trigger hot reload on the active Flutter runner, if any.
+pub fn hot_reload() -> Result<ReloadResult, FlutterRunError> {
+    let lock = ACTIVE_FLUTTER_RUNNER.get_or_init(|| Mutex::new(None));
+    let maybe_runner = {
+        if let Ok(guard) = lock.lock() {
+            guard.clone()
+        } else {
+            None
+        }
+    };
+    if let Some(runner) = maybe_runner {
+        let mut r = runner.lock().map_err(|_| FlutterRunError::ProcessTerminated)?;
+        if r.is_running() {
+            return r.hot_reload();
+        }
+    }
+    Err(FlutterRunError::ProcessTerminated)
 }
 
 #[cfg(test)]

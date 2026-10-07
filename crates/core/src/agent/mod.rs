@@ -1,5 +1,6 @@
 pub mod acp;
 pub mod context;
+pub mod heal;
 pub mod hermes;
 pub mod mcp;
 pub mod memory;
@@ -18,6 +19,10 @@ pub use acp::{
     RequestCallback, UpdateCallback,
 };
 pub use context::{prune_file_context, DiagnosticSnippet, PrunedContextResult, SymbolOutline};
+pub use heal::{
+    get_self_heal_status, reset_self_heal, trigger_self_heal, SelfHealPhase, SelfHealResult,
+    SelfHealStatus, SelfHealingLoop, SelfHealingManager,
+};
 pub use hermes::{
     check_hermes_acp, check_hermes_version, detect_hermes, fallback_read_profiles,
     parse_kanban_json, parse_kanban_text, parse_profile_list_table, resolve_hermes,

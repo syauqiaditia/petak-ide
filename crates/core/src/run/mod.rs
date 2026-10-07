@@ -29,7 +29,8 @@ pub use device::{
     DevicesSnapshot, EmulatorInfo, PhysicalDevice, SnapshotDevice,
 };
 pub use flutter::{
-    extract_devtools_url, parse_build_error, parse_flutter_daemon_line, AppState, BuildError,
+    extract_devtools_url, hot_reload, is_flutter_runner_active, parse_build_error,
+    parse_flutter_daemon_line, set_active_flutter_runner, AppState, BuildError,
     FlutterDaemonMessage, FlutterRun, FlutterRunError, OutputStream, ReloadResult, RunEvent,
 };
 pub use ios::{
@@ -47,7 +48,7 @@ pub use pairing::{
     PairResult,
 };
 pub use flow::{
-    cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, save_flow, validate_flow_id,
-    Flow, FlowRunResult, FlowStep, FlowStepStatus, FlowStepStatusKind,
+    cancel_flow, create_flow, is_flow_cancelled, list_flows, run_flow, run_flow_sync, save_flow,
+    validate_flow_id, Flow, FlowRunResult, FlowStep, FlowStepStatus, FlowStepStatusKind,
 };
 pub use crate::exec::{Exec, SystemExec, SystemExec as ProcessExec};
