@@ -1,7 +1,8 @@
 use petak_core::agent::{
-    HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult, MemoryItem,
-    PendingPermissionRequest, PromptResponse, Proposal, Skill, SkillSummary, SlotConfig,
-    SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig, UsageReport,
+    get_all_role_scopes, HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult,
+    MemoryItem, PendingPermissionRequest, PromptResponse, Proposal, RoleScopeInfo, Skill,
+    SkillSummary, SlotConfig, SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig,
+    UsageReport,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -112,6 +113,15 @@ pub async fn agent_get_supported_engines(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// ── Role Tool Scopes ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_role_scopes() -> Result<Vec<RoleScopeInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(get_all_role_scopes()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 // ── Team configuration & slot management ───────────────────────────────────

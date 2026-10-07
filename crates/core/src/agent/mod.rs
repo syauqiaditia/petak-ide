@@ -3,6 +3,7 @@ pub mod hermes;
 pub mod mcp;
 pub mod memory;
 pub mod perm;
+pub mod policy;
 pub mod proposal;
 pub mod quota;
 pub mod skills;
@@ -30,6 +31,12 @@ pub use memory::{
 pub use perm::{
     default_allowlist, PendingPermissionRequest, PermissionDecision, PermissionManager,
     PermissionMode,
+};
+pub use policy::{
+    default_role_blacklist, default_role_whitelist, extract_tool_name, filter_advertised_tools,
+    filter_tool_schemas, filter_tools_list_response, get_all_role_scopes, normalize_tool_name,
+    tool_matches, AgentRole, RoleScopeInfo, RoleToolScope, ToolPolicy, ROLE_CUSTOM, ROLE_MANAGER,
+    ROLE_REVIEWER, ROLE_SENIOR, ROLE_SENIOR2, ROLE_TECHLEAD,
 };
 pub use proposal::{apply_hunk_to_text, compute_hunks, Proposal, ProposalBuffer, ProposalStatus};
 pub use quota::{
