@@ -23,10 +23,29 @@ export interface SlotConfig {
 export interface SupportedEngineInfo {
   id: string;
   name: string;
-  detected: boolean;
-  status: string;
-  allowedModels: string[];
+  detected?: boolean;
+  status?: string;
+  allowedModels?: string[];
+  available?: boolean;
+  version?: string | null;
+  binaryPath?: string | null;
   defaultModel?: string | null;
+  models?: string[];
+  description?: string;
+}
+
+export interface EnginePlatformOption {
+  id: string;
+  name: string;
+  badge: string;
+  desc: string;
+  defaultModel: string;
+  models: Array<{
+    id: string;
+    name: string;
+    desc?: string;
+    recommended?: boolean;
+  }>;
 }
 
 export type SlotStatus =

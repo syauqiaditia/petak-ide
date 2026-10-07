@@ -4,6 +4,10 @@ import type {
   UsageReport,
   FixWithAgentDraft,
   SlotStatus,
+  SlotConfig,
+  TeamConfig,
+  HermesProfileInfo,
+  EnginePlatformOption,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
@@ -340,35 +344,140 @@ export interface AgentPlatform {
 }
 
 export const AGENT_PLATFORMS: AgentPlatform[] = [
-  { id: 'antigravity', name: 'Antigravity (via 9Router)', badge: '🚀 Antigravity', desc: 'Google Gemini & Claude Opus via 9Router proxy' },
+  { id: 'hermes', name: 'Hermes Agent', badge: '🤖 Hermes', desc: 'Daemon profil lokal Hermes CLI' },
   { id: 'claude-code', name: 'Claude Code CLI', badge: '🟣 Claude Code', desc: 'Anthropic Standalone CLI via ACP' },
-  { id: 'codex', name: 'OpenAI Codex / GPT', badge: '🟢 Codex', desc: 'OpenAI Autonomous Agent via ACP' },
-  { id: 'hermes', name: 'Hermes Agent', badge: '🤖 Hermes', desc: 'Daemon profil lokal Hermes' },
+  { id: 'antigravity', name: 'Antigravity (via 9Router)', badge: '🚀 Antigravity', desc: 'Google Gemini & Claude Opus via 9Router proxy' },
+  { id: 'codex', name: 'OpenAI Codex', badge: '🟢 Codex', desc: 'OpenAI Autonomous Agent via ACP' },
+  { id: 'acp-custom', name: 'Custom ACP Command', badge: '⚙️ Custom', desc: 'Perintah terminal bebas via stdio ACP' },
   { id: 'ollama', name: 'Local Ollama', badge: '🦙 Ollama', desc: 'Model offline tanpa internet' },
   { id: 'custom', name: 'Custom ACP Command', badge: '⚙️ Custom', desc: 'Perintah terminal bebas via stdio ACP' },
 ];
 
+export const SUPPORTED_ENGINES: EnginePlatformOption[] = [
+  {
+    id: 'hermes',
+    name: 'Hermes Agent',
+    badge: '🤖 Hermes',
+    desc: 'Daemon profil lokal Hermes CLI',
+    defaultModel: 'ag/gemini-3.8-flash-high',
+    models: [
+      { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Default', recommended: true },
+      { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus Thinking', desc: 'Hermes Reasoning' },
+      { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', desc: 'Hermes Cloud' },
+      { id: 'openai/gpt-4o', name: 'OpenAI GPT-4o', desc: 'Hermes Cloud' },
+    ],
+  },
+  {
+    id: 'claude-code',
+    name: 'Claude Code CLI',
+    badge: '🟣 Claude Code',
+    desc: 'Anthropic Standalone CLI via ACP',
+    defaultModel: 'claude-3-7-sonnet',
+    models: [
+      { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
+      { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+      { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+    ],
+  },
+  {
+    id: 'antigravity',
+    name: 'Antigravity (via 9Router)',
+    badge: '🚀 Antigravity',
+    desc: 'Google Gemini & Claude Opus via 9Router proxy',
+    defaultModel: 'ag/gemini-3.8-flash-high',
+    models: [
+      { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Cepat & Hemat Kuota', recommended: true },
+      { id: 'ag/claude-opus-4.1', name: 'Claude Opus 4.1', desc: 'Arsitektur & Reasoning Kuat', recommended: true },
+      { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'Deep Reasoning Flagship' },
+    ],
+  },
+  {
+    id: 'codex',
+    name: 'OpenAI Codex',
+    badge: '🟢 Codex',
+    desc: 'OpenAI Autonomous Agent via ACP',
+    defaultModel: 'gpt-4o',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+      { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+      { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+    ],
+  },
+  {
+    id: 'acp-custom',
+    name: 'Custom ACP Command',
+    badge: '⚙️ Custom',
+    desc: 'Perintah terminal bebas via stdio ACP',
+    defaultModel: 'custom-model',
+    models: [
+      { id: 'custom-model', name: 'Custom Model ID', desc: 'Model bebas via parameter CLI' },
+    ],
+  },
+];
+
+export const ENGINE_WHITELIST_MODELS: Record<string, ModelPreset[]> = {
+  'claude-code': [
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
+    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+  ],
+  antigravity: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Cepat & Hemat Kuota', recommended: true },
+    { id: 'ag/claude-opus-4.1', name: 'Claude Opus 4.1', desc: 'Arsitektur & Reasoning Kuat', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'Deep Reasoning Flagship' },
+  ],
+  codex: [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+    { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+    { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+  ],
+  hermes: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Profile Default', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus Thinking', desc: 'Hermes Profile Fallback' },
+    { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', desc: 'Hermes Cloud' },
+    { id: 'openai/gpt-4o', name: 'OpenAI GPT-4o', desc: 'Hermes Cloud' },
+  ],
+  'acp-custom': [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
+  ],
+  custom: [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
+  ],
+  ollama: [
+    { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', desc: 'Coding Lokal Terbaik (16GB)', recommended: true },
+    { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', desc: 'Cepat & Akurat (Mac 16GB)' },
+    { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng untuk Mac 8GB' },
+    { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
+    { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
+  ],
+};
+
 export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
   antigravity: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Cepat, Hemat & Cerdas', recommended: true },
-    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity — Deep Reasoning & Arsitektur', recommended: true },
+    { id: 'ag/claude-opus-4.1', name: 'Claude Opus 4.1', desc: 'via Antigravity — Arsitektur & Reasoning Kuat', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity — Deep Reasoning & Arsitektur' },
     { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship' },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Standar Cepat & Akurat' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Reasoning Kuat & Multimodal' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Super Cepat & Hemat Kuota' },
   ],
   'claude-code': [
     { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship (Rekomendasi)', recommended: true },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Standar Cepat & Akurat' },
     { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
   ],
   codex: [
     { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
     { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
     { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
-    { id: 'o1-mini', name: 'o1-mini', desc: 'Reasoning Ringan' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
   ],
   hermes: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Profile Default', recommended: true },
@@ -382,17 +491,17 @@ export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
     { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng untuk Mac 8GB' },
     { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
     { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
-    { id: 'llama3.3:70b', name: 'Llama 3.3 70B', desc: 'Model Besar Serbaguna' },
-    { id: 'llama3.1:8b', name: 'Llama 3.1 8B', desc: 'Lokal Cepat Standar' },
+  ],
+  'acp-custom': [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
   ],
   custom: [
     { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
   ],
-  // Compatibility aliases
   anthropic: [
     { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
-    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
+    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
   ],
   gemini: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Rekomendasi Hermes', recommended: true },
@@ -401,8 +510,8 @@ export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
   ],
   openai: [
     { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
     { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
   ],
 };
 
@@ -446,6 +555,167 @@ export function getModelDescription(modelId: string): string {
     if (found?.desc) return found.desc;
   }
   return '';
+}
+
+// ── Multi-Engine Cascading & Presets (Phase 1 ACP Gateway) ───────────────────
+
+export function getEngineOptions(): EnginePlatformOption[] {
+  return SUPPORTED_ENGINES;
+}
+
+export function normalizeEngineId(engine?: string | null): string {
+  if (!engine) return 'hermes';
+  const e = engine.trim().toLowerCase();
+  if (e === 'openai') return 'codex';
+  if (e === 'custom') return 'acp-custom';
+  return e;
+}
+
+export function getModelsForEngine(
+  engine?: string | null,
+  hermesProfiles?: HermesProfileInfo[]
+): ModelPreset[] {
+  const norm = normalizeEngineId(engine);
+  if (norm === 'hermes' && hermesProfiles && hermesProfiles.length > 0) {
+    const list: ModelPreset[] = hermesProfiles.map((p) => ({
+      id: p.model || p.name,
+      name: `Hermes: ${p.name.charAt(0).toUpperCase() + p.name.slice(1)}`,
+      desc: p.model ? `Model: ${p.model}` : 'Profil Hermes Lokal',
+      recommended: p.is_active,
+    }));
+    for (const m of (ENGINE_WHITELIST_MODELS.hermes || [])) {
+      if (!list.some((item) => item.id === m.id)) {
+        list.push(m);
+      }
+    }
+    return list;
+  }
+
+  return (
+    ENGINE_WHITELIST_MODELS[norm] ||
+    ENGINE_WHITELIST_MODELS[engine || ''] ||
+    ENGINE_WHITELIST_MODELS.antigravity
+  );
+}
+
+export function getDefaultModelForEngine(engine?: string | null): string {
+  const norm = normalizeEngineId(engine);
+  switch (norm) {
+    case 'claude-code':
+      return 'claude-3-7-sonnet';
+    case 'antigravity':
+      return 'ag/gemini-3.8-flash-high';
+    case 'codex':
+      return 'gpt-4o';
+    case 'hermes':
+      return 'ag/gemini-3.8-flash-high';
+    case 'acp-custom':
+      return 'custom-model';
+    default:
+      return 'ag/gemini-3.8-flash-high';
+  }
+}
+
+export function isModelAllowedForEngine(
+  engine: string,
+  model: string,
+  hermesProfiles?: HermesProfileInfo[]
+): boolean {
+  if (!engine || !model) return false;
+  const models = getModelsForEngine(engine, hermesProfiles);
+  return models.some((m) => m.id === model);
+}
+
+export function resetModelOnEngineChange(
+  newEngine: string,
+  _currentModel?: string | null,
+  _hermesProfiles?: HermesProfileInfo[]
+): string {
+  return getDefaultModelForEngine(newEngine);
+}
+
+export function resolveModelForEngine(
+  newEngine: string,
+  currentModel?: string | null,
+  hermesProfiles?: HermesProfileInfo[]
+): string {
+  if (currentModel && isModelAllowedForEngine(newEngine, currentModel, hermesProfiles)) {
+    return currentModel;
+  }
+  return getDefaultModelForEngine(newEngine);
+}
+
+export function getStandardTeamPreset(cwd: string = 'project'): TeamConfig & SlotConfig[] {
+  const slots: SlotConfig[] = [
+    {
+      id: 'manager',
+      label: '👑 Manager',
+      kind: 'antigravity',
+      engine: 'antigravity',
+      model: 'ag/claude-opus-4.1',
+      fallbackModel: 'ag/claude-opus-4-6-thinking',
+      permission: 'ask',
+      cwd,
+    },
+    {
+      id: 'senior',
+      label: '⚡ Senior',
+      kind: 'claude-code',
+      engine: 'claude-code',
+      model: 'claude-3-7-sonnet',
+      fallbackModel: 'claude-3-5-sonnet',
+      permission: 'ask',
+      cwd,
+    },
+    {
+      id: 'reviewer',
+      label: '🔍 Reviewer',
+      kind: 'antigravity',
+      engine: 'antigravity',
+      model: 'ag/gemini-3.8-flash-high',
+      fallbackModel: null,
+      permission: 'ask',
+      cwd,
+    },
+  ];
+
+  const result = slots as any;
+  result.version = 1;
+  result.slots = slots;
+  return result;
+}
+
+export function formatEngineName(engine?: string | null): string {
+  if (!engine) return 'Hermes';
+  const e = engine.toLowerCase();
+  if (e.includes('antigravity')) return 'Antigravity';
+  if (e.includes('claude')) return 'Claude Code';
+  if (e.includes('codex') || e.includes('openai')) return 'Codex';
+  if (e.includes('hermes')) return 'Hermes';
+  if (e.includes('custom') || e.includes('acp')) return 'Custom ACP';
+  if (e.includes('ollama')) return 'Ollama';
+  return engine;
+}
+
+export function getEngineShortBadge(engine?: string | null): string {
+  if (!engine) return 'H';
+  const e = engine.toLowerCase();
+  if (e.includes('antigravity')) return 'AG';
+  if (e.includes('claude')) return 'C';
+  if (e.includes('codex') || e.includes('openai')) return 'CX';
+  if (e.includes('hermes')) return 'H';
+  if (e.includes('custom') || e.includes('acp')) return 'ACP';
+  if (e.includes('ollama')) return 'OL';
+  return 'A';
+}
+
+export function formatShortModelName(model?: string | null): string {
+  if (!model) return '';
+  let m = model;
+  if (m.startsWith('ag/')) m = m.slice(3);
+  if (m.startsWith('anthropic/')) m = m.slice(10);
+  if (m.startsWith('openai/')) m = m.slice(7);
+  return m;
 }
 
 /**

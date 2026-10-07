@@ -1,6 +1,7 @@
 <script lang="ts">
   import { agentsStore } from './agents.svelte';
   import type { PermissionMode } from './types';
+  import { formatEngineName, getEngineShortBadge, formatShortModelName } from './agentsLogic';
 
   let currentSlot = $derived(agentsStore.activeSlot);
   let slots = $derived(agentsStore.slots);
@@ -48,12 +49,13 @@
         >
           <span class="status-dot" style:background={statusColor} class:pulse={slot.status === 'busy'}></span>
           <span class="slot-label">{slot.label}</span>
-          {#if slot.kind === 'hermes'}
-            <span class="kind-tag hermes">H</span>
-          {:else if slot.kind === 'claude-code'}
-            <span class="kind-tag claude">C</span>
-          {:else}
-            <span class="kind-tag custom">A</span>
+          <span class="engine-badge badge-{slot.config?.engine || slot.kind}">
+            {getEngineShortBadge(slot.config?.engine || slot.kind)}
+          </span>
+          {#if slot.config?.model}
+            <span class="model-tag" title="Model: {slot.config.model}">
+              {formatShortModelName(slot.config.model)}
+            </span>
           {/if}
         </button>
       {/each}
@@ -100,6 +102,12 @@
           <option value="auto">Auto-Run Safe</option>
           <option value="full">FULL ACCESS ⚠️</option>
         </select>
+      </div>
+
+      <!-- Active Slot Engine + Model Badge -->
+      <div class="active-engine-model-badge" title="Engine: {formatEngineName(currentSlot.config?.engine || currentSlot.kind)} | Model: {currentSlot.config?.model || 'auto'}">
+        <span class="subbar-engine-tag">{formatEngineName(currentSlot.config?.engine || currentSlot.kind)}</span>
+        <span class="subbar-model-tag">{currentSlot.config?.model || 'auto'}</span>
       </div>
 
       <!-- Discipline Badges / Toggles -->
@@ -212,6 +220,49 @@
     max-width: 100px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .engine-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: #1c212c;
+    color: #6ea8ff;
+    border: 1px solid #2b3950;
+  }
+
+  .model-tag {
+    font-size: 9px;
+    font-family: var(--font-mono, monospace);
+    color: #8b949e;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .active-engine-model-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #14161c;
+    border: 1px solid #232732;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .subbar-engine-tag {
+    color: #60a5fa;
+    font-weight: 600;
+  }
+
+  .subbar-model-tag {
+    color: #94a3b8;
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
   }
 
   .kind-tag {

@@ -13,6 +13,10 @@
     getModelDescription,
     PROVIDER_MODELS,
     ALL_PRESET_MODELS,
+    getModelsForEngine,
+    resetModelOnEngineChange,
+    getStandardTeamPreset,
+    formatEngineName,
   } from '../agents/agentsLogic';
   import AccountsSettings from '../accounts/AccountsSettings.svelte';
   import { keymapStore, keyEventToShortcut, type ConflictInfo } from './keymapStore.svelte';
@@ -80,19 +84,24 @@
   });
 
   function handleProviderChange() {
-    const models = getModelsForProvider(activeProvider);
-    const recommended = models.find((m) => m.recommended) || models[0];
-    if (recommended) {
-      activeModelId = recommended.id;
-      isCustomModel = false;
-      customModelId = '';
-      if (selectedConfigSlotId) {
-        agentsStore.updateSlotConfig(selectedConfigSlotId, {
-          model: activeModelId,
-          kind: activeProvider === 'hermes' ? 'hermes' : 'acp-custom',
-        });
-      }
+    activeModelId = resetModelOnEngineChange(activeProvider, activeModelId, hermesDetection?.profiles);
+    isCustomModel = false;
+    customModelId = '';
+    if (selectedConfigSlotId) {
+      agentsStore.updateSlotConfig(selectedConfigSlotId, {
+        model: activeModelId,
+        engine: activeProvider,
+        kind: activeProvider === 'hermes' ? 'hermes' : activeProvider === 'claude-code' ? 'claude-code' : (activeProvider === 'codex' ? 'openai' : 'acp-custom'),
+      });
     }
+  }
+
+  async function handleApplyStandardTeamPreset() {
+    const preset = getStandardTeamPreset();
+    const slots = preset.slots || preset;
+    await api.agentSaveTeam({ version: 1, slots });
+    await agentsStore.loadTeam();
+    await agentsStore.loadSlots();
   }
 
   function handleModelSelectChange(e: Event) {
@@ -142,7 +151,8 @@
       const newSlot = {
         id: `slot-${Date.now().toString(36)}`,
         label: `${newBotIcon} ${newBotLabel.trim()}`,
-        kind: newBotPlatform === 'hermes' ? 'hermes' : newBotPlatform === 'claude-code' ? 'claude-code' : 'acp-custom',
+        kind: newBotPlatform === 'hermes' ? 'hermes' : newBotPlatform === 'claude-code' ? 'claude-code' : (newBotPlatform === 'codex' ? 'openai' : 'acp-custom'),
+        engine: newBotPlatform,
         command: newBotPlatform === 'claude-code' ? 'npx @agentclientprotocol/claude-agent-acp' : null,
         hermesProfile: newBotPlatform === 'hermes' ? newBotLabel.toLowerCase() : null,
         model: newBotModel,
@@ -900,17 +910,10 @@
                       value={isCustomModel ? 'custom' : activeModelId}
                       onchange={handleModelSelectChange}
                     >
-                      <optgroup label="Model {activeProvider.toUpperCase()}">
-                        {#each getModelsForProvider(activeProvider) as m}
+                      <optgroup label="Model {activeProvider.toUpperCase()} (Terkunci)">
+                        {#each getModelsForEngine(activeProvider, hermesDetection?.profiles) as m}
                           <option value={m.id}>
                             {m.name} — {m.id} {m.recommended ? '★ (Rekomendasi)' : ''}
-                          </option>
-                        {/each}
-                      </optgroup>
-                      <optgroup label="Penyedia Lain (Cepat Ganti)">
-                        {#each ALL_PRESET_MODELS.filter((m) => !getModelsForProvider(activeProvider).some((pm) => pm.id === m.id)) as m}
-                          <option value={m.id}>
-                            {m.name} — {m.id}
                           </option>
                         {/each}
                       </optgroup>
@@ -1000,9 +1003,14 @@
                     </div>
                     <span class="setting-hint">Daftar bot yang bertugas di proyek ini. Anda bebas menambah bot baru, mengubah model, atau menghapus bot.</span>
                   </div>
-                  <button class="pill-btn active" style="padding: 6px 14px;" onclick={() => (isAddBotFormOpen = !isAddBotFormOpen)}>
-                    {isAddBotFormOpen ? '✕ Tutup Form' : '+ Tambah Bot Manual'}
-                  </button>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="pill-btn preset-standard-btn" onclick={handleApplyStandardTeamPreset} title="Terapkan preset Manager (Antigravity Opus), Senior (Claude Code Sonnet), Reviewer (Gemini Flash)">
+                      ⚡ Gunakan Susunan Tim Standar
+                    </button>
+                    <button class="pill-btn active" style="padding: 6px 14px;" onclick={() => (isAddBotFormOpen = !isAddBotFormOpen)}>
+                      {isAddBotFormOpen ? '✕ Tutup Form' : '+ Tambah Bot Manual'}
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Form Tambah Bot Baru (Manual) -->
@@ -1102,7 +1110,7 @@
                           </span>
                         </div>
                         <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
-                          Platform: <strong style="color: var(--text-secondary);">{slot.kind}</strong>
+                          Platform: <strong style="color: var(--text-secondary);">{formatEngineName(slot.config?.engine || slot.kind)}</strong>
                         </div>
                         <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                           {slot.config?.model || 'auto'}

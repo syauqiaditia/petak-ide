@@ -2,7 +2,12 @@
   import { onMount } from 'svelte';
   import { agentsStore } from './agents.svelte';
   import type { SlotConfig, HermesProfileInfo, PermissionMode, AgentKind } from './types';
-  import { ALL_PRESET_MODELS } from './agentsLogic';
+  import {
+    ALL_PRESET_MODELS,
+    getModelsForEngine,
+    resetModelOnEngineChange,
+    getStandardTeamPreset,
+  } from './agentsLogic';
 
   let localSlots = $state<SlotConfig[]>([]);
   let isSaving = $state(false);
@@ -27,6 +32,7 @@
         id: newId,
         label: `Agent ${localSlots.length + 1}`,
         kind: 'claude-code',
+        engine: 'claude-code',
         command: null,
         hermesProfile: null,
         model: 'claude-3-7-sonnet',
@@ -41,6 +47,23 @@
     localSlots = localSlots.filter((_, i) => i !== idx);
   }
 
+  function handleEngineChange(idx: number, newEngine: string) {
+    const slot = localSlots[idx];
+    if (!slot) return;
+    const oldEngine = slot.engine || slot.kind;
+    slot.engine = newEngine;
+    slot.kind = newEngine === 'codex' ? 'openai' : (newEngine === 'custom' ? 'acp-custom' : newEngine);
+    if (oldEngine !== newEngine) {
+      slot.model = resetModelOnEngineChange(newEngine, slot.model, hermes?.profiles);
+      slot.fallbackModel = null;
+    }
+  }
+
+  function handleApplyStandardTeamPreset() {
+    const preset = getStandardTeamPreset();
+    localSlots = JSON.parse(JSON.stringify(preset.slots || preset));
+  }
+
   async function handleAddHermesProfile(profile: HermesProfileInfo) {
     const newId = `hermes-${profile.name}-${Date.now().toString(36)}`;
     localSlots = [
@@ -49,9 +72,10 @@
         id: newId,
         label: profile.name.charAt(0).toUpperCase() + profile.name.slice(1),
         kind: 'hermes',
+        engine: 'hermes',
         command: null,
         hermesProfile: profile.name,
-        model: profile.model || 'auto',
+        model: profile.model || 'ag/gemini-3.8-flash-high',
         fallbackModel: null,
         permission: 'ask',
         cwd: 'project',
@@ -145,9 +169,19 @@
           <div class="section-title">
             <span>Daftar Slot Agen Proyek ({localSlots.length})</span>
           </div>
-          <button class="add-slot-btn" onclick={addEmptySlot}>
-            + Tambah Slot
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button
+              class="preset-team-btn"
+              type="button"
+              onclick={handleApplyStandardTeamPreset}
+              title="Terapkan preset Manager (Antigravity Opus), Senior (Claude Code Sonnet), Reviewer (Gemini Flash)"
+            >
+              ⚡ Gunakan Susunan Tim Standar
+            </button>
+            <button class="add-slot-btn" onclick={addEmptySlot}>
+              + Tambah Slot
+            </button>
+          </div>
         </div>
 
         {#if localSlots.length === 0}
@@ -165,19 +199,23 @@
                   </div>
 
                   <div class="field-group">
-                    <label>Kind</label>
-                    <select bind:value={slot.kind}>
-                      <option value="claude-code">Claude Code ACP</option>
+                    <label>Engine / Platform</label>
+                    <select
+                      value={slot.engine || slot.kind}
+                      onchange={(e) => handleEngineChange(idx, (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="antigravity">Antigravity (via 9Router)</option>
+                      <option value="claude-code">Claude Code CLI</option>
+                      <option value="codex">OpenAI Codex</option>
                       <option value="hermes">Hermes Agent</option>
                       <option value="acp-custom">Custom ACP Command</option>
-                      <option value="openai">OpenAI Compatible (A5)</option>
                     </select>
                   </div>
 
                   <div class="field-group">
-                    <label>Model</label>
+                    <label>Model (Terkunci)</label>
                     <select bind:value={slot.model}>
-                      {#each ALL_PRESET_MODELS as m}
+                      {#each getModelsForEngine(slot.engine || slot.kind, hermes?.profiles) as m}
                         <option value={m.id}>{m.name} ({m.id})</option>
                       {/each}
                     </select>
@@ -435,6 +473,23 @@
     background: #1c1d22;
     padding: 1px 4px;
     border-radius: 3px;
+  }
+
+  .preset-team-btn {
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    color: #60a5fa;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .preset-team-btn:hover {
+    background: #2563eb;
+    color: #ffffff;
   }
 
   .add-slot-btn {

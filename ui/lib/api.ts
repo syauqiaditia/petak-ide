@@ -33,8 +33,9 @@ import type {
   SkillSummary,
   Skill,
   SupportedEngineInfo,
+  EnginePlatformOption,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo };
+export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill, SupportedEngineInfo, EnginePlatformOption };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -2133,13 +2134,74 @@ export const api = {
   },
 
   async agentGetSupportedEngines(): Promise<SupportedEngineInfo[]> {
-    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
       return [
-        { id: 'hermes', name: 'Hermes Agent', detected: true, status: 'Hermes profiles found', allowedModels: ['ag/gemini-3.8-flash-high'], defaultModel: 'ag/gemini-3.8-flash-high' },
-        { id: 'claude-code', name: 'Claude Code', detected: true, status: 'npx found', allowedModels: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'], defaultModel: 'claude-3-7-sonnet' },
-        { id: 'antigravity', name: 'Antigravity', detected: true, status: '9Router online', allowedModels: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'], defaultModel: 'ag/gemini-3.8-flash-high' },
-        { id: 'openai', name: 'OpenAI Codex', detected: true, status: 'API key found', allowedModels: ['gpt-4o', 'o3-mini', 'o1'], defaultModel: 'gpt-4o' },
-        { id: 'acp-custom', name: 'Custom ACP', detected: true, status: 'Custom command', allowedModels: [], defaultModel: null },
+        {
+          id: 'hermes',
+          name: 'Hermes Agent',
+          detected: true,
+          available: true,
+          status: 'Hermes profiles found',
+          allowedModels: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4-6-thinking', 'anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+          models: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4-6-thinking', 'anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+          defaultModel: 'ag/gemini-3.8-flash-high',
+          description: 'Daemon profil lokal Hermes CLI',
+        },
+        {
+          id: 'claude-code',
+          name: 'Claude Code CLI',
+          detected: true,
+          available: true,
+          status: 'npx found',
+          allowedModels: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'],
+          models: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'],
+          defaultModel: 'claude-3-7-sonnet',
+          description: 'Anthropic Standalone CLI via ACP',
+        },
+        {
+          id: 'antigravity',
+          name: 'Antigravity (via 9Router)',
+          detected: true,
+          available: true,
+          status: '9Router online',
+          allowedModels: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'],
+          models: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'],
+          defaultModel: 'ag/gemini-3.8-flash-high',
+          description: 'Google Gemini & Claude Opus via 9Router proxy',
+        },
+        {
+          id: 'openai',
+          name: 'OpenAI Codex',
+          detected: true,
+          available: true,
+          status: 'API key found',
+          allowedModels: ['gpt-4o', 'o3-mini', 'o1'],
+          models: ['gpt-4o', 'o3-mini', 'o1'],
+          defaultModel: 'gpt-4o',
+          description: 'OpenAI Autonomous Agent via ACP',
+        },
+        {
+          id: 'codex',
+          name: 'OpenAI Codex',
+          detected: true,
+          available: true,
+          status: 'API key found',
+          allowedModels: ['gpt-4o', 'o3-mini', 'o1'],
+          models: ['gpt-4o', 'o3-mini', 'o1'],
+          defaultModel: 'gpt-4o',
+          description: 'OpenAI Autonomous Agent via ACP',
+        },
+        {
+          id: 'acp-custom',
+          name: 'Custom ACP Command',
+          detected: true,
+          available: true,
+          status: 'Custom command',
+          allowedModels: [],
+          models: ['custom-model'],
+          defaultModel: 'custom-model',
+          description: 'Perintah terminal bebas via stdio ACP',
+        },
       ];
     }
     return invoke<SupportedEngineInfo[]>('agent_get_supported_engines');
