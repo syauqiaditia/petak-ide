@@ -1465,6 +1465,45 @@ export function resolveSelfHealChip(status?: SelfHealStatus | null): {
   return formatSelfHealStatus(status.status, status.attempt, status.max_attempts || 3);
 }
 
+/**
+ * Detects whether a message is an ACP activity watchdog abort or unstuck signal.
+ */
+export function isWatchdogAbortedMessage(content?: string | null): boolean {
+  if (!content || typeof content !== 'string') return false;
+  const lower = content.toLowerCase();
+  return (
+    (lower.includes('perintah') && (lower.includes('macet') || lower.includes('dibatalkan otomatis'))) ||
+    lower.includes('perintah terminal macet') ||
+    lower.includes('tidak ada aktivitas selama') ||
+    lower.includes('idle timeout') ||
+    lower.includes('watchdog timeout') ||
+    (lower.includes('watchdog') && (lower.includes('abort') || lower.includes('cancel') || lower.includes('stuck') || lower.includes('idle'))) ||
+    lower.includes('command timed out due to inactivity') ||
+    lower.includes('proses terminal macet')
+  );
+}
+
+/**
+ * Formats a user-friendly recovery alert text for watchdog abort events.
+ */
+export function formatWatchdogRecoveryText(content?: string | null): string {
+  const defaultText = '⚠️ Perintah terminal macet dibatalkan otomatis -> Melanjutkan...';
+  if (!content || typeof content !== 'string') {
+    return defaultText;
+  }
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return defaultText;
+  }
+  if (trimmed.includes('Perintah terminal macet dibatalkan otomatis') && trimmed.includes('Melanjutkan...')) {
+    return trimmed;
+  }
+  if (isWatchdogAbortedMessage(trimmed)) {
+    return defaultText;
+  }
+  return trimmed.startsWith('⚠️') ? trimmed : `⚠️ ${trimmed}`;
+}
+
 
 
 

@@ -9,6 +9,8 @@
     formatPrunedContextForPrompt,
     formatDomainMemoryForPrompt,
     formatSelfHealStatus,
+    isWatchdogAbortedMessage,
+    formatWatchdogRecoveryText,
   } from './agentsLogic';
   import type {
     ChatMessage,
@@ -53,10 +55,56 @@
   let activeSlot = $derived(agentsStore.activeSlot);
   let messages = $derived(agentsStore.activeMessages);
   let pendingPerm = $derived(agentsStore.activePendingPermission);
-  let isBusy = $derived(agentsStore.isStreaming || activeSlot?.status === 'busy');
+  let isBusy = $derived(
+    !agentsStore.isWatchdogAborted && (agentsStore.isStreaming || (activeSlot?.status === 'busy' && agentsStore.isStreaming))
+  );
   let activePermission = $derived<PermissionMode>(
     ((activeSlot?.config?.permission as PermissionMode) || 'ask')
   );
+
+  let lastMessage = $derived(messages.length > 0 ? messages[messages.length - 1] : null);
+  let lastMessageWatchdog = $derived(
+    lastMessage && isWatchdogAbortedMessage(typeof lastMessage.content === 'string' ? lastMessage.content : '')
+      ? formatWatchdogRecoveryText(typeof lastMessage.content === 'string' ? lastMessage.content : '')
+      : null
+  );
+  let watchdogRecoveryText = $derived<string | null>(
+    agentsStore.watchdogRecoveryMessage || lastMessageWatchdog
+  );
+  let isWatchdogBannerDismissed = $state(false);
+
+  $effect(() => {
+    if (agentsStore.isWatchdogAborted || lastMessageWatchdog) {
+      isWatchdogBannerDismissed = false;
+    }
+  });
+
+  let showWatchdogBanner = $derived(
+    !isWatchdogBannerDismissed && Boolean(watchdogRecoveryText)
+  );
+
+  function handleWatchdogContinue() {
+    isWatchdogBannerDismissed = true;
+    agentsStore.dismissWatchdogRecovery();
+    agentsStore.sendPrompt('Lanjutkan');
+  }
+
+  function handleWatchdogResend() {
+    isWatchdogBannerDismissed = true;
+    agentsStore.dismissWatchdogRecovery();
+    const toResend = agentsStore.lastPromptText || promptText;
+    if (toResend?.trim()) {
+      agentsStore.sendPrompt(toResend.trim());
+    } else {
+      promptText = 'Lanjutkan';
+      textareaEl?.focus();
+    }
+  }
+
+  function dismissWatchdogAlert() {
+    isWatchdogBannerDismissed = true;
+    agentsStore.dismissWatchdogRecovery();
+  }
 
   let isSelfHealActive = $state(true);
   let selfHealStatus = $state<SelfHealStatus | null>(null);
@@ -551,6 +599,42 @@
             </button>
           </div>
         {/if}
+      </div>
+    {/if}
+
+    <!-- Interactive ACP Watchdog Recovery Alert Banner / Status Chip -->
+    {#if showWatchdogBanner && watchdogRecoveryText}
+      <div class="watchdog-recovery-banner" role="alert">
+        <div class="status-banner-content">
+          <span class="status-banner-icon">⚠️</span>
+          <span class="status-banner-text">{watchdogRecoveryText}</span>
+        </div>
+        <div class="status-banner-actions">
+          <button
+            type="button"
+            class="watchdog-btn watchdog-continue-btn"
+            onclick={handleWatchdogContinue}
+            title="Lanjutkan tugas agen"
+          >
+            Lanjutkan (Continue)
+          </button>
+          <button
+            type="button"
+            class="watchdog-btn watchdog-resend-btn"
+            onclick={handleWatchdogResend}
+            title="Kirim ulang instruksi sebelumnya"
+          >
+            Kirim Ulang
+          </button>
+          <button
+            type="button"
+            class="watchdog-btn-dismiss"
+            onclick={dismissWatchdogAlert}
+            title="Tutup notifikasi pemulihan"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     {/if}
   </div>
@@ -1588,6 +1672,76 @@
     border-color: rgba(239, 68, 68, 0.4);
     background: rgba(239, 68, 68, 0.12);
     color: #f87171;
+  }
+
+  .watchdog-recovery-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 12px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .watchdog-btn {
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #f1f5f9;
+    font-weight: 500;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .watchdog-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .watchdog-continue-btn {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #86efac;
+  }
+
+  .watchdog-continue-btn:hover {
+    background: rgba(34, 197, 94, 0.3);
+    border-color: rgba(34, 197, 94, 0.5);
+  }
+
+  .watchdog-resend-btn {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #7dd3fc;
+  }
+
+  .watchdog-resend-btn:hover {
+    background: rgba(56, 189, 248, 0.3);
+    border-color: rgba(56, 189, 248, 0.5);
+  }
+
+  .watchdog-btn-dismiss {
+    padding: 2px 6px;
+    margin-left: 4px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .watchdog-btn-dismiss:hover {
+    color: #f1f5f9;
   }
 
   .context-pill.custom-skill {
