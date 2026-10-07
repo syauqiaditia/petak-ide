@@ -7,11 +7,23 @@ export type PermissionMode = 'read' | 'ask' | 'auto' | 'full';
 
 export type AgentKind = 'claude-code' | 'hermes' | 'acp-custom' | 'openai' | 'antigravity' | 'codex';
 
+export type AgentRole = 'manager' | 'senior' | 'senior2' | 'techlead' | 'reviewer' | 'custom' | string;
+
+export interface RoleScopeInfo {
+  role: string;
+  badge: string;
+  description: string;
+  defaultWhitelist: string[];
+  blacklist: string[];
+}
+
 export interface SlotConfig {
   id: string;
   label: string;
   kind: AgentKind | string;
   engine?: string | null;
+  role?: string | null;
+  customWhitelist?: string[] | null;
   command?: string | null;
   hermesProfile?: string | null;
   model?: string | null;

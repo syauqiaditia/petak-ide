@@ -1,7 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { formatUsageText, ALL_PRESET_MODELS, getModelDisplayName, formatEngineName } from './agentsLogic';
+  import {
+    formatUsageText,
+    ALL_PRESET_MODELS,
+    getModelDisplayName,
+    formatEngineName,
+    getRoleScopeBadge,
+    inferRoleFromSlot,
+    getRoleScopeDescription,
+  } from './agentsLogic';
   import AgentChat from './AgentChat.svelte';
   import ProposedEdits from './ProposedEdits.svelte';
   import QuotaUsageView from './QuotaUsageView.svelte';
@@ -60,6 +68,12 @@
     const prof = (activeSlot.config?.hermesProfile || activeSlot.label || '').toLowerCase();
     const match = HERMES_PROFILES.find((p) => prof.includes(p.id) || p.id === prof);
     return match ? match.id : 'default';
+  });
+
+  let activeSlotRole = $derived.by(() => {
+    if (activeSlot?.config?.role) return activeSlot.config.role;
+    if (activeSlot?.config) return inferRoleFromSlot(activeSlot.config);
+    return activeProfileId;
   });
 
   let currentModelName = $derived(
@@ -232,6 +246,14 @@
           {/each}
         </select>
         <span class="dropdown-chevron">▾</span>
+      </div>
+
+      <!-- Tool Scoping Protection Indicator -->
+      <div
+        class="tool-scoping-badge"
+        title="Least-privilege gateway aktif: {getRoleScopeBadge(activeSlotRole)}. {getRoleScopeDescription(activeSlotRole)}"
+      >
+        <span class="tool-scoping-text">🛡️ Tool Scoping: Active</span>
       </div>
 
       <!-- + New Chat & History Sessions Action Buttons -->
@@ -415,6 +437,7 @@
       <div class="footer-agent-badges">
         <span class="footer-engine-badge">{formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}</span>
         <span class="footer-model-badge">{currentModelName}</span>
+        <span class="footer-scoping-badge" title={getRoleScopeDescription(activeSlotRole)}>{getRoleScopeBadge(activeSlotRole)}</span>
       </div>
       <span class="usage-text" class:unreported={!usageInfo.isReported}>
         {usageInfo.text}
@@ -617,6 +640,37 @@
     font-size: 8px;
     margin-left: 2px;
     opacity: 0.6;
+  }
+
+  /* Tool Scoping Status Indicator */
+  .tool-scoping-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.08);
+    color: #34d399;
+    flex-shrink: 0;
+    cursor: default;
+  }
+
+  .tool-scoping-text {
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .footer-scoping-badge {
+    font-size: 9px;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
   }
 
   .session-actions-group {
