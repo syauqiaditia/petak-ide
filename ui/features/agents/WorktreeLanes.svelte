@@ -3,14 +3,16 @@
   import { api } from '../../lib/api';
   import { agentsStore } from './agents.svelte';
   import { tabsManager } from '../editor/tabs.svelte';
-  import type { WorktreeInfo } from './types';
+  import type { WorktreeInfo, SelfHealStatus } from './types';
   import {
     formatWorktreeRuntime,
     resolveWorktreeBotInfo,
     aggregateWorktreeStats,
+    resolveSelfHealChip,
   } from './agentsLogic';
 
   let worktrees = $state<WorktreeInfo[]>([]);
+  let selfHealStatuses = $state<Record<string, SelfHealStatus>>({});
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let now = $state(Date.now());
@@ -25,11 +27,23 @@
 
   let stats = $derived(aggregateWorktreeStats(worktrees));
 
+  async function loadSelfHealStatuses() {
+    for (const wt of worktrees) {
+      try {
+        const st = await api.agentGetSelfHealStatus(wt.task_id);
+        selfHealStatuses[wt.task_id] = st;
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   async function loadWorktrees() {
     isLoading = true;
     error = null;
     try {
       worktrees = await api.agentWorktreeList();
+      await loadSelfHealStatuses();
     } catch (e: any) {
       error = e?.message || 'Gagal memuat daftar worktree lanes';
     } finally {
@@ -218,6 +232,7 @@
           {@const bot = resolveWorktreeBotInfo(wt, agentsStore.slots)}
           {@const runtime = formatWorktreeRuntime(wt.created_at, now)}
           {@const events = getMiniEvents(wt)}
+          {@const healChip = resolveSelfHealChip(selfHealStatuses[wt.task_id])}
 
           <div class="lane-column" class:is-running={bot.status === 'RUNNING'}>
             <!-- Header Lane: Bot Avatar, Title, Status Badge, Live Runtime -->
@@ -249,6 +264,17 @@
                 </span>
                 <span class="dirty-indicator" class:modified={wt.is_dirty}>
                   {wt.is_dirty ? '● modified' : '● clean'}
+                </span>
+              </div>
+
+              <!-- Self-Heal Status Chip -->
+              <div class="self-heal-row">
+                <span
+                  class="self-heal-chip {healChip.cssClass}"
+                  title="Status Self-Healing: {healChip.label}"
+                >
+                  <span class="heal-icon">{healChip.icon}</span>
+                  <span class="heal-label">{healChip.label}</span>
                 </span>
               </div>
 
@@ -846,6 +872,64 @@
 
   .dirty-indicator.modified {
     color: #e5c07b;
+  }
+
+  .self-heal-row {
+    display: flex;
+    align-items: center;
+    margin-top: 1px;
+  }
+
+  .self-heal-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #abb2bf;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .self-heal-chip .heal-icon {
+    font-size: 11px;
+  }
+
+  .self-heal-chip.self-heal-hot-reloading {
+    border-color: rgba(234, 179, 8, 0.35);
+    background: rgba(234, 179, 8, 0.1);
+    color: #e5c07b;
+  }
+
+  .self-heal-chip.self-heal-testing {
+    border-color: rgba(97, 175, 239, 0.35);
+    background: rgba(97, 175, 239, 0.1);
+    color: #61afef;
+  }
+
+  .self-heal-chip.self-heal-passed {
+    border-color: rgba(152, 195, 121, 0.35);
+    background: rgba(152, 195, 121, 0.1);
+    color: #98c379;
+  }
+
+  .self-heal-chip.self-heal-failed {
+    border-color: rgba(224, 108, 117, 0.35);
+    background: rgba(224, 108, 117, 0.1);
+    color: #e06c75;
+  }
+
+  .self-heal-chip.self-heal-paused {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
   }
 
   .branch-meta-row {

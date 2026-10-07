@@ -30,6 +30,7 @@
   import { createLspAutocompleteExtension } from './lsp/completion';
   import { createEditorKeymapExtension } from './keymap';
   import { createGhostTextExtension, clearGhostTextEffect } from './ghostText';
+  import { ghostDiffExtension } from './ghostDiff';
   import { editorSettings } from './editorSettings.svelte';
   import { createLspHoverExtension } from './lsp/hover';
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
@@ -610,6 +611,7 @@
           getPath: () => currentSwappedPath,
           isEnabled: () => editorSettings.ghostText,
         }),
+        ghostDiffExtension(),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active && active.path === currentSwappedPath) {

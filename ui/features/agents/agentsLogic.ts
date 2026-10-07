@@ -16,6 +16,9 @@ import type {
   MemorySnippet,
   WorktreeInfo,
   SlotSummary,
+  SelfHealPhase,
+  SelfHealStatus,
+  SelfHealResult,
 } from './types';
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
@@ -1394,6 +1397,74 @@ export function aggregateWorktreeStats(worktrees: WorktreeInfo[]): {
   const running = dirty > 0 ? dirty : Math.min(total, 1);
   return { total, running, dirty };
 }
+
+/**
+ * Resolves Self-Heal display status label, icon, and css class.
+ */
+export function formatSelfHealStatus(
+  status: SelfHealPhase | string = 'idle',
+  attempt: number = 0,
+  maxAttempts: number = 3
+): {
+  label: string;
+  icon: string;
+  cssClass: string;
+} {
+  switch (status) {
+    case 'hot_reloading':
+      return {
+        label: '⚡ Hot Reloading Flutter...',
+        icon: '⚡',
+        cssClass: 'self-heal-hot-reloading',
+      };
+    case 'testing':
+      return {
+        label: '🧪 Running Maestro flow...',
+        icon: '🧪',
+        cssClass: 'self-heal-testing',
+      };
+    case 'passed':
+      return {
+        label: '✅ Verification PASS',
+        icon: '✅',
+        cssClass: 'self-heal-passed',
+      };
+    case 'failed':
+      return {
+        label: `⚠️ Test Failed -> Triggering Self-Fix Loop (${attempt}/${maxAttempts})`,
+        icon: '⚠️',
+        cssClass: 'self-heal-failed',
+      };
+    case 'paused':
+      return {
+        label: `🛑 Self-Heal Paused (${maxAttempts}/${maxAttempts} attempts failed)`,
+        icon: '🛑',
+        cssClass: 'self-heal-paused',
+      };
+    case 'idle':
+    default:
+      return {
+        label: '🔄 Self-Heal: Auto (Hot Reload + Test)',
+        icon: '🔄',
+        cssClass: 'self-heal-idle',
+      };
+  }
+}
+
+/**
+ * Resolves a compact chip representation for card lanes.
+ */
+export function resolveSelfHealChip(status?: SelfHealStatus | null): {
+  label: string;
+  icon: string;
+  cssClass: string;
+} {
+  if (!status) {
+    return formatSelfHealStatus('idle');
+  }
+  return formatSelfHealStatus(status.status, status.attempt, status.max_attempts || 3);
+}
+
 
 
 

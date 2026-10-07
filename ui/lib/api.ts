@@ -40,6 +40,9 @@ import type {
   PrunedContextResult,
   MemorySnippet,
   WorktreeInfo,
+  SelfHealPhase,
+  SelfHealStatus,
+  SelfHealResult,
 } from '../features/agents/types.ts';
 export type {
   ProviderQuotaInfo,
@@ -55,6 +58,9 @@ export type {
   PrunedContextResult,
   MemorySnippet,
   WorktreeInfo,
+  SelfHealPhase,
+  SelfHealStatus,
+  SelfHealResult,
 };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
@@ -2537,6 +2543,20 @@ export const api = {
     }
     return invoke('agent_worktree_remove', { taskId, deleteBranch });
   },
+
+  async agentTriggerSelfHeal(taskId: string, activeFile: string): Promise<SelfHealResult> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSelfHealStore.trigger(taskId, activeFile);
+    }
+    return invoke<SelfHealResult>('agent_trigger_self_heal', { taskId, activeFile });
+  },
+
+  async agentGetSelfHealStatus(taskId: string): Promise<SelfHealStatus> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSelfHealStore.getStatus(taskId);
+    }
+    return invoke<SelfHealStatus>('agent_get_self_heal_status', { taskId });
+  },
 };
 
 const mockFlowStore = {
@@ -2833,5 +2853,64 @@ const mockWorktreeStore = {
     }
   },
 };
+
+const mockSelfHealStore = {
+  statuses: new Map<string, SelfHealStatus>([
+    [
+      't_default',
+      {
+        task_id: 't_default',
+        active_file: 'lib/main.dart',
+        status: 'idle' as SelfHealPhase,
+        attempt: 0,
+        max_attempts: 3,
+        last_verified_at: Date.now(),
+      },
+    ],
+  ]),
+
+  getStatus(taskId: string): SelfHealStatus {
+    const existing = this.statuses.get(taskId);
+    if (existing) return { ...existing };
+    const created: SelfHealStatus = {
+      task_id: taskId,
+      active_file: 'lib/main.dart',
+      status: 'idle',
+      attempt: 0,
+      max_attempts: 3,
+      last_verified_at: Date.now(),
+    };
+    this.statuses.set(taskId, created);
+    return { ...created };
+  },
+
+  trigger(taskId: string, activeFile: string): SelfHealResult {
+    const current = this.getStatus(taskId);
+    current.active_file = activeFile;
+    current.attempt = Math.min(current.max_attempts, current.attempt + 1);
+    const newStatus: SelfHealPhase = current.attempt >= current.max_attempts ? 'paused' : 'passed';
+    current.status = newStatus;
+    current.last_verified_at = Date.now();
+    this.statuses.set(taskId, current);
+    return {
+      task_id: taskId,
+      success: current.status === 'passed',
+      attempts: current.attempt,
+      status: current.status,
+      message:
+        current.status === 'passed'
+          ? 'Verification PASS: hot reload and tests succeeded'
+          : 'Self-Heal Paused (3/3 attempts failed)',
+      diagnosis_prompt:
+        current.status === 'paused'
+          ? 'Periksa kegagalan pengujian pada ' + activeFile
+          : undefined,
+    };
+  },
+};
+
+export const agentTriggerSelfHeal = api.agentTriggerSelfHeal.bind(api);
+export const agentGetSelfHealStatus = api.agentGetSelfHealStatus.bind(api);
+
 
 
