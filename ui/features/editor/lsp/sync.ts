@@ -85,7 +85,7 @@ export function flushPending(path: string) {
 
 /**
  * CodeMirror 6 extension that listens to document updates, accumulates changes,
- * debounces ~50ms, and sends incremental didChange notifications to the LSP server.
+ * debounces ~15ms, and sends incremental didChange notifications to the LSP server.
  */
 export function createLspSyncExtension(getPath: () => string | null): Extension {
   return EditorView.updateListener.of((update: ViewUpdate) => {
@@ -117,6 +117,6 @@ export function createLspSyncExtension(getPath: () => string | null): Extension 
 
     tracked.debounceTimer = setTimeout(() => {
       flushPending(path);
-    }, 50);
+    }, 15);
   });
 }

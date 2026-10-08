@@ -253,7 +253,7 @@ pub struct SlotManager {
     project_root: Mutex<Option<PathBuf>>,
     max_active_slots: usize,
     idle_timeout: Duration,
-    listeners: Mutex<Vec<SlotEventCallback>>,
+    listeners: Arc<Mutex<Vec<SlotEventCallback>>>,
     perm_manager: Arc<PermissionManager>,
     proposal_buffer: Arc<ProposalBuffer>,
 }
@@ -277,7 +277,7 @@ impl SlotManager {
                 max_active_slots
             },
             idle_timeout,
-            listeners: Mutex::new(Vec::new()),
+            listeners: Arc::new(Mutex::new(Vec::new())),
             perm_manager,
             proposal_buffer,
         }
@@ -732,17 +732,14 @@ impl SlotManager {
             .unwrap_or_else(|| ".".to_string());
 
         let slot_id = config.id.clone();
-        let listeners = {
-            let guard = self.listeners.lock().unwrap();
-            guard.clone()
-        };
+        let listeners_ref = Arc::clone(&self.listeners);
 
         let perm_mgr = Arc::clone(&self.perm_manager);
         let prop_buf = Arc::clone(&self.proposal_buffer);
         let proj_root_buf = project_root.map(|p| p.to_path_buf());
         let slot_permission_str = config.permission.clone();
         let slot_id_for_req = slot_id.clone();
-        let listeners_for_req = listeners.clone();
+        let listeners_for_req = Arc::clone(&listeners_ref);
         let slot_role_scope = config.role_scope();
 
         let client = AcpClient::spawn_with_handler(
@@ -761,6 +758,10 @@ impl SlotManager {
                     .cloned()
                     .unwrap_or(update_val.clone());
 
+                let listeners = {
+                    let guard = listeners_ref.lock().unwrap();
+                    guard.clone()
+                };
                 for listener in &listeners {
                     listener(SlotEvent::Update {
                         slot_id: slot_id.clone(),
@@ -784,13 +785,27 @@ impl SlotManager {
                                 .unwrap_or("")
                                 .to_string();
 
-                            match perm_mgr.request_permission_with_role(
+                            let listeners_for_ask = Arc::clone(&listeners_for_req);
+                            match perm_mgr.request_permission_with_role_cb(
                                 &slot_id_for_req,
                                 &sess_id,
                                 mode,
                                 &tool_call,
                                 slot_role_scope.as_ref(),
                                 Duration::from_secs(120),
+                                move |req| {
+                                    let listeners = {
+                                        let guard = listeners_for_ask.lock().unwrap();
+                                        guard.clone()
+                                    };
+                                    for listener in &listeners {
+                                        listener(SlotEvent::PermissionRequested {
+                                            slot_id: req.slot_id.clone(),
+                                            request_id: req.request_id.clone(),
+                                            tool_call: req.tool_call.clone(),
+                                        });
+                                    }
+                                },
                             ) {
                                 Ok(true) => Some(Ok(serde_json::json!({
                                     "outcome": { "outcome": "approved" }
@@ -874,7 +889,11 @@ impl SlotManager {
                             let (prop, rx) =
                                 prop_buf.create_proposal(&slot_id_for_req, &sess_id, path, content);
 
-                            for listener in &listeners_for_req {
+                            let listeners = {
+                                let guard = listeners_for_req.lock().unwrap();
+                                guard.clone()
+                            };
+                            for listener in &listeners {
                                 listener(SlotEvent::ProposalCreated {
                                     slot_id: slot_id_for_req.clone(),
                                     proposal_id: prop.id.clone(),

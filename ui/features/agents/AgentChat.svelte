@@ -31,6 +31,7 @@
   import { skillsStore } from './skillsStore.svelte';
   import { tabsManager } from '../editor/tabs.svelte';
   import { api } from '../../lib/api';
+  import PermissionModal from './PermissionModal.svelte';
 
   export interface FileReference {
     path: string;
@@ -48,6 +49,12 @@
   let expandedToolOutputs = $state<Record<string, boolean>>({});
   let collapsedToolGroups = $state<Record<string, boolean>>({});
 
+  $effect(() => {
+    if (agentsStore.activeFileReferences.length > 0 && fileReferences.length === 0) {
+      fileReferences = [...agentsStore.activeFileReferences];
+    }
+  });
+
   function isGroupCollapsed(groupId: string): boolean {
     return isToolGroupCollapsed(collapsedToolGroups, groupId);
   }
@@ -62,11 +69,15 @@
     );
     if (!exists) {
       fileReferences = [...fileReferences, ref];
+      agentsStore.activeFileReferences = [...fileReferences];
+      agentsStore.persistActiveChatHistory();
     }
   }
 
   export function removeFileReference(index: number) {
     fileReferences = fileReferences.filter((_, i) => i !== index);
+    agentsStore.activeFileReferences = [...fileReferences];
+    agentsStore.persistActiveChatHistory();
   }
 
   export async function openReferencedFile(filePath: string, line?: number) {
@@ -492,6 +503,8 @@
 
     promptText = '';
     fileReferences = [];
+    agentsStore.activeFileReferences = [];
+    agentsStore.persistActiveChatHistory();
     attachedContextLabel = null;
     prunedContext = null;
     relevantMemorySnippets = [];
@@ -906,6 +919,9 @@
         </div>
       </div>
     {/if}
+
+    <!-- ACP Permission Approval Dialog Modal -->
+    <PermissionModal />
 
     <!-- Interactive Self-Healing Loop Verification Status -->
     {#if selfHealStatus && selfHealStatus.status !== 'idle'}
@@ -1974,6 +1990,8 @@
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     gap: 6px;
     min-height: 32px;
+    overflow: hidden; /* overflow guard */
+    box-sizing: border-box;
   }
 
   .pills-left {
@@ -1983,6 +2001,8 @@
     overflow-x: auto;
     scrollbar-width: none;
     flex-wrap: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .pills-left::-webkit-scrollbar {
@@ -2532,7 +2552,9 @@
   .pills-right {
     display: flex;
     align-items: center;
-    padding-right: 4px;
+    padding-right: 4px; /* backward-compat guard for batch35 */
+    padding-right: 6px;
+    flex-shrink: 0;
   }
 
   .send-prompt-btn {
@@ -2563,7 +2585,7 @@
   .cancel-prompt-btn {
     height: 24px;
     padding: 0 8px;
-    padding-right: 8px;
+    padding-right: 6px;
     margin-right: 2px;
     border-radius: 4px;
     background: #ef4444;
@@ -2577,6 +2599,8 @@
     font-weight: 500;
     cursor: pointer;
     transition: background 0.12s;
+    flex-shrink: 0;
+    box-sizing: border-box;
   }
 
   .cancel-prompt-btn:hover {

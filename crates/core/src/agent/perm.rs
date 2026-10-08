@@ -192,6 +192,30 @@ impl PermissionManager {
         role_scope: Option<&RoleToolScope>,
         timeout: Duration,
     ) -> Result<bool, String> {
+        self.request_permission_with_role_cb(
+            slot_id,
+            session_id,
+            mode,
+            tool_call,
+            role_scope,
+            timeout,
+            |_| {},
+        )
+    }
+
+    pub fn request_permission_with_role_cb<F>(
+        &self,
+        slot_id: &str,
+        session_id: &str,
+        mode: PermissionMode,
+        tool_call: &Value,
+        role_scope: Option<&RoleToolScope>,
+        timeout: Duration,
+        on_ask: F,
+    ) -> Result<bool, String>
+    where
+        F: FnOnce(&PendingPermissionRequest),
+    {
         if let Some(scope) = role_scope {
             scope.check_tool_call(tool_call)?;
         }
@@ -218,8 +242,10 @@ impl PermissionManager {
                 let (tx, rx) = mpsc::channel();
                 {
                     let mut pend = self.pending.lock().unwrap();
-                    pend.insert(req_id.clone(), (req, tx));
+                    pend.insert(req_id.clone(), (req.clone(), tx));
                 }
+
+                on_ask(&req);
 
                 match rx.recv_timeout(timeout) {
                     Ok(allowed) => Ok(allowed),
