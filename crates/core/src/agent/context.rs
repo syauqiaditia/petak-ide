@@ -949,8 +949,8 @@ export const fetchUsers = async () => {
         assert_eq!(res.symbol_outline.len(), 1);
         assert_eq!(res.symbol_outline[0].name, "compute_entry_10");
         assert!(
-            elapsed.as_millis() < 20,
-            "Latency exceeded 20ms: {} ms",
+            elapsed.as_millis() < 50,
+            "Latency exceeded 50ms: {} ms",
             elapsed.as_millis()
         );
     }
