@@ -1,7 +1,7 @@
 import { hoverTooltip, EditorView, closeHoverTooltips, keymap, type Tooltip } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { api, type LspHover } from '../../../lib/api';
-import { isLspSupported } from './sync';
+import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos, lspPosToOffset } from './pos';
 import { renderMarkdownToDom } from './markdown';
 
@@ -251,6 +251,8 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
         const path = getPath();
         if (!path || !isLspSupported(path)) return null;
 
+        flushPending(path);
+
         const doc = view.state.doc;
         const lspPos = offsetToLspPos(doc, pos);
 
@@ -273,6 +275,11 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
               from = word.from;
               to = word.to;
             }
+          }
+          if (from > to) {
+            const tmp = from;
+            from = to;
+            to = tmp;
           }
 
           const symbolText = doc.sliceString(from, to).trim() || 'symbol';
@@ -345,6 +352,7 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
 
               function adjustPosition() {
                 if (!view.dom.isConnected || !dom.isConnected) return;
+                dom.style.transform = 'none';
                 const editorRect = view.dom.getBoundingClientRect();
                 const domRect = dom.getBoundingClientRect();
                 const currentVisualPos = view.coordsAtPos(from) || visualPos;
@@ -388,16 +396,9 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
       },
       {
         hideOnChange: true,
-        hideOn: (tr) => tr.docChanged || tr.selection !== undefined,
       }
     ),
     hoverKeymap,
     hoverTheme,
-    EditorView.domEventHandlers({
-      scroll(_event, view) {
-        view.dispatch({ effects: closeHoverTooltips });
-        return false;
-      },
-    }),
   ];
 }
