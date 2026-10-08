@@ -1150,6 +1150,10 @@
     align-items: center;
     gap: 6px;
     margin-right: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .footer-engine-badge {
@@ -1159,10 +1163,15 @@
 
   .footer-model-badge {
     color: #a1a1aa;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .usage-text {
     color: #8b949e;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

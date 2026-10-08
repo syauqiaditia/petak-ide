@@ -28,10 +28,56 @@
   import { tabsManager } from '../editor/tabs.svelte';
   import { api } from '../../lib/api';
 
+  export interface FileReference {
+    path: string;
+    name: string;
+    line?: number;
+    endLine?: number;
+    isDir?: boolean;
+  }
+
   let promptText = $state('');
+  let fileReferences = $state<FileReference[]>([]);
+  let userPinnedToBottom = $state(true);
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let messagesContainerEl: HTMLDivElement | null = $state(null);
   let expandedToolOutputs = $state<Record<string, boolean>>({});
+
+  export function addFileReference(ref: FileReference) {
+    const exists = fileReferences.some(
+      (r) => r.path === ref.path && r.line === ref.line && r.endLine === ref.endLine
+    );
+    if (!exists) {
+      fileReferences = [...fileReferences, ref];
+    }
+  }
+
+  export function removeFileReference(index: number) {
+    fileReferences = fileReferences.filter((_, i) => i !== index);
+  }
+
+  export async function openReferencedFile(filePath: string, line?: number) {
+    if (!filePath) return;
+    const fileName = filePath.split('/').pop() || filePath;
+    const existing = tabsManager.tabs.find((t) => t.path === filePath);
+    let content = existing ? existing.savedContent : '';
+    if (!existing) {
+      try {
+        content = await api.readFile(filePath);
+      } catch (err) {
+        console.warn('Failed to read referenced file content:', err);
+        content = '';
+      }
+    }
+    tabsManager.openTab(filePath, fileName, content);
+    if (line !== undefined && line !== null) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).__PETAK_GOTO_LINE__) {
+          (window as any).__PETAK_GOTO_LINE__(line, 1);
+        }
+      }, 50);
+    }
+  }
 
   let isContextPickerOpen = $state(false);
   let attachedContextLabel = $state<string | null>(null);
@@ -105,6 +151,19 @@
 
   function handleContainerClick(e: MouseEvent) {
     const target = e.target as HTMLElement | null;
+    const pillBtn = target?.closest('.bubble-file-pill') as HTMLElement | null;
+    if (pillBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const p = pillBtn.getAttribute('data-path') || '';
+      const l = pillBtn.getAttribute('data-line');
+      const lineNum = l ? parseInt(l, 10) : undefined;
+      if (p) {
+        openReferencedFile(p, lineNum);
+        return;
+      }
+    }
+
     const copyBtn = target?.closest('.code-copy-btn') as HTMLButtonElement | null;
     if (copyBtn) {
       e.preventDefault();
@@ -194,9 +253,22 @@
     isSelfHealActive = !isSelfHealActive;
   }
 
+  function handleScroll() {
+    if (!messagesContainerEl) return;
+    const distanceToBottom =
+      messagesContainerEl.scrollHeight -
+      messagesContainerEl.scrollTop -
+      messagesContainerEl.clientHeight;
+    if (distanceToBottom <= 60) {
+      userPinnedToBottom = true;
+    } else {
+      userPinnedToBottom = false;
+    }
+  }
+
   $effect(() => {
-    // Scroll to bottom on new messages or streaming changes
-    if (messages.length || agentsStore.streamingContent) {
+    // Scroll to bottom on new messages or streaming changes only if pinned
+    if ((messages.length || agentsStore.streamingContent) && userPinnedToBottom) {
       scrollToBottom();
     }
   });
@@ -207,9 +279,12 @@
     checkSelfHealStatus();
   });
 
-  async function scrollToBottom() {
+  async function scrollToBottom(force = false) {
+    if (force) {
+      userPinnedToBottom = true;
+    }
     await tick();
-    if (messagesContainerEl) {
+    if (messagesContainerEl && (userPinnedToBottom || force)) {
       messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
     }
   }
@@ -289,26 +364,42 @@
     }
   }
 
-  function applyMention(item: { name: string; path: string }) {
+  function applyMention(item: { name: string; path: string; isTab?: boolean }) {
     if (!textareaEl) return;
     const val = textareaEl.value;
     const cursorPos = textareaEl.selectionStart;
 
     const before = val.slice(0, mentionCursorStart);
     const after = val.slice(cursorPos);
-    const insert = `@${item.path} `;
 
-    promptText = before + insert + after;
+    promptText = before + after;
     isMentionPopupOpen = false;
     mentionResults = [];
     attachedContextLabel = item.name;
 
-    triggerSmartContextPruning(item.path);
+    let filePath = item.path;
+    let startLine: number | undefined;
+    let endLine: number | undefined;
+    const lineMatch = filePath.match(/^(.+?):(\d+)(?:-(\d+))?$/);
+    if (lineMatch) {
+      filePath = lineMatch[1];
+      startLine = parseInt(lineMatch[2], 10);
+      endLine = lineMatch[3] ? parseInt(lineMatch[3], 10) : undefined;
+    }
+
+    addFileReference({
+      path: filePath,
+      name: item.name || filePath.split('/').pop() || filePath,
+      line: startLine,
+      endLine,
+      isDir: !item.isTab && !filePath.includes('.'),
+    });
+
+    triggerSmartContextPruning(filePath, startLine);
 
     tick().then(() => {
       if (textareaEl) {
-        const nextPos = before.length + insert.length;
-        textareaEl.setSelectionRange(nextPos, nextPos);
+        textareaEl.setSelectionRange(before.length, before.length);
         textareaEl.focus();
       }
     });
@@ -341,6 +432,16 @@
       }
     }
 
+    if (e.key === 'Backspace') {
+      const isEmpty = !promptText || promptText.length === 0;
+      const isAtStart = textareaEl?.selectionStart === 0 && textareaEl?.selectionEnd === 0;
+      if (isEmpty && isAtStart && fileReferences.length > 0) {
+        e.preventDefault();
+        removeFileReference(fileReferences.length - 1);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -348,14 +449,25 @@
   }
 
   async function handleSubmit() {
-    if (!promptText.trim() || isBusy) return;
+    if (!promptText.trim() && fileReferences.length === 0) return;
+    if (isBusy) return;
+
+    userPinnedToBottom = true;
+    scrollToBottom(true);
+
     const text = promptText.trim();
+    const refsSnapshot = [...fileReferences];
 
     // Prepare extra context payload without polluting visible user message
     const options: {
       prunedContext?: PrunedContextResult | null;
       domainMemorySnippets?: MemorySnippet[];
+      fileReferences?: FileReference[];
     } = {};
+
+    if (refsSnapshot.length > 0) {
+      options.fileReferences = refsSnapshot;
+    }
 
     if (prunedContext && settingsStore.lspContextPruning) {
       options.prunedContext = prunedContext;
@@ -366,6 +478,7 @@
     }
 
     promptText = '';
+    fileReferences = [];
     attachedContextLabel = null;
     prunedContext = null;
     relevantMemorySnippets = [];
@@ -410,7 +523,11 @@
     fileSearchResults = [];
     const fileName = filePath.split('/').pop() || filePath;
     attachedContextLabel = fileName;
-    promptText = (promptText ? promptText + ' ' : '') + `@${filePath} `;
+    addFileReference({
+      path: filePath,
+      name: fileName,
+      isDir: !filePath.includes('.'),
+    });
     triggerSmartContextPruning(filePath);
     textareaEl?.focus();
   }
@@ -424,6 +541,7 @@
     // Get current line if available from active editor view
     let lineSuffix = '';
     let startLine: number | undefined;
+    let endLine: number | undefined;
     const view = (window as any).__PETAK_EDITOR_VIEW__;
     if (view) {
       try {
@@ -437,7 +555,13 @@
     }
 
     attachedContextLabel = `${fileName}${lineSuffix}`;
-    promptText = (promptText ? promptText + ' ' : '') + `@${path}${lineSuffix} `;
+    addFileReference({
+      path,
+      name: fileName,
+      line: startLine,
+      endLine: endLine && endLine !== startLine ? endLine : undefined,
+      isDir: false,
+    });
     triggerSmartContextPruning(path, startLine);
     textareaEl?.focus();
   }
@@ -464,7 +588,7 @@
 
 <div class="agent-chat-wrapper">
   <!-- Messages Scroll Area -->
-  <div class="chat-messages" bind:this={messagesContainerEl} onclick={handleContainerClick}>
+  <div class="chat-messages" bind:this={messagesContainerEl} onscroll={handleScroll} onclick={handleContainerClick}>
     {#if messages.length === 0 && !agentsStore.isStreaming}
       <!-- Empty Session Greeting & Quick Suggestions -->
       <div class="empty-chat-welcome">
@@ -532,6 +656,26 @@
               </button>
             {/if}
           </div>
+
+          <!-- Interactive File Reference Pills if present in metadata -->
+          {#if msg.metadata?.fileReferences && msg.metadata.fileReferences.length > 0}
+            <div class="bubble-file-pills">
+              {#each msg.metadata.fileReferences as ref}
+                <button
+                  type="button"
+                  class="bubble-file-pill"
+                  data-path={ref.path}
+                  data-line={ref.line}
+                  onclick={() => openReferencedFile(ref.path, ref.line)}
+                  title={`Buka ${ref.path}${ref.line ? `:${ref.line}` : ''} di Editor`}
+                >
+                  <span class="pill-icon">{ref.isDir ? '📁' : '📄'}</span>
+                  <span class="pill-name">{ref.name || ref.path.split('/').pop()}{ref.line ? `:${ref.line}` : ''}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
           <div class="message-body chat-markdown">
             {@html renderChatMarkdown(typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || JSON.stringify(msg.content)))}
           </div>
@@ -546,8 +690,17 @@
                 <div class="tool-call-card">
                   <div class="tool-call-header">
                     <span class="tool-name">⚡ {tool.name}</span>
-                    {#if tool.arguments?.path}
-                      <span class="tool-arg">{tool.arguments.path}</span>
+                    {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
+                      <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
+                    {:else if tool.arguments?.command}
+                      <span class="tool-arg">{tool.arguments.command}</span>
+                    {/if}
+                    {#if tool.status === 'completed'}
+                      <span class="tool-badge-completed">✓ Selesai</span>
+                    {:else if tool.status === 'failed'}
+                      <span class="tool-badge-failed">✕ Gagal</span>
+                    {:else if tool.status === 'running'}
+                      <span class="tool-badge-running">Berjalan...</span>
                     {/if}
                   </div>
                   {#if tool.output}
@@ -737,7 +890,7 @@
   </div>
 
   <!-- Floating Context Composer with Interactive Context Pills -->
-  <div class="agent-composer-container">
+  <div class="agent-composer-container chat-input-box">
     {#if isContextPickerOpen}
       <div class="context-picker-popup">
         <div class="context-picker-header">
@@ -826,6 +979,26 @@
             </div>
           {/each}
         </div>
+      </div>
+    {/if}
+
+    <!-- Rich File Reference Chips -->
+    {#if fileReferences.length > 0}
+      <div class="composer-file-chips">
+        {#each fileReferences as ref, idx (ref.path + (ref.line || ''))}
+          <div class="composer-file-chip" title={ref.path}>
+            <span class="chip-icon">{ref.isDir ? '📁' : '📄'}</span>
+            <span class="chip-name">{ref.name}{ref.line ? `:${ref.line}${ref.endLine && ref.endLine !== ref.line ? `-${ref.endLine}` : ''}` : ''}</span>
+            <button
+              type="button"
+              class="chip-remove-btn"
+              onclick={() => removeFileReference(idx)}
+              title="Hapus referensi berkas"
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
       </div>
     {/if}
 
@@ -1037,7 +1210,7 @@
             type="button"
             class="send-prompt-btn"
             onclick={handleSubmit}
-            disabled={!promptText.trim()}
+            disabled={!promptText.trim() && fileReferences.length === 0}
             title="Kirim instruksi ke agen"
           >
             ➤
@@ -1136,7 +1309,7 @@
   }
 
   .message-bubble {
-    max-width: 88%;
+    max-width: 95%;
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 12px;
@@ -1145,6 +1318,24 @@
     user-select: text !important;
     -webkit-user-select: text !important;
     cursor: text;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    overflow: hidden;
+  }
+
+  .message-bubble pre,
+  .message-bubble :global(pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
+  }
+
+  .message-bubble code,
+  .message-bubble :global(code) {
+    max-width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
   }
 
   .user-bubble {
@@ -1392,18 +1583,21 @@
     font-size: 10px;
     color: #4ade80;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   .tool-badge-failed {
     font-size: 10px;
     color: #f87171;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   .tool-badge-running {
     font-size: 10px;
     color: #38bdf8;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   .status-placeholder {
@@ -1464,12 +1658,17 @@
     border-radius: 5px;
     padding: 6px 8px;
     font-size: 11px;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .tool-call-header {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    width: 100%;
     color: #f59e0b;
     font-weight: 600;
   }
@@ -1478,6 +1677,11 @@
     color: #94a3b8;
     font-family: monospace;
     font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
   }
 
   .tool-output {
@@ -2188,6 +2392,7 @@
   .pills-right {
     display: flex;
     align-items: center;
+    padding-right: 4px;
   }
 
   .send-prompt-btn {
@@ -2218,6 +2423,8 @@
   .cancel-prompt-btn {
     height: 24px;
     padding: 0 8px;
+    padding-right: 8px;
+    margin-right: 2px;
     border-radius: 4px;
     background: #ef4444;
     color: white;
@@ -2616,5 +2823,83 @@
     color: #60a5fa;
     border: 1px solid rgba(59, 130, 246, 0.3);
     flex-shrink: 0;
+  }
+
+  /* Rich File Reference Chips in Composer & Chat Bubbles */
+  .composer-file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .composer-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: #93c5fd;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    max-width: 100%;
+  }
+
+  .composer-file-chip .chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+  }
+
+  .composer-file-chip .chip-remove-btn {
+    background: transparent;
+    border: none;
+    color: #93c5fd;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 0 2px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.1s;
+  }
+
+  .composer-file-chip .chip-remove-btn:hover {
+    opacity: 1;
+    color: #ef4444;
+  }
+
+  .bubble-file-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .bubble-file-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: #60a5fa;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    cursor: pointer;
+    transition: all 0.12s ease-in-out;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .bubble-file-pill:hover {
+    background: rgba(59, 130, 246, 0.22);
+    border-color: rgba(59, 130, 246, 0.45);
+    color: #93c5fd;
   }
 </style>

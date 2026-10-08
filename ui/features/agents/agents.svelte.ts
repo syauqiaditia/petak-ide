@@ -21,6 +21,7 @@ import type {
   CodeReference,
   PrunedContextResult,
   MemorySnippet,
+  FileReference,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -413,9 +414,10 @@ class AgentsStore {
     options?: {
       prunedContext?: PrunedContextResult | null;
       domainMemorySnippets?: MemorySnippet[];
+      fileReferences?: FileReference[];
     }
   ) {
-    if (!rawPrompt.trim() || !this.activeSlotId) return;
+    if ((!rawPrompt.trim() && (!options?.fileReferences || options.fileReferences.length === 0)) || !this.activeSlotId) return;
     const slotId = this.activeSlotId;
     const dispatchSessionId = this.activeSessionId;
 
@@ -463,6 +465,12 @@ class AgentsStore {
       refPrefix = `[REFERENSI KODE: ${loc}${sym}]${snippet}\n[/REFERENSI KODE]\n\n`;
       this.clearAttachedReference();
     }
+    if (options?.fileReferences && options.fileReferences.length > 0) {
+      const refList = options.fileReferences
+        .map((r) => `- ${r.path}${r.line ? `:${r.line}` : ''}${r.endLine && r.endLine !== r.line ? `-${r.endLine}` : ''}`)
+        .join('\n');
+      refPrefix += `[REFERENSI BERKAS:\n${refList}\n]\n\n`;
+    }
 
     const fullPromptText = `${refPrefix}${rawPrompt.trim()}`;
     this.lastPromptText = rawPrompt.trim();
@@ -485,6 +493,10 @@ class AgentsStore {
       timestamp: Date.now(),
       role: 'user',
       content: rawPrompt.trim(),
+      metadata:
+        options?.fileReferences && options.fileReferences.length > 0
+          ? { fileReferences: options.fileReferences }
+          : undefined,
     };
 
     if (!this.chatHistory[slotId]) {

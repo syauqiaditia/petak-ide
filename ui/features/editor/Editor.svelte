@@ -937,6 +937,7 @@
 
     if (typeof window !== 'undefined') {
       (window as any).__PETAK_EDITOR_VIEW__ = view;
+      (window as any).__PETAK_GOTO_LINE__ = gotoLine;
     }
 
     if (active) {
@@ -983,6 +984,9 @@
   });
 
   onDestroy(() => {
+    if (typeof window !== 'undefined' && (window as any).__PETAK_GOTO_LINE__ === gotoLine) {
+      delete (window as any).__PETAK_GOTO_LINE__;
+    }
     window.removeEventListener('keydown', onKeydown, true);
     if (unlistenDiagnostics) {
       unlistenDiagnostics();
