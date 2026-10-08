@@ -38,7 +38,7 @@ export const hoverTheme = EditorView.theme({
     maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
-    overflowX: 'hidden !important',
+    overflowX: 'auto !important',
     color: '#d4d6dc !important',
     fontSize: '12px !important',
     scrollbarWidth: 'thin !important',
@@ -55,7 +55,7 @@ export const hoverTheme = EditorView.theme({
     maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
-    overflowX: 'hidden !important',
+    overflowX: 'auto !important',
     boxShadow: '0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3) !important',
     fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important",
     zIndex: '500 !important',
@@ -239,9 +239,10 @@ const hoverKeymap = keymap.of([
 import {
   shouldPlaceHoverAbove,
   computeTooltipMaxWidth,
+  computeAdaptiveHoverCoords,
 } from './hoverLogic.ts';
 
-export { shouldPlaceHoverAbove, computeTooltipMaxWidth };
+export { shouldPlaceHoverAbove, computeTooltipMaxWidth, computeAdaptiveHoverCoords };
 
 export function createLspHoverExtension(getPath: () => string | null): Extension {
   return [
@@ -279,19 +280,31 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
 
           const visualPos = view.coordsAtPos(from);
           const editorRect = view.dom.getBoundingClientRect();
+          const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
           const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
           const bottomDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
           const bottomDockTop = bottomDockEl ? bottomDockEl.getBoundingClientRect().top : null;
+          const rightDockEl = typeof document !== 'undefined' ? document.querySelector('.right-panel-container') : null;
+          const rightDockLeft = rightDockEl ? rightDockEl.getBoundingClientRect().left : null;
 
-          const placeAbove = shouldPlaceHoverAbove(visualPos, editorRect, viewportHeight, bottomDockTop);
+          const adaptive = computeAdaptiveHoverCoords(
+            visualPos,
+            editorRect,
+            null,
+            { viewportWidth, viewportHeight, rightDockLeft, bottomDockTop }
+          );
 
           return {
             pos: from,
             end: to,
-            above: placeAbove,
+            above: adaptive.above,
             create(view: EditorView) {
               const dom = document.createElement('div');
               dom.className = 'cm-lsp-hover-tooltip';
+              dom.style.maxWidth = `${adaptive.maxWidth}px`;
+              if (adaptive.translateX !== 0) {
+                dom.style.transform = `translateX(${adaptive.translateX}px)`;
+              }
 
               // Header toolbar with location & "Tanya di Chat" action
               const toolbar = document.createElement('div');
@@ -334,18 +347,24 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
                 if (!view.dom.isConnected || !dom.isConnected) return;
                 const editorRect = view.dom.getBoundingClientRect();
                 const domRect = dom.getBoundingClientRect();
+                const currentVisualPos = view.coordsAtPos(from) || visualPos;
+                const vWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+                const vHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+                const bDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
+                const bDockTop = bDockEl ? bDockEl.getBoundingClientRect().top : null;
+                const rDockEl = typeof document !== 'undefined' ? document.querySelector('.right-panel-container') : null;
+                const rDockLeft = rDockEl ? rDockEl.getBoundingClientRect().left : null;
 
-                // Dynamic max width to always stay inside visible editor area
-                const maxAllowedWidth = computeTooltipMaxWidth(editorRect.width, domRect.left, editorRect.right);
-                dom.style.maxWidth = `${maxAllowedWidth}px`;
+                const coords = computeAdaptiveHoverCoords(
+                  currentVisualPos,
+                  editorRect,
+                  domRect,
+                  { viewportWidth: vWidth, viewportHeight: vHeight, rightDockLeft: rDockLeft, bottomDockTop: bDockTop }
+                );
 
-                // If right dock/panel causes tooltip to overflow right edge of visible editor
-                if (domRect.right > editorRect.right - 12) {
-                  const shift = domRect.right - (editorRect.right - 12);
-                  dom.style.transform = `translateX(-${Math.max(0, shift)}px)`;
-                } else if (domRect.left < editorRect.left + 12) {
-                  const shift = (editorRect.left + 12) - domRect.left;
-                  dom.style.transform = `translateX(${Math.max(0, shift)}px)`;
+                dom.style.maxWidth = `${coords.maxWidth}px`;
+                if (coords.translateX !== 0) {
+                  dom.style.transform = `translateX(${coords.translateX}px)`;
                 } else {
                   dom.style.transform = 'none';
                 }
@@ -354,7 +373,7 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
               return {
                 dom,
                 mount() {
-                  requestAnimationFrame(adjustPosition);
+                  adjustPosition();
                 },
                 positioned() {
                   adjustPosition();
