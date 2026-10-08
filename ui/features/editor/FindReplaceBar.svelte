@@ -170,6 +170,10 @@
     query = q;
   }
 
+  export function focus() {
+    searchInputEl?.focus();
+  }
+
   function handleExclude() {
     // Android Studio Exclude: skip current match and proceed to next
     handleNext();
@@ -210,6 +214,7 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    e.stopPropagation();
     if (e.key === 'Escape') {
       e.preventDefault();
       handleClose();

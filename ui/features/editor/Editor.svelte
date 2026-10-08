@@ -147,24 +147,13 @@
     }
   });
 
-  // Ensure CodeMirror view is always attached to container, measured, and not blank
+  // Ensure CodeMirror view is always attached to container and measured
   $effect(() => {
     if (!isCenterDiffActive && view && container) {
       if (view.dom.parentElement !== container) {
         container.replaceChildren(view.dom);
+        view.requestMeasure();
       }
-      const active = tabsManager.activeTab;
-      if (active && !isImageFile(active.path)) {
-        if (!active.state || (active.state.doc.length === 0 && active.savedContent.length > 0)) {
-          active.state = createEditorState(active.savedContent, active.name, active.path);
-        }
-        if (view.state !== active.state || (view.state.doc.length === 0 && active.savedContent.length > 0)) {
-          view.setState(active.state);
-        }
-        restoreFileFoldState(active.path, view);
-      }
-      view.requestMeasure();
-      view.focus();
     }
   });
 
@@ -1170,7 +1159,11 @@
         const vcsMap = computeVcsLineChanges(active.savedContent, active.state.doc.toString());
         view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
 
-        view.focus();
+        if (!findReplaceOpen) {
+          view.focus();
+        } else {
+          findReplaceRef?.focus();
+        }
 
         onTabOpen(active.path, active.savedContent);
         applyStoredDiagnosticsToView(view, active.path);
