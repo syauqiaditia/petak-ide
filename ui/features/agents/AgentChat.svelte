@@ -11,6 +11,10 @@
     formatSelfHealStatus,
     isWatchdogAbortedMessage,
     formatWatchdogRecoveryText,
+    formatToolGroupSummary,
+    isToolGroupCollapsed,
+    toggleToolGroupCollapsed,
+    separateStreamingToolCalls,
   } from './agentsLogic';
   import type {
     ChatMessage,
@@ -42,6 +46,15 @@
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let messagesContainerEl: HTMLDivElement | null = $state(null);
   let expandedToolOutputs = $state<Record<string, boolean>>({});
+  let collapsedToolGroups = $state<Record<string, boolean>>({});
+
+  function isGroupCollapsed(groupId: string): boolean {
+    return isToolGroupCollapsed(collapsedToolGroups, groupId);
+  }
+
+  function toggleGroup(groupId: string) {
+    collapsedToolGroups = toggleToolGroupCollapsed(collapsedToolGroups, groupId);
+  }
 
   export function addFileReference(ref: FileReference) {
     const exists = fileReferences.some(
@@ -682,39 +695,58 @@
 
           <!-- Tool calls if present -->
           {#if msg.toolCalls && msg.toolCalls.length > 0}
-            <div class="tool-calls-list">
-              {#each msg.toolCalls as tool, idx}
-                {@const key = `${msg.id}-tool-${idx}`}
-                {@const isExpanded = expandedToolOutputs[key]}
-                {@const truncated = truncateToolOutput(tool.output || '', 200)}
-                <div class="tool-call-card">
-                  <div class="tool-call-header">
-                    <span class="tool-name">⚡ {tool.name}</span>
-                    {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
-                      <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
-                    {:else if tool.arguments?.command}
-                      <span class="tool-arg">{tool.arguments.command}</span>
-                    {/if}
-                    {#if tool.status === 'completed'}
-                      <span class="tool-badge-completed">✓ Selesai</span>
-                    {:else if tool.status === 'failed'}
-                      <span class="tool-badge-failed">✕ Gagal</span>
-                    {:else if tool.status === 'running'}
-                      <span class="tool-badge-running">Berjalan...</span>
-                    {/if}
+            {@const groupId = `msg-${msg.id}`}
+            {@const isCollapsed = isGroupCollapsed(groupId)}
+            <div class="tool-group-accordion">
+              <button
+                type="button"
+                class="tool-group-header"
+                onclick={() => toggleGroup(groupId)}
+                aria-expanded={!isCollapsed}
+              >
+                <span class="tool-group-title">
+                  ⚙️ {msg.toolCalls.length} tindakan alat ({formatToolGroupSummary(msg.toolCalls)})
+                </span>
+                <span class="tool-group-arrow">{isCollapsed ? '▶' : '▼'}</span>
+              </button>
+              {#if !isCollapsed}
+                <div class="tool-group-content">
+                  <div class="tool-calls-list">
+                    {#each msg.toolCalls as tool, idx}
+                      {@const key = `${msg.id}-tool-${idx}`}
+                      {@const isExpanded = expandedToolOutputs[key]}
+                      {@const truncated = truncateToolOutput(tool.output || '', 200)}
+                      <div class="tool-call-card">
+                        <div class="tool-call-header">
+                          <span class="tool-name">⚡ {tool.name}</span>
+                          {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
+                            <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
+                          {:else if tool.arguments?.command}
+                            <span class="tool-arg">{tool.arguments.command}</span>
+                          {/if}
+                          {#if tool.status === 'completed'}
+                            <span class="tool-badge-completed">✓ Selesai</span>
+                          {:else if tool.status === 'failed'}
+                            <span class="tool-badge-failed">✕ Gagal</span>
+                          {:else if tool.status === 'running'}
+                            <span class="tool-badge-running">Berjalan...</span>
+                          {/if}
+                        </div>
+                        {#if tool.output}
+                          <div class="tool-output">
+                            <pre>{isExpanded ? tool.output : truncated.text}</pre>
+                            {#if truncated.isTruncated}
+                              <button class="expand-tool-btn" onclick={() => toggleToolOutput(key)}>
+                                {isExpanded ? 'Sembunyikan' : 'Tampilkan seluruh output'}
+                              </button>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
                   </div>
-                  {#if tool.output}
-                    <div class="tool-output">
-                      <pre>{isExpanded ? tool.output : truncated.text}</pre>
-                      {#if truncated.isTruncated}
-                        <button class="expand-tool-btn" onclick={() => toggleToolOutput(key)}>
-                          {isExpanded ? 'Sembunyikan' : 'Tampilkan seluruh output'}
-                        </button>
-                      {/if}
-                    </div>
-                  {/if}
                 </div>
-              {/each}
+              {/if}
             </div>
           {/if}
         </div>
@@ -749,26 +781,77 @@
 
           <!-- Active tool calls during streaming -->
           {#if agentsStore.activeToolCalls.length > 0}
-            <div class="tool-calls-list live-tools">
-              {#each agentsStore.activeToolCalls as tool}
+            {@const separated = separateStreamingToolCalls(agentsStore.activeToolCalls)}
+            <div class="tool-streaming-container">
+              {#if separated.completedTools.length > 0}
+                {@const liveGroupId = 'live-stream-tools'}
+                {@const isCollapsed = isGroupCollapsed(liveGroupId)}
+                <div class="tool-group-accordion live-accordion">
+                  <button
+                    type="button"
+                    class="tool-group-header"
+                    onclick={() => toggleGroup(liveGroupId)}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <span class="tool-group-title">
+                      ⚙️ {separated.completedTools.length} tindakan alat selesai ({formatToolGroupSummary(separated.completedTools)})
+                    </span>
+                    <span class="tool-group-arrow">{isCollapsed ? '▶' : '▼'}</span>
+                  </button>
+                  {#if !isCollapsed}
+                    <div class="tool-group-content">
+                      <div class="tool-calls-list">
+                        {#each separated.completedTools as tool, idx}
+                          {@const key = `live-tool-${idx}`}
+                          {@const isExpanded = expandedToolOutputs[key]}
+                          {@const truncated = truncateToolOutput(tool.output || '', 200)}
+                          <div class="tool-call-card">
+                            <div class="tool-call-header">
+                              <span class="tool-name">⚡ {tool.name}</span>
+                              {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
+                                <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
+                              {:else if tool.arguments?.command}
+                                <span class="tool-arg">{tool.arguments.command}</span>
+                              {/if}
+                              {#if tool.status === 'completed'}
+                                <span class="tool-badge-completed">✓ Selesai</span>
+                              {:else if tool.status === 'failed'}
+                                <span class="tool-badge-failed">✕ Gagal</span>
+                              {:else}
+                                <span class="tool-badge-running">Berjalan...</span>
+                              {/if}
+                            </div>
+                            {#if tool.output}
+                              <div class="tool-output">
+                                <pre>{isExpanded ? tool.output : truncated.text}</pre>
+                                {#if truncated.isTruncated}
+                                  <button class="expand-tool-btn" onclick={() => toggleToolOutput(key)}>
+                                    {isExpanded ? 'Sembunyikan' : 'Tampilkan seluruh output'}
+                                  </button>
+                                {/if}
+                              </div>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
+              {#if separated.activeRunningTool}
                 <div class="tool-call-card live">
                   <div class="tool-call-header">
-                    <span class="tool-name">⚡ {tool.name}</span>
-                    {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
-                      <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
-                    {:else if tool.arguments?.command}
-                      <span class="tool-arg">{tool.arguments.command}</span>
+                    <span class="tool-name">⚡ {separated.activeRunningTool.name}</span>
+                    {#if separated.activeRunningTool.arguments?.path || separated.activeRunningTool.arguments?.filepath || separated.activeRunningTool.arguments?.file}
+                      <span class="tool-arg">{separated.activeRunningTool.arguments.path || separated.activeRunningTool.arguments.filepath || separated.activeRunningTool.arguments.file}</span>
+                    {:else if separated.activeRunningTool.arguments?.command}
+                      <span class="tool-arg">{separated.activeRunningTool.arguments.command}</span>
                     {/if}
-                    {#if tool.status === 'completed'}
-                      <span class="tool-badge-completed">✓ Selesai</span>
-                    {:else if tool.status === 'failed'}
-                      <span class="tool-badge-failed">✕ Gagal</span>
-                    {:else}
-                      <span class="tool-badge-running">Berjalan...</span>
-                    {/if}
+                    <span class="tool-badge-running">Berjalan...</span>
                   </div>
                 </div>
-              {/each}
+              {/if}
             </div>
           {/if}
 
@@ -1643,6 +1726,63 @@
   @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
+  }
+
+  .tool-group-accordion {
+    margin-top: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: #111216;
+    overflow: hidden;
+  }
+
+  .tool-group-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: none;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+  }
+
+  .tool-group-header:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #f1f5f9;
+  }
+
+  .tool-group-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .tool-group-arrow {
+    color: #94a3b8;
+    font-size: 9px;
+    flex-shrink: 0;
+  }
+
+  .tool-group-content {
+    padding: 6px 8px 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: #0d0e11;
+  }
+
+  .tool-streaming-container {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .tool-calls-list {

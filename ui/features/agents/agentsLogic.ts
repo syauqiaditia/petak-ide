@@ -22,8 +22,9 @@ import type {
   ChatMessage,
   ChatSessionMeta,
   FileReference,
+  ToolCallData,
 } from './types';
-export type { FileReference };
+export type { FileReference, ToolCallData };
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
 
@@ -149,6 +150,82 @@ export function truncateToolOutput(text: string, maxLen = 300): { text: string; 
   return {
     text: text.slice(0, maxLen) + '\n... [output dipotong, klik untuk memperluas]',
     isTruncated: true,
+  };
+}
+
+/**
+ * Formats a concise summary of tool calls by frequency (e.g. "read_file (4), terminal (2)").
+ */
+export function formatToolGroupSummary(tools: ToolCallData[] | any[]): string {
+  if (!tools || tools.length === 0) return '';
+  const counts: Record<string, number> = {};
+  const order: string[] = [];
+  for (const t of tools) {
+    const name = t?.name || 'tool';
+    if (!counts[name]) {
+      counts[name] = 0;
+      order.push(name);
+    }
+    counts[name]++;
+  }
+  return order.map((name) => `${name} (${counts[name]})`).join(', ');
+}
+
+/**
+ * Checks if a tool group accordion is collapsed. Default is true (collapsed).
+ */
+export function isToolGroupCollapsed(
+  state: Record<string, boolean> | null | undefined,
+  groupId: string
+): boolean {
+  if (!state || !(groupId in state)) return true;
+  return state[groupId] !== false;
+}
+
+/**
+ * Toggles the collapsed state for a given tool group ID.
+ */
+export function toggleToolGroupCollapsed(
+  state: Record<string, boolean>,
+  groupId: string
+): Record<string, boolean> {
+  const current = isToolGroupCollapsed(state, groupId);
+  return {
+    ...state,
+    [groupId]: !current,
+  };
+}
+
+/**
+ * Separates streaming tool calls into completed tools (folded into accordion)
+ * and the single active running tool (displayed on live line).
+ */
+export function separateStreamingToolCalls(tools: ToolCallData[] | any[]): {
+  completedTools: ToolCallData[];
+  activeRunningTool: ToolCallData | null;
+} {
+  if (!tools || tools.length === 0) {
+    return { completedTools: [], activeRunningTool: null };
+  }
+
+  let runningIndex = -1;
+  for (let i = tools.length - 1; i >= 0; i--) {
+    if (tools[i].status === 'running') {
+      runningIndex = i;
+      break;
+    }
+  }
+
+  if (runningIndex !== -1) {
+    return {
+      completedTools: tools.filter((_, idx) => idx !== runningIndex),
+      activeRunningTool: tools[runningIndex],
+    };
+  }
+
+  return {
+    completedTools: [...tools],
+    activeRunningTool: null,
   };
 }
 
