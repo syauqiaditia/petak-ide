@@ -27,10 +27,10 @@ export const darculaTheme = EditorView.theme(
       borderLeftWidth: '2px',
     },
     '&.cm-focused .cm-selectionBackground, ::selection': {
-      backgroundColor: '#214283 !important',
+      backgroundColor: '#264f78 !important',
     },
     '.cm-selectionBackground': {
-      backgroundColor: '#214283 !important',
+      backgroundColor: '#264f78 !important',
     },
     '.cm-gutters': {
       backgroundColor: '#1e1f22',
@@ -50,14 +50,15 @@ export const darculaTheme = EditorView.theme(
       fontWeight: '500',
     },
     '.cm-search-match': {
-      backgroundColor: '#2d5e38',
+      backgroundColor: '#32593d !important',
       borderRadius: '2px',
     },
     '.cm-search-match-active': {
-      backgroundColor: '#387c3a',
-      outline: '1.5px solid #ffffff',
+      backgroundColor: '#32593d !important',
+      outline: '1.5px solid #ffffff !important',
+      boxShadow: '0 0 5px rgba(255, 255, 255, 0.7) !important',
       borderRadius: '2px',
-      zIndex: '2',
+      zIndex: '5',
     },
     '.cm-vim-panel': {
       backgroundColor: '#1e1f22',

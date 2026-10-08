@@ -13,7 +13,8 @@
     GutterMarker,
   } from '@codemirror/view';
   import { EditorState, StateEffect, StateField, Compartment } from '@codemirror/state';
-  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+  import { defaultKeymap, history, historyKeymap, toggleComment } from '@codemirror/commands';
+  import { bracketMatching } from '@codemirror/language';
   import { vim } from '@replit/codemirror-vim';
   import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
   import { tabsManager, type TabItem } from './tabs.svelte';
@@ -613,10 +614,15 @@
         highlightActiveLineGutter(),
         highlightActiveLine(),
         drawSelection(),
+        bracketMatching(),
         history(),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
+          {
+            key: 'Mod-/',
+            run: toggleComment,
+          },
           {
             key: 'Mod-F8',
             run: (v) => toggleBreakpointAtCursor(v, () => currentSwappedPath),
@@ -652,7 +658,9 @@
               const isDirty = currentText !== active.savedContent;
               tabsManager.markDirty(active.path, isDirty);
               const vcsMap = computeVcsLineChanges(active.savedContent, currentText);
-              view?.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+              queueMicrotask(() => {
+                view?.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+              });
             }
           }
           if (update.selectionSet || update.docChanged) {
@@ -879,11 +887,18 @@
 
   function onKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement | null;
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target && target.isContentEditable)) {
+    const isInsideEditor = !!target?.closest('.cm-editor');
+    if (!isInsideEditor && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target && target.isContentEditable))) {
       return;
     }
 
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === '/' || e.code === 'Slash')) {
+      if (view) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleComment(view);
+      }
+    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
       e.preventDefault();
       e.stopPropagation();
       sendSelectionToAgent();
@@ -1503,13 +1518,8 @@
     pointer-events: none !important;
     user-select: none !important;
   }
-  :global(.cm-indent-guide) {
-    border-left: 1px solid #2b2d30 !important;
-    margin-left: -1px !important;
-  }
-  :global(.cm-bracket-matching-guide) {
-    border-left: 1px solid #5b5f68 !important;
-    margin-left: -1px !important;
+  :global(.cm-indent-guide-step) {
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.1) !important;
   }
   :global(.cm-breakpoint-gutter) {
     width: 20px !important;

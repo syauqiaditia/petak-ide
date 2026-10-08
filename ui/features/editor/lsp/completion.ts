@@ -12,7 +12,7 @@ import {
 } from '@codemirror/autocomplete';
 import { EditorView, keymap } from '@codemirror/view';
 import { api, type LspCompletionItem } from '../../../lib/api';
-import { isLspSupported } from './sync';
+import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos } from './pos';
 import { createSnippetCompletionSource } from '../snippets';
 import { applyTextEditsToView } from './applyEdit';
@@ -107,10 +107,13 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
     const from = word ? word.from : context.pos;
     const lspPos = offsetToLspPos(context.state.doc, context.pos);
 
+    // Ensure LSP server has the freshest document content before requesting completion
+    flushPending(path);
+
     let docAborted = false;
     context.addEventListener('abort', () => {
       docAborted = true;
-    }, { onDocChange: true });
+    });
 
     try {
       const response = await api.lsp.completion(path, lspPos.line, lspPos.character);

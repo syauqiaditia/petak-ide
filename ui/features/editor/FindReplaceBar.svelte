@@ -45,21 +45,17 @@
 
   let docText = $derived(view ? view.state.doc.toString() : '');
   let matches = $derived<MatchRange[]>(findMatches(docText, query, options));
-  let cursorHead = $derived(view ? view.state.selection.main.head : 0);
 
-  // Sync active match index when cursor or query changes
+  // Keep match index valid when matches change
   $effect(() => {
-    if (matches.length > 0) {
-      const idx = getActiveMatchIndex(matches, cursorHead);
-      if (idx >= 0 && idx !== currentMatchIndex) {
-        currentMatchIndex = idx;
-      }
-    } else {
+    if (matches.length === 0) {
+      currentMatchIndex = 0;
+    } else if (currentMatchIndex >= matches.length) {
       currentMatchIndex = 0;
     }
   });
 
-  // Apply search highlights in CodeMirror
+  // Apply search highlights in CodeMirror without interrupting mouse selection
   $effect(() => {
     if (view) {
       if (isOpen && query.length > 0) {
@@ -93,6 +89,12 @@
             query = autoQuery;
           }
         }
+      }
+
+      if (view && matches.length > 0) {
+        const head = view.state.selection.main.head;
+        const idx = getActiveMatchIndex(matches, head);
+        if (idx >= 0) currentMatchIndex = idx;
       }
 
       requestAnimationFrame(() => {
@@ -157,6 +159,9 @@
       selection: { anchor: newRange.from, head: newRange.to },
       scrollIntoView: true,
     });
+    setTimeout(() => {
+      handleNext();
+    }, 20);
   }
 
   function handleReplaceAll() {

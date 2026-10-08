@@ -117,18 +117,40 @@ export const indentGuidesField = StateField.define<DecorationSet>({
   provide: (f) => EditorView.decorations.from(f),
 });
 
-function buildIndentGuideDecorations(doc: any): DecorationSet {
+function buildIndentGuideDecorations(doc: any, tabSize: number = 2): DecorationSet {
   const decos: any[] = [];
   const linesCount = doc.lines;
   for (let i = 1; i <= linesCount; i++) {
     const line = doc.line(i);
-    const level = calculateIndentLevel(line.text, 2);
-    if (level > 0 && line.text.trim().length > 0) {
-      decos.push(
-        Decoration.line({
-          class: `cm-indent-guide cm-indent-level-${Math.min(level, 8)}`,
-        }).range(line.from)
-      );
+    const text = line.text;
+    if (text.length === 0) continue;
+
+    let col = 0;
+    let stepStart = 0;
+    let stepCount = 0;
+    for (let j = 0; j < text.length; j++) {
+      const ch = text[j];
+      if (ch === ' ') {
+        col += 1;
+      } else if (ch === '\t') {
+        col += tabSize;
+      } else {
+        break;
+      }
+
+      if (col % tabSize === 0) {
+        stepCount++;
+        const from = line.from + stepStart;
+        const to = line.from + j + 1;
+        if (from < to) {
+          decos.push(
+            Decoration.mark({
+              class: 'cm-indent-guide-step',
+            }).range(from, to)
+          );
+        }
+        stepStart = j + 1;
+      }
     }
   }
   return Decoration.set(decos, true);
@@ -142,31 +164,12 @@ export const bracketMatchingLinesField = StateField.define<DecorationSet>({
   create() {
     return Decoration.none;
   },
-  update(decorations, tr) {
-    const head = tr.state.selection.main.head;
-    const doc = tr.state.doc;
-    const docText = doc.toString();
-
-    const match = findMatchingBrackets(docText, head);
-    if (!match) return Decoration.none;
-
-    const decos: any[] = [];
-    for (let ln = match.openLine + 1; ln < match.closeLine; ln++) {
-      if (ln <= doc.lines) {
-        const lineObj = doc.line(ln);
-        decos.push(
-          Decoration.line({
-            class: 'cm-bracket-matching-guide',
-          }).range(lineObj.from)
-        );
-      }
-    }
-
-    return Decoration.set(decos, true);
+  update() {
+    return Decoration.none;
   },
   provide: (f) => EditorView.decorations.from(f),
 });
 
 export function createIndentGuidesExtension() {
-  return [indentGuidesField, bracketMatchingLinesField];
+  return [indentGuidesField];
 }

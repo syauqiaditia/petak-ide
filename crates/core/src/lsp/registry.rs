@@ -179,7 +179,7 @@ fn did_open_params(doc: &OpenDoc) -> serde_json::Value {
 
 /// State for one managed server.
 struct ManagedServer {
-    server: Server,
+    server: Arc<Server>,
     last_activity: Instant,
 }
 
@@ -509,13 +509,22 @@ impl Registry {
         let root = Self::find_root(file_path, lang, workspace_root);
         let key = ServerKey { lang, root };
 
-        let mut servers = self.servers.lock().unwrap();
-        let (managed, _) = self.ensure_alive(&mut servers, &key)?;
-        managed.last_activity = self.clock.now();
-        let res = managed.server.request(method, params);
-        if let Err(ServerError::ServerDied) = res {
+        let server = {
+            let mut servers = self.servers.lock().unwrap();
             let (managed, _) = self.ensure_alive(&mut servers, &key)?;
-            managed.server.request(method, params)
+            managed.last_activity = self.clock.now();
+            managed.server.clone()
+        };
+
+        let res = server.request(method, params);
+        if let Err(ServerError::ServerDied) = res {
+            let server = {
+                let mut servers = self.servers.lock().unwrap();
+                let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+                managed.last_activity = self.clock.now();
+                managed.server.clone()
+            };
+            server.request(method, params)
         } else {
             res
         }
@@ -787,7 +796,7 @@ impl Registry {
         );
 
         Ok(ManagedServer {
-            server,
+            server: Arc::new(server),
             last_activity: self.clock.now(),
         })
     }
