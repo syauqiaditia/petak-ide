@@ -92,6 +92,14 @@ export interface CodeReference {
   codeSnippet?: string;
 }
 
+export interface FileReference {
+  path: string;
+  name: string;
+  line?: number;
+  endLine?: number;
+  isDir?: boolean;
+}
+
 export interface ToolCallData {
   name: string;
   arguments?: any;

@@ -21,7 +21,9 @@ import type {
   SelfHealResult,
   ChatMessage,
   ChatSessionMeta,
+  FileReference,
 } from './types';
+export type { FileReference };
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
 
@@ -1526,6 +1528,8 @@ export function generateSessionId(): string {
 export interface CleanPromptEnvelope {
   displayContent: string;
   formattedPrompt: string;
+  fileReferences?: FileReference[];
+  metadata?: Record<string, any>;
 }
 
 export function buildCleanPromptEnvelope(
@@ -1539,10 +1543,18 @@ export function buildCleanPromptEnvelope(
     domainMemoryInjection?: string;
     prunedContextInjection?: string;
     referencePrefix?: string;
+    fileReferences?: FileReference[];
   }
 ): CleanPromptEnvelope {
   const cleanInput = (userInput || '').trim();
-  const refPrefix = options?.referencePrefix || '';
+  let refPrefix = options?.referencePrefix || '';
+  if (options?.fileReferences && options.fileReferences.length > 0) {
+    const refLines = options.fileReferences.map((r) => {
+      const loc = `${r.path}${r.line ? `:${r.line}` : ''}${r.endLine && r.endLine !== r.line ? `-${r.endLine}` : ''}`;
+      return `- ${loc}`;
+    });
+    refPrefix = `${refPrefix}[REFERENSI BERKAS:\n${refLines.join('\n')}\n]\n\n`;
+  }
   const fullPromptText = `${refPrefix}${cleanInput}`;
   const formattedPrompt = applyDisciplineDirectives(
     fullPromptText,
@@ -1557,7 +1569,59 @@ export function buildCleanPromptEnvelope(
   return {
     displayContent: cleanInput,
     formattedPrompt,
+    fileReferences: options?.fileReferences,
+    metadata:
+      options?.fileReferences && options.fileReferences.length > 0
+        ? { fileReferences: options.fileReferences }
+        : undefined,
   };
+}
+
+/**
+ * Opens a referenced file in the editor tabs and jumps to line if specified.
+ */
+export async function openReferencedFile(
+  filePath: string,
+  line?: number,
+  deps?: {
+    tabsManager?: {
+      tabs: Array<{ path: string; name: string; savedContent?: string }>;
+      openTab: (path: string, name: string, content: string) => any;
+    };
+    api?: {
+      readFile: (path: string) => Promise<string>;
+    };
+    gotoLine?: (line: number, col?: number) => void;
+  }
+): Promise<void> {
+  if (!filePath) return;
+  const fileName = filePath.split('/').pop() || filePath;
+  const tm =
+    deps?.tabsManager ||
+    (typeof window !== 'undefined' ? (window as any).__PETAK_TABS_MANAGER__ : undefined);
+  const fileApi =
+    deps?.api || (typeof window !== 'undefined' ? (window as any).__PETAK_API__ : undefined);
+
+  let content = '';
+  const existing = tm?.tabs?.find((t: any) => t.path === filePath);
+  if (existing) {
+    content = existing.savedContent || '';
+  } else if (fileApi?.readFile) {
+    try {
+      content = await fileApi.readFile(filePath);
+    } catch {
+      content = '';
+    }
+  }
+
+  tm?.openTab?.(filePath, fileName, content);
+
+  const jump =
+    deps?.gotoLine ||
+    (typeof window !== 'undefined' ? (window as any).__PETAK_GOTO_LINE__ : undefined);
+  if (line !== undefined && line !== null && jump) {
+    jump(line, 1);
+  }
 }
 
 /**
