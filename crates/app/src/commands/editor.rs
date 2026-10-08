@@ -131,9 +131,16 @@ pub async fn lsp_completion(
             "textDocument": { "uri": uri },
             "position": { "line": line, "character": character }
         });
-        registry
-            .request(p, lang, "textDocument/completion", &params, None)
-            .map_err(|e| format!("{:?}", e))
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
+            let _ = writeln!(f, "[LSP_COMPLETION] path={} line={} char={}", path, line, character);
+        }
+        let res = registry
+            .request(p, lang, "textDocument/completion", &params, None);
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
+            let _ = writeln!(f, "[LSP_COMPLETION_RES] is_ok={}", res.is_ok());
+        }
+        res.map_err(|e| format!("{:?}", e))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -179,9 +186,16 @@ pub async fn lsp_hover(
             "textDocument": { "uri": uri },
             "position": { "line": line, "character": character }
         });
-        registry
-            .request(p, lang, "textDocument/hover", &params, None)
-            .map_err(|e| format!("{:?}", e))
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
+            let _ = writeln!(f, "[LSP_HOVER] path={} line={} char={}", path, line, character);
+        }
+        let res = registry
+            .request(p, lang, "textDocument/hover", &params, None);
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
+            let _ = writeln!(f, "[LSP_HOVER_RES] is_ok={}", res.is_ok());
+        }
+        res.map_err(|e| format!("{:?}", e))
     })
     .await
     .map_err(|e| e.to_string())?

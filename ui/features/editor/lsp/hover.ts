@@ -23,7 +23,7 @@ function extractHoverText(contents: LspHover['contents']): string {
 }
 
 export const hoverTheme = EditorView.theme({
-  '.cm-tooltip': {
+  '.cm-tooltip.cm-tooltip-hover': {
     backgroundColor: '#1e1f22 !important',
     border: '1px solid #383a42 !important',
     borderRadius: '8px !important',

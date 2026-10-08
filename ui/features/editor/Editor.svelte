@@ -631,12 +631,12 @@
         lintGutter(),
         lintTheme,
         createCodeFoldingExtension(),
-        createLspSyncExtension(() => tabsManager.activePath || currentSwappedPath || tabsManager.activeTab?.path || null),
-        createLspAutocompleteExtension(() => tabsManager.activePath || currentSwappedPath || tabsManager.activeTab?.path || null),
-        createLspHoverExtension(() => tabsManager.activePath || currentSwappedPath || tabsManager.activeTab?.path || null),
-        createLspNavExtension(() => tabsManager.activePath || currentSwappedPath || tabsManager.activeTab?.path || null, gotoLine),
+        createLspSyncExtension(() => currentSwappedPath || filePath || null),
+        createLspAutocompleteExtension(() => currentSwappedPath || filePath || null),
+        createLspHoverExtension(() => currentSwappedPath || filePath || null),
+        createLspNavExtension(() => currentSwappedPath || filePath || null, gotoLine),
         createGhostTextExtension({
-          getPath: () => tabsManager.activePath || currentSwappedPath || tabsManager.activeTab?.path || null,
+          getPath: () => currentSwappedPath || filePath || null,
           isEnabled: () => editorSettings.ghostText,
         }),
         ghostDiffExtension(),
@@ -981,13 +981,15 @@
     window.addEventListener('keydown', onKeydown, true);
 
     const active = tabsManager.activeTab;
+    if (active) {
+      currentSwappedPath = active.path;
+    }
     const initialState = active
       ? createEditorState(active.savedContent, active.name, active.path)
       : createEditorState('', 'Untitled');
 
     if (active) {
       active.state = initialState;
-      currentSwappedPath = active.path;
       onTabOpen(active.path, active.savedContent);
     }
 
