@@ -29,7 +29,7 @@ export const hoverTheme = EditorView.theme({
     borderRadius: '8px !important',
     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important',
     zIndex: '500 !important',
-    overflow: 'hidden !important',
+    pointerEvents: 'auto !important',
   },
   '.cm-tooltip-hover': {
     backgroundColor: '#1e1f22 !important',
@@ -44,6 +44,21 @@ export const hoverTheme = EditorView.theme({
     scrollbarWidth: 'thin !important',
     scrollbarColor: '#3c3f4a transparent !important',
     boxSizing: 'border-box !important',
+    pointerEvents: 'auto !important',
+  },
+  '.cm-tooltip-hover::-webkit-scrollbar': {
+    width: '6px !important',
+    height: '6px !important',
+  },
+  '.cm-tooltip-hover::-webkit-scrollbar-track': {
+    background: 'transparent !important',
+  },
+  '.cm-tooltip-hover::-webkit-scrollbar-thumb': {
+    backgroundColor: '#3c3f4a !important',
+    borderRadius: '4px !important',
+  },
+  '.cm-tooltip-hover::-webkit-scrollbar-thumb:hover': {
+    backgroundColor: '#565a68 !important',
   },
   '.cm-tooltip.cm-lsp-hover-tooltip': {
     backgroundColor: '#1e1f22 !important',
@@ -276,6 +291,15 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
               to = word.to;
             }
           }
+          if (from === to) {
+            const word = view.state.wordAt(pos);
+            if (word) {
+              from = word.from;
+              to = word.to;
+            } else if (to < doc.length) {
+              to = from + 1;
+            }
+          }
           if (from > to) {
             const tmp = from;
             from = to;
@@ -309,9 +333,6 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
               const dom = document.createElement('div');
               dom.className = 'cm-lsp-hover-tooltip';
               dom.style.maxWidth = `${adaptive.maxWidth}px`;
-              if (adaptive.translateX !== 0) {
-                dom.style.transform = `translateX(${adaptive.translateX}px)`;
-              }
 
               // Header toolbar with location & "Tanya di Chat" action
               const toolbar = document.createElement('div');
@@ -352,7 +373,6 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
 
               function adjustPosition() {
                 if (!view.dom.isConnected || !dom.isConnected) return;
-                dom.style.transform = 'none';
                 const editorRect = view.dom.getBoundingClientRect();
                 const domRect = dom.getBoundingClientRect();
                 const currentVisualPos = view.coordsAtPos(from) || visualPos;
@@ -371,11 +391,6 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
                 );
 
                 dom.style.maxWidth = `${coords.maxWidth}px`;
-                if (coords.translateX !== 0) {
-                  dom.style.transform = `translateX(${coords.translateX}px)`;
-                } else {
-                  dom.style.transform = 'none';
-                }
               }
 
               return {
@@ -396,6 +411,7 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
       },
       {
         hideOnChange: true,
+        hoverTime: 180,
       }
     ),
     hoverKeymap,
