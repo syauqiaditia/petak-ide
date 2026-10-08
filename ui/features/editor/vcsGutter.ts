@@ -185,6 +185,7 @@ export const inlineBlameField = StateField.define<DecorationSet>({
     if (doc.length === 0) return Decoration.none;
 
     const line = doc.lineAt(head);
+    if (line.text.trim().length === 0) return Decoration.none;
     const b = blameMap.get(line.number);
     if (b && b.author) {
       const text = formatBlameInline(b.author, b.timeUnix, b.summary);
