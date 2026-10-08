@@ -1537,7 +1537,7 @@
     color: #6e7681 !important;
     font-size: 11px !important;
     font-style: italic !important;
-    margin-left: 24px !important;
+    padding-left: 24px !important;
     opacity: 0.75 !important;
     pointer-events: none !important;
     user-select: none !important;

@@ -185,7 +185,8 @@ export const inlineBlameField = StateField.define<DecorationSet>({
     if (doc.length === 0) return Decoration.none;
 
     const line = doc.lineAt(head);
-    if (line.text.trim().length === 0) return Decoration.none;
+    // Never show blame on empty lines or when cursor is at the end of the line (prevents cursor displacement)
+    if (line.text.trim().length === 0 || head === line.to) return Decoration.none;
     const b = blameMap.get(line.number);
     if (b && b.author) {
       const text = formatBlameInline(b.author, b.timeUnix, b.summary);

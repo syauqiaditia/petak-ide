@@ -23,18 +23,29 @@ function extractHoverText(contents: LspHover['contents']): string {
 }
 
 export const hoverTheme = EditorView.theme({
-  '.cm-tooltip.cm-tooltip-hover': {
+  '.cm-tooltip:has(.cm-tooltip-hover)': {
     backgroundColor: '#1e1f22 !important',
     border: '1px solid #383a42 !important',
     borderRadius: '8px !important',
     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important',
+    overflow: 'hidden !important',
     zIndex: '500 !important',
+  },
+  '.cm-tooltip .cm-tooltip-hover': {
+    backgroundColor: '#1e1f22 !important',
+    maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
+    maxHeight: '280px !important',
+    overflowY: 'auto !important',
+    overflowX: 'auto !important',
+    color: '#d4d6dc !important',
+    fontSize: '12px !important',
+    scrollbarWidth: 'thin !important',
+    scrollbarColor: '#3c3f4a transparent !important',
+    boxSizing: 'border-box !important',
     pointerEvents: 'auto !important',
   },
   '.cm-tooltip-hover': {
     backgroundColor: '#1e1f22 !important',
-    border: '1px solid #383a42 !important',
-    borderRadius: '8px !important',
     maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
@@ -259,6 +270,23 @@ import {
 
 export { shouldPlaceHoverAbove, computeTooltipMaxWidth, computeAdaptiveHoverCoords };
 
+const DART_KEYWORD_DOCS: Record<string, string> = {
+  await: '```dart\nawait expression\n```\nSuspends execution until the Future completes.',
+  async: '```dart\nasync\n```\nMarks a function as asynchronous, enabling the `await` keyword and wrapping the return value in a Future.',
+  yield: '```dart\nyield expression\n```\nEmits a value from a generator function (`sync*` or `async*`).',
+  Future: '```dart\nabstract class Future<T>\n```\nAn object representing a delayed computation or asynchronous result.',
+  Stream: '```dart\nabstract class Stream<T>\n```\nA source of asynchronous data events.',
+  void: '```dart\nvoid\n```\nIndicates that a function returns no value.',
+  late: '```dart\nlate\n```\nDeclares a non-nullable variable that is initialized after its declaration.',
+  const: '```dart\nconst\n```\nDeclares a compile-time constant.',
+  final: '```dart\nfinal\n```\nDeclares a variable that can be set only once.',
+  var: '```dart\nvar\n```\nDeclares a variable with type inferred by the compiler.',
+};
+
+function getKeywordDoc(word: string): string | null {
+  return DART_KEYWORD_DOCS[word] || null;
+}
+
 export function createLspHoverExtension(getPath: () => string | null): Extension {
   return [
     hoverTooltip(
@@ -273,15 +301,12 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
 
         try {
           const hoverRes = await api.lsp.hover(path, lspPos.line, lspPos.character);
-          if (!hoverRes) return null;
-
-          const text = extractHoverText(hoverRes.contents);
-          if (!text.trim()) return null;
+          let text = hoverRes ? extractHoverText(hoverRes.contents) : '';
 
           let from = pos;
           let to = pos;
 
-          if (hoverRes.range) {
+          if (hoverRes && hoverRes.range) {
             from = lspPosToOffset(doc, hoverRes.range.start);
             to = lspPosToOffset(doc, hoverRes.range.end);
           } else {
@@ -291,6 +316,22 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
               to = word.to;
             }
           }
+
+          if (!text.trim()) {
+            const word = view.state.wordAt(pos);
+            if (word) {
+              const kw = doc.sliceString(word.from, word.to);
+              const kwDoc = getKeywordDoc(kw);
+              if (kwDoc) {
+                text = kwDoc;
+                from = word.from;
+                to = word.to;
+              }
+            }
+          }
+
+          if (!text.trim()) return null;
+
           if (from === to) {
             const word = view.state.wordAt(pos);
             if (word) {
