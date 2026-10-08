@@ -13,6 +13,7 @@
     type MatchRange,
     type SearchOptions,
   } from './searchLogic';
+  import { tabsManager } from './tabs.svelte';
 
   let {
     view = null,
@@ -45,7 +46,22 @@
     isRegex,
   });
 
-  let docText = $derived(view && docVersion >= 0 ? view.state.doc.toString() : '');
+  let docText = $derived.by(() => {
+    if (view && docVersion >= 0) {
+      try {
+        const text = view.state.doc.toString();
+        if (text) return text;
+      } catch (_) {}
+    }
+    const tab = tabsManager.activeTab;
+    if (tab) {
+      if (tab.state) {
+        return tab.state.doc.toString();
+      }
+      return tab.savedContent || '';
+    }
+    return '';
+  });
   let matches = $derived<MatchRange[]>(findMatches(docText, query, options));
 
   // Keep match index valid when matches change

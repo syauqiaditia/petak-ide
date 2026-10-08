@@ -110,7 +110,7 @@
   }>();
 
   let container: HTMLDivElement;
-  let view: EditorView | null = null;
+  let view = $state.raw<EditorView | null>(null);
   let currentSwappedPath: string | null = null;
   let unlistenDiagnostics: UnlistenFn | null = null;
   let unlistenApplyEdit: UnlistenFn | null = null;
@@ -998,6 +998,7 @@
       state: initialState,
       parent: container,
     });
+    editorDocVersion++;
 
     onScrollHandler = () => {
       if (currentSwappedPath && view) {
@@ -1118,6 +1119,7 @@
           active.state = createEditorState(active.savedContent, active.name, active.path);
         }
         view.setState(active.state);
+        editorDocVersion++;
         restoreFileFoldState(active.path, view);
 
         // Restore scroll and cursor position
