@@ -16,12 +16,14 @@
 
   let {
     view = null,
+    docVersion = 0,
     isOpen = false,
     mode = 'find',
     initialQuery = '',
     onClose = () => {},
   }: {
     view: EditorView | null;
+    docVersion?: number;
     isOpen: boolean;
     mode: 'find' | 'replace';
     initialQuery?: string;
@@ -43,7 +45,7 @@
     isRegex,
   });
 
-  let docText = $derived(view ? view.state.doc.toString() : '');
+  let docText = $derived(view && docVersion >= 0 ? view.state.doc.toString() : '');
   let matches = $derived<MatchRange[]>(findMatches(docText, query, options));
 
   // Keep match index valid when matches change
@@ -76,8 +78,13 @@
     }
   });
 
+  let prevIsOpen = false;
+
   $effect(() => {
-    if (isOpen) {
+    const justOpened = isOpen && !prevIsOpen;
+    prevIsOpen = isOpen;
+
+    if (justOpened) {
       if (initialQuery) {
         query = initialQuery;
       } else if (view) {
@@ -89,12 +96,6 @@
             query = autoQuery;
           }
         }
-      }
-
-      if (view && matches.length > 0) {
-        const head = view.state.selection.main.head;
-        const idx = getActiveMatchIndex(matches, head);
-        if (idx >= 0) currentMatchIndex = idx;
       }
 
       requestAnimationFrame(() => {

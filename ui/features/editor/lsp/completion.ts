@@ -115,6 +115,18 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
       docAborted = true;
     });
 
+    const prefix = word ? word.text.toLowerCase() : '';
+    const keywords = getKeywordsForPath(path);
+    const keywordOptions: (Completion & { _kindLetter?: string })[] = (
+      prefix ? keywords.filter((k) => k.toLowerCase().startsWith(prefix)) : keywords
+    ).map((kw) => ({
+      label: kw,
+      type: 'keyword',
+      detail: 'keyword',
+      _kindLetter: 'k',
+      boost: 10,
+    }));
+
     try {
       const response = await api.lsp.completion(path, lspPos.line, lspPos.character);
       if (context.aborted || docAborted) return null;
@@ -125,9 +137,7 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
         ? (response as any).items
         : [];
 
-      if (rawItems.length === 0) return null;
-
-      const options: Completion[] = rawItems.map((item) => {
+      const lspOptions: Completion[] = rawItems.map((item) => {
         const { typeName, letter } = getKindInfo(item.kind);
 
         const completion: Completion & { _kindLetter?: string } = {
@@ -183,16 +193,64 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
         return completion;
       });
 
+      // De-duplicate keywords if LSP already provided them
+      const lspLabels = new Set(lspOptions.map((o) => o.label));
+      const filteredKeywords = keywordOptions.filter((kw) => !lspLabels.has(kw.label));
+      const combinedOptions = [...filteredKeywords, ...lspOptions];
+
+      if (combinedOptions.length === 0) return null;
+
       return {
         from,
-        options,
+        options: combinedOptions,
         validFor: /^[\w$]*$/,
       };
     } catch (e) {
-      console.error('LSP completion error:', e);
+      if (keywordOptions.length > 0) {
+        return {
+          from,
+          options: keywordOptions,
+          validFor: /^[\w$]*$/,
+        };
+      }
       return null;
     }
   };
+}
+
+const DART_KEYWORDS = [
+  'await', 'async', 'yield', 'class', 'extension', 'enum', 'mixin',
+  'final', 'var', 'const', 'return', 'if', 'else', 'switch', 'case', 'default',
+  'try', 'catch', 'finally', 'throw', 'rethrow', 'void', 'dynamic', 'bool',
+  'int', 'double', 'String', 'List', 'Map', 'Set', 'Future', 'Stream',
+  'Widget', 'BuildContext', 'State', 'StatelessWidget', 'StatefulWidget',
+  'true', 'false', 'null', 'import', 'export', 'part', 'library', 'as',
+  'show', 'hide', 'is', 'new', 'this', 'super', 'static', 'abstract',
+  'implements', 'with', 'extends', 'override', 'required', 'late', 'factory',
+  'get', 'set',
+];
+
+const KOTLIN_KEYWORDS = [
+  'fun', 'val', 'var', 'class', 'data', 'sealed', 'interface', 'object',
+  'override', 'suspend', 'private', 'public', 'protected', 'internal',
+  'companion', 'init', 'constructor', 'return', 'if', 'else', 'when',
+  'for', 'while', 'try', 'catch', 'finally', 'throw', 'null', 'true', 'false',
+  'import', 'package', 'this', 'super',
+];
+
+const SWIFT_KEYWORDS = [
+  'func', 'let', 'var', 'class', 'struct', 'enum', 'protocol', 'extension',
+  'override', 'private', 'public', 'open', 'fileprivate', 'internal',
+  'init', 'return', 'if', 'else', 'switch', 'case', 'default', 'for',
+  'while', 'try', 'catch', 'throw', 'nil', 'true', 'false', 'import',
+  'self', 'super', 'guard', 'defer',
+];
+
+function getKeywordsForPath(path: string): string[] {
+  if (/\.dart$/.test(path)) return DART_KEYWORDS;
+  if (/\.(kt|kts)$/.test(path)) return KOTLIN_KEYWORDS;
+  if (/\.swift$/.test(path)) return SWIFT_KEYWORDS;
+  return [];
 }
 
 /**

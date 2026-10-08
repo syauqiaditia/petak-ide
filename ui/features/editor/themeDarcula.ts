@@ -27,7 +27,7 @@ export const darculaTheme = EditorView.theme(
       borderLeftWidth: '2px',
     },
     '&.cm-focused .cm-selectionBackground, ::selection': {
-      backgroundColor: '#264f78 !important',
+      backgroundColor: '#2e5788 !important',
     },
     '.cm-selectionBackground': {
       backgroundColor: '#264f78 !important',
@@ -42,7 +42,7 @@ export const darculaTheme = EditorView.theme(
       paddingLeft: '12px',
     },
     '.cm-activeLine': {
-      backgroundColor: '#2b2d30 !important',
+      backgroundColor: 'rgba(255, 255, 255, 0.04) !important',
     },
     '.cm-activeLineGutter': {
       backgroundColor: '#2b2d30 !important',

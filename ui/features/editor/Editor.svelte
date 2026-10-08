@@ -13,8 +13,8 @@
     GutterMarker,
   } from '@codemirror/view';
   import { EditorState, StateEffect, StateField, Compartment } from '@codemirror/state';
-  import { defaultKeymap, history, historyKeymap, toggleComment } from '@codemirror/commands';
-  import { bracketMatching } from '@codemirror/language';
+  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+  import { bracketMatching, indentUnit } from '@codemirror/language';
   import { vim } from '@replit/codemirror-vim';
   import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
   import { tabsManager, type TabItem } from './tabs.svelte';
@@ -29,7 +29,7 @@
     setDiagnosticsEditorView,
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
-  import { createEditorKeymapExtension } from './keymap';
+  import { createEditorKeymapExtension, toggleCommentForView } from './keymap';
   import { createGhostTextExtension, clearGhostTextEffect } from './ghostText';
   import { ghostDiffExtension } from './ghostDiff';
   import { editorSettings } from './editorSettings.svelte';
@@ -120,6 +120,7 @@
   let findReplaceMode = $state<'find' | 'replace'>('find');
   let findReplaceInitialQuery = $state('');
   let findReplaceRef = $state<any>(null);
+  let editorDocVersion = $state(0);
 
   let isCenterDiffActive = $state(false);
 
@@ -615,13 +616,14 @@
         highlightActiveLine(),
         drawSelection(),
         bracketMatching(),
+        indentUnit.of('  '),
         history(),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
           {
             key: 'Mod-/',
-            run: toggleComment,
+            run: (v) => toggleCommentForView(v),
           },
           {
             key: 'Mod-F8',
@@ -654,6 +656,7 @@
           if (active && active.path === currentSwappedPath) {
             active.state = update.state;
             if (update.docChanged) {
+              editorDocVersion++;
               const currentText = update.state.doc.toString();
               const isDirty = currentText !== active.savedContent;
               tabsManager.markDirty(active.path, isDirty);
@@ -896,7 +899,7 @@
       if (view) {
         e.preventDefault();
         e.stopPropagation();
-        toggleComment(view);
+        toggleCommentForView(view);
       }
     } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
       e.preventDefault();
@@ -1343,6 +1346,7 @@
     <FindReplaceBar
       bind:this={findReplaceRef}
       {view}
+      docVersion={editorDocVersion}
       isOpen={findReplaceOpen}
       mode={findReplaceMode}
       initialQuery={findReplaceInitialQuery}
@@ -1518,8 +1522,88 @@
     pointer-events: none !important;
     user-select: none !important;
   }
-  :global(.cm-indent-guide-step) {
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.1) !important;
+  :global(.cm-line.cm-indent-guide-1) {
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0 !important;
+    background-size: 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-2) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0 !important;
+    background-size: 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-3) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-4) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-5) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-6) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0, 12ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-7) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0, 12ch 0, 14ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-8) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0, 12ch 0, 14ch 0, 16ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
   }
   :global(.cm-breakpoint-gutter) {
     width: 20px !important;

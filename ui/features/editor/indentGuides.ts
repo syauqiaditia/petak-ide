@@ -120,37 +120,46 @@ export const indentGuidesField = StateField.define<DecorationSet>({
 function buildIndentGuideDecorations(doc: any, tabSize: number = 2): DecorationSet {
   const decos: any[] = [];
   const linesCount = doc.lines;
+
+  const levels: number[] = new Array(linesCount + 1).fill(0);
+  for (let i = 1; i <= linesCount; i++) {
+    const text = doc.line(i).text;
+    if (text.trim().length > 0) {
+      levels[i] = calculateIndentLevel(text, tabSize);
+    }
+  }
+
+  // Interpolate indent levels across blank lines so vertical lines connect seamlessly
+  for (let i = 1; i <= linesCount; i++) {
+    const text = doc.line(i).text;
+    if (text.trim().length === 0) {
+      let prev = 0;
+      for (let p = i - 1; p >= 1; p--) {
+        if (doc.line(p).text.trim().length > 0) {
+          prev = levels[p];
+          break;
+        }
+      }
+      let next = 0;
+      for (let n = i + 1; n <= linesCount; n++) {
+        if (doc.line(n).text.trim().length > 0) {
+          next = levels[n];
+          break;
+        }
+      }
+      levels[i] = Math.min(prev, next);
+    }
+  }
+
   for (let i = 1; i <= linesCount; i++) {
     const line = doc.line(i);
-    const text = line.text;
-    if (text.length === 0) continue;
-
-    let col = 0;
-    let stepStart = 0;
-    let stepCount = 0;
-    for (let j = 0; j < text.length; j++) {
-      const ch = text[j];
-      if (ch === ' ') {
-        col += 1;
-      } else if (ch === '\t') {
-        col += tabSize;
-      } else {
-        break;
-      }
-
-      if (col % tabSize === 0) {
-        stepCount++;
-        const from = line.from + stepStart;
-        const to = line.from + j + 1;
-        if (from < to) {
-          decos.push(
-            Decoration.mark({
-              class: 'cm-indent-guide-step',
-            }).range(from, to)
-          );
-        }
-        stepStart = j + 1;
-      }
+    const lvl = levels[i];
+    if (lvl > 0) {
+      decos.push(
+        Decoration.line({
+          class: `cm-indent-guide-${Math.min(lvl, 8)}`,
+        }).range(line.from)
+      );
     }
   }
   return Decoration.set(decos, true);
