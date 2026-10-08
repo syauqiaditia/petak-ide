@@ -68,7 +68,17 @@
   import DiffView from '../git/DiffView.svelte';
   import { createCodeFoldingExtension, saveFileFoldState, restoreFileFoldState } from './folding';
   import FindReplaceBar from './FindReplaceBar.svelte';
-  import { getSearchQueryFromSelection } from './searchLogic';
+  import { getSearchQueryFromSelection, searchHighlightField } from './searchLogic';
+  import { darculaTheme } from './themeDarcula';
+  import {
+    createVcsGutterExtension,
+    createInlineBlameExtension,
+    setVcsChangesEffect,
+    setBlameLinesEffect,
+    computeVcsLineChanges,
+  } from './vcsGutter';
+  import { createIndentGuidesExtension } from './indentGuides';
+  import NavUsagesPopup from './NavUsagesPopup.svelte';
   import ImagePreview from './ImagePreview.svelte';
   import { isImageFile } from './imageUtils';
 
@@ -103,10 +113,12 @@
   let currentSwappedPath: string | null = null;
   let unlistenDiagnostics: UnlistenFn | null = null;
   let unlistenApplyEdit: UnlistenFn | null = null;
+  let onScrollHandler: (() => void) | null = null;
 
   let findReplaceOpen = $state(false);
   let findReplaceMode = $state<'find' | 'replace'>('find');
   let findReplaceInitialQuery = $state('');
+  let findReplaceRef = $state<any>(null);
 
   let isCenterDiffActive = $state(false);
 
@@ -177,7 +189,20 @@
         borderLeftWidth: '2px',
       },
       '&.cm-focused .cm-selectionBackground, ::selection': {
-        backgroundColor: '#1f2a3d',
+        backgroundColor: '#214283 !important',
+      },
+      '.cm-selectionBackground': {
+        backgroundColor: '#214283 !important',
+      },
+      '.cm-search-match': {
+        backgroundColor: '#2d5e38',
+        borderRadius: '2px',
+      },
+      '.cm-search-match-active': {
+        backgroundColor: '#387c3a',
+        outline: '1.5px solid #ffffff',
+        borderRadius: '2px',
+        zIndex: '2',
       },
       '.cm-gutters': {
         backgroundColor: '#1a1b1f',
@@ -597,7 +622,11 @@
             run: (v) => toggleBreakpointAtCursor(v, () => currentSwappedPath),
           },
         ]),
-        petakTheme,
+        darculaTheme,
+        searchHighlightField,
+        createVcsGutterExtension(),
+        createInlineBlameExtension(),
+        createIndentGuidesExtension(),
         highlightTheme,
         filenameFacet.of(filename),
         treeSitterPlugin,
@@ -622,6 +651,8 @@
               const currentText = update.state.doc.toString();
               const isDirty = currentText !== active.savedContent;
               tabsManager.markDirty(active.path, isDirty);
+              const vcsMap = computeVcsLineChanges(active.savedContent, currentText);
+              view?.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
             }
           }
           if (update.selectionSet || update.docChanged) {
@@ -646,7 +677,7 @@
     view?.focus();
   }
 
-  export function gotoLine(line: number, col: number = 1) {
+  export function gotoLine(line: number, col: number = 1, options?: { center?: boolean }) {
     if (!view) return;
     const doc = view.state.doc;
     const lineNum = Math.max(1, Math.min(line, doc.lines));
@@ -656,14 +687,19 @@
     view.dispatch({
       selection: { anchor: pos, head: pos },
       scrollIntoView: true,
-      effects: [setFlashLine.of(lineNum)],
+      effects: [
+        EditorView.scrollIntoView(pos, { y: 'center' }),
+        setFlashLine.of(lineNum),
+      ],
     });
     view.focus();
     setTimeout(() => {
       view?.dispatch({
         effects: [setFlashLine.of(null)],
       });
-    }, 1200);
+      // Center line in viewport
+      view?.dom?.querySelector('.cm-activeLine')?.scrollIntoView({ block: 'center' });
+    }, 50);
   }
 
   export async function handleSave() {
@@ -913,6 +949,16 @@
         }
       }
       findReplaceOpen = true;
+    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'g' || e.code === 'KeyG')) {
+      if (findReplaceOpen && findReplaceRef) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) {
+          findReplaceRef.prev();
+        } else {
+          findReplaceRef.next();
+        }
+      }
     }
   }
 
@@ -934,6 +980,16 @@
       state: initialState,
       parent: container,
     });
+
+    onScrollHandler = () => {
+      if (currentSwappedPath && view) {
+        tabsManager.saveViewState(currentSwappedPath, {
+          scrollTop: view.scrollDOM.scrollTop,
+          scrollLeft: view.scrollDOM.scrollLeft,
+        });
+      }
+    };
+    view.scrollDOM.addEventListener('scroll', onScrollHandler, { passive: true });
 
     if (typeof window !== 'undefined') {
       (window as any).__PETAK_EDITOR_VIEW__ = view;
@@ -997,6 +1053,10 @@
       unlistenApplyEdit = null;
     }
     if (view) {
+      if (onScrollHandler) {
+        view.scrollDOM.removeEventListener('scroll', onScrollHandler);
+        onScrollHandler = null;
+      }
       view.destroy();
       view = null;
     }
@@ -1024,6 +1084,12 @@
         const prevTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
         if (prevTab && view && view.state.doc.length > 0) {
           prevTab.state = view.state;
+          tabsManager.saveViewState(currentSwappedPath, {
+            scrollTop: view.scrollDOM.scrollTop,
+            scrollLeft: view.scrollDOM.scrollLeft,
+            cursorHead: view.state.selection.main.head,
+            cursorAnchor: view.state.selection.main.anchor,
+          });
         }
       }
 
@@ -1035,6 +1101,36 @@
         }
         view.setState(active.state);
         restoreFileFoldState(active.path, view);
+
+        // Restore scroll and cursor position
+        const savedView = tabsManager.getViewState(active.path);
+        if (savedView) {
+          if (savedView.cursorHead !== undefined) {
+            view.dispatch({
+              selection: {
+                anchor: savedView.cursorAnchor ?? savedView.cursorHead,
+                head: savedView.cursorHead,
+              },
+            });
+          }
+          if (savedView.scrollTop !== undefined || savedView.scrollLeft !== undefined) {
+            const top = savedView.scrollTop ?? 0;
+            const left = savedView.scrollLeft ?? 0;
+            view.scrollDOM.scrollTop = top;
+            view.scrollDOM.scrollLeft = left;
+            requestAnimationFrame(() => {
+              if (view) {
+                view.scrollDOM.scrollTop = top;
+                view.scrollDOM.scrollLeft = left;
+              }
+            });
+          }
+        }
+
+        // Compute VCS gutter markers
+        const vcsMap = computeVcsLineChanges(active.savedContent, active.state.doc.toString());
+        view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+
         view.focus();
 
         onTabOpen(active.path, active.savedContent);
@@ -1048,14 +1144,31 @@
               const map = new Map<number, GitBlameLine>();
               for (const l of lines) map.set(l.line, l);
               view?.dispatch({
-                effects: blameCompartment.reconfigure(makeBlameGutter(map)),
+                effects: [
+                  blameCompartment.reconfigure(makeBlameGutter(map)),
+                  setBlameLinesEffect.of(map),
+                ],
               });
             })
             .catch(() => {
               view?.dispatch({
-                effects: blameCompartment.reconfigure([]),
+                effects: [
+                  blameCompartment.reconfigure([]),
+                  setBlameLinesEffect.of(new Map()),
+                ],
               });
             });
+        } else if (folderPath) {
+          // Inline blame still fetches in background
+          const rel = getRelativePath(active.path, folderPath);
+          api
+            .gitBlame(folderPath, rel)
+            .then((lines) => {
+              const map = new Map<number, GitBlameLine>();
+              for (const l of lines) map.set(l.line, l);
+              view?.dispatch({ effects: setBlameLinesEffect.of(map) });
+            })
+            .catch(() => {});
         }
 
         const head = active.state.selection.main.head;
@@ -1213,6 +1326,7 @@
     ></div>
 
     <FindReplaceBar
+      bind:this={findReplaceRef}
       {view}
       isOpen={findReplaceOpen}
       mode={findReplaceMode}
@@ -1222,6 +1336,8 @@
         view?.focus();
       }}
     />
+
+    <NavUsagesPopup gotoLineFn={gotoLine} />
 
     {#if renameStore.visible}
       <div
@@ -1359,6 +1475,42 @@
 </div>
 
 <style>
+  :global(.cm-vcs-gutter) {
+    width: 4px !important;
+    background-color: transparent !important;
+    margin-right: 2px !important;
+  }
+  :global(.cm-vcs-marker) {
+    width: 3px !important;
+    height: 100% !important;
+    border-radius: 1px !important;
+  }
+  :global(.cm-vcs-added) {
+    background-color: #499c54 !important;
+  }
+  :global(.cm-vcs-modified) {
+    background-color: #3882f6 !important;
+  }
+  :global(.cm-vcs-deleted) {
+    background-color: #e55353 !important;
+  }
+  :global(.cm-inline-blame) {
+    color: #6e7681 !important;
+    font-size: 11px !important;
+    font-style: italic !important;
+    margin-left: 24px !important;
+    opacity: 0.75 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+  :global(.cm-indent-guide) {
+    border-left: 1px solid #2b2d30 !important;
+    margin-left: -1px !important;
+  }
+  :global(.cm-bracket-matching-guide) {
+    border-left: 1px solid #5b5f68 !important;
+    margin-left: -1px !important;
+  }
   :global(.cm-breakpoint-gutter) {
     width: 20px !important;
     cursor: pointer !important;

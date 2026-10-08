@@ -7,9 +7,11 @@ export class EditorSettings {
   ghostText: boolean = true;
   vimMode: boolean = false;
   codeFolding: boolean = true;
+  theme: string = 'darcula';
   private listeners: Set<(enabled: boolean) => void> = new Set();
   private vimListeners: Set<(enabled: boolean) => void> = new Set();
   private foldListeners: Set<(enabled: boolean) => void> = new Set();
+  private themeListeners: Set<(theme: string) => void> = new Set();
 
   constructor(initialGhostText: boolean = true) {
     this.ghostText = initialGhostText;
@@ -31,6 +33,11 @@ export class EditorSettings {
     return () => this.foldListeners.delete(listener);
   }
 
+  onThemeChange(listener: (theme: string) => void): () => void {
+    this.themeListeners.add(listener);
+    return () => this.themeListeners.delete(listener);
+  }
+
   loadFromStorage(): void {
     if (typeof localStorage !== 'undefined') {
       try {
@@ -45,6 +52,10 @@ export class EditorSettings {
         const foldVal = localStorage.getItem('editor.codeFolding');
         if (foldVal !== null) {
           this.codeFolding = foldVal !== 'false';
+        }
+        const themeVal = localStorage.getItem('editor.theme');
+        if (themeVal !== null) {
+          this.theme = themeVal;
         }
       } catch {
         // ignore
@@ -100,6 +111,24 @@ export class EditorSettings {
     for (const listener of this.foldListeners) {
       try {
         listener(enabled);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  setTheme(theme: string): void {
+    this.theme = theme;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('editor.theme', theme);
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.themeListeners) {
+      try {
+        listener(theme);
       } catch {
         // ignore
       }
