@@ -416,6 +416,71 @@ fn test_permission_modes_with_fake_agent() {
 }
 
 #[test]
+fn test_permission_requested_event_emission() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
+    let manager = Arc::new(SlotManager::new(Some(root), 5, Duration::from_secs(60)));
+
+    let mut ask_cfg = make_fake_slot_config("slot-ask-event", "Ask Slot Event");
+    ask_cfg.permission = "ask".to_string();
+    manager.add_slot(ask_cfg).unwrap();
+
+    let captured_events = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let cap_clone = Arc::clone(&captured_events);
+    manager.add_listener(move |event| {
+        if let SlotEvent::PermissionRequested {
+            slot_id,
+            request_id,
+            tool_call,
+        } = event
+        {
+            let mut list = cap_clone.lock().unwrap();
+            list.push((slot_id, request_id, tool_call));
+        }
+    });
+
+    let mgr_clone = Arc::clone(&manager);
+    let prompt_handle =
+        thread::spawn(move || mgr_clone.prompt_slot("slot-ask-event", "perm:rm -rf /test"));
+
+    // Wait for event to arrive
+    let mut req_id = String::new();
+    for _ in 0..100 {
+        let list = captured_events.lock().unwrap();
+        if let Some((slot, id, tc)) = list.first() {
+            assert_eq!(slot, "slot-ask-event");
+            assert!(id.starts_with("perm_"));
+            assert!(
+                tc.get("command").is_some()
+                    || tc.get("arguments").is_some()
+                    || tc.get("tool").is_some()
+            );
+            req_id = id.clone();
+            break;
+        }
+        drop(list);
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    assert!(
+        !req_id.is_empty(),
+        "SlotEvent::PermissionRequested must be emitted to listener"
+    );
+
+    // Respond allow using the captured request_id
+    manager.permission_manager().respond(&req_id, true).unwrap();
+
+    let resp = prompt_handle.join().unwrap().unwrap();
+    let meta = resp.meta.unwrap();
+    let perm_res = meta
+        .get("permResult")
+        .and_then(|r| r.get("outcome"))
+        .and_then(|o| o.get("outcome"))
+        .and_then(|s| s.as_str());
+    assert_eq!(perm_res, Some("approved"));
+}
+
+#[test]
 fn test_proposal_workflow_with_fake_agent() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().to_path_buf();

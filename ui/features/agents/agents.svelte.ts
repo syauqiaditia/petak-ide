@@ -54,12 +54,14 @@ class AgentsStore {
     if (typeof window !== 'undefined') {
       (window as any).__agentsStore = this;
       this.loadSavedSessions();
+      this.loadActiveChatHistory();
     }
   }
 
   slots = $state<SlotSummary[]>([]);
   activeSlotId = $state<string | null>(null);
   chatHistory = $state<Record<string, ChatMessage[]>>({});
+  activeFileReferences = $state<FileReference[]>([]);
   savedSessions = $state<ChatSessionMeta[]>([]);
   activeSessionId = $state<string>('default-sess');
   isHistoryOpen = $state(false);
@@ -169,6 +171,8 @@ class AgentsStore {
     if (this.initialized) return;
     this.initialized = true;
 
+    this.loadActiveChatHistory();
+
     // Load initial data
     await this.loadSlots();
     await this.loadProposals();
@@ -217,6 +221,7 @@ class AgentsStore {
       } else if (status === 'crashed' || status === 'error') {
         this.isStreaming = false;
       }
+      this.persistActiveChatHistory();
     } else if (event.WatchdogAborted) {
       const { slot_id, message } = event.WatchdogAborted;
       this.isStreaming = false;
@@ -226,6 +231,7 @@ class AgentsStore {
       if (sIdx !== -1) {
         this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
       }
+      this.persistActiveChatHistory();
     } else if (event.Update) {
       const { slot_id, update } = event.Update;
       if (!update) return;
@@ -306,6 +312,7 @@ class AgentsStore {
           displayText: update.usage.displayText || '',
         };
       }
+      this.persistActiveChatHistory();
     } else if (event.PermissionRequested) {
       const { slot_id, request_id, tool_call } = event.PermissionRequested;
       this.pendingPermissions = [
@@ -318,6 +325,7 @@ class AgentsStore {
           createdAt: Date.now(),
         },
       ];
+      this.persistActiveChatHistory();
     } else if (event.ProposalCreated) {
       this.loadProposals();
     }
@@ -365,7 +373,9 @@ class AgentsStore {
 
       // Populate demo chat history if empty and in demo mode
       if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
-        this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+        if (Object.keys(this.chatHistory).length === 0) {
+          this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+        }
         this.usageReports = { ...DEMO_USAGE_REPORTS };
       }
     } catch (e: any) {
@@ -373,7 +383,9 @@ class AgentsStore {
       // Fallback to demo slots in browser
       this.slots = DEMO_SLOTS;
       this.activeSlotId = DEMO_SLOTS[0].id;
-      this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+      if (Object.keys(this.chatHistory).length === 0) {
+        this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+      }
       this.usageReports = { ...DEMO_USAGE_REPORTS };
     } finally {
       this.isLoading = false;
@@ -503,6 +515,7 @@ class AgentsStore {
       this.chatHistory[slotId] = [];
     }
     this.chatHistory[slotId] = [...this.chatHistory[slotId], userMsg];
+    this.persistActiveChatHistory();
 
     // Set slot status to busy
     const idx = this.slots.findIndex((s) => s.id === slotId);
@@ -536,6 +549,7 @@ class AgentsStore {
           this.watchdogRecoveryMessage = formatWatchdogRecoveryText(cleanContent);
         }
         this.chatHistory[slotId] = [...(this.chatHistory[slotId] || []), agentMsg];
+        this.persistActiveChatHistory();
       } else {
         // Dispatched session is stale / backgrounded -> Route to savedSessions
         this.appendMessageToSavedSession(dispatchSessionId, agentMsg);
@@ -567,6 +581,7 @@ class AgentsStore {
           this.watchdogRecoveryMessage = formatWatchdogRecoveryText(errText);
         }
         this.chatHistory[slotId] = [...(this.chatHistory[slotId] || []), errMsg];
+        this.persistActiveChatHistory();
       } else {
         this.appendMessageToSavedSession(dispatchSessionId, errMsg);
       }
@@ -623,6 +638,7 @@ class AgentsStore {
           content: allow ? '✓ Izin eksekusi disetujui pengguna.' : '✕ Izin eksekusi ditolak pengguna.',
         };
         this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
+        this.persistActiveChatHistory();
       }
     } catch (e: any) {
       this.error = `Gagal merespons izin: ${e?.message || e}`;
@@ -665,6 +681,7 @@ class AgentsStore {
           content: `✓ Seluruh perubahan usulan (${proposalId}) diterima dan disimpan ke disk. Snapshot Local History telah dibuat.`,
         };
         this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
+        this.persistActiveChatHistory();
       }
     } catch (e: any) {
       this.error = `Gagal menerima proposal: ${e?.message || e}`;
@@ -683,6 +700,7 @@ class AgentsStore {
           content: `✕ Usulan perubahan (${proposalId}) ditolak.`,
         };
         this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
+        this.persistActiveChatHistory();
       }
     } catch (e: any) {
       this.error = `Gagal menolak proposal: ${e?.message || e}`;
@@ -845,6 +863,70 @@ class AgentsStore {
     }
   }
 
+  // ── Active Chat & References Persistence (petak_active_chat_history_v1) ───────
+
+  loadActiveChatHistory() {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('petak_active_chat_history_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.chatHistory && typeof parsed.chatHistory === 'object' && !Array.isArray(parsed.chatHistory)) {
+              this.chatHistory = parsed.chatHistory;
+            } else if (!parsed.chatHistory && !Array.isArray(parsed)) {
+              this.chatHistory = parsed;
+            }
+            if (Array.isArray(parsed.fileReferences)) {
+              this.activeFileReferences = parsed.fileReferences;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse petak_active_chat_history_v1:', e);
+      }
+    }
+  }
+
+  persistActiveChatHistory() {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const payload = {
+          chatHistory: this.chatHistory,
+          fileReferences: this.activeFileReferences,
+        };
+        localStorage.setItem('petak_active_chat_history_v1', JSON.stringify(payload));
+      } catch (e) {
+        console.warn('Failed to save petak_active_chat_history_v1:', e);
+      }
+    }
+  }
+
+  setFileReferences(refs: FileReference[]) {
+    this.activeFileReferences = [...refs];
+    this.persistActiveChatHistory();
+  }
+
+  addFileReference(ref: FileReference) {
+    const exists = this.activeFileReferences.some(
+      (r) => r.path === ref.path && r.line === ref.line && r.endLine === ref.endLine
+    );
+    if (!exists) {
+      this.activeFileReferences = [...this.activeFileReferences, ref];
+      this.persistActiveChatHistory();
+    }
+  }
+
+  removeFileReference(index: number) {
+    this.activeFileReferences = this.activeFileReferences.filter((_, i) => i !== index);
+    this.persistActiveChatHistory();
+  }
+
+  clearFileReferences() {
+    this.activeFileReferences = [];
+    this.persistActiveChatHistory();
+  }
+
   async newSession(slotId?: string) {
     const targetSlotId = slotId || this.activeSlotId;
     if (!targetSlotId) return;
@@ -874,6 +956,8 @@ class AgentsStore {
 
     // Reset current slot history & active session
     this.chatHistory[targetSlotId] = [];
+    this.clearFileReferences();
+    this.persistActiveChatHistory();
     this.activeSessionId = generateSessionId();
     this.error = null;
     this.isHistoryOpen = false;
@@ -943,6 +1027,7 @@ class AgentsStore {
     this.activeSlotId = session.slotId;
     this.activeSessionId = session.id;
     this.chatHistory[session.slotId] = [...session.messages];
+    this.persistActiveChatHistory();
     if (session.modelId) {
       this.updateSlotModel(session.slotId, session.modelId);
     }
