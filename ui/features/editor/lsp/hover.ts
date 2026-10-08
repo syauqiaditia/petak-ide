@@ -1,6 +1,7 @@
 import { hoverTooltip, EditorView, closeHoverTooltips, keymap, type Tooltip } from '@codemirror/view';
+import { completionStatus } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
-import { api, type LspHover } from '../../../lib/api';
+import { api, type LspHover, type LspPosition } from '../../../lib/api';
 import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos, lspPosToOffset } from './pos';
 import { renderMarkdownToDom } from './markdown';
@@ -287,16 +288,47 @@ function getKeywordDoc(word: string): string | null {
   return DART_KEYWORD_DOCS[word] || null;
 }
 
+interface CachedHover {
+  text: string;
+  from: number;
+  to: number;
+  timestamp: number;
+}
+const hoverMemoryCache = new Map<string, CachedHover>();
+
 export function createLspHoverExtension(getPath: () => string | null): Extension {
   return [
     hoverTooltip(
       async (view: EditorView, pos: number): Promise<Tooltip | null> => {
+        // If autocomplete suggestions are currently open, hover must not appear (like Android Studio)
+        if (completionStatus(view.state) === 'active') {
+          return null;
+        }
+
         const path = getPath();
         if (!path || !isLspSupported(path)) return null;
 
+        const doc = view.state.doc;
+        const word = view.state.wordAt(pos);
+        const wordText = word ? doc.sliceString(word.from, word.to) : '';
+
+        // 1. Check built-in keyword documentation (instant sync)
+        if (wordText) {
+          const kwDoc = getKeywordDoc(wordText);
+          if (kwDoc) {
+            return buildHoverTooltip(view, path, word!.from, word!.to, wordText, offsetToLspPos(doc, pos).line + 1, kwDoc);
+          }
+        }
+
+        // 2. Check memory cache for fresh response (< 30s)
+        const cacheKey = `${path}:${wordText || pos}`;
+        const cached = hoverMemoryCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < 30000) {
+          return buildHoverTooltip(view, path, cached.from, cached.to, wordText || 'symbol', offsetToLspPos(doc, pos).line + 1, cached.text);
+        }
+
         flushPending(path);
 
-        const doc = view.state.doc;
         const lspPos = offsetToLspPos(doc, pos);
 
         try {
@@ -309,31 +341,19 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
           if (hoverRes && hoverRes.range) {
             from = lspPosToOffset(doc, hoverRes.range.start);
             to = lspPosToOffset(doc, hoverRes.range.end);
-          } else {
-            const word = view.state.wordAt(pos);
-            if (word) {
-              from = word.from;
-              to = word.to;
-            }
+          } else if (word) {
+            from = word.from;
+            to = word.to;
           }
 
-          if (!text.trim()) {
-            const word = view.state.wordAt(pos);
-            if (word) {
-              const kw = doc.sliceString(word.from, word.to);
-              const kwDoc = getKeywordDoc(kw);
-              if (kwDoc) {
-                text = kwDoc;
-                from = word.from;
-                to = word.to;
-              }
-            }
+          if (!text.trim() && wordText) {
+            const kwDoc = getKeywordDoc(wordText);
+            if (kwDoc) text = kwDoc;
           }
 
           if (!text.trim()) return null;
 
           if (from === to) {
-            const word = view.state.wordAt(pos);
             if (word) {
               from = word.from;
               to = word.to;
@@ -347,104 +367,13 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
             to = tmp;
           }
 
-          const symbolText = doc.sliceString(from, to).trim() || 'symbol';
+          // Cache the resolved result
+          hoverMemoryCache.set(cacheKey, { text, from, to, timestamp: Date.now() });
+
+          const symbolText = doc.sliceString(from, to).trim() || wordText || 'symbol';
           const lineNum = lspPos.line + 1;
 
-          const visualPos = view.coordsAtPos(from);
-          const editorRect = view.dom.getBoundingClientRect();
-          const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-          const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
-          const bottomDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
-          const bottomDockTop = bottomDockEl ? bottomDockEl.getBoundingClientRect().top : null;
-          const rightDockEl = typeof document !== 'undefined' ? document.querySelector('.right-panel-container') : null;
-          const rightDockLeft = rightDockEl ? rightDockEl.getBoundingClientRect().left : null;
-
-          const adaptive = computeAdaptiveHoverCoords(
-            visualPos,
-            editorRect,
-            null,
-            { viewportWidth, viewportHeight, rightDockLeft, bottomDockTop }
-          );
-
-          return {
-            pos: from,
-            end: to,
-            above: adaptive.above,
-            create(view: EditorView) {
-              const dom = document.createElement('div');
-              dom.className = 'cm-lsp-hover-tooltip';
-              dom.style.maxWidth = `${adaptive.maxWidth}px`;
-
-              // Header toolbar with location & "Tanya di Chat" action
-              const toolbar = document.createElement('div');
-              toolbar.className = 'cm-lsp-hover-action-bar';
-
-              const locBadge = document.createElement('span');
-              locBadge.className = 'cm-lsp-hover-loc-badge';
-              const fileName = path.split('/').pop() || path;
-              locBadge.textContent = `${fileName}:${lineNum}`;
-
-              const askBtn = document.createElement('button');
-              askBtn.type = 'button';
-              askBtn.className = 'cm-lsp-hover-ask-btn';
-              askBtn.innerHTML = `<span>💬 Tanya di Chat</span>`;
-              askBtn.title = `Kirim ${symbolText} (${fileName}:${lineNum}) ke Petak Agent`;
-              askBtn.onclick = async (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                view.dispatch({ effects: closeHoverTooltips });
-
-                const { agentsStore } = await import('../../agents/agents.svelte');
-                const { panelStore } = await import('../../../shell/panelStore.svelte');
-
-                agentsStore.attachCodeReference({
-                  path,
-                  line: lineNum,
-                  symbol: symbolText,
-                  codeSnippet: text,
-                });
-                panelStore.openRightPanel('agent');
-              };
-
-              toolbar.appendChild(locBadge);
-              toolbar.appendChild(askBtn);
-              dom.appendChild(toolbar);
-
-              dom.appendChild(renderMarkdownToDom(text));
-
-              function adjustPosition() {
-                if (!view.dom.isConnected || !dom.isConnected) return;
-                const editorRect = view.dom.getBoundingClientRect();
-                const domRect = dom.getBoundingClientRect();
-                const currentVisualPos = view.coordsAtPos(from) || visualPos;
-                const vWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
-                const vHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
-                const bDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
-                const bDockTop = bDockEl ? bDockEl.getBoundingClientRect().top : null;
-                const rDockEl = typeof document !== 'undefined' ? document.querySelector('.right-panel-container') : null;
-                const rDockLeft = rDockEl ? rDockEl.getBoundingClientRect().left : null;
-
-                const coords = computeAdaptiveHoverCoords(
-                  currentVisualPos,
-                  editorRect,
-                  domRect,
-                  { viewportWidth: vWidth, viewportHeight: vHeight, rightDockLeft: rDockLeft, bottomDockTop: bDockTop }
-                );
-
-                dom.style.maxWidth = `${coords.maxWidth}px`;
-              }
-
-              return {
-                dom,
-                mount() {
-                  adjustPosition();
-                },
-                positioned() {
-                  adjustPosition();
-                },
-              };
-            },
-          };
+          return buildHoverTooltip(view, path, from, to, symbolText, lineNum, text);
         } catch (e) {
           console.error('LSP hover error:', e);
           return null;
@@ -452,10 +381,115 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
       },
       {
         hideOnChange: true,
-        hoverTime: 180,
       }
     ),
     hoverKeymap,
     hoverTheme,
   ];
+}
+
+function buildHoverTooltip(
+  view: EditorView,
+  path: string,
+  from: number,
+  to: number,
+  symbolText: string,
+  lineNum: number,
+  text: string
+): Tooltip {
+  const visualPos = view.coordsAtPos(from);
+  const editorRect = view.dom.getBoundingClientRect();
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const bottomDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
+  const bottomDockTop = bottomDockEl ? bottomDockEl.getBoundingClientRect().top : null;
+  const rightDockEl = typeof document !== 'undefined' ? document.querySelector('.right-panel-container') : null;
+  const rightDockLeft = rightDockEl ? rightDockEl.getBoundingClientRect().left : null;
+
+  const adaptive = computeAdaptiveHoverCoords(
+    visualPos,
+    editorRect,
+    null,
+    { viewportWidth, viewportHeight, rightDockLeft, bottomDockTop }
+  );
+
+  return {
+    pos: from,
+    end: to,
+    above: adaptive.above,
+    create(view: EditorView) {
+      const dom = document.createElement('div');
+      dom.className = 'cm-lsp-hover-tooltip';
+      dom.style.maxWidth = `${adaptive.maxWidth}px`;
+
+      // Header toolbar with location & "Tanya di Chat" action
+      const toolbar = document.createElement('div');
+      toolbar.className = 'cm-lsp-hover-action-bar';
+
+      const locBadge = document.createElement('span');
+      locBadge.className = 'cm-lsp-hover-loc-badge';
+      const fileName = path.split('/').pop() || path;
+      locBadge.textContent = `${fileName}:${lineNum}`;
+
+      const askBtn = document.createElement('button');
+      askBtn.type = 'button';
+      askBtn.className = 'cm-lsp-hover-ask-btn';
+      askBtn.innerHTML = `<span>💬 Tanya di Chat</span>`;
+      askBtn.title = `Kirim ${symbolText} (${fileName}:${lineNum}) ke Petak Agent`;
+      askBtn.onclick = async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        view.dispatch({ effects: closeHoverTooltips });
+
+        const { agentsStore } = await import('../../agents/agents.svelte');
+        const { panelStore } = await import('../../../shell/panelStore.svelte');
+
+        agentsStore.attachCodeReference({
+          path,
+          line: lineNum,
+          symbol: symbolText,
+          codeSnippet: text,
+        });
+        panelStore.openRightPanel('agent');
+      };
+
+      toolbar.appendChild(locBadge);
+      toolbar.appendChild(askBtn);
+      dom.appendChild(toolbar);
+
+      dom.appendChild(renderMarkdownToDom(text));
+
+      function adjustPosition() {
+        if (!view.dom.isConnected || !dom.isConnected) return;
+        const editorRect = view.dom.getBoundingClientRect();
+        const domRect = dom.getBoundingClientRect();
+        const currentVisualPos = view.coordsAtPos(from) || visualPos;
+        const vWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+        const vHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+        const bDockEl = typeof document !== 'undefined' ? document.querySelector('.bottom-dock-container') : null;
+        const bDockTop = bDockEl ? bDockEl.getBoundingClientRect().top : null;
+        const rDockEl = typeof document !== 'undefined' ? document.querySelector('.right-panel-container') : null;
+        const rDockLeft = rDockEl ? rDockEl.getBoundingClientRect().left : null;
+
+        const coords = computeAdaptiveHoverCoords(
+          currentVisualPos,
+          editorRect,
+          domRect,
+          { viewportWidth: vWidth, viewportHeight: vHeight, rightDockLeft: rDockLeft, bottomDockTop: bDockTop }
+        );
+
+        dom.style.maxWidth = `${coords.maxWidth}px`;
+      }
+
+      return {
+        dom,
+        mount() {
+                  adjustPosition();
+                },
+        positioned() {
+                  adjustPosition();
+                },
+      };
+    },
+  };
 }

@@ -7,6 +7,7 @@
     highlightActiveLineGutter,
     drawSelection,
     keymap,
+    closeHoverTooltips,
     Decoration,
     type DecorationSet,
     gutter,
@@ -884,6 +885,10 @@
       return;
     }
 
+    if (view && isInsideEditor && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1) {
+      view.dispatch({ effects: closeHoverTooltips });
+    }
+
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === '/' || e.code === 'Slash')) {
       if (view) {
         e.preventDefault();
@@ -1541,6 +1546,42 @@
     opacity: 0.75 !important;
     pointer-events: none !important;
     user-select: none !important;
+  }
+  :global(.cm-tooltip) {
+    z-index: 9999 !important;
+  }
+  :global(.cm-tooltip:has(.cm-tooltip-hover)),
+  :global(.cm-tooltip:has(.cm-lsp-hover-tooltip)) {
+    background-color: #1e1f22 !important;
+    border: 1px solid #383a42 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+    overflow: hidden !important;
+    z-index: 9999 !important;
+  }
+  :global(.cm-tooltip-hover) {
+    background-color: #1e1f22 !important;
+    max-width: min(560px, calc(100vw - 420px), calc(100% - 24px)) !important;
+    max-height: 280px !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    color: #d4d6dc !important;
+    font-size: 12px !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #3c3f4a transparent !important;
+    box-sizing: border-box !important;
+    pointer-events: auto !important;
+  }
+  :global(.cm-lsp-hover-tooltip) {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    background-color: #1e1f22 !important;
+    padding: 0 !important;
+    color: #d4d6dc !important;
+    font-size: 12px !important;
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
+    box-sizing: border-box !important;
   }
   :global(.cm-line.cm-indent-guide-1) {
     background-image: linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
