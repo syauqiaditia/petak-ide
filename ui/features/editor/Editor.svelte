@@ -953,6 +953,10 @@
         }
       }
       findReplaceOpen = true;
+      if (currentSwappedPath) {
+        const curTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
+        if (curTab) curTab.findOpen = true;
+      }
     } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'r' || e.code === 'KeyR')) {
       e.preventDefault();
       e.stopPropagation();
@@ -967,6 +971,10 @@
         }
       }
       findReplaceOpen = true;
+      if (currentSwappedPath) {
+        const curTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
+        if (curTab) curTab.findOpen = true;
+      }
     } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'g' || e.code === 'KeyG')) {
       if (findReplaceOpen && findReplaceRef) {
         e.preventDefault();
@@ -1110,11 +1118,22 @@
             cursorAnchor: view.state.selection.main.anchor,
           });
         }
+        if (prevTab) {
+          prevTab.findOpen = findReplaceOpen;
+          prevTab.findQuery = (findReplaceRef && typeof findReplaceRef.getQuery === 'function')
+            ? findReplaceRef.getQuery()
+            : findReplaceInitialQuery;
+          prevTab.findMode = findReplaceMode;
+        }
       }
 
       currentSwappedPath = activePath;
 
       if (active && !isImageFile(active.path)) {
+        findReplaceOpen = active.findOpen ?? false;
+        findReplaceInitialQuery = active.findQuery ?? '';
+        findReplaceMode = active.findMode ?? 'find';
+
         if (!active.state || (active.state.doc.length === 0 && active.savedContent.length > 0)) {
           active.state = createEditorState(active.savedContent, active.name, active.path);
         }
@@ -1354,6 +1373,10 @@
       initialQuery={findReplaceInitialQuery}
       onClose={() => {
         findReplaceOpen = false;
+        if (currentSwappedPath) {
+          const curTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
+          if (curTab) curTab.findOpen = false;
+        }
         view?.focus();
       }}
     />

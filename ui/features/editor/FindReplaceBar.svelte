@@ -162,6 +162,14 @@
     handlePrev();
   }
 
+  export function getQuery(): string {
+    return query;
+  }
+
+  export function setQuery(q: string) {
+    query = q;
+  }
+
   function handleExclude() {
     // Android Studio Exclude: skip current match and proceed to next
     handleNext();

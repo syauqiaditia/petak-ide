@@ -19,6 +19,9 @@ export interface TabItem {
   cursorAnchor?: number;
   externalConflict?: boolean;
   pendingDiskContent?: string;
+  findOpen?: boolean;
+  findQuery?: string;
+  findMode?: 'find' | 'replace';
 }
 
 class TabsManager {
