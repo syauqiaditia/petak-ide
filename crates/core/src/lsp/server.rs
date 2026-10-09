@@ -421,7 +421,8 @@ fn client_capabilities(root_uri: &str) -> Value {
                         "resolveSupport": {
                             "properties": ["documentation"]
                         }
-                    }
+                    },
+                    "contextSupport": true
                 },
                 "hover": {
                     "contentFormat": ["markdown", "plaintext"]
@@ -465,4 +466,18 @@ fn client_capabilities(root_uri: &str) -> Value {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_capabilities_context_support() {
+        let caps = client_capabilities("file:///workspace");
+        assert_eq!(
+            caps["capabilities"]["textDocument"]["completion"]["contextSupport"],
+            true
+        );
+    }
 }

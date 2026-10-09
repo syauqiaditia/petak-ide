@@ -137,7 +137,7 @@ test('b38 LSP Completion: completion.ts awaits flushPending before api.lsp.compl
   const code = fs.readFileSync(compPath, 'utf-8');
 
   const flushIndex = code.indexOf('await flushPending(path);');
-  const completionIndex = code.indexOf('await api.lsp.completion(path, lspPos.line, lspPos.character);');
+  const completionIndex = code.indexOf('await api.lsp.completion(');
 
   assert.ok(flushIndex !== -1, 'completion.ts must call await flushPending(path)');
   assert.ok(completionIndex !== -1, 'completion.ts must call await api.lsp.completion');

@@ -68,6 +68,17 @@ function getKindInfo(kind?: number): { typeName: string; letter: string } {
   }
 }
 
+import {
+  detectIsAfterDot,
+  getKeywordOptions,
+  getSnippetOptions,
+} from './completionLogic.ts';
+export {
+  detectIsAfterDot,
+  getKeywordOptions,
+  getSnippetOptions,
+};
+
 /**
  * Format markdown documentation for CodeMirror completion info popover.
  */
@@ -106,30 +117,23 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
     const prefix = word ? word.text.toLowerCase() : '';
     const lspPos = offsetToLspPos(context.state.doc, context.pos);
 
+    const charBeforePos = word ? word.from - 1 : context.pos - 1;
+    const charBefore = charBeforePos >= 0 ? context.state.sliceDoc(charBeforePos, charBeforePos + 1) : '';
+    const isAfterDot = charBefore === '.';
+    const triggerKind = isAfterDot ? 2 : (context.explicit ? 1 : 1);
+    const triggerCharacter = isAfterDot ? '.' : undefined;
+
     const keywords = getKeywordsForPath(path);
-    const keywordOptions: (Completion & { _kindLetter?: string })[] = (
-      prefix ? keywords.filter((k) => k.toLowerCase().startsWith(prefix)) : keywords
-    ).map((kw) => ({
-      label: kw,
-      type: 'keyword',
-      detail: 'keyword',
-      _kindLetter: 'k',
-      boost: 10,
-    }));
+    const keywordOptions = getKeywordOptions(keywords, prefix, isAfterDot);
 
     const lang = getLangForFilename(path);
     const allSnippets = lang ? getSnippetCompletionsForLanguage(lang) : [];
-    const snippetOptions = (
-      prefix ? allSnippets.filter((s) => s.label.toLowerCase().startsWith(prefix)) : allSnippets
-    ).map((opt) => ({
-      ...opt,
-      boost: -99,
-    }));
+    const snippetOptions = getSnippetOptions(allSnippets, prefix, isAfterDot);
 
     let lspOptions: Completion[] = [];
     try {
       await flushPending(path);
-      const response = await api.lsp.completion(path, lspPos.line, lspPos.character);
+      const response = await api.lsp.completion(path, lspPos.line, lspPos.character, triggerKind, triggerCharacter);
       const rawItems: LspCompletionItem[] = Array.isArray(response)
         ? response
         : response && Array.isArray((response as any).items)
