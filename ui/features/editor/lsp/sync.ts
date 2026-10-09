@@ -49,7 +49,7 @@ export function onTabClose(path: string) {
   });
 }
 
-export function flushPending(path: string) {
+export async function flushPending(path: string): Promise<void> {
   const tracked = trackedDocs.get(path);
   if (!tracked) return;
 
@@ -77,9 +77,11 @@ export function flushPending(path: string) {
 
   if (changes.length > 0) {
     tracked.version++;
-    api.lsp.didChange(path, tracked.version, changes).catch((err) => {
+    try {
+      await api.lsp.didChange(path, tracked.version, changes);
+    } catch (err) {
       console.error('LSP didChange error:', path, err);
-    });
+    }
   }
 }
 

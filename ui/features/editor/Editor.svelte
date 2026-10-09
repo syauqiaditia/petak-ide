@@ -1550,8 +1550,7 @@
   :global(.cm-tooltip) {
     z-index: 9999 !important;
   }
-  :global(.cm-tooltip:has(.cm-tooltip-hover)),
-  :global(.cm-tooltip:has(.cm-lsp-hover-tooltip)) {
+  :global(.cm-tooltip.cm-tooltip-hover) {
     background-color: #1e1f22 !important;
     border: 1px solid #383a42 !important;
     border-radius: 8px !important;
@@ -1572,6 +1571,7 @@
     box-sizing: border-box !important;
     pointer-events: auto !important;
   }
+  :global(.cm-tooltip.cm-tooltip-hover .cm-lsp-hover-tooltip),
   :global(.cm-lsp-hover-tooltip) {
     display: flex !important;
     flex-direction: column !important;

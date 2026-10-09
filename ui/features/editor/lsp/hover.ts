@@ -24,73 +24,38 @@ function extractHoverText(contents: LspHover['contents']): string {
 }
 
 export const hoverTheme = EditorView.theme({
-  '.cm-tooltip:has(.cm-tooltip-hover)': {
+  '.cm-tooltip-hover, .cm-tooltip.cm-tooltip-hover': {
     backgroundColor: '#1e1f22 !important',
     border: '1px solid #383a42 !important',
     borderRadius: '8px !important',
     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important',
-    overflow: 'hidden !important',
-    zIndex: '500 !important',
-  },
-  '.cm-tooltip .cm-tooltip-hover': {
-    backgroundColor: '#1e1f22 !important',
     maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
     overflowX: 'auto !important',
     color: '#d4d6dc !important',
     fontSize: '12px !important',
+    zIndex: '9999 !important',
     scrollbarWidth: 'thin !important',
     scrollbarColor: '#3c3f4a transparent !important',
     boxSizing: 'border-box !important',
     pointerEvents: 'auto !important',
   },
-  '.cm-tooltip-hover': {
-    backgroundColor: '#1e1f22 !important',
-    maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
-    maxHeight: '280px !important',
-    overflowY: 'auto !important',
-    overflowX: 'auto !important',
-    color: '#d4d6dc !important',
-    fontSize: '12px !important',
-    scrollbarWidth: 'thin !important',
-    scrollbarColor: '#3c3f4a transparent !important',
-    boxSizing: 'border-box !important',
-    pointerEvents: 'auto !important',
-  },
-  '.cm-tooltip-hover::-webkit-scrollbar': {
+  '.cm-tooltip-hover::-webkit-scrollbar, .cm-tooltip.cm-tooltip-hover::-webkit-scrollbar, .cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar': {
     width: '6px !important',
     height: '6px !important',
   },
-  '.cm-tooltip-hover::-webkit-scrollbar-track': {
+  '.cm-tooltip-hover::-webkit-scrollbar-track, .cm-tooltip.cm-tooltip-hover::-webkit-scrollbar-track, .cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar-track': {
     background: 'transparent !important',
   },
-  '.cm-tooltip-hover::-webkit-scrollbar-thumb': {
+  '.cm-tooltip-hover::-webkit-scrollbar-thumb, .cm-tooltip.cm-tooltip-hover::-webkit-scrollbar-thumb, .cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar-thumb': {
     backgroundColor: '#3c3f4a !important',
     borderRadius: '4px !important',
   },
-  '.cm-tooltip-hover::-webkit-scrollbar-thumb:hover': {
+  '.cm-tooltip-hover::-webkit-scrollbar-thumb:hover, .cm-tooltip.cm-tooltip-hover::-webkit-scrollbar-thumb:hover, .cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar-thumb:hover': {
     backgroundColor: '#565a68 !important',
   },
-  '.cm-tooltip.cm-lsp-hover-tooltip': {
-    backgroundColor: '#1e1f22 !important',
-    border: '1px solid #383a42 !important',
-    borderRadius: '8px !important',
-    padding: '0 !important',
-    color: '#d4d6dc !important',
-    fontSize: '12px !important',
-    maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
-    maxHeight: '280px !important',
-    overflowY: 'auto !important',
-    overflowX: 'auto !important',
-    boxShadow: '0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3) !important',
-    fontFamily: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important",
-    zIndex: '500 !important',
-    scrollbarWidth: 'thin !important',
-    scrollbarColor: '#3c3f4a transparent !important',
-    boxSizing: 'border-box !important',
-  },
-  '.cm-lsp-hover-tooltip': {
+  '.cm-tooltip-hover .cm-lsp-hover-tooltip, .cm-lsp-hover-tooltip': {
     display: 'flex !important',
     flexDirection: 'column !important',
     width: '100% !important',
@@ -134,20 +99,6 @@ export const hoverTheme = EditorView.theme({
     background: 'rgba(59, 130, 246, 0.25) !important',
     borderColor: '#3b82f6 !important',
     color: '#93c5fd !important',
-  },
-  '.cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar': {
-    width: '5px !important',
-    height: '5px !important',
-  },
-  '.cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar-track': {
-    background: 'transparent !important',
-  },
-  '.cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar-thumb': {
-    backgroundColor: '#3c3f4a !important',
-    borderRadius: '4px !important',
-  },
-  '.cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar-thumb:hover': {
-    backgroundColor: '#565a68 !important',
   },
   '.cm-lsp-markdown-root': {
     display: 'flex',
@@ -327,11 +278,10 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
           return buildHoverTooltip(view, path, cached.from, cached.to, wordText || 'symbol', offsetToLspPos(doc, pos).line + 1, cached.text);
         }
 
-        flushPending(path);
-
         const lspPos = offsetToLspPos(doc, pos);
 
         try {
+          await flushPending(path);
           const hoverRes = await api.lsp.hover(path, lspPos.line, lspPos.character);
           let text = hoverRes ? extractHoverText(hoverRes.contents) : '';
 
