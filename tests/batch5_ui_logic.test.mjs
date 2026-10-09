@@ -173,18 +173,18 @@ import {
   DEFAULT_BOTTOM_PANEL_HEIGHT,
 } from '../ui/features/terminal/bottomPanelResize.ts';
 
-test('bottom panel resize clamp: enforces min 120px and max 80% window height', () => {
+test('bottom panel resize clamp: enforces min 140px and max 45% window height', () => {
   const winHeight = 1000;
   // 1. Min clamp
-  assert.equal(clampBottomPanelHeight(50, winHeight), 120);
-  assert.equal(clampBottomPanelHeight(-10, winHeight), 120);
+  assert.equal(clampBottomPanelHeight(50, winHeight), 140);
+  assert.equal(clampBottomPanelHeight(-10, winHeight), 140);
 
   // 2. Normal range
   assert.equal(clampBottomPanelHeight(300, winHeight), 300);
 
-  // 3. Max clamp (80% of 1000 = 800)
-  assert.equal(clampBottomPanelHeight(850, winHeight), 800);
-  assert.equal(clampBottomPanelHeight(1200, winHeight), 800);
+  // 3. Max clamp (45% of 1000 = 450)
+  assert.equal(clampBottomPanelHeight(850, winHeight), 450);
+  assert.equal(clampBottomPanelHeight(1200, winHeight), 450);
 });
 
 test('bottom panel maximize/restore toggle on double-click', () => {
@@ -194,7 +194,7 @@ test('bottom panel maximize/restore toggle on double-click', () => {
   // 1. Toggle to maximize
   const maxResult = toggleMaximizeBottomPanel(initialHeight, 232, winHeight);
   assert.equal(maxResult.isMaximized, true);
-  assert.equal(maxResult.height, 800); // 80% of 1000
+  assert.equal(maxResult.height, 450); // 45% of 1000
   assert.equal(maxResult.nextRestoredHeight, 250);
 
   // 2. Toggle to restore
