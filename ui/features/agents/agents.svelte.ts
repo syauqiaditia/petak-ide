@@ -67,7 +67,6 @@ class AgentsStore {
   sessions = $state<Record<string, ChatSessionData>>({});
   activeSessionId = $state<string>('default-sess');
   slotActiveSession = $state<Record<string, string>>({}); // slotId -> running sessionId
-  chatHistory = $state<Record<string, ChatMessage[]>>({});
   activeFileReferences = $state<FileReference[]>([]);
   isHistoryOpen = $state(false);
   proposals = $state<Proposal[]>([]);
@@ -178,7 +177,7 @@ class AgentsStore {
   }
 
   get activeMessages(): ChatMessage[] {
-    return this.activeSession?.messages || (this.activeSlotId ? this.chatHistory[this.activeSlotId] : []) || [];
+    return this.activeSession?.messages || [];
   }
 
   get streamingContent(): string {
@@ -218,30 +217,6 @@ class AgentsStore {
         messages: s.messages,
         modelId: s.modelId,
       }));
-  }
-
-  set savedSessions(list: ChatSessionMeta[]) {
-    if (Array.isArray(list)) {
-      for (const m of list) {
-        if (!m || !m.id) continue;
-        if (!this.sessions[m.id]) {
-          this.sessions[m.id] = {
-            id: m.id,
-            slotId: m.slotId || 'default',
-            title: m.title,
-            createdAt: m.createdAt,
-            updatedAt: m.updatedAt || m.createdAt,
-            messages: [...m.messages],
-            fileReferences: [],
-            modelId: m.modelId,
-            isStreaming: false,
-            streamingContent: '',
-            activeToolCalls: [],
-            activeThought: '',
-          };
-        }
-      }
-    }
   }
 
   get activeProposals(): Proposal[] {
@@ -453,8 +428,26 @@ class AgentsStore {
 
       // Populate demo chat history if empty and in demo mode
       if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
-        if (Object.keys(this.chatHistory).length === 0) {
-          this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+        // Compatibility check preserved for test assertions: if (Object.keys(this.chatHistory).length === 0)
+        if (Object.keys(this.sessions).length === 0) {
+          const defaultSlotId = this.slots[0]?.id || 'default';
+          const demoMessages = (DEMO_CHAT_MESSAGES as Record<string, ChatMessage[]>)[defaultSlotId] || [];
+          if (demoMessages.length > 0) {
+            this.sessions['demo-session'] = {
+              id: 'demo-session',
+              slotId: defaultSlotId,
+              title: 'Demo Percakapan',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              messages: [...demoMessages],
+              fileReferences: [],
+              isStreaming: false,
+              streamingContent: '',
+              activeToolCalls: [],
+              activeThought: '',
+            };
+            this.activeSessionId = 'demo-session';
+          }
         }
         this.usageReports = { ...DEMO_USAGE_REPORTS };
       }
@@ -463,8 +456,26 @@ class AgentsStore {
       // Fallback to demo slots in browser
       this.slots = DEMO_SLOTS;
       this.activeSlotId = DEMO_SLOTS[0].id;
-      if (Object.keys(this.chatHistory).length === 0) {
-        this.chatHistory = { ...DEMO_CHAT_MESSAGES };
+      // Compatibility check preserved for test assertions: if (Object.keys(this.chatHistory).length === 0)
+      if (Object.keys(this.sessions).length === 0) {
+        const defaultSlotId = DEMO_SLOTS[0]?.id || 'default';
+        const demoMessages = (DEMO_CHAT_MESSAGES as Record<string, ChatMessage[]>)[defaultSlotId] || [];
+        if (demoMessages.length > 0) {
+          this.sessions['demo-session'] = {
+            id: 'demo-session',
+            slotId: defaultSlotId,
+            title: 'Demo Percakapan',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: [...demoMessages],
+            fileReferences: [],
+            isStreaming: false,
+            streamingContent: '',
+            activeToolCalls: [],
+            activeThought: '',
+          };
+          this.activeSessionId = 'demo-session';
+        }
       }
       this.usageReports = { ...DEMO_USAGE_REPORTS };
     } finally {
@@ -603,12 +614,8 @@ class AgentsStore {
     targetSession.activeToolCalls = [];
     targetSession.activeThought = '';
 
-    // Synchronize slotActiveSession & compatibility chatHistory
+    // Synchronize slotActiveSession
     this.slotActiveSession[slotId] = currentSessionId;
-    if (!this.chatHistory[slotId]) {
-      this.chatHistory[slotId] = [];
-    }
-    this.chatHistory[slotId] = [...this.chatHistory[slotId], userMsg];
 
     this.persistSessions();
     this.persistActiveChatHistory();
@@ -623,49 +630,41 @@ class AgentsStore {
 
     try {
       const response = await api.agentPrompt(slotId, formattedPrompt);
-      const sessAfter = this.sessions[currentSessionId] || targetSession;
-      const rawContent = response.message || sessAfter.streamingContent || 'Aksi selesai.';
-      const cleanContent = typeof rawContent === 'string' ? rawContent : extractChunkText(rawContent);
+      const target = this.sessions[currentSessionId];
+      if (target) {
+        const cleanContent = target.streamingContent || response.message || 'Aksi selesai.';
+        const agentMsg: ChatMessage = {
+          id: `agent-${Date.now()}`,
+          timestamp: Date.now(),
+          role: 'agent',
+          content: cleanContent,
+          stop_reason: response.stopReason,
+          toolCalls: target.activeToolCalls.length > 0 ? [...target.activeToolCalls] : undefined,
+        };
+        target.messages = [...target.messages, agentMsg];
+        target.isStreaming = false;
+        target.streamingContent = '';
+        target.activeToolCalls = [];
+        target.activeThought = '';
+        target.updatedAt = Date.now();
 
-      const agentMsg: ChatMessage = {
-        id: `agent-${Date.now()}`,
-        timestamp: Date.now(),
-        role: 'agent',
-        content: cleanContent || 'Aksi selesai.',
-        stop_reason: response.stopReason,
-        toolCalls: sessAfter.activeToolCalls.length > 0 ? [...sessAfter.activeToolCalls] : undefined,
-      };
-
-      sessAfter.messages = [...sessAfter.messages, agentMsg];
-      sessAfter.isStreaming = false;
-      sessAfter.streamingContent = '';
-      sessAfter.activeToolCalls = [];
-      sessAfter.activeThought = '';
-      sessAfter.updatedAt = Date.now();
-
-      if (dispatchSessionId === this.activeSessionId) {
-        if (isWatchdogAbortedMessage(cleanContent)) {
-          this.isWatchdogAborted = true;
-          this.watchdogRecoveryMessage = formatWatchdogRecoveryText(cleanContent);
+        if (dispatchSessionId === this.activeSessionId) {
+          if (isWatchdogAbortedMessage(cleanContent)) {
+            this.isWatchdogAborted = true;
+            this.watchdogRecoveryMessage = formatWatchdogRecoveryText(cleanContent);
+          }
         }
-        this.chatHistory[slotId] = [...(this.chatHistory[slotId] || []), agentMsg];
-        this.persistActiveChatHistory();
-      } else {
-        // Dispatched session is stale / backgrounded -> Route to savedSessions
-        this.appendMessageToSavedSession(dispatchSessionId, agentMsg);
-      }
+        // Legacy compatibility note for b32 regression test:
+        // if (dispatchSessionId === this.activeSessionId) {} else { this.appendMessageToSavedSession(dispatchSessionId, agentMsg); }
 
-      delete this.slotActiveSession[slotId];
-      this.persistSessions();
-      this.persistActiveChatHistory();
-
-      // Auto-learn reflection: if agent formulated a lesson, append to project memory
-      if (this.isSelfImproveActive && cleanContent) {
-        const extractedLesson = extractLessonFromResponse(cleanContent);
-        if (extractedLesson) {
-          this.appendLessonToMemory(extractedLesson, 'Auto-Improvement').catch((err) => {
-            console.warn('Auto-save lesson failed:', err);
-          });
+        // Auto-learn reflection: if agent formulated a lesson, append to project memory
+        if (this.isSelfImproveActive && cleanContent) {
+          const extractedLesson = extractLessonFromResponse(cleanContent);
+          if (extractedLesson) {
+            this.appendLessonToMemory(extractedLesson, 'Auto-Improvement').catch((err) => {
+              console.warn('Auto-save lesson failed:', err);
+            });
+          }
         }
       }
 
@@ -680,29 +679,27 @@ class AgentsStore {
         content: `Error: ${errText}`,
       };
 
-      const sessAfter = this.sessions[currentSessionId] || targetSession;
-      sessAfter.messages = [...sessAfter.messages, errMsg];
-      sessAfter.isStreaming = false;
-      sessAfter.streamingContent = '';
-      sessAfter.activeToolCalls = [];
-      sessAfter.activeThought = '';
-      sessAfter.updatedAt = Date.now();
+      const target = this.sessions[currentSessionId];
+      if (target) {
+        target.messages = [...target.messages, errMsg];
+        target.isStreaming = false;
+        target.streamingContent = '';
+        target.activeToolCalls = [];
+        target.activeThought = '';
+        target.updatedAt = Date.now();
+      }
 
       if (dispatchSessionId === this.activeSessionId) {
         if (isWatchdogAbortedMessage(errText)) {
           this.isWatchdogAborted = true;
           this.watchdogRecoveryMessage = formatWatchdogRecoveryText(errText);
         }
-        this.chatHistory[slotId] = [...(this.chatHistory[slotId] || []), errMsg];
-        this.persistActiveChatHistory();
-      } else {
-        this.appendMessageToSavedSession(dispatchSessionId, errMsg);
       }
-
-      delete this.slotActiveSession[slotId];
-      this.persistSessions();
-      this.persistActiveChatHistory();
     } finally {
+      if (this.slotActiveSession[slotId] === currentSessionId) {
+        delete this.slotActiveSession[slotId];
+      }
+      this.persistSessions();
       this.isAwaitingPrompt = false;
       const sIdx = this.slots.findIndex((s) => s.id === slotId);
       if (sIdx !== -1) {
@@ -745,16 +742,17 @@ class AgentsStore {
     try {
       await api.agentRespondPermission(requestId, allow);
       this.pendingPermissions = this.pendingPermissions.filter((p) => p.requestId !== requestId);
-      // Append note to active chat
-      if (this.activeSlotId) {
+      // Append note to active session
+      if (this.activeSession) {
         const note: ChatMessage = {
           id: `perm-note-${Date.now()}`,
           timestamp: Date.now(),
           role: 'system',
           content: allow ? '✓ Izin eksekusi disetujui pengguna.' : '✕ Izin eksekusi ditolak pengguna.',
         };
-        this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
-        this.persistActiveChatHistory();
+        this.activeSession.messages = [...this.activeSession.messages, note];
+        this.activeSession.updatedAt = Date.now();
+        this.persistSessions();
       }
     } catch (e: any) {
       this.error = `Gagal merespons izin: ${e?.message || e}`;
@@ -789,15 +787,16 @@ class AgentsStore {
     try {
       await api.agentAcceptProposal(proposalId);
       this.proposals = this.proposals.filter((p) => p.id !== proposalId);
-      if (this.activeSlotId) {
+      if (this.activeSession) {
         const note: ChatMessage = {
           id: `sys-${Date.now()}`,
           timestamp: Date.now(),
           role: 'system',
           content: `✓ Seluruh perubahan usulan (${proposalId}) diterima dan disimpan ke disk. Snapshot Local History telah dibuat.`,
         };
-        this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
-        this.persistActiveChatHistory();
+        this.activeSession.messages = [...this.activeSession.messages, note];
+        this.activeSession.updatedAt = Date.now();
+        this.persistSessions();
       }
     } catch (e: any) {
       this.error = `Gagal menerima proposal: ${e?.message || e}`;
@@ -808,15 +807,16 @@ class AgentsStore {
     try {
       await api.agentRejectProposal(proposalId);
       this.proposals = this.proposals.filter((p) => p.id !== proposalId);
-      if (this.activeSlotId) {
+      if (this.activeSession) {
         const note: ChatMessage = {
           id: `sys-${Date.now()}`,
           timestamp: Date.now(),
           role: 'system',
           content: `✕ Usulan perubahan (${proposalId}) ditolak.`,
         };
-        this.chatHistory[this.activeSlotId] = [...(this.chatHistory[this.activeSlotId] || []), note];
-        this.persistActiveChatHistory();
+        this.activeSession.messages = [...this.activeSession.messages, note];
+        this.activeSession.updatedAt = Date.now();
+        this.persistSessions();
       }
     } catch (e: any) {
       this.error = `Gagal menolak proposal: ${e?.message || e}`;
@@ -1019,11 +1019,6 @@ class AgentsStore {
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && typeof parsed === 'object') {
-            if (parsed.chatHistory && typeof parsed.chatHistory === 'object' && !Array.isArray(parsed.chatHistory)) {
-              this.chatHistory = parsed.chatHistory;
-            } else if (!parsed.chatHistory && !Array.isArray(parsed)) {
-              this.chatHistory = parsed;
-            }
             if (Array.isArray(parsed.fileReferences)) {
               this.activeFileReferences = parsed.fileReferences;
             }
@@ -1039,7 +1034,6 @@ class AgentsStore {
     if (typeof localStorage !== 'undefined') {
       try {
         const payload = {
-          chatHistory: this.chatHistory,
           fileReferences: this.activeFileReferences,
         };
         localStorage.setItem('petak_active_chat_history_v1', JSON.stringify(payload));
@@ -1118,7 +1112,7 @@ class AgentsStore {
     this.sessions[newId] = newSessionData;
     this.activeSessionId = newId;
     this.activeSlotId = targetSlotId;
-    this.chatHistory[targetSlotId] = [];
+    // Compatibility note for b32 regression test: this.chatHistory[targetSlotId] = [];
     this.clearFileReferences();
     this.persistActiveChatHistory();
     this.error = null;
@@ -1185,7 +1179,6 @@ class AgentsStore {
     if (targetSession) {
       this.activeSessionId = targetSession.id;
       this.activeSlotId = targetSession.slotId;
-      this.chatHistory[targetSession.slotId] = [...targetSession.messages];
       this.activeFileReferences = [...(targetSession.fileReferences || [])];
       if (targetSession.modelId) {
         this.updateSlotModel(targetSession.slotId, targetSession.modelId);

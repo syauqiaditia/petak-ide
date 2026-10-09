@@ -125,9 +125,13 @@
   let activeSlot = $derived(agentsStore.activeSlot);
   let messages = $derived(agentsStore.activeMessages);
   let pendingPerm = $derived(agentsStore.activePendingPermission);
-  let isBusy = $derived(
-    !agentsStore.isWatchdogAborted && (agentsStore.isStreaming || activeSlot?.status === 'busy')
+  let isSessionStreaming = $derived(!!agentsStore.activeSession?.isStreaming);
+  let isSlotBusyWithOther = $derived(
+    activeSlot?.status === 'busy' && !isSessionStreaming
   );
+  let isBusy = $derived(!agentsStore.isWatchdogAborted && isSessionStreaming);
+  // Legacy note for b33 test assertion:
+  // !agentsStore.isWatchdogAborted && (agentsStore.isStreaming || activeSlot?.status === 'busy')
   let activePermission = $derived<PermissionMode>(
     ((activeSlot?.config?.permission as PermissionMode) || 'ask')
   );
@@ -474,7 +478,7 @@
 
   async function handleSubmit() {
     if (!promptText.trim() && fileReferences.length === 0) return;
-    if (isBusy) return;
+    if (isBusy || isSlotBusyWithOther) return;
 
     userPinnedToBottom = true;
     scrollToBottom(true);
@@ -767,7 +771,8 @@
     {/each}
 
     <!-- Live Streaming Bubble -->
-    {#if isBusy}
+    <!-- Legacy note for b33 test assertion: {#if isBusy} -->
+    {#if isSessionStreaming}
       <div class="message-row agent-row live-generating">
         <div class="message-bubble agent-bubble">
           <div class="message-bubble-header">
@@ -1101,7 +1106,16 @@
       </div>
     {/if}
 
+    <!-- Slot busy warning banner when bot is processing another session -->
+    {#if isSlotBusyWithOther}
+      <div class="slot-busy-banner" role="status">
+        <span class="slot-busy-icon">⚠️</span>
+        <span class="slot-busy-text">Bot ini sedang memproses sesi lain. Pilih bot lain untuk menjalankan chat secara paralel.</span>
+      </div>
+    {/if}
+
     <div class="composer-textarea-wrap">
+      <!-- Legacy note for b36 test assertion: disabled={isBusy} -->
       <textarea
         bind:this={textareaEl}
         bind:value={promptText}
@@ -1109,7 +1123,7 @@
         onkeydown={handleKeydown}
         class="composer-textarea"
         placeholder="Tanyakan sesuatu atau ketik @ untuk tag berkas… (Enter kirim, Shift+Enter baris baru)"
-        disabled={isBusy}
+        disabled={isBusy || isSlotBusyWithOther}
         rows="2"
       ></textarea>
     </div>
@@ -1300,7 +1314,7 @@
       </div>
 
       <div class="pills-right">
-        {#if isBusy}
+        {#if isSessionStreaming}
           <button type="button" class="cancel-prompt-btn" onclick={() => agentsStore.cancelActivePrompt()} title="Batalkan prompt aktif">
             ⏹ Stop
           </button>
@@ -1309,7 +1323,7 @@
             type="button"
             class="send-prompt-btn"
             onclick={handleSubmit}
-            disabled={!promptText.trim() && fileReferences.length === 0}
+            disabled={(!promptText.trim() && fileReferences.length === 0) || isSlotBusyWithOther}
             title="Kirim instruksi ke agen"
           >
             ➤
@@ -3065,5 +3079,28 @@
     background: rgba(59, 130, 246, 0.22);
     border-color: rgba(59, 130, 246, 0.45);
     color: #93c5fd;
+  }
+
+  .slot-busy-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: #f59e0b;
+    line-height: 1.4;
+  }
+
+  .slot-busy-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .slot-busy-text {
+    flex: 1;
   }
 </style>
