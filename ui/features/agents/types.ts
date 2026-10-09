@@ -282,6 +282,21 @@ export interface Skill {
 
 // ── Petak Chat Session Types ──────────────────────────────────────────────
 
+export interface ChatSessionData {
+  id: string;
+  slotId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: ChatMessage[];
+  fileReferences: FileReference[];
+  modelId?: string | null;
+  isStreaming: boolean;
+  streamingContent: string;
+  activeToolCalls: ToolCallData[];
+  activeThought?: string;
+}
+
 export interface ChatSessionMeta {
   id: string;
   slotId: string;

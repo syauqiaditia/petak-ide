@@ -17,6 +17,7 @@ import type {
   LlmQuotaReport,
   MemoryItem,
   ChatSessionMeta,
+  ChatSessionData,
   ToolCallData,
   CodeReference,
   PrunedContextResult,
@@ -35,6 +36,9 @@ import {
   isWatchdogAbortedMessage,
   formatWatchdogRecoveryText,
   generateSessionId,
+  migrateV1SessionsToV2,
+  resolveTargetSessionId,
+  applyStreamUpdateToSession,
 } from './agentsLogic';
 import { settingsStore } from '../settings/settingsStore.svelte';
 import { skillsStore } from './skillsStore.svelte';
@@ -60,10 +64,11 @@ class AgentsStore {
 
   slots = $state<SlotSummary[]>([]);
   activeSlotId = $state<string | null>(null);
+  sessions = $state<Record<string, ChatSessionData>>({});
+  activeSessionId = $state<string>('default-sess');
+  slotActiveSession = $state<Record<string, string>>({}); // slotId -> running sessionId
   chatHistory = $state<Record<string, ChatMessage[]>>({});
   activeFileReferences = $state<FileReference[]>([]);
-  savedSessions = $state<ChatSessionMeta[]>([]);
-  activeSessionId = $state<string>('default-sess');
   isHistoryOpen = $state(false);
   proposals = $state<Proposal[]>([]);
   pendingPermissions = $state<PendingPermissionRequest[]>([]);
@@ -94,11 +99,7 @@ class AgentsStore {
   isSelfImproveActive = $state(true); // Default true (Self-improvement & auto-learning)
 
   isLoading = $state(false);
-  isStreaming = $state(false);
   isAwaitingPrompt = $state(false);
-  streamingContent = $state('');
-  activeToolCalls = $state<ToolCallData[]>([]);
-  activeThought = $state<string>('');
   attachedReference = $state<CodeReference | null>(null);
   error = $state<string | null>(null);
 
@@ -111,12 +112,40 @@ class AgentsStore {
     this.watchdogRecoveryMessage = null;
   }
 
+  getOrCreateSession(id: string, slotId?: string): ChatSessionData {
+    if (!this.sessions[id]) {
+      const sId = slotId || this.activeSlotId || (this.slots[0] ? this.slots[0].id : 'default');
+      this.sessions[id] = {
+        id,
+        slotId: sId,
+        title: 'Percakapan Baru',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: [],
+        fileReferences: [],
+        modelId: this.activeSlot?.config?.model,
+        isStreaming: false,
+        streamingContent: '',
+        activeToolCalls: [],
+        activeThought: '',
+      };
+    }
+    return this.sessions[id];
+  }
+
   resetSlotToReady(slotId?: string) {
     const targetId = slotId || this.activeSlotId;
-    this.isStreaming = false;
-    this.streamingContent = '';
-    this.activeToolCalls = [];
-    this.activeThought = '';
+    const runningSessId = targetId ? this.slotActiveSession[targetId] : null;
+    const sess = (runningSessId && this.sessions[runningSessId]) || this.activeSession;
+    if (sess) {
+      sess.isStreaming = false;
+      sess.streamingContent = '';
+      sess.activeToolCalls = [];
+      sess.activeThought = '';
+    }
+    if (targetId) {
+      delete this.slotActiveSession[targetId];
+    }
     this.isWatchdogAborted = false;
     this.watchdogRecoveryMessage = null;
     if (targetId) {
@@ -125,6 +154,7 @@ class AgentsStore {
         this.slots[idx] = { ...this.slots[idx], status: 'ready' };
       }
     }
+    this.persistSessions();
   }
 
   attachCodeReference(ref: CodeReference) {
@@ -143,10 +173,75 @@ class AgentsStore {
     return this.slots.find((s) => s.id === this.activeSlotId) || null;
   }
 
+  get activeSession(): ChatSessionData | null {
+    return this.sessions[this.activeSessionId] || null;
+  }
+
   get activeMessages(): ChatMessage[] {
-    const id = this.activeSlotId || (this.slots[0] ? this.slots[0].id : null);
-    if (!id) return [];
-    return this.chatHistory[id] || [];
+    return this.activeSession?.messages || (this.activeSlotId ? this.chatHistory[this.activeSlotId] : []) || [];
+  }
+
+  get streamingContent(): string {
+    return this.activeSession?.streamingContent || '';
+  }
+
+  get activeToolCalls(): ToolCallData[] {
+    return this.activeSession?.activeToolCalls || [];
+  }
+
+  get activeThought(): string {
+    return this.activeSession?.activeThought || '';
+  }
+
+  get isStreaming(): boolean {
+    return !!this.activeSession?.isStreaming;
+  }
+
+  set isStreaming(val: boolean) {
+    if (this.activeSession) {
+      this.activeSession.isStreaming = val;
+    }
+  }
+
+  get savedSessions(): ChatSessionMeta[] {
+    return Object.values(this.sessions)
+      .filter((s) => s.messages && s.messages.length > 0)
+      .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
+      .slice(0, 50)
+      .map((s) => ({
+        id: s.id,
+        slotId: s.slotId,
+        title: s.title,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+        messageCount: s.messages.length,
+        messages: s.messages,
+        modelId: s.modelId,
+      }));
+  }
+
+  set savedSessions(list: ChatSessionMeta[]) {
+    if (Array.isArray(list)) {
+      for (const m of list) {
+        if (!m || !m.id) continue;
+        if (!this.sessions[m.id]) {
+          this.sessions[m.id] = {
+            id: m.id,
+            slotId: m.slotId || 'default',
+            title: m.title,
+            createdAt: m.createdAt,
+            updatedAt: m.updatedAt || m.createdAt,
+            messages: [...m.messages],
+            fileReferences: [],
+            modelId: m.modelId,
+            isStreaming: false,
+            streamingContent: '',
+            activeToolCalls: [],
+            activeThought: '',
+          };
+        }
+      }
+    }
   }
 
   get activeProposals(): Proposal[] {
@@ -210,96 +305,80 @@ class AgentsStore {
       if (idx !== -1) {
         this.slots[idx] = { ...this.slots[idx], status };
       }
+      const runningSessId = this.slotActiveSession[slot_id];
+      const targetSession = runningSessId
+        ? this.sessions[runningSessId]
+        : (slot_id === this.activeSlotId ? this.activeSession : null);
+
       if (status === 'busy') {
+        if (targetSession) {
+          targetSession.isStreaming = true;
+        }
         if (slot_id === this.activeSlotId) {
           this.isStreaming = true;
         }
       } else if (status === 'ready') {
         if (!this.isAwaitingPrompt) {
-          this.isStreaming = false;
+          if (targetSession) {
+            targetSession.isStreaming = false;
+          }
+          if (slot_id === this.activeSlotId) {
+            this.isStreaming = false;
+          }
         }
       } else if (status === 'crashed' || status === 'error') {
-        this.isStreaming = false;
+        if (targetSession) {
+          targetSession.isStreaming = false;
+        }
+        if (slot_id === this.activeSlotId) {
+          this.isStreaming = false;
+        }
       }
+      this.persistSessions();
       this.persistActiveChatHistory();
     } else if (event.WatchdogAborted) {
       const { slot_id, message } = event.WatchdogAborted;
-      this.isStreaming = false;
-      this.isWatchdogAborted = true;
-      this.watchdogRecoveryMessage = formatWatchdogRecoveryText(message);
+      const runningSessId = this.slotActiveSession[slot_id];
+      const targetSession = runningSessId
+        ? this.sessions[runningSessId]
+        : (slot_id === this.activeSlotId ? this.activeSession : null);
+      if (targetSession) {
+        targetSession.isStreaming = false;
+      }
+      if (slot_id === this.activeSlotId || targetSession?.id === this.activeSessionId) {
+        this.isWatchdogAborted = true;
+        this.watchdogRecoveryMessage = formatWatchdogRecoveryText(message);
+      }
       const sIdx = this.slots.findIndex((s) => s.id === slot_id);
       if (sIdx !== -1) {
         this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
       }
+      this.persistSessions();
       this.persistActiveChatHistory();
     } else if (event.Update) {
-      const { slot_id, update } = event.Update;
+      const { slot_id, session_id, update } = event.Update;
       if (!update) return;
 
-      const sessionUpdate = update.sessionUpdate;
+      const targetSessionId = resolveTargetSessionId(
+        session_id,
+        slot_id,
+        this.sessions,
+        this.slotActiveSession,
+        this.activeSessionId
+      );
 
-      if (sessionUpdate === 'agent_message_chunk') {
-        const text = extractChunkText(update.content !== undefined ? update.content : update);
-        if (text) {
-          this.streamingContent += text;
-          if (isWatchdogAbortedMessage(text)) {
-            this.isStreaming = false;
-            this.isWatchdogAborted = true;
-            this.watchdogRecoveryMessage = formatWatchdogRecoveryText(text);
-            const sIdx = this.slots.findIndex((s) => s.id === slot_id);
-            if (sIdx !== -1) {
-              this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
-            }
+      if (targetSessionId) {
+        const session = this.getOrCreateSession(targetSessionId, slot_id);
+        const updated = applyStreamUpdateToSession(session, update);
+        this.sessions[targetSessionId] = updated;
+
+        if (targetSessionId === this.activeSessionId && !updated.isStreaming && isWatchdogAbortedMessage(updated.streamingContent)) {
+          this.isWatchdogAborted = true;
+          this.watchdogRecoveryMessage = formatWatchdogRecoveryText(updated.streamingContent);
+          const sIdx = this.slots.findIndex((s) => s.id === slot_id);
+          if (sIdx !== -1) {
+            this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
           }
-        }
-      } else if (sessionUpdate === 'tool_call') {
-        const toolName = update.title || update.kind || 'tool';
-        const toolId = update.toolCallId || `tool-${Date.now()}`;
-        const newTool: ToolCallData = {
-          name: toolName,
-          status: 'running',
-          arguments: update.locations?.[0] ? { path: update.locations[0].path } : undefined,
-          output: '',
-        };
-        const existingIdx = this.activeToolCalls.findIndex((t: any) => t._id === toolId);
-        if (existingIdx !== -1) {
-          this.activeToolCalls[existingIdx] = { ...this.activeToolCalls[existingIdx], ...newTool };
-        } else {
-          (newTool as any)._id = toolId;
-          this.activeToolCalls = [...this.activeToolCalls, newTool];
-        }
-      } else if (sessionUpdate === 'tool_call_update') {
-        const toolId = update.toolCallId;
-        const outText = extractChunkText(update.content);
-        const status = update.status === 'completed' ? 'completed' : update.status === 'failed' ? 'failed' : 'running';
-        const existingIdx = this.activeToolCalls.findIndex((t: any) => t._id === toolId);
-        if (existingIdx !== -1) {
-          const current = this.activeToolCalls[existingIdx];
-          this.activeToolCalls[existingIdx] = {
-            ...current,
-            status,
-            output: outText || current.output,
-          };
-        } else {
-          this.activeToolCalls = [
-            ...this.activeToolCalls,
-            {
-              name: update.kind || 'tool',
-              status,
-              output: outText,
-            },
-          ];
-        }
-      } else if (sessionUpdate === 'agent_thought_chunk') {
-        const thought = extractChunkText(update.content);
-        if (thought) {
-          this.activeThought = thought.trim();
-        }
-      } else if (!sessionUpdate) {
-        // Fallback for non-sessionUpdate updates or plain text streaming
-        const text = extractChunkText(update);
-        if (text) {
-          this.streamingContent += text;
         }
       }
 
@@ -312,6 +391,7 @@ class AgentsStore {
           displayText: update.usage.displayText || '',
         };
       }
+      this.persistSessions();
       this.persistActiveChatHistory();
     } else if (event.PermissionRequested) {
       const { slot_id, request_id, tool_call } = event.PermissionRequested;
@@ -432,6 +512,7 @@ class AgentsStore {
     if ((!rawPrompt.trim() && (!options?.fileReferences || options.fileReferences.length === 0)) || !this.activeSlotId) return;
     const slotId = this.activeSlotId;
     const dispatchSessionId = this.activeSessionId;
+    const currentSessionId = dispatchSessionId;
 
     let memorySnippet = '';
     if (this.isSelfImproveActive) {
@@ -511,10 +592,25 @@ class AgentsStore {
           : undefined,
     };
 
+    const targetSession = this.getOrCreateSession(currentSessionId, slotId);
+    targetSession.messages = [...targetSession.messages, userMsg];
+    targetSession.updatedAt = Date.now();
+    if (targetSession.messages.filter((m) => m.role === 'user').length === 1 && rawPrompt.trim()) {
+      targetSession.title = rawPrompt.trim().slice(0, 48);
+    }
+    targetSession.isStreaming = true;
+    targetSession.streamingContent = '';
+    targetSession.activeToolCalls = [];
+    targetSession.activeThought = '';
+
+    // Synchronize slotActiveSession & compatibility chatHistory
+    this.slotActiveSession[slotId] = currentSessionId;
     if (!this.chatHistory[slotId]) {
       this.chatHistory[slotId] = [];
     }
     this.chatHistory[slotId] = [...this.chatHistory[slotId], userMsg];
+
+    this.persistSessions();
     this.persistActiveChatHistory();
 
     // Set slot status to busy
@@ -523,15 +619,12 @@ class AgentsStore {
       this.slots[idx] = { ...this.slots[idx], status: 'busy' };
     }
 
-    this.isStreaming = true;
     this.isAwaitingPrompt = true;
-    this.streamingContent = '';
-    this.activeToolCalls = [];
-    this.activeThought = '';
 
     try {
       const response = await api.agentPrompt(slotId, formattedPrompt);
-      const rawContent = response.message || this.streamingContent || 'Aksi selesai.';
+      const sessAfter = this.sessions[currentSessionId] || targetSession;
+      const rawContent = response.message || sessAfter.streamingContent || 'Aksi selesai.';
       const cleanContent = typeof rawContent === 'string' ? rawContent : extractChunkText(rawContent);
 
       const agentMsg: ChatMessage = {
@@ -540,8 +633,15 @@ class AgentsStore {
         role: 'agent',
         content: cleanContent || 'Aksi selesai.',
         stop_reason: response.stopReason,
-        toolCalls: this.activeToolCalls.length > 0 ? [...this.activeToolCalls] : undefined,
+        toolCalls: sessAfter.activeToolCalls.length > 0 ? [...sessAfter.activeToolCalls] : undefined,
       };
+
+      sessAfter.messages = [...sessAfter.messages, agentMsg];
+      sessAfter.isStreaming = false;
+      sessAfter.streamingContent = '';
+      sessAfter.activeToolCalls = [];
+      sessAfter.activeThought = '';
+      sessAfter.updatedAt = Date.now();
 
       if (dispatchSessionId === this.activeSessionId) {
         if (isWatchdogAbortedMessage(cleanContent)) {
@@ -554,6 +654,10 @@ class AgentsStore {
         // Dispatched session is stale / backgrounded -> Route to savedSessions
         this.appendMessageToSavedSession(dispatchSessionId, agentMsg);
       }
+
+      delete this.slotActiveSession[slotId];
+      this.persistSessions();
+      this.persistActiveChatHistory();
 
       // Auto-learn reflection: if agent formulated a lesson, append to project memory
       if (this.isSelfImproveActive && cleanContent) {
@@ -575,6 +679,15 @@ class AgentsStore {
         role: 'system',
         content: `Error: ${errText}`,
       };
+
+      const sessAfter = this.sessions[currentSessionId] || targetSession;
+      sessAfter.messages = [...sessAfter.messages, errMsg];
+      sessAfter.isStreaming = false;
+      sessAfter.streamingContent = '';
+      sessAfter.activeToolCalls = [];
+      sessAfter.activeThought = '';
+      sessAfter.updatedAt = Date.now();
+
       if (dispatchSessionId === this.activeSessionId) {
         if (isWatchdogAbortedMessage(errText)) {
           this.isWatchdogAborted = true;
@@ -585,17 +698,15 @@ class AgentsStore {
       } else {
         this.appendMessageToSavedSession(dispatchSessionId, errMsg);
       }
+
+      delete this.slotActiveSession[slotId];
+      this.persistSessions();
+      this.persistActiveChatHistory();
     } finally {
       this.isAwaitingPrompt = false;
-      if (dispatchSessionId === this.activeSessionId) {
-        this.isStreaming = false;
-        this.streamingContent = '';
-        this.activeToolCalls = [];
-        this.activeThought = '';
-        const sIdx = this.slots.findIndex((s) => s.id === slotId);
-        if (sIdx !== -1) {
-          this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
-        }
+      const sIdx = this.slots.findIndex((s) => s.id === slotId);
+      if (sIdx !== -1) {
+        this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
       }
     }
   }
@@ -609,16 +720,21 @@ class AgentsStore {
       console.warn('Cancel failed:', e);
     } finally {
       this.isAwaitingPrompt = false;
-      this.isStreaming = false;
-      this.streamingContent = '';
-      this.activeToolCalls = [];
-      this.activeThought = '';
+      const currentSession = this.activeSession;
+      if (currentSession) {
+        currentSession.isStreaming = false;
+        currentSession.streamingContent = '';
+        currentSession.activeToolCalls = [];
+        currentSession.activeThought = '';
+      }
+      delete this.slotActiveSession[slotId];
       this.isWatchdogAborted = false;
       this.watchdogRecoveryMessage = null;
       const sIdx = this.slots.findIndex((s) => s.id === slotId);
       if (sIdx !== -1) {
         this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
       }
+      this.persistSessions();
       try {
         await this.loadSlots();
       } catch (_) {}
@@ -837,18 +953,49 @@ class AgentsStore {
 
   // ── Session & History Management ─────────────────────────────────────────
 
-  private loadSavedSessions() {
+  loadSavedSessions() {
     if (typeof localStorage !== 'undefined') {
       try {
-        const raw = localStorage.getItem('petak_chat_sessions_v1');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            this.savedSessions = parsed;
+        const v2Raw = localStorage.getItem('petak_chat_sessions_v2');
+        if (v2Raw) {
+          const parsed = JSON.parse(v2Raw);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            this.sessions = parsed;
+            const keys = Object.keys(parsed);
+            if (keys.length > 0 && !parsed[this.activeSessionId]) {
+              this.activeSessionId = keys[0];
+            }
+            return;
           }
         }
+
+        // Transparent migration from v1 if v2 is empty
+        const v1Raw = localStorage.getItem('petak_chat_sessions_v1');
+        const activeHistoryRaw = localStorage.getItem('petak_active_chat_history_v1');
+        const v1Sessions = v1Raw ? JSON.parse(v1Raw) : null;
+        const activeHistory = activeHistoryRaw ? JSON.parse(activeHistoryRaw) : null;
+
+        const migrated = migrateV1SessionsToV2(v1Sessions, activeHistory);
+        if (Object.keys(migrated).length > 0) {
+          this.sessions = migrated;
+          const keys = Object.keys(migrated);
+          if (keys.length > 0) {
+            this.activeSessionId = keys[0];
+          }
+          this.persistSessions();
+        }
       } catch (e) {
-        console.warn('Failed to parse petak_chat_sessions_v1:', e);
+        console.warn('Failed to load or migrate sessions:', e);
+      }
+    }
+  }
+
+  persistSessions() {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('petak_chat_sessions_v2', JSON.stringify(this.sessions));
+      } catch (e) {
+        console.warn('Failed to save petak_chat_sessions_v2:', e);
       }
     }
   }
@@ -904,6 +1051,9 @@ class AgentsStore {
 
   setFileReferences(refs: FileReference[]) {
     this.activeFileReferences = [...refs];
+    const session = this.getOrCreateSession(this.activeSessionId);
+    session.fileReferences = [...refs];
+    this.persistSessions();
     this.persistActiveChatHistory();
   }
 
@@ -913,137 +1063,165 @@ class AgentsStore {
     );
     if (!exists) {
       this.activeFileReferences = [...this.activeFileReferences, ref];
+      const session = this.getOrCreateSession(this.activeSessionId);
+      session.fileReferences = [...this.activeFileReferences];
+      this.persistSessions();
       this.persistActiveChatHistory();
     }
   }
 
   removeFileReference(index: number) {
     this.activeFileReferences = this.activeFileReferences.filter((_, i) => i !== index);
+    const session = this.getOrCreateSession(this.activeSessionId);
+    session.fileReferences = [...this.activeFileReferences];
+    this.persistSessions();
     this.persistActiveChatHistory();
   }
 
   clearFileReferences() {
     this.activeFileReferences = [];
+    const session = this.sessions[this.activeSessionId];
+    if (session) {
+      session.fileReferences = [];
+      this.persistSessions();
+    }
     this.persistActiveChatHistory();
   }
 
   async newSession(slotId?: string) {
-    const targetSlotId = slotId || this.activeSlotId;
+    const targetSlotId = slotId || this.activeSlotId || 'default';
     if (!targetSlotId) return;
 
-    const currentSlot = this.slots.find((s) => s.id === targetSlotId) || this.activeSlot;
-    if (this.isStreaming || currentSlot?.status === 'busy') {
-      await this.cancelActivePrompt();
+    if (false as boolean) {
+      const currentSlot = this.slots.find((s) => s.id === targetSlotId) || this.activeSlot;
+      if (this.isStreaming || currentSlot?.status === 'busy') {
+        await this.cancelActivePrompt();
+      }
     }
 
-    // Archive current session if it has user/agent messages
-    const currentMsgs = this.chatHistory[targetSlotId] || [];
-    if (currentMsgs.length > 0) {
-      const firstUserMsg = currentMsgs.find((m) => m.role === 'user');
-      const title = firstUserMsg ? firstUserMsg.content.slice(0, 48) : `Percakapan ${new Date().toLocaleTimeString()}`;
-      const sessionMeta: ChatSessionMeta = {
-        id: this.activeSessionId || `sess-${Date.now()}`,
-        slotId: targetSlotId,
-        title,
-        createdAt: currentMsgs[0]?.timestamp || Date.now(),
-        messageCount: currentMsgs.length,
-        messages: [...currentMsgs],
-        modelId: this.activeSlot?.config?.model,
-      };
-      this.savedSessions = [sessionMeta, ...this.savedSessions.filter((s) => s.id !== sessionMeta.id)].slice(0, 50);
-      this.persistSavedSessions();
-    }
+    const newId = generateSessionId();
+    const newSessionData: ChatSessionData = {
+      id: newId,
+      slotId: targetSlotId,
+      title: 'Percakapan Baru',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+      fileReferences: [],
+      modelId: this.activeSlot?.config?.model,
+      isStreaming: false,
+      streamingContent: '',
+      activeToolCalls: [],
+      activeThought: '',
+    };
 
-    // Reset current slot history & active session
+    this.sessions[newId] = newSessionData;
+    this.activeSessionId = newId;
+    this.activeSlotId = targetSlotId;
     this.chatHistory[targetSlotId] = [];
     this.clearFileReferences();
     this.persistActiveChatHistory();
-    this.activeSessionId = generateSessionId();
     this.error = null;
     this.isHistoryOpen = false;
 
-    // Reset status and indicators so new session is ready for input immediately
-    this.isStreaming = false;
-    this.streamingContent = '';
-    this.activeToolCalls = [];
-    this.activeThought = '';
     this.isWatchdogAborted = false;
     this.watchdogRecoveryMessage = null;
     const sIdx = this.slots.findIndex((s) => s.id === targetSlotId);
     if (sIdx !== -1) {
       this.slots[sIdx] = { ...this.slots[sIdx], status: 'ready' };
     }
+    this.persistSessions();
+    this.persistSavedSessions();
   }
 
   appendMessageToSavedSession(sessionId: string, msg: ChatMessage) {
-    const existingIndex = this.savedSessions.findIndex((s) => s.id === sessionId);
-    if (existingIndex !== -1) {
-      const session = this.savedSessions[existingIndex];
-      const updatedMessages = [...session.messages, msg];
-      const updatedSession: ChatSessionMeta = {
-        ...session,
-        messages: updatedMessages,
-        messageCount: updatedMessages.length,
-      };
-      this.savedSessions = [
-        ...this.savedSessions.slice(0, existingIndex),
-        updatedSession,
-        ...this.savedSessions.slice(existingIndex + 1),
-      ];
-      this.persistSavedSessions();
+    let session = this.sessions[sessionId];
+    if (session) {
+      session.messages = [...session.messages, msg];
+      session.updatedAt = Date.now();
     } else {
-      const newSessionMeta: ChatSessionMeta = {
+      session = {
         id: sessionId,
         slotId: this.activeSlotId || 'default',
         title: msg.content.slice(0, 48),
-        createdAt: msg.timestamp,
-        messageCount: 1,
+        createdAt: msg.timestamp || Date.now(),
+        updatedAt: Date.now(),
         messages: [msg],
+        fileReferences: [],
         modelId: this.activeSlot?.config?.model,
+        isStreaming: false,
+        streamingContent: '',
+        activeToolCalls: [],
+        activeThought: '',
       };
-      this.savedSessions = [newSessionMeta, ...this.savedSessions].slice(0, 50);
-      this.persistSavedSessions();
+      this.sessions[sessionId] = session;
     }
+    this.persistSessions();
+    this.persistSavedSessions();
   }
 
-  loadSession(session: ChatSessionMeta) {
-    // Save current if dirty
-    const currentMsgs = this.activeMessages;
-    if (currentMsgs.length > 0 && this.activeSlotId && this.activeSessionId !== session.id) {
-      const firstUserMsg = currentMsgs.find((m) => m.role === 'user');
-      const title = firstUserMsg ? firstUserMsg.content.slice(0, 48) : `Percakapan ${new Date().toLocaleTimeString()}`;
-      const prevMeta: ChatSessionMeta = {
-        id: this.activeSessionId,
-        slotId: this.activeSlotId,
-        title,
-        createdAt: currentMsgs[0]?.timestamp || Date.now(),
-        messageCount: currentMsgs.length,
-        messages: [...currentMsgs],
-        modelId: this.activeSlot?.config?.model,
+  loadSession(session: ChatSessionMeta | string) {
+    const sessionId = typeof session === 'string' ? session : session.id;
+    let targetSession = this.sessions[sessionId];
+
+    if (!targetSession && typeof session !== 'string') {
+      targetSession = {
+        id: session.id,
+        slotId: session.slotId || 'default',
+        title: session.title,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt || session.createdAt,
+        messages: [...session.messages],
+        fileReferences: [],
+        modelId: session.modelId,
+        isStreaming: false,
+        streamingContent: '',
+        activeToolCalls: [],
+        activeThought: '',
       };
-      this.savedSessions = [prevMeta, ...this.savedSessions.filter((s) => s.id !== prevMeta.id)].slice(0, 50);
+      this.sessions[sessionId] = targetSession;
     }
 
-    this.activeSlotId = session.slotId;
-    this.activeSessionId = session.id;
-    this.chatHistory[session.slotId] = [...session.messages];
-    this.persistActiveChatHistory();
-    if (session.modelId) {
-      this.updateSlotModel(session.slotId, session.modelId);
+    if (targetSession) {
+      this.activeSessionId = targetSession.id;
+      this.activeSlotId = targetSession.slotId;
+      this.chatHistory[targetSession.slotId] = [...targetSession.messages];
+      this.activeFileReferences = [...(targetSession.fileReferences || [])];
+      if (targetSession.modelId) {
+        this.updateSlotModel(targetSession.slotId, targetSession.modelId);
+      }
     }
-    this.persistSavedSessions();
+
     this.isHistoryOpen = false;
+    this.persistSessions();
+    this.persistActiveChatHistory();
   }
 
   deleteSession(sessionId: string) {
-    this.savedSessions = this.savedSessions.filter((s) => s.id !== sessionId);
+    delete this.sessions[sessionId];
+    if (this.activeSessionId === sessionId) {
+      const remaining = Object.keys(this.sessions);
+      if (remaining.length > 0) {
+        this.activeSessionId = remaining[0];
+        if (this.sessions[this.activeSessionId]) {
+          this.activeSlotId = this.sessions[this.activeSessionId].slotId;
+        }
+      } else {
+        this.newSession();
+      }
+    }
+    this.persistSessions();
     this.persistSavedSessions();
+    this.persistActiveChatHistory();
   }
 
   clearAllSessions() {
-    this.savedSessions = [];
+    this.sessions = {};
+    this.persistSessions();
     this.persistSavedSessions();
+    this.persistActiveChatHistory();
     this.isHistoryOpen = false;
+    this.newSession();
   }
 
   toggleHistory() {

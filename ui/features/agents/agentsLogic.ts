@@ -21,10 +21,11 @@ import type {
   SelfHealResult,
   ChatMessage,
   ChatSessionMeta,
+  ChatSessionData,
   FileReference,
   ToolCallData,
 } from './types';
-export type { FileReference, ToolCallData };
+export type { FileReference, ToolCallData, ChatSessionData };
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
 
@@ -1769,6 +1770,213 @@ export function computeIsBusy(
   slotStatus?: string | null
 ): boolean {
   return !isWatchdogAborted && (isStreaming || slotStatus === 'busy');
+}
+
+/**
+ * Migrates legacy chat sessions (v1) and active chat history to isolated v2 format.
+ */
+export function migrateV1SessionsToV2(
+  savedSessionsV1: any[] | null | undefined,
+  activeHistoryV1?: any
+): Record<string, ChatSessionData> {
+  const result: Record<string, ChatSessionData> = {};
+
+  if (Array.isArray(savedSessionsV1)) {
+    for (const s of savedSessionsV1) {
+      if (!s || !s.id) continue;
+      result[s.id] = {
+        id: s.id,
+        slotId: s.slotId || 'default',
+        title: s.title || (s.messages?.[0]?.content ? s.messages[0].content.slice(0, 48) : 'Percakapan'),
+        createdAt: s.createdAt || Date.now(),
+        updatedAt: s.updatedAt || s.createdAt || Date.now(),
+        messages: Array.isArray(s.messages) ? [...s.messages] : [],
+        fileReferences: Array.isArray(s.fileReferences) ? [...s.fileReferences] : [],
+        modelId: s.modelId || null,
+        isStreaming: false,
+        streamingContent: '',
+        activeToolCalls: [],
+        activeThought: '',
+      };
+    }
+  }
+
+  // Active chat history migration
+  if (activeHistoryV1) {
+    const rawHistory = activeHistoryV1.chatHistory && typeof activeHistoryV1.chatHistory === 'object'
+      ? activeHistoryV1.chatHistory
+      : (!Array.isArray(activeHistoryV1) && typeof activeHistoryV1 === 'object' ? activeHistoryV1 : null);
+
+    const fileRefs: FileReference[] = Array.isArray(activeHistoryV1.fileReferences)
+      ? activeHistoryV1.fileReferences
+      : [];
+
+    if (rawHistory) {
+      for (const [slotId, msgs] of Object.entries(rawHistory)) {
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          const sessId = `migrated-${slotId}`;
+          if (!result[sessId]) {
+            result[sessId] = {
+              id: sessId,
+              slotId,
+              title: msgs[0]?.content ? msgs[0].content.slice(0, 48) : `Sesi ${slotId}`,
+              createdAt: msgs[0]?.timestamp || Date.now(),
+              updatedAt: msgs[msgs.length - 1]?.timestamp || Date.now(),
+              messages: [...msgs],
+              fileReferences: [...fileRefs],
+              modelId: null,
+              isStreaming: false,
+              streamingContent: '',
+              activeToolCalls: [],
+              activeThought: '',
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Resolves the target session ID for an incoming stream event.
+ * Uses event.Update.session_id if valid in sessions, or falls back to slotActiveSession[slot_id], or fallback ID.
+ */
+export function resolveTargetSessionId(
+  eventSessionId: string | undefined | null,
+  slotId: string | undefined | null,
+  sessions: Record<string, ChatSessionData>,
+  slotActiveSession: Record<string, string>,
+  fallbackActiveSessionId?: string
+): string | null {
+  if (eventSessionId && sessions[eventSessionId]) {
+    return eventSessionId;
+  }
+  if (slotId && slotActiveSession[slotId] && sessions[slotActiveSession[slotId]]) {
+    return slotActiveSession[slotId];
+  }
+  if (eventSessionId) {
+    return eventSessionId;
+  }
+  if (fallbackActiveSessionId && sessions[fallbackActiveSessionId]) {
+    return fallbackActiveSessionId;
+  }
+  return null;
+}
+
+/**
+ * Pure function to apply stream chunk / tool call updates to an isolated ChatSessionData.
+ */
+export function applyStreamUpdateToSession(
+  session: ChatSessionData,
+  update: any
+): ChatSessionData {
+  if (!update) return session;
+
+  let streamingContent = session.streamingContent || '';
+  let activeToolCalls = session.activeToolCalls ? [...session.activeToolCalls] : [];
+  let activeThought = session.activeThought || '';
+  let isStreaming = session.isStreaming;
+
+  const sessionUpdate = update.sessionUpdate;
+
+  if (sessionUpdate === 'agent_message_chunk') {
+    const text = extractChunkText(update.content !== undefined ? update.content : update);
+    if (text) {
+      streamingContent += text;
+      if (isWatchdogAbortedMessage(text)) {
+        isStreaming = false;
+      }
+    }
+  } else if (sessionUpdate === 'tool_call') {
+    const toolName = update.title || update.kind || 'tool';
+    const toolId = update.toolCallId || `tool-${Date.now()}`;
+    const newTool: ToolCallData = {
+      name: toolName,
+      status: 'running',
+      arguments: update.locations?.[0] ? { path: update.locations[0].path } : undefined,
+      output: '',
+    };
+    const existingIdx = activeToolCalls.findIndex((t: any) => (t as any)._id === toolId);
+    if (existingIdx !== -1) {
+      activeToolCalls[existingIdx] = { ...activeToolCalls[existingIdx], ...newTool };
+    } else {
+      (newTool as any)._id = toolId;
+      activeToolCalls.push(newTool);
+    }
+  } else if (sessionUpdate === 'tool_call_update') {
+    const toolId = update.toolCallId;
+    const outText = extractChunkText(update.content);
+    const status = update.status === 'completed' ? 'completed' : update.status === 'failed' ? 'failed' : 'running';
+    const existingIdx = activeToolCalls.findIndex((t: any) => (t as any)._id === toolId);
+    if (existingIdx !== -1) {
+      const current = activeToolCalls[existingIdx];
+      activeToolCalls[existingIdx] = {
+        ...current,
+        status,
+        output: outText || current.output,
+      };
+    } else {
+      activeToolCalls.push({
+        name: update.kind || 'tool',
+        status,
+        output: outText,
+      });
+    }
+  } else if (sessionUpdate === 'agent_thought_chunk') {
+    const thought = extractChunkText(update.content);
+    if (thought) {
+      activeThought = thought.trim();
+    }
+  } else if (!sessionUpdate) {
+    const text = extractChunkText(update);
+    if (text) {
+      streamingContent += text;
+    }
+  }
+
+  return {
+    ...session,
+    isStreaming,
+    streamingContent,
+    activeToolCalls,
+    activeThought,
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Routes a stream event to the appropriate isolated session without leaking into other sessions.
+ */
+export function routeStreamEvent(
+  event: any,
+  sessions: Record<string, ChatSessionData>,
+  slotActiveSession: Record<string, string>,
+  activeSessionId?: string
+): {
+  targetSessionId: string | null;
+  updatedSessions: Record<string, ChatSessionData>;
+} {
+  if (!event || !event.Update) {
+    return { targetSessionId: null, updatedSessions: sessions };
+  }
+
+  const { slot_id, session_id, update } = event.Update;
+  const targetId = resolveTargetSessionId(session_id, slot_id, sessions, slotActiveSession, activeSessionId);
+
+  if (!targetId || !sessions[targetId]) {
+    return { targetSessionId: null, updatedSessions: sessions };
+  }
+
+  const updatedSession = applyStreamUpdateToSession(sessions[targetId], update);
+  return {
+    targetSessionId: targetId,
+    updatedSessions: {
+      ...sessions,
+      [targetId]: updatedSession,
+    },
+  };
 }
 
 
