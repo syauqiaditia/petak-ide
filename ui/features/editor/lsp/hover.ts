@@ -1,5 +1,5 @@
 import { hoverTooltip, EditorView, closeHoverTooltips, keymap, type Tooltip } from '@codemirror/view';
-import { completionStatus } from '@codemirror/autocomplete';
+import { currentCompletions } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
 import { api, type LspHover, type LspPosition } from '../../../lib/api';
 import { isLspSupported, flushPending } from './sync';
@@ -252,7 +252,7 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
     hoverTooltip(
       async (view: EditorView, pos: number): Promise<Tooltip | null> => {
         // If autocomplete suggestions are currently open, hover must not appear (like Android Studio)
-        if (completionStatus(view.state) === 'active') {
+        if (currentCompletions(view.state).length > 0) {
           return null;
         }
 
@@ -331,6 +331,7 @@ export function createLspHoverExtension(getPath: () => string | null): Extension
       },
       {
         hideOnChange: true,
+        hoverTime: 180,
       }
     ),
     hoverKeymap,

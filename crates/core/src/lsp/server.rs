@@ -388,9 +388,22 @@ impl Drop for Server {
 
 /// Build the client capabilities JSON for the initialize request.
 fn client_capabilities(root_uri: &str) -> Value {
+    let name = root_uri
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("workspace");
+
     json!({
         "processId": std::process::id(),
         "rootUri": root_uri,
+        "workspaceFolders": [
+            {
+                "uri": root_uri,
+                "name": name
+            }
+        ],
         "capabilities": {
             "textDocument": {
                 "synchronization": {

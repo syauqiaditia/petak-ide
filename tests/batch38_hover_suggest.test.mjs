@@ -155,3 +155,148 @@ test('b38 LSP Hover: hover.ts awaits flushPending before api.lsp.hover', () => {
   assert.ok(hoverIndex !== -1, 'hover.ts must call await api.lsp.hover');
   assert.ok(flushIndex < hoverIndex, 'await flushPending must occur before await api.lsp.hover');
 });
+
+// =============================================================================
+// Suite 4: Hotfix - Hover Suppress Logic & HoverTime
+// =============================================================================
+
+test('b38 Hotfix Hover: hover.ts suppresses hover using currentCompletions length > 0', () => {
+  const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
+  const code = fs.readFileSync(hoverPath, 'utf-8');
+
+  assert.ok(
+    code.includes("import { currentCompletions } from '@codemirror/autocomplete';") ||
+      code.includes('currentCompletions'),
+    'hover.ts must import currentCompletions'
+  );
+  assert.ok(
+    code.includes('currentCompletions(view.state).length > 0'),
+    'hover.ts must check currentCompletions(view.state).length > 0'
+  );
+  assert.ok(
+    !code.includes("completionStatus(view.state) === 'active'"),
+    'hover.ts must not suppress hover on raw completionStatus === active'
+  );
+});
+
+test('b38 Hotfix Hover: hover.ts sets hoverTime: 180 for fast Android Studio response', () => {
+  const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
+  const code = fs.readFileSync(hoverPath, 'utf-8');
+
+  assert.ok(
+    code.includes('hoverTime: 180'),
+    'hoverTooltip options in hover.ts must specify hoverTime: 180'
+  );
+});
+
+// =============================================================================
+// Suite 5: Hotfix - Autocomplete Source Unification & Fallback
+// =============================================================================
+
+test('b38 Hotfix Completion: completion.ts imports snippets helpers and unifies sources', () => {
+  const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
+  const code = fs.readFileSync(compPath, 'utf-8');
+
+  assert.ok(
+    code.includes('getSnippetCompletionsForLanguage') && code.includes('getLangForFilename'),
+    'completion.ts must import getSnippetCompletionsForLanguage and getLangForFilename from ../snippets'
+  );
+  assert.ok(
+    code.includes('createLspCompletionSource(getPath)'),
+    'createLspAutocompleteExtension must use unified createLspCompletionSource'
+  );
+  assert.ok(
+    !code.includes('createSnippetCompletionSource(getPath)'),
+    'createLspAutocompleteExtension must not override with standalone createSnippetCompletionSource'
+  );
+});
+
+test('b38 Hotfix Completion: completion.ts provides fallback and deduplication', () => {
+  const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
+  const code = fs.readFileSync(compPath, 'utf-8');
+
+  assert.ok(
+    code.includes('[...filteredSnippets, ...filteredKeywords, ...lspOptions]'),
+    'completion.ts must combine [...filteredSnippets, ...filteredKeywords, ...lspOptions]'
+  );
+  assert.ok(
+    code.includes('[...snippetOptions, ...keywordOptions]'),
+    'completion.ts must fallback to [...snippetOptions, ...keywordOptions] on error/timeout/abort'
+  );
+});
+
+test('b38 Hotfix Keymap: keymap registers Alt-/ for macOS completion trigger', () => {
+  const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
+  const compCode = fs.readFileSync(compPath, 'utf-8');
+  const keymapPath = path.resolve(uiRoot, 'features/editor/keymap.ts');
+  const keymapCode = fs.readFileSync(keymapPath, 'utf-8');
+
+  assert.ok(
+    compCode.includes("key: 'Alt-/'") && compCode.includes('run: startCompletion'),
+    'completion.ts must include Alt-/ shortcut in keymap extension'
+  );
+  assert.ok(
+    keymapCode.includes("key: 'Alt-/'") && keymapCode.includes('run: startCompletion'),
+    'keymap.ts must include Alt-/ shortcut for startCompletion'
+  );
+});
+
+// =============================================================================
+// Suite 6: Hotfix - Z-Index & Pointer-Events CSS
+// =============================================================================
+
+test('b38 Hotfix CSS: .cm-tooltip-autocomplete has z-index: 99999 and pointer-events: auto', () => {
+  const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
+  const compCode = fs.readFileSync(compPath, 'utf-8');
+  const editorPath = path.resolve(uiRoot, 'features/editor/Editor.svelte');
+  const editorCode = fs.readFileSync(editorPath, 'utf-8');
+
+  assert.ok(
+    compCode.includes("zIndex: '99999 !important'") &&
+      compCode.includes("pointerEvents: 'auto !important'"),
+    'completionTheme in completion.ts must set zIndex 99999 and pointerEvents auto'
+  );
+  assert.ok(
+    compCode.includes("'.cm-tooltip.cm-tooltip-autocomplete'"),
+    'completionTheme must target .cm-tooltip.cm-tooltip-autocomplete'
+  );
+
+  assert.ok(
+    editorCode.includes(':global(.cm-tooltip-autocomplete)') &&
+      editorCode.includes(':global(.cm-tooltip.cm-tooltip-autocomplete)') &&
+      editorCode.includes('z-index: 99999 !important;') &&
+      editorCode.includes('pointer-events: auto !important;'),
+    'Editor.svelte must enforce z-index: 99999 !important and pointer-events: auto !important on autocomplete tooltip'
+  );
+});
+
+// =============================================================================
+// Suite 7: Hotfix - Rust Core workspaceFolders & App lsp_did_change await
+// =============================================================================
+
+test('b38 Hotfix Rust Core: client_capabilities includes workspaceFolders with root_uri and name', () => {
+  const serverPath = path.resolve(projectRoot, 'crates/core/src/lsp/server.rs');
+  const code = fs.readFileSync(serverPath, 'utf-8');
+
+  assert.ok(
+    code.includes('"workspaceFolders": [') &&
+      code.includes('"uri": root_uri') &&
+      code.includes('"name": name'),
+    'client_capabilities in server.rs must include workspaceFolders with uri and name'
+  );
+});
+
+test('b38 Hotfix Rust App: lsp_did_change awaits spawn_blocking handle', () => {
+  const cmdPath = path.resolve(projectRoot, 'crates/app/src/commands/editor.rs');
+  const code = fs.readFileSync(cmdPath, 'utf-8');
+
+  const fnIndex = code.indexOf('pub async fn lsp_did_change(');
+  assert.ok(fnIndex !== -1, 'lsp_did_change function must exist');
+
+  const fnSlice = code.slice(fnIndex, fnIndex + 600);
+  assert.ok(
+    fnSlice.includes('let handle = tauri::async_runtime::spawn_blocking(') &&
+      fnSlice.includes('handle.await.map_err('),
+    'lsp_did_change must await spawn_blocking handle'
+  );
+});

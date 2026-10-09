@@ -1550,6 +1550,11 @@
   :global(.cm-tooltip) {
     z-index: 9999 !important;
   }
+  :global(.cm-tooltip-autocomplete),
+  :global(.cm-tooltip.cm-tooltip-autocomplete) {
+    z-index: 99999 !important;
+    pointer-events: auto !important;
+  }
   :global(.cm-tooltip.cm-tooltip-hover) {
     background-color: #1e1f22 !important;
     border: 1px solid #383a42 !important;

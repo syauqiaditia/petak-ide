@@ -67,13 +67,14 @@ pub async fn lsp_did_change(
     changes: Vec<serde_json::Value>,
 ) -> Result<(), String> {
     let registry = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let handle = tauri::async_runtime::spawn_blocking(move || {
         let p = std::path::Path::new(&path);
         let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
         if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
             let _ = registry.did_change(p, lang, version, &changes, None);
         }
     });
+    handle.await.map_err(|e| e.to_string())?;
     Ok(())
 }
 

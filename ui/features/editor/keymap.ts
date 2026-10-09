@@ -234,6 +234,10 @@ export function createEditorKeyBindings(): KeyBinding[] {
       key: 'Ctrl-Space',
       run: startCompletion,
     },
+    {
+      key: 'Alt-/',
+      run: startCompletion,
+    },
   ];
 }
 
