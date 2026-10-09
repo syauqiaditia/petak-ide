@@ -1850,15 +1850,15 @@ export function resolveTargetSessionId(
   slotActiveSession: Record<string, string>,
   fallbackActiveSessionId?: string
 ): string | null {
+  // 1. Direct match with known frontend session ID
   if (eventSessionId && sessions[eventSessionId]) {
     return eventSessionId;
   }
+  // 2. Active session bound to this slot
   if (slotId && slotActiveSession[slotId] && sessions[slotActiveSession[slotId]]) {
     return slotActiveSession[slotId];
   }
-  if (eventSessionId) {
-    return eventSessionId;
-  }
+  // 3. Fallback to active session currently viewed
   if (fallbackActiveSessionId && sessions[fallbackActiveSessionId]) {
     return fallbackActiveSessionId;
   }
