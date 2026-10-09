@@ -211,31 +211,19 @@ test('b36 Hover Logic 4: computeAdaptiveHoverCoords quad-direction bounding (rig
 // Suite 5: Synchronous Mount & Positioning Contracts (Zero Flicker)
 // =============================================================================
 
-test('b36 Hover Polish 5: hover.ts eliminates async requestAnimationFrame delay in mount()', () => {
+test('b36 Hover Polish 5: hover.ts eliminates async requestAnimationFrame delay with native CodeMirror tooltip', () => {
   const hoverSrc = fs.readFileSync(path.resolve(uiRoot, 'features/editor/lsp/hover.ts'), 'utf-8');
 
-  // Must not have requestAnimationFrame inside mount()
+  // Must not have requestAnimationFrame inside hover
   assert.ok(
-    !hoverSrc.includes('mount() {\n                  requestAnimationFrame('),
-    'mount() must NOT contain requestAnimationFrame delay to eliminate flicker'
+    !hoverSrc.includes('requestAnimationFrame('),
+    'hover.ts must NOT contain requestAnimationFrame delay to eliminate flicker'
   );
 
-  // Must call adjustPosition synchronously in mount()
+  // Must return native create() tooltip DOM element
   assert.ok(
-    hoverSrc.includes('mount() {\n                  adjustPosition();\n                }'),
-    'mount() must execute adjustPosition() synchronously'
-  );
-
-  // Must call adjustPosition synchronously in positioned()
-  assert.ok(
-    hoverSrc.includes('positioned() {\n                  adjustPosition();\n                }'),
-    'positioned() must execute adjustPosition() synchronously'
-  );
-
-  // Must export computeAdaptiveHoverCoords
-  assert.ok(
-    hoverSrc.includes('computeAdaptiveHoverCoords'),
-    'hover.ts must import and re-export computeAdaptiveHoverCoords'
+    hoverSrc.includes('create() {') && hoverSrc.includes('return { dom };'),
+    'hover.ts must return native CodeMirror create() tooltip DOM structure'
   );
 });
 

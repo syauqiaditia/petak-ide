@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from 'svelte';
   import {
     EditorView,
-    tooltips,
     lineNumbers,
     highlightActiveLine,
     highlightActiveLineGutter,
@@ -597,10 +596,6 @@
     return EditorState.create({
       doc: content,
       extensions: [
-        tooltips({
-          parent: typeof document !== 'undefined' ? document.body : undefined,
-          position: 'fixed',
-        }),
         createEditorKeymapExtension(),
         EditorState.allowMultipleSelections.of(true),
         vimCompartment.of(editorSettings.vimMode ? vim() : []),
@@ -1556,32 +1551,12 @@
     pointer-events: none !important;
     user-select: none !important;
   }
-  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu):has(.cm-tooltip)),
-  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu)[class*="cm-"]) {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    background: transparent !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-    pointer-events: none !important;
-    z-index: 99999 !important;
-    overflow: visible !important;
-  }
-  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu):has(.cm-tooltip) .cm-tooltip),
-  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu)[class*="cm-"] .cm-tooltip) {
-    pointer-events: auto !important;
-  }
   :global(.cm-tooltip) {
     z-index: 9999 !important;
   }
   :global(.cm-tooltip-autocomplete),
   :global(.cm-tooltip.cm-tooltip-autocomplete) {
-    z-index: 99999 !important;
+    z-index: 9999 !important;
     pointer-events: auto !important;
   }
   :global(.cm-tooltip.cm-tooltip-hover) {
@@ -2000,9 +1975,10 @@
     color: #8b8f98;
   }
   .editor-container {
+    position: relative;
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
   }
@@ -2012,6 +1988,7 @@
   :global(.editor-container .cm-editor) {
     height: 100%;
     outline: none;
+    overflow: visible;
   }
   .empty-editor-overlay {
     flex: 1;

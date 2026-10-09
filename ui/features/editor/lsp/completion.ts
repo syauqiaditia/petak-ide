@@ -3,14 +3,12 @@ import {
   autocompletion,
   snippet,
   startCompletion,
-  closeCompletion,
-  acceptCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
   type CompletionSource,
 } from '@codemirror/autocomplete';
-import { EditorView, keymap, tooltips } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { api, type LspCompletionItem } from '../../../lib/api';
 import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos } from './pos';
@@ -87,7 +85,7 @@ function renderDocContent(doc: string | { kind?: string; value: string } | any):
 }
 
 /**
- * CompletionSource calling the LSP server with debouncing / stale check.
+ * Clean, robust completion source using standard CodeMirror 6 patterns.
  */
 export function createLspCompletionSource(getPath: () => string | null): CompletionSource {
   return async (context: CompletionContext): Promise<CompletionResult | null> => {
@@ -105,14 +103,9 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
     }
 
     const from = word ? word.from : context.pos;
+    const prefix = word ? word.text.toLowerCase() : '';
     const lspPos = offsetToLspPos(context.state.doc, context.pos);
 
-    let docAborted = false;
-    context.addEventListener('abort', () => {
-      docAborted = true;
-    });
-
-    const prefix = word ? word.text.toLowerCase() : '';
     const keywords = getKeywordsForPath(path);
     const keywordOptions: (Completion & { _kindLetter?: string })[] = (
       prefix ? keywords.filter((k) => k.toLowerCase().startsWith(prefix)) : keywords
@@ -133,55 +126,17 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
       boost: -99,
     }));
 
+    let lspOptions: Completion[] = [];
     try {
-      // Ensure LSP server has the freshest document content before requesting completion
       await flushPending(path);
-      if (context.aborted || docAborted) {
-        const fallbackOptions = [...snippetOptions, ...keywordOptions];
-        if (fallbackOptions.length > 0) {
-          return {
-            from,
-            options: fallbackOptions,
-            validFor: /^[\w$]*$/,
-          };
-        }
-        return null;
-      }
-
-      let timer: any;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('LSP completion timeout')), 4000);
-      });
-      const lspPromise = (async () => {
-        return await api.lsp.completion(path, lspPos.line, lspPos.character);
-      })();
-
-      let response: any;
-      try {
-        response = await Promise.race([lspPromise, timeoutPromise]);
-      } finally {
-        clearTimeout(timer);
-      }
-
-      if (context.aborted || docAborted) {
-        const fallbackOptions = [...snippetOptions, ...keywordOptions];
-        if (fallbackOptions.length > 0) {
-          return {
-            from,
-            options: fallbackOptions,
-            validFor: /^[\w$]*$/,
-          };
-        }
-        return null;
-      }
-
+      const response = await api.lsp.completion(path, lspPos.line, lspPos.character);
       const rawItems: LspCompletionItem[] = Array.isArray(response)
         ? response
         : response && Array.isArray((response as any).items)
         ? (response as any).items
         : [];
 
-      const lspOptions: Completion[] = rawItems.map((item) => {
+      lspOptions = rawItems.map((item) => {
         const { typeName, letter } = getKindInfo(item.kind);
 
         const completion: Completion & { _kindLetter?: string } = {
@@ -236,21 +191,7 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
 
         return completion;
       });
-
-      // De-duplicate snippets and keywords if LSP already provided them
-      const lspLabels = new Set(lspOptions.map((o) => o.label));
-      const filteredKeywords = keywordOptions.filter((kw) => !lspLabels.has(kw.label));
-      const filteredSnippets = snippetOptions.filter((s) => !lspLabels.has(s.label));
-      const combinedOptions = [...filteredSnippets, ...filteredKeywords, ...lspOptions];
-
-      if (combinedOptions.length === 0) return null;
-
-      return {
-        from,
-        options: combinedOptions,
-        validFor: /^[\w$]*$/,
-      };
-    } catch (e) {
+    } catch (_) {
       const fallbackOptions = [...snippetOptions, ...keywordOptions];
       if (fallbackOptions.length > 0) {
         return {
@@ -261,6 +202,29 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
       }
       return null;
     }
+
+    const lspLabels = new Set(lspOptions.map((o) => o.label));
+    const filteredKeywords = keywordOptions.filter((kw) => !lspLabels.has(kw.label));
+    const filteredSnippets = snippetOptions.filter((s) => !lspLabels.has(s.label));
+    const combinedOptions = [...filteredSnippets, ...filteredKeywords, ...lspOptions];
+
+    if (combinedOptions.length === 0) {
+      const fallbackOptions = [...snippetOptions, ...keywordOptions];
+      if (fallbackOptions.length > 0) {
+        return {
+          from,
+          options: fallbackOptions,
+          validFor: /^[\w$]*$/,
+        };
+      }
+      return null;
+    }
+
+    return {
+      from,
+      options: combinedOptions,
+      validFor: /^[\w$]*$/,
+    };
   };
 }
 
@@ -312,11 +276,11 @@ export const completionTheme = EditorView.theme({
     minWidth: '340px !important',
     maxWidth: '520px !important',
     fontFamily: "'JetBrains Mono', monospace !important",
-    zIndex: '99999 !important',
+    zIndex: '9999 !important',
     pointerEvents: 'auto !important',
   },
   '.cm-tooltip.cm-tooltip-autocomplete': {
-    zIndex: '99999 !important',
+    zIndex: '9999 !important',
     pointerEvents: 'auto !important',
   },
   '.cm-tooltip-autocomplete::after': {
@@ -448,10 +412,6 @@ export const completionTheme = EditorView.theme({
  */
 export function createLspAutocompleteExtension(getPath: () => string | null): Extension {
   return [
-    tooltips({
-      parent: typeof document !== 'undefined' ? document.body : undefined,
-      position: 'fixed',
-    }),
     autocompletion({
       override: [
         createLspCompletionSource(getPath),
