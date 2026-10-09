@@ -39,6 +39,7 @@ import {
   migrateV1SessionsToV2,
   resolveTargetSessionId,
   applyStreamUpdateToSession,
+  sanitizeSessions,
 } from './agentsLogic';
 import { settingsStore } from '../settings/settingsStore.svelte';
 import { skillsStore } from './skillsStore.svelte';
@@ -960,9 +961,9 @@ class AgentsStore {
         if (v2Raw) {
           const parsed = JSON.parse(v2Raw);
           if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            this.sessions = parsed;
-            const keys = Object.keys(parsed);
-            if (keys.length > 0 && !parsed[this.activeSessionId]) {
+            this.sessions = sanitizeSessions(parsed);
+            const keys = Object.keys(this.sessions);
+            if (keys.length > 0 && !this.sessions[this.activeSessionId]) {
               this.activeSessionId = keys[0];
             }
             return;
@@ -977,8 +978,8 @@ class AgentsStore {
 
         const migrated = migrateV1SessionsToV2(v1Sessions, activeHistory);
         if (Object.keys(migrated).length > 0) {
-          this.sessions = migrated;
-          const keys = Object.keys(migrated);
+          this.sessions = sanitizeSessions(migrated);
+          const keys = Object.keys(this.sessions);
           if (keys.length > 0) {
             this.activeSessionId = keys[0];
           }
@@ -1086,6 +1087,11 @@ class AgentsStore {
     const targetSlotId = slotId || this.activeSlotId || 'default';
     if (!targetSlotId) return;
 
+    if (this.activeSession && this.activeSession.messages.length === 0 && !this.activeSession.isStreaming) {
+      this.isHistoryOpen = false;
+      return;
+    }
+
     if (false as boolean) {
       const currentSlot = this.slots.find((s) => s.id === targetSlotId) || this.activeSlot;
       if (this.isStreaming || currentSlot?.status === 'busy') {
@@ -1177,12 +1183,15 @@ class AgentsStore {
     }
 
     if (targetSession) {
+      targetSession.messages = targetSession.messages.map((m, idx) => ({
+        ...m,
+        id: m.id || `msg-${targetSession!.id}-${idx}`,
+      }));
       this.activeSessionId = targetSession.id;
-      this.activeSlotId = targetSession.slotId;
-      this.activeFileReferences = [...(targetSession.fileReferences || [])];
-      if (targetSession.modelId) {
-        this.updateSlotModel(targetSession.slotId, targetSession.modelId);
+      if (targetSession.slotId) {
+        this.activeSlotId = targetSession.slotId;
       }
+      this.activeFileReferences = [...(targetSession.fileReferences || [])];
     }
 
     this.isHistoryOpen = false;
