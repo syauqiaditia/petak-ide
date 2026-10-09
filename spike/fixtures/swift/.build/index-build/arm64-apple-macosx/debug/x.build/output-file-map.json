@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/uqi/petak/spike/fixtures/swift/.build/index-build/arm64-apple-macosx/debug/x.build/primary.swiftdeps"
+  },
+  "/Users/uqi/petak/spike/fixtures/swift/Sources/x/main.swift": {
+    "dependencies": "/Users/uqi/petak/spike/fixtures/swift/.build/index-build/arm64-apple-macosx/debug/x.build/main.d",
+    "object": "/Users/uqi/petak/spike/fixtures/swift/.build/index-build/arm64-apple-macosx/debug/x.build/main.swift.o",
+    "swiftmodule": "/Users/uqi/petak/spike/fixtures/swift/.build/index-build/arm64-apple-macosx/debug/x.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/uqi/petak/spike/fixtures/swift/.build/index-build/arm64-apple-macosx/debug/x.build/main.swiftdeps",
+    "diagnostics": "/Users/uqi/petak/spike/fixtures/swift/.build/index-build/arm64-apple-macosx/debug/x.build/main.dia"
+  }
+}

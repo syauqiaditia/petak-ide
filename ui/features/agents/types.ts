@@ -5,18 +5,59 @@
 
 export type PermissionMode = 'read' | 'ask' | 'auto' | 'full';
 
-export type AgentKind = 'claude-code' | 'hermes' | 'acp-custom' | 'openai';
+export type AgentKind = 'claude-code' | 'hermes' | 'acp-custom' | 'openai' | 'antigravity' | 'codex';
+
+export type AgentRole = 'manager' | 'senior' | 'senior2' | 'techlead' | 'reviewer' | 'custom' | string;
+
+export interface RoleScopeInfo {
+  role: string;
+  badge: string;
+  description: string;
+  defaultWhitelist: string[];
+  blacklist: string[];
+}
 
 export interface SlotConfig {
   id: string;
   label: string;
   kind: AgentKind | string;
+  engine?: string | null;
+  role?: string | null;
+  customWhitelist?: string[] | null;
   command?: string | null;
   hermesProfile?: string | null;
   model?: string | null;
   fallbackModel?: string | null;
   permission: PermissionMode | string;
   cwd: string;
+}
+
+export interface SupportedEngineInfo {
+  id: string;
+  name: string;
+  detected?: boolean;
+  status?: string;
+  allowedModels?: string[];
+  available?: boolean;
+  version?: string | null;
+  binaryPath?: string | null;
+  defaultModel?: string | null;
+  models?: string[];
+  description?: string;
+}
+
+export interface EnginePlatformOption {
+  id: string;
+  name: string;
+  badge: string;
+  desc: string;
+  defaultModel: string;
+  models: Array<{
+    id: string;
+    name: string;
+    desc?: string;
+    recommended?: boolean;
+  }>;
 }
 
 export type SlotStatus =
@@ -49,6 +90,14 @@ export interface CodeReference {
   endLine?: number;
   symbol?: string;
   codeSnippet?: string;
+}
+
+export interface FileReference {
+  path: string;
+  name: string;
+  line?: number;
+  endLine?: number;
+  isDir?: boolean;
 }
 
 export interface ToolCallData {
@@ -233,6 +282,21 @@ export interface Skill {
 
 // ── Petak Chat Session Types ──────────────────────────────────────────────
 
+export interface ChatSessionData {
+  id: string;
+  slotId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: ChatMessage[];
+  fileReferences: FileReference[];
+  modelId?: string | null;
+  isStreaming: boolean;
+  streamingContent: string;
+  activeToolCalls: ToolCallData[];
+  activeThought?: string;
+}
+
 export interface ChatSessionMeta {
   id: string;
   slotId: string;
@@ -243,4 +307,75 @@ export interface ChatSessionMeta {
   messages: ChatMessage[];
   modelId?: string | null;
 }
+
+// ── Smart Context & Semantic Memory Types (Phase 3) ─────────────────────────
+
+export interface SymbolOutline {
+  name: string;
+  kind: string;
+  line: number;
+  signature: string;
+  children?: SymbolOutline[];
+}
+
+export interface DiagnosticSnippet {
+  line: number;
+  message: string;
+  severity: string;
+}
+
+export interface PrunedContextResult {
+  filePath: string;
+  totalLines: number;
+  prunedLines: number;
+  estimatedTokensSaved: number;
+  symbolOutline: SymbolOutline[];
+  diagnostics: DiagnosticSnippet[];
+  compactSummary: string;
+}
+
+export interface MemorySnippet {
+  domain: string;
+  sourceFile: string;
+  title: string;
+  content: string;
+}
+
+// ── Multi-Agent Worktree Lane Cockpit Types (Phase 4) ─────────────────────────
+
+export interface WorktreeInfo {
+  task_id: string;
+  path: string;
+  branch: string;
+  base_branch: string;
+  head_sha: string;
+  is_dirty: boolean;
+  created_at: number;
+}
+
+// ── Self-Healing Loop & Ghost Diff Types (Phase 5) ─────────────────────────
+
+export type SelfHealPhase = 'idle' | 'hot_reloading' | 'testing' | 'passed' | 'failed' | 'paused';
+
+export interface SelfHealStatus {
+  task_id: string;
+  active_file: string;
+  status: SelfHealPhase;
+  attempt: number;
+  max_attempts: number;
+  error?: string;
+  last_verified_at?: number;
+}
+
+export interface SelfHealResult {
+  task_id: string;
+  success: boolean;
+  attempts: number;
+  status: SelfHealPhase;
+  message: string;
+  diagnosis_prompt?: string;
+}
+
+
+
 

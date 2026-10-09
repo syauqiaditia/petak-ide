@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Fake ACP agent for Petak tests: newline-delimited JSON-RPC 2.0 over stdio.
 import readline from 'node:readline';
+import { spawn } from 'node:child_process';
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -234,6 +235,33 @@ rl.on('line', (line) => {
           });
         }
       };
+    } else if (promptText.startsWith('subproc')) {
+      const child = spawn('sleep', ['60']);
+      send({
+        jsonrpc: '2.0',
+        method: 'session/update',
+        params: {
+          sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: `child_pid:${child.pid}` },
+          },
+        },
+      });
+      currentPromptResolve = (cancelled) => {
+        if (cancelled) {
+          send({
+            jsonrpc: '2.0',
+            id: msg.id,
+            result: {
+              stopReason: 'cancelled',
+              usage: { inputTokens: 5, outputTokens: 5 },
+            },
+          });
+        }
+      };
+    } else if (promptText.startsWith('stuck') || promptText.startsWith('hang')) {
+      // Intentionally do nothing to simulate stuck process / idle timeout
     } else {
       // Normal quick prompt: stream chunks and usage, then finish
       send({
@@ -287,6 +315,8 @@ rl.on('line', (line) => {
       currentPromptResolve(true);
       currentPromptResolve = null;
     }
+  } else if (msg.method === 'test/hang') {
+    // Hang intentionally: do not reply to simulate hanging request
   } else if (msg.id !== undefined && msg.id !== null) {
     // Unhandled request
     send({

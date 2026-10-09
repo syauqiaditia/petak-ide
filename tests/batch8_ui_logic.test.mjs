@@ -104,11 +104,14 @@ test('hover markdown: separates header signature and clean body documentation', 
   assert.ok(html.includes('The list of allowed orientations'));
 });
 
-test('hover theme: tooltip maxHeight capped at 280px and custom scrollbar configured', () => {
+test('hover theme: tooltip maxHeight capped and custom scrollbar configured', () => {
   const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
   const code = fs.readFileSync(hoverPath, 'utf-8');
 
-  assert.ok(code.includes("maxHeight: '280px !important'"), 'Tooltip maxHeight must be capped at 280px');
+  assert.ok(
+    code.includes("maxHeight: '260px !important'") || code.includes("maxHeight: '280px !important'"),
+    'Tooltip maxHeight must be capped at 260px or 280px'
+  );
   assert.ok(code.includes('.cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar'), 'Must configure custom scrollbar');
   assert.ok(code.includes("scrollbarWidth: 'thin !important'"), 'Must configure thin scrollbar');
 });

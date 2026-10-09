@@ -179,14 +179,14 @@ fn did_open_params(doc: &OpenDoc) -> serde_json::Value {
 
 /// State for one managed server.
 struct ManagedServer {
-    server: Server,
+    server: Arc<Server>,
     last_activity: Instant,
-    open_docs: HashMap<String, OpenDoc>, // uri -> doc
 }
 
 /// Registry manages LSP servers per (Lang, root).
 pub struct Registry {
     servers: Mutex<HashMap<ServerKey, ManagedServer>>,
+    open_docs: Mutex<HashMap<ServerKey, HashMap<String, OpenDoc>>>,
     clock: Arc<dyn Clock>,
     event_callback: Arc<dyn Fn(Lang, PathBuf, ServerEvent) + Send + Sync>,
     idle_timeout: Duration,
@@ -206,6 +206,7 @@ impl Registry {
 
         Self {
             servers: Mutex::new(HashMap::new()),
+            open_docs: Mutex::new(HashMap::new()),
             clock,
             event_callback: Arc::new(on_event),
             idle_timeout,
@@ -256,31 +257,50 @@ impl Registry {
             .to_path_buf()
     }
 
-    /// Restart a crashed server (re-didOpen its tracked docs) and bump activity.
-    /// Errs if no server exists for `key` — servers are only created by did_open.
+    /// Ensure the server for `key` is running and alive.
+    /// If the server has stopped, was killed by idle timeout, crashed, or not started yet:
+    /// automatically wakes/spawns/restarts the server and re-sends textDocument/didOpen
+    /// for all tracked open documents of that (Lang, root).
+    /// Resets `last_activity` timestamp to now.
     fn ensure_alive<'a>(
         &self,
         servers: &'a mut HashMap<ServerKey, ManagedServer>,
         key: &ServerKey,
-    ) -> Result<&'a mut ManagedServer, ServerError> {
-        let dead = servers.get(key).ok_or(ServerError::ServerDied)?;
-        if !dead.server.is_alive() {
-            let docs: Vec<OpenDoc> = dead.open_docs.values().cloned().collect();
-            let mut fresh = self.start_server(key.lang, &key.root)?;
+    ) -> Result<(&'a mut ManagedServer, bool), ServerError> {
+        let needs_start = match servers.get(key) {
+            Some(managed) => !managed.server.is_alive(),
+            None => true,
+        };
+
+        if needs_start {
+            if let Some(old) = servers.remove(key) {
+                old.server.kill();
+            }
+
+            let fresh = self.start_server(key.lang, &key.root)?;
+            let docs: Vec<OpenDoc> = {
+                let open_guard = self.open_docs.lock().unwrap();
+                open_guard
+                    .get(key)
+                    .map(|map| map.values().cloned().collect())
+                    .unwrap_or_default()
+            };
+
             for doc in docs {
-                let _ = fresh.server.notify("textDocument/didOpen", &did_open_params(&doc));
-                fresh.open_docs.insert(doc.uri.clone(), doc);
+                let _ = fresh
+                    .server
+                    .notify("textDocument/didOpen", &did_open_params(&doc));
             }
-            if let Some(old) = servers.insert(key.clone(), fresh) {
-                old.server.kill(); // reap the dead child
-            }
+
+            servers.insert(key.clone(), fresh);
         }
+
         let managed = servers.get_mut(key).unwrap();
         managed.last_activity = self.clock.now();
-        Ok(managed)
+        Ok((managed, needs_start))
     }
 
-    /// Open a document — lazily starts the server if needed.
+    /// Open a document — lazily starts or auto-wakes the server if needed.
     pub fn did_open(
         &self,
         file_path: &Path,
@@ -300,28 +320,36 @@ impl Registry {
             Lang::Swift => "swift",
         };
 
-        let mut servers = self.servers.lock().unwrap();
-
-        if !servers.contains_key(&key) {
-            let fresh = self.start_server(lang, &root)?;
-            servers.insert(key.clone(), fresh);
-        }
-
-        let managed = self.ensure_alive(&mut servers, &key)?;
-
         let doc = OpenDoc {
             uri: uri.clone(),
             language_id: language_id.to_string(),
             version: 1,
             text: text.to_string(),
         };
-        managed.server.notify("textDocument/didOpen", &did_open_params(&doc))?;
-        managed.open_docs.insert(uri, doc);
+
+        // Track in open_docs first
+        {
+            let mut open_guard = self.open_docs.lock().unwrap();
+            let docs_for_key = open_guard.entry(key.clone()).or_default();
+            docs_for_key.insert(uri.clone(), doc.clone());
+        }
+
+        let (server, started_fresh) = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, started_fresh) = self.ensure_alive(&mut servers, &key)?;
+            (Arc::clone(&managed.server), started_fresh)
+        };
+
+        if !started_fresh {
+            server.notify("textDocument/didOpen", &did_open_params(&doc))?;
+        }
 
         Ok(())
     }
 
     /// Notify didChange for a document with incremental or full content changes.
+    /// Auto-wakes the server if dead or idle, registers document in open_docs,
+    /// and forwards changes cleanly.
     pub fn did_change(
         &self,
         file_path: &Path,
@@ -334,45 +362,82 @@ impl Registry {
         let key = ServerKey { lang, root };
         let uri = path_to_uri(file_path);
 
-        let mut servers = self.servers.lock().unwrap();
-        let managed = self.ensure_alive(&mut servers, &key)?;
-        managed.server.notify(
+        let language_id = match lang {
+            Lang::Dart => "dart",
+            Lang::Kotlin => "kotlin",
+            Lang::Swift => "swift",
+        };
+
+        // Ensure document is registered in open_docs
+        {
+            let mut open_guard = self.open_docs.lock().unwrap();
+            let docs_for_key = open_guard.entry(key.clone()).or_default();
+            if !docs_for_key.contains_key(&uri) {
+                let initial_text = std::fs::read_to_string(file_path).unwrap_or_default();
+                docs_for_key.insert(
+                    uri.clone(),
+                    OpenDoc {
+                        uri: uri.clone(),
+                        language_id: language_id.to_string(),
+                        version: version.saturating_sub(1),
+                        text: initial_text,
+                    },
+                );
+            }
+        }
+
+        let server = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+            managed.last_activity = self.clock.now();
+            Arc::clone(&managed.server)
+        };
+
+        server.notify(
             "textDocument/didChange",
             &json!({
                 "textDocument": { "uri": &uri, "version": version },
                 "contentChanges": changes
             }),
         )?;
-        if let Some(doc) = managed.open_docs.get_mut(&uri) {
-            doc.version = version;
-            for change in changes {
-                if let Some(text_val) = change.get("text").and_then(|t| t.as_str()) {
-                    if let Some(range_val) = change.get("range") {
-                        if let (Some(sl), Some(sc), Some(el), Some(ec)) = (
-                            range_val.get("start").and_then(|s| s.get("line")).and_then(|l| l.as_u64()),
-                            range_val.get("start").and_then(|s| s.get("character")).and_then(|c| c.as_u64()),
-                            range_val.get("end").and_then(|e| e.get("line")).and_then(|l| l.as_u64()),
-                            range_val.get("end").and_then(|e| e.get("character")).and_then(|c| c.as_u64()),
-                        ) {
-                            if let (Some(start_byte), Some(end_byte)) = (
-                                pos::lsp_to_byte_offset(&doc.text, sl as u32, sc as u32),
-                                pos::lsp_to_byte_offset(&doc.text, el as u32, ec as u32),
-                            ) {
-                                if start_byte <= end_byte && end_byte <= doc.text.len() {
-                                    doc.text.replace_range(start_byte..end_byte, text_val);
+
+        // Update document state in open_docs
+        {
+            let mut open_guard = self.open_docs.lock().unwrap();
+            if let Some(docs_for_key) = open_guard.get_mut(&key) {
+                if let Some(doc) = docs_for_key.get_mut(&uri) {
+                    doc.version = version;
+                    for change in changes {
+                        if let Some(text_val) = change.get("text").and_then(|t| t.as_str()) {
+                            if let Some(range_val) = change.get("range") {
+                                if let (Some(sl), Some(sc), Some(el), Some(ec)) = (
+                                    range_val.get("start").and_then(|s| s.get("line")).and_then(|l| l.as_u64()),
+                                    range_val.get("start").and_then(|s| s.get("character")).and_then(|c| c.as_u64()),
+                                    range_val.get("end").and_then(|e| e.get("line")).and_then(|l| l.as_u64()),
+                                    range_val.get("end").and_then(|e| e.get("character")).and_then(|c| c.as_u64()),
+                                ) {
+                                    if let (Some(start_byte), Some(end_byte)) = (
+                                        pos::lsp_to_byte_offset(&doc.text, sl as u32, sc as u32),
+                                        pos::lsp_to_byte_offset(&doc.text, el as u32, ec as u32),
+                                    ) {
+                                        if start_byte <= end_byte && end_byte <= doc.text.len() {
+                                            doc.text.replace_range(start_byte..end_byte, text_val);
+                                        }
+                                    }
                                 }
+                            } else {
+                                doc.text = text_val.to_string();
                             }
                         }
-                    } else {
-                        doc.text = text_val.to_string();
                     }
                 }
             }
         }
+
         Ok(())
     }
 
-    /// Notify didSave for a document.
+    /// Notify didSave for a document. Auto-wakes server if idle or stopped.
     pub fn did_save(
         &self,
         file_path: &Path,
@@ -384,20 +449,28 @@ impl Registry {
         let key = ServerKey { lang, root };
         let uri = path_to_uri(file_path);
 
-        let mut servers = self.servers.lock().unwrap();
-        let managed = self.ensure_alive(&mut servers, &key)?;
+        if let Some(t) = text {
+            let mut open_guard = self.open_docs.lock().unwrap();
+            if let Some(docs_for_key) = open_guard.get_mut(&key) {
+                if let Some(doc) = docs_for_key.get_mut(&uri) {
+                    doc.text = t.to_string();
+                }
+            }
+        }
+
+        let server = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+            managed.last_activity = self.clock.now();
+            Arc::clone(&managed.server)
+        };
         let mut params = json!({
             "textDocument": { "uri": &uri }
         });
         if let Some(t) = text {
             params["text"] = json!(t);
         }
-        managed.server.notify("textDocument/didSave", &params)?;
-        if let Some(doc) = managed.open_docs.get_mut(&uri) {
-            if let Some(t) = text {
-                doc.text = t.to_string();
-            }
-        }
+        server.notify("textDocument/didSave", &params)?;
         Ok(())
     }
 
@@ -412,21 +485,37 @@ impl Registry {
         let key = ServerKey { lang, root };
         let uri = path_to_uri(file_path);
 
-        let mut servers = self.servers.lock().unwrap();
-        if let Some(managed) = servers.get_mut(&key) {
-            managed.last_activity = self.clock.now();
-            if managed.server.is_alive() {
-                let _ = managed.server.notify(
-                    "textDocument/didClose",
-                    &json!({ "textDocument": { "uri": &uri } }),
-                );
+        {
+            let mut open_guard = self.open_docs.lock().unwrap();
+            if let Some(docs_for_key) = open_guard.get_mut(&key) {
+                docs_for_key.remove(&uri);
             }
-            managed.open_docs.remove(&uri);
+        }
+
+        let server_opt = {
+            let mut servers = self.servers.lock().unwrap();
+            if let Some(managed) = servers.get_mut(&key) {
+                managed.last_activity = self.clock.now();
+                if managed.server.is_alive() {
+                    Some(Arc::clone(&managed.server))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        if let Some(server) = server_opt {
+            let _ = server.notify(
+                "textDocument/didClose",
+                &json!({ "textDocument": { "uri": &uri } }),
+            );
         }
         Ok(())
     }
 
     /// Send an LSP request to the server for a given file.
+    /// Automatically wakes the server if it has stopped or was killed by idle timeout.
     pub fn request(
         &self,
         file_path: &Path,
@@ -438,9 +527,25 @@ impl Registry {
         let root = Self::find_root(file_path, lang, workspace_root);
         let key = ServerKey { lang, root };
 
-        let mut servers = self.servers.lock().unwrap();
-        let managed = self.ensure_alive(&mut servers, &key)?;
-        managed.server.request(method, params)
+        let server = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+            managed.last_activity = self.clock.now();
+            managed.server.clone()
+        };
+
+        let res = server.request(method, params);
+        if let Err(ServerError::ServerDied) = res {
+            let server = {
+                let mut servers = self.servers.lock().unwrap();
+                let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+                managed.last_activity = self.clock.now();
+                managed.server.clone()
+            };
+            server.request(method, params)
+        } else {
+            res
+        }
     }
 
     /// Respond to a server-initiated request (e.g. workspace/applyEdit).
@@ -455,31 +560,44 @@ impl Registry {
             lang,
             root: root.to_path_buf(),
         };
-        let servers = self.servers.lock().unwrap();
-        if let Some(managed) = servers.get(&key) {
-            managed.server.respond(id, result)
-        } else {
-            Err(ServerError::ServerDied)
-        }
+        let server = {
+            let servers = self.servers.lock().unwrap();
+            if let Some(managed) = servers.get(&key) {
+                Arc::clone(&managed.server)
+            } else {
+                return Err(ServerError::ServerDied);
+            }
+        };
+        server.respond(id, result)
     }
 
     /// Respond to a server-initiated applyEdit request.
     pub fn respond_apply_edit(&self, id: &Value, applied: bool) -> Result<(), ServerError> {
         let result = json!({ "applied": applied });
         let key_opt = self.pending_apply_edits.lock().unwrap().remove(&id.to_string());
-        let servers = self.servers.lock().unwrap();
-        if let Some(key) = key_opt {
-            if let Some(managed) = servers.get(&key) {
-                return managed.server.respond(id, &result);
+        let (server_for_key, fallback_servers) = {
+            let servers = self.servers.lock().unwrap();
+            let matched = key_opt.as_ref().and_then(|key| servers.get(key)).map(|m| Arc::clone(&m.server));
+            if matched.is_some() {
+                (matched, Vec::new())
+            } else {
+                let fallbacks = servers
+                    .values()
+                    .filter(|m| m.server.is_alive())
+                    .map(|m| Arc::clone(&m.server))
+                    .collect::<Vec<_>>();
+                (None, fallbacks)
             }
+        };
+
+        if let Some(server) = server_for_key {
+            return server.respond(id, &result);
         }
-        // Fallback: send to any alive server
+
         let mut sent = false;
-        for (_, managed) in servers.iter() {
-            if managed.server.is_alive() {
-                let _ = managed.server.respond(id, &result);
-                sent = true;
-            }
+        for server in fallback_servers {
+            let _ = server.respond(id, &result);
+            sent = true;
         }
         if sent {
             Ok(())
@@ -529,6 +647,7 @@ impl Registry {
                 },
             );
         }
+        self.open_docs.lock().unwrap().clear();
     }
 
     /// Restart running servers for a specific language, or all running servers if `lang` is None.
@@ -536,11 +655,18 @@ impl Registry {
     pub fn restart(&self, lang: Option<Lang>) -> Result<(), ServerError> {
         let target_keys: Vec<ServerKey> = {
             let servers = self.servers.lock().unwrap();
-            servers
+            let open_guard = self.open_docs.lock().unwrap();
+            let mut keys: std::collections::HashSet<ServerKey> = servers
                 .keys()
                 .filter(|k| lang.map_or(true, |l| k.lang == l))
                 .cloned()
-                .collect()
+                .collect();
+            for (k, docs) in open_guard.iter() {
+                if !docs.is_empty() && lang.map_or(true, |l| k.lang == l) {
+                    keys.insert(k.clone());
+                }
+            }
+            keys.into_iter().collect()
         };
 
         for key in target_keys {
@@ -550,7 +676,6 @@ impl Registry {
             };
 
             if let Some(old) = old_opt {
-                let docs: Vec<OpenDoc> = old.open_docs.values().cloned().collect();
                 old.server.kill();
                 (self.event_callback)(
                     key.lang,
@@ -560,28 +685,35 @@ impl Registry {
                         reason: None,
                     },
                 );
+            }
 
-                match self.start_server(key.lang, &key.root) {
-                    Ok(mut fresh) => {
-                        for doc in docs {
-                            let _ = fresh
-                                .server
-                                .notify("textDocument/didOpen", &did_open_params(&doc));
-                            fresh.open_docs.insert(doc.uri.clone(), doc);
-                        }
-                        let mut servers = self.servers.lock().unwrap();
-                        servers.insert(key, fresh);
+            let docs: Vec<OpenDoc> = {
+                let open_guard = self.open_docs.lock().unwrap();
+                open_guard
+                    .get(&key)
+                    .map(|map| map.values().cloned().collect())
+                    .unwrap_or_default()
+            };
+
+            match self.start_server(key.lang, &key.root) {
+                Ok(fresh) => {
+                    for doc in docs {
+                        let _ = fresh
+                            .server
+                            .notify("textDocument/didOpen", &did_open_params(&doc));
                     }
-                    Err(e) => {
-                        (self.event_callback)(
-                            key.lang,
-                            key.root,
-                            ServerEvent::Status {
-                                state: "crashed".into(),
-                                reason: Some(format!("failed to restart: {}", e)),
-                            },
-                        );
-                    }
+                    let mut servers = self.servers.lock().unwrap();
+                    servers.insert(key, fresh);
+                }
+                Err(e) => {
+                    (self.event_callback)(
+                        key.lang,
+                        key.root,
+                        ServerEvent::Status {
+                            state: "crashed".into(),
+                            reason: Some(format!("failed to restart: {}", e)),
+                        },
+                    );
                 }
             }
         }
@@ -592,6 +724,16 @@ impl Registry {
     /// How many servers are currently running.
     pub fn server_count(&self) -> usize {
         self.servers.lock().unwrap().len()
+    }
+
+    /// Count tracked open documents, optionally filtered by language.
+    pub fn open_docs_count(&self, lang: Option<Lang>) -> usize {
+        let open_guard = self.open_docs.lock().unwrap();
+        open_guard
+            .iter()
+            .filter(|(k, _)| lang.map_or(true, |l| k.lang == l))
+            .map(|(_, docs)| docs.len())
+            .sum()
     }
 
     fn start_server(&self, lang: Lang, root: &Path) -> Result<ManagedServer, ServerError> {
@@ -685,9 +827,8 @@ impl Registry {
         );
 
         Ok(ManagedServer {
-            server,
+            server: Arc::new(server),
             last_activity: self.clock.now(),
-            open_docs: HashMap::new(),
         })
     }
 }

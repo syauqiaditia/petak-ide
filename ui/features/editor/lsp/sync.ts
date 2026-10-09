@@ -49,7 +49,7 @@ export function onTabClose(path: string) {
   });
 }
 
-export function flushPending(path: string) {
+export async function flushPending(path: string): Promise<void> {
   const tracked = trackedDocs.get(path);
   if (!tracked) return;
 
@@ -77,15 +77,17 @@ export function flushPending(path: string) {
 
   if (changes.length > 0) {
     tracked.version++;
-    api.lsp.didChange(path, tracked.version, changes).catch((err) => {
+    try {
+      await api.lsp.didChange(path, tracked.version, changes);
+    } catch (err) {
       console.error('LSP didChange error:', path, err);
-    });
+    }
   }
 }
 
 /**
  * CodeMirror 6 extension that listens to document updates, accumulates changes,
- * debounces ~50ms, and sends incremental didChange notifications to the LSP server.
+ * debounces ~15ms, and sends incremental didChange notifications to the LSP server.
  */
 export function createLspSyncExtension(getPath: () => string | null): Extension {
   return EditorView.updateListener.of((update: ViewUpdate) => {
@@ -117,6 +119,6 @@ export function createLspSyncExtension(getPath: () => string | null): Extension 
 
     tracked.debounceTimer = setTimeout(() => {
       flushPending(path);
-    }, 50);
+    }, 15);
   });
 }

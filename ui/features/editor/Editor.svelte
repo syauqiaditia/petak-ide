@@ -7,6 +7,7 @@
     highlightActiveLineGutter,
     drawSelection,
     keymap,
+    closeHoverTooltips,
     Decoration,
     type DecorationSet,
     gutter,
@@ -14,6 +15,7 @@
   } from '@codemirror/view';
   import { EditorState, StateEffect, StateField, Compartment } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+  import { bracketMatching, indentUnit } from '@codemirror/language';
   import { vim } from '@replit/codemirror-vim';
   import { filenameFacet, treeSitterPlugin, highlightTheme } from './ts/highlight';
   import { tabsManager, type TabItem } from './tabs.svelte';
@@ -28,8 +30,9 @@
     setDiagnosticsEditorView,
   } from './lsp/diagnostics.svelte';
   import { createLspAutocompleteExtension } from './lsp/completion';
-  import { createEditorKeymapExtension } from './keymap';
+  import { createEditorKeymapExtension, toggleCommentForView } from './keymap';
   import { createGhostTextExtension, clearGhostTextEffect } from './ghostText';
+  import { ghostDiffExtension } from './ghostDiff';
   import { editorSettings } from './editorSettings.svelte';
   import { createLspHoverExtension } from './lsp/hover';
   import { createLspNavExtension, goToDefinition, findUsages } from './lsp/nav.svelte';
@@ -67,6 +70,17 @@
   import DiffView from '../git/DiffView.svelte';
   import { createCodeFoldingExtension, saveFileFoldState, restoreFileFoldState } from './folding';
   import FindReplaceBar from './FindReplaceBar.svelte';
+  import { getSearchQueryFromSelection, searchHighlightField } from './searchLogic';
+  import { darculaTheme } from './themeDarcula';
+  import {
+    createVcsGutterExtension,
+    createInlineBlameExtension,
+    setVcsChangesEffect,
+    setBlameLinesEffect,
+    computeVcsLineChanges,
+  } from './vcsGutter';
+  import { createIndentGuidesExtension } from './indentGuides';
+  import NavUsagesPopup from './NavUsagesPopup.svelte';
   import ImagePreview from './ImagePreview.svelte';
   import { isImageFile } from './imageUtils';
 
@@ -97,13 +111,17 @@
   }>();
 
   let container: HTMLDivElement;
-  let view: EditorView | null = null;
+  let view = $state.raw<EditorView | null>(null);
   let currentSwappedPath: string | null = null;
   let unlistenDiagnostics: UnlistenFn | null = null;
   let unlistenApplyEdit: UnlistenFn | null = null;
+  let onScrollHandler: (() => void) | null = null;
 
   let findReplaceOpen = $state(false);
   let findReplaceMode = $state<'find' | 'replace'>('find');
+  let findReplaceInitialQuery = $state('');
+  let findReplaceRef = $state<any>(null);
+  let editorDocVersion = $state(0);
 
   let isCenterDiffActive = $state(false);
 
@@ -130,24 +148,13 @@
     }
   });
 
-  // Ensure CodeMirror view is always attached to container, measured, and not blank
+  // Ensure CodeMirror view is always attached to container and measured
   $effect(() => {
     if (!isCenterDiffActive && view && container) {
       if (view.dom.parentElement !== container) {
         container.replaceChildren(view.dom);
+        view.requestMeasure();
       }
-      const active = tabsManager.activeTab;
-      if (active && !isImageFile(active.path)) {
-        if (!active.state || (active.state.doc.length === 0 && active.savedContent.length > 0)) {
-          active.state = createEditorState(active.savedContent, active.name, active.path);
-        }
-        if (view.state !== active.state || (view.state.doc.length === 0 && active.savedContent.length > 0)) {
-          view.setState(active.state);
-        }
-        restoreFileFoldState(active.path, view);
-      }
-      view.requestMeasure();
-      view.focus();
     }
   });
 
@@ -174,7 +181,20 @@
         borderLeftWidth: '2px',
       },
       '&.cm-focused .cm-selectionBackground, ::selection': {
-        backgroundColor: '#1f2a3d',
+        backgroundColor: '#214283 !important',
+      },
+      '.cm-selectionBackground': {
+        backgroundColor: '#214283 !important',
+      },
+      '.cm-search-match': {
+        backgroundColor: '#2d5e38',
+        borderRadius: '2px',
+      },
+      '.cm-search-match-active': {
+        backgroundColor: '#387c3a',
+        outline: '1.5px solid #ffffff',
+        borderRadius: '2px',
+        zIndex: '2',
       },
       '.cm-gutters': {
         backgroundColor: '#1a1b1f',
@@ -585,16 +605,26 @@
         highlightActiveLineGutter(),
         highlightActiveLine(),
         drawSelection(),
+        bracketMatching(),
+        indentUnit.of('  '),
         history(),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
           {
+            key: 'Mod-/',
+            run: (v) => toggleCommentForView(v),
+          },
+          {
             key: 'Mod-F8',
             run: (v) => toggleBreakpointAtCursor(v, () => currentSwappedPath),
           },
         ]),
-        petakTheme,
+        darculaTheme,
+        searchHighlightField,
+        createVcsGutterExtension(),
+        createInlineBlameExtension(),
+        createIndentGuidesExtension(),
         highlightTheme,
         filenameFacet.of(filename),
         treeSitterPlugin,
@@ -602,22 +632,28 @@
         lintGutter(),
         lintTheme,
         createCodeFoldingExtension(),
-        createLspSyncExtension(() => currentSwappedPath),
-        createLspAutocompleteExtension(() => currentSwappedPath),
-        createLspHoverExtension(() => currentSwappedPath),
-        createLspNavExtension(() => currentSwappedPath, gotoLine),
+        createLspSyncExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null),
+        createLspAutocompleteExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null),
+        createLspHoverExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null),
+        createLspNavExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null, gotoLine),
         createGhostTextExtension({
-          getPath: () => currentSwappedPath,
+          getPath: () => tabsManager.activePath || currentSwappedPath || filePath || null,
           isEnabled: () => editorSettings.ghostText,
         }),
+        ghostDiffExtension(),
         EditorView.updateListener.of((update) => {
           const active = tabsManager.activeTab;
           if (active && active.path === currentSwappedPath) {
             active.state = update.state;
             if (update.docChanged) {
+              editorDocVersion++;
               const currentText = update.state.doc.toString();
               const isDirty = currentText !== active.savedContent;
               tabsManager.markDirty(active.path, isDirty);
+              const vcsMap = computeVcsLineChanges(active.savedContent, currentText);
+              queueMicrotask(() => {
+                view?.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+              });
             }
           }
           if (update.selectionSet || update.docChanged) {
@@ -642,7 +678,11 @@
     view?.focus();
   }
 
-  export function gotoLine(line: number, col: number = 1) {
+  export function deactivateCenterDiff() {
+    isCenterDiffActive = false;
+  }
+
+  export function gotoLine(line: number, col: number = 1, options?: { center?: boolean }) {
     if (!view) return;
     const doc = view.state.doc;
     const lineNum = Math.max(1, Math.min(line, doc.lines));
@@ -652,14 +692,19 @@
     view.dispatch({
       selection: { anchor: pos, head: pos },
       scrollIntoView: true,
-      effects: [setFlashLine.of(lineNum)],
+      effects: [
+        EditorView.scrollIntoView(pos, { y: 'center' }),
+        setFlashLine.of(lineNum),
+      ],
     });
     view.focus();
     setTimeout(() => {
       view?.dispatch({
         effects: [setFlashLine.of(null)],
       });
-    }, 1200);
+      // Center line in viewport
+      view?.dom?.querySelector('.cm-activeLine')?.scrollIntoView({ block: 'center' });
+    }, 50);
   }
 
   export async function handleSave() {
@@ -838,7 +883,23 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
+    const target = e.target as HTMLElement | null;
+    const isInsideEditor = !!target?.closest('.cm-editor');
+    if (!isInsideEditor && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target && target.isContentEditable))) {
+      return;
+    }
+
+    if (view && isInsideEditor && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1) {
+      view.dispatch({ effects: closeHoverTooltips });
+    }
+
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === '/' || e.code === 'Slash')) {
+      if (view) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleCommentForView(view);
+      }
+    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'l') {
       e.preventDefault();
       e.stopPropagation();
       sendSelectionToAgent();
@@ -880,12 +941,48 @@
       e.preventDefault();
       e.stopPropagation();
       findReplaceMode = 'find';
+      if (view) {
+        const { from, to } = view.state.selection.main;
+        if (from !== to) {
+          const selText = view.state.sliceDoc(from, to);
+          findReplaceInitialQuery = getSearchQueryFromSelection(selText);
+        } else {
+          findReplaceInitialQuery = '';
+        }
+      }
       findReplaceOpen = true;
+      if (currentSwappedPath) {
+        const curTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
+        if (curTab) curTab.findOpen = true;
+      }
     } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === 'r' || e.code === 'KeyR')) {
       e.preventDefault();
       e.stopPropagation();
       findReplaceMode = 'replace';
+      if (view) {
+        const { from, to } = view.state.selection.main;
+        if (from !== to) {
+          const selText = view.state.sliceDoc(from, to);
+          findReplaceInitialQuery = getSearchQueryFromSelection(selText);
+        } else {
+          findReplaceInitialQuery = '';
+        }
+      }
       findReplaceOpen = true;
+      if (currentSwappedPath) {
+        const curTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
+        if (curTab) curTab.findOpen = true;
+      }
+    } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key.toLowerCase() === 'g' || e.code === 'KeyG')) {
+      if (findReplaceOpen && findReplaceRef) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) {
+          findReplaceRef.prev();
+        } else {
+          findReplaceRef.next();
+        }
+      }
     }
   }
 
@@ -893,13 +990,15 @@
     window.addEventListener('keydown', onKeydown, true);
 
     const active = tabsManager.activeTab;
+    if (active) {
+      currentSwappedPath = active.path;
+    }
     const initialState = active
       ? createEditorState(active.savedContent, active.name, active.path)
       : createEditorState('', 'Untitled');
 
     if (active) {
       active.state = initialState;
-      currentSwappedPath = active.path;
       onTabOpen(active.path, active.savedContent);
     }
 
@@ -907,9 +1006,21 @@
       state: initialState,
       parent: container,
     });
+    editorDocVersion++;
+
+    onScrollHandler = () => {
+      if (currentSwappedPath && view) {
+        tabsManager.saveViewState(currentSwappedPath, {
+          scrollTop: view.scrollDOM.scrollTop,
+          scrollLeft: view.scrollDOM.scrollLeft,
+        });
+      }
+    };
+    view.scrollDOM.addEventListener('scroll', onScrollHandler, { passive: true });
 
     if (typeof window !== 'undefined') {
       (window as any).__PETAK_EDITOR_VIEW__ = view;
+      (window as any).__PETAK_GOTO_LINE__ = gotoLine;
     }
 
     if (active) {
@@ -956,6 +1067,9 @@
   });
 
   onDestroy(() => {
+    if (typeof window !== 'undefined' && (window as any).__PETAK_GOTO_LINE__ === gotoLine) {
+      delete (window as any).__PETAK_GOTO_LINE__;
+    }
     window.removeEventListener('keydown', onKeydown, true);
     if (unlistenDiagnostics) {
       unlistenDiagnostics();
@@ -966,6 +1080,10 @@
       unlistenApplyEdit = null;
     }
     if (view) {
+      if (onScrollHandler) {
+        view.scrollDOM.removeEventListener('scroll', onScrollHandler);
+        onScrollHandler = null;
+      }
       view.destroy();
       view = null;
     }
@@ -993,18 +1111,70 @@
         const prevTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
         if (prevTab && view && view.state.doc.length > 0) {
           prevTab.state = view.state;
+          tabsManager.saveViewState(currentSwappedPath, {
+            scrollTop: view.scrollDOM.scrollTop,
+            scrollLeft: view.scrollDOM.scrollLeft,
+            cursorHead: view.state.selection.main.head,
+            cursorAnchor: view.state.selection.main.anchor,
+          });
+        }
+        if (prevTab) {
+          prevTab.findOpen = findReplaceOpen;
+          prevTab.findQuery = (findReplaceRef && typeof findReplaceRef.getQuery === 'function')
+            ? findReplaceRef.getQuery()
+            : findReplaceInitialQuery;
+          prevTab.findMode = findReplaceMode;
         }
       }
 
       currentSwappedPath = activePath;
 
       if (active && !isImageFile(active.path)) {
+        findReplaceOpen = active.findOpen ?? false;
+        findReplaceInitialQuery = active.findQuery ?? '';
+        findReplaceMode = active.findMode ?? 'find';
+
         if (!active.state || (active.state.doc.length === 0 && active.savedContent.length > 0)) {
           active.state = createEditorState(active.savedContent, active.name, active.path);
         }
         view.setState(active.state);
+        editorDocVersion++;
         restoreFileFoldState(active.path, view);
-        view.focus();
+
+        // Restore scroll and cursor position
+        const savedView = tabsManager.getViewState(active.path);
+        if (savedView) {
+          if (savedView.cursorHead !== undefined) {
+            view.dispatch({
+              selection: {
+                anchor: savedView.cursorAnchor ?? savedView.cursorHead,
+                head: savedView.cursorHead,
+              },
+            });
+          }
+          if (savedView.scrollTop !== undefined || savedView.scrollLeft !== undefined) {
+            const top = savedView.scrollTop ?? 0;
+            const left = savedView.scrollLeft ?? 0;
+            view.scrollDOM.scrollTop = top;
+            view.scrollDOM.scrollLeft = left;
+            requestAnimationFrame(() => {
+              if (view) {
+                view.scrollDOM.scrollTop = top;
+                view.scrollDOM.scrollLeft = left;
+              }
+            });
+          }
+        }
+
+        // Compute VCS gutter markers
+        const vcsMap = computeVcsLineChanges(active.savedContent, active.state.doc.toString());
+        view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+
+        if (!findReplaceOpen) {
+          view.focus();
+        } else {
+          findReplaceRef?.focus();
+        }
 
         onTabOpen(active.path, active.savedContent);
         applyStoredDiagnosticsToView(view, active.path);
@@ -1017,14 +1187,31 @@
               const map = new Map<number, GitBlameLine>();
               for (const l of lines) map.set(l.line, l);
               view?.dispatch({
-                effects: blameCompartment.reconfigure(makeBlameGutter(map)),
+                effects: [
+                  blameCompartment.reconfigure(makeBlameGutter(map)),
+                  setBlameLinesEffect.of(map),
+                ],
               });
             })
             .catch(() => {
               view?.dispatch({
-                effects: blameCompartment.reconfigure([]),
+                effects: [
+                  blameCompartment.reconfigure([]),
+                  setBlameLinesEffect.of(new Map()),
+                ],
               });
             });
+        } else if (folderPath) {
+          // Inline blame still fetches in background
+          const rel = getRelativePath(active.path, folderPath);
+          api
+            .gitBlame(folderPath, rel)
+            .then((lines) => {
+              const map = new Map<number, GitBlameLine>();
+              for (const l of lines) map.set(l.line, l);
+              view?.dispatch({ effects: setBlameLinesEffect.of(map) });
+            })
+            .catch(() => {});
         }
 
         const head = active.state.selection.main.head;
@@ -1182,14 +1369,23 @@
     ></div>
 
     <FindReplaceBar
+      bind:this={findReplaceRef}
       {view}
+      docVersion={editorDocVersion}
       isOpen={findReplaceOpen}
       mode={findReplaceMode}
+      initialQuery={findReplaceInitialQuery}
       onClose={() => {
         findReplaceOpen = false;
+        if (currentSwappedPath) {
+          const curTab = tabsManager.tabs.find((t) => t.path === currentSwappedPath);
+          if (curTab) curTab.findOpen = false;
+        }
         view?.focus();
       }}
     />
+
+    <NavUsagesPopup gotoLineFn={gotoLine} />
 
     {#if renameStore.visible}
       <div
@@ -1327,6 +1523,163 @@
 </div>
 
 <style>
+  :global(.cm-vcs-gutter) {
+    width: 4px !important;
+    background-color: transparent !important;
+    margin-right: 2px !important;
+  }
+  :global(.cm-vcs-marker) {
+    width: 3px !important;
+    height: 100% !important;
+    border-radius: 1px !important;
+  }
+  :global(.cm-vcs-added) {
+    background-color: #499c54 !important;
+  }
+  :global(.cm-vcs-modified) {
+    background-color: #3882f6 !important;
+  }
+  :global(.cm-vcs-deleted) {
+    background-color: #e55353 !important;
+  }
+  :global(.cm-inline-blame) {
+    color: #6e7681 !important;
+    font-size: 11px !important;
+    font-style: italic !important;
+    padding-left: 24px !important;
+    opacity: 0.75 !important;
+    pointer-events: none !important;
+    user-select: none !important;
+  }
+  :global(.cm-tooltip) {
+    z-index: 9999 !important;
+  }
+  :global(.cm-tooltip-autocomplete),
+  :global(.cm-tooltip.cm-tooltip-autocomplete) {
+    z-index: 9999 !important;
+    pointer-events: auto !important;
+  }
+  :global(.cm-tooltip.cm-tooltip-hover) {
+    background-color: #1e1f22 !important;
+    border: 1px solid #383a42 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+    z-index: 9999 !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+  :global(.cm-tooltip-hover) {
+    background-color: #1e1f22 !important;
+    min-width: 280px !important;
+    width: max-content !important;
+    max-width: min(640px, calc(100vw - 64px)) !important;
+    max-height: 280px !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    color: #d4d6dc !important;
+    font-size: 12px !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #3c3f4a transparent !important;
+    box-sizing: border-box !important;
+    pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+  :global(.cm-tooltip.cm-tooltip-hover .cm-lsp-hover-tooltip),
+  :global(.cm-lsp-hover-tooltip) {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    background-color: #1e1f22 !important;
+    padding: 0 !important;
+    color: #d4d6dc !important;
+    font-size: 12px !important;
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
+    box-sizing: border-box !important;
+  }
+  :global(.cm-line.cm-indent-guide-1) {
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0 !important;
+    background-size: 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-2) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0 !important;
+    background-size: 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-3) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-4) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-5) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-6) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0, 12ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-7) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0, 12ch 0, 14ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
+  :global(.cm-line.cm-indent-guide-8) {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+      linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px) !important;
+    background-position: 2ch 0, 4ch 0, 6ch 0, 8ch 0, 10ch 0, 12ch 0, 14ch 0, 16ch 0 !important;
+    background-size: 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100%, 1px 100% !important;
+    background-repeat: no-repeat !important;
+  }
   :global(.cm-breakpoint-gutter) {
     width: 20px !important;
     cursor: pointer !important;
@@ -1622,9 +1975,10 @@
     color: #8b8f98;
   }
   .editor-container {
+    position: relative;
     flex: 1;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
   }
@@ -1634,6 +1988,7 @@
   :global(.editor-container .cm-editor) {
     height: 100%;
     outline: none;
+    overflow: visible;
   }
   .empty-editor-overlay {
     flex: 1;

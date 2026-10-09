@@ -360,7 +360,10 @@ export function createSnippetCompletionSource(getPath: () => string | null): Com
     if (!word && !context.explicit) return null;
 
     const from = word ? word.from : context.pos;
-    const options = getSnippetCompletionsForLanguage(lang);
+    const options = getSnippetCompletionsForLanguage(lang).map((opt) => ({
+      ...opt,
+      boost: -99,
+    }));
 
     return {
       from,

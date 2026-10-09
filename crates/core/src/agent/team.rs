@@ -35,7 +35,10 @@ pub fn load_team(project_root: Option<&Path>) -> (TeamConfig, PathBuf) {
         let p_path = project_team_path(root);
         if p_path.is_file() {
             if let Ok(content) = std::fs::read_to_string(&p_path) {
-                if let Ok(cfg) = serde_json::from_str::<TeamConfig>(&content) {
+                if let Ok(mut cfg) = serde_json::from_str::<TeamConfig>(&content) {
+                    for slot in &mut cfg.slots {
+                        slot.normalize();
+                    }
                     return (cfg, p_path);
                 }
             }
@@ -45,7 +48,10 @@ pub fn load_team(project_root: Option<&Path>) -> (TeamConfig, PathBuf) {
     if let Some(g_path) = global_team_path() {
         if g_path.is_file() {
             if let Ok(content) = std::fs::read_to_string(&g_path) {
-                if let Ok(cfg) = serde_json::from_str::<TeamConfig>(&content) {
+                if let Ok(mut cfg) = serde_json::from_str::<TeamConfig>(&content) {
+                    for slot in &mut cfg.slots {
+                        slot.normalize();
+                    }
                     return (cfg, g_path);
                 }
             }
@@ -80,7 +86,12 @@ pub fn save_team_to_path(path: &Path, team: &TeamConfig) -> Result<(), String> {
             .map_err(|e| format!("Failed to create directory {parent:?}: {e}"))?;
     }
 
-    let json = serde_json::to_string_pretty(team)
+    let mut team_to_save = team.clone();
+    for slot in &mut team_to_save.slots {
+        slot.normalize();
+    }
+
+    let json = serde_json::to_string_pretty(&team_to_save)
         .map_err(|e| format!("Failed to serialize team config: {e}"))?;
 
     crate::fs::save_file(path, &json)
@@ -108,12 +119,15 @@ mod tests {
             id: "s1".to_string(),
             label: "Techlead".to_string(),
             kind: "claude-code".to_string(),
+            engine: Some("claude-code".to_string()),
             command: None,
             hermes_profile: None,
             model: Some("opus".to_string()),
             fallback_model: Some("sonnet".to_string()),
             permission: "ask".to_string(),
             cwd: "project".to_string(),
+            role: None,
+            custom_whitelist: None,
         };
 
         let team = TeamConfig {
@@ -131,5 +145,97 @@ mod tests {
         assert_eq!(reloaded.version, 1);
         assert_eq!(reloaded.slots.len(), 1);
         assert_eq!(reloaded.slots[0], slot);
+    }
+
+    #[test]
+    fn test_team_serialization_roundtrip_with_new_engine_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+
+        let s1 = SlotConfig {
+            id: "s-antigravity".to_string(),
+            label: "Senior Antigravity".to_string(),
+            kind: "antigravity".to_string(),
+            engine: Some("antigravity".to_string()),
+            command: None,
+            hermes_profile: None,
+            model: Some("ag/gemini-3.8-flash-high".to_string()),
+            fallback_model: None,
+            permission: "ask".to_string(),
+            cwd: "project".to_string(),
+            role: Some("senior".to_string()),
+            custom_whitelist: None,
+        };
+
+        let s2 = SlotConfig {
+            id: "s-claude".to_string(),
+            label: "Reviewer Claude".to_string(),
+            kind: "claude-code".to_string(),
+            engine: Some("claude-code".to_string()),
+            command: None,
+            hermes_profile: None,
+            model: Some("claude-3-7-sonnet".to_string()),
+            fallback_model: None,
+            permission: "auto".to_string(),
+            cwd: "project".to_string(),
+            role: Some("reviewer".to_string()),
+            custom_whitelist: None,
+        };
+
+        let s3 = SlotConfig {
+            id: "s-openai".to_string(),
+            label: "Codex Agent".to_string(),
+            kind: "openai".to_string(),
+            engine: Some("openai".to_string()),
+            command: None,
+            hermes_profile: None,
+            model: Some("gpt-4o".to_string()),
+            fallback_model: None,
+            permission: "full".to_string(),
+            cwd: "project".to_string(),
+            role: Some("custom".to_string()),
+            custom_whitelist: Some(vec!["terminal".to_string()]),
+        };
+
+        let original_team = TeamConfig {
+            version: 1,
+            slots: vec![s1.clone(), s2.clone(), s3.clone()],
+            obsidian_vault_path: Some("/path/to/vault".to_string()),
+        };
+
+        let path = save_team(Some(root), &original_team).unwrap();
+        assert!(path.is_file());
+
+        let raw_json = std::fs::read_to_string(&path).unwrap();
+        assert!(raw_json.contains("\"engine\": \"antigravity\""));
+        assert!(raw_json.contains("\"engine\": \"claude-code\""));
+        assert!(raw_json.contains("\"engine\": \"openai\""));
+        assert!(raw_json.contains("\"model\": \"ag/gemini-3.8-flash-high\""));
+
+        let (loaded, _) = load_team(Some(root));
+        assert_eq!(loaded.slots.len(), 3);
+        assert_eq!(loaded.slots[0].engine(), "antigravity");
+        assert_eq!(loaded.slots[0].model.as_deref(), Some("ag/gemini-3.8-flash-high"));
+        assert_eq!(loaded.slots[1].engine(), "claude-code");
+        assert_eq!(loaded.slots[2].engine(), "openai");
+
+        // Backward compatibility: JSON with only `kind` populates `engine`
+        let legacy_json = r#"{
+            "version": 1,
+            "slots": [
+                {
+                    "id": "legacy",
+                    "label": "Legacy Bot",
+                    "kind": "antigravity",
+                    "model": "ag/gemini-3.8-flash-high"
+                }
+            ]
+        }"#;
+        let mut parsed: TeamConfig = serde_json::from_str(legacy_json).unwrap();
+        for slot in &mut parsed.slots {
+            slot.normalize();
+        }
+        assert_eq!(parsed.slots[0].engine(), "antigravity");
+        assert_eq!(parsed.slots[0].engine, Some("antigravity".to_string()));
     }
 }

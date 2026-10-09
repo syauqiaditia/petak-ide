@@ -39,9 +39,9 @@ test('git layout 1: App.svelte layout structure has bottom dock spanning workspa
   assert.ok(appFile.includes('.bottom-dock-container {'), 'Must have bottom-dock-container styles');
   assert.ok(appFile.includes('width: 100%;'), 'bottom-dock-container must span width: 100%');
 
-  // Verify bottom panel resize clamp logic enforces min 120px
-  assert.equal(MIN_BOTTOM_PANEL_HEIGHT, 120);
-  assert.equal(clampBottomPanelHeight(50, 1000), 120);
+  // Verify bottom panel resize clamp logic enforces min 140px
+  assert.equal(MIN_BOTTOM_PANEL_HEIGHT, 140);
+  assert.equal(clampBottomPanelHeight(50, 1000), 140);
   assert.equal(clampBottomPanelHeight(240, 1000), 240);
 });
 

@@ -3,8 +3,6 @@ import {
   autocompletion,
   snippet,
   startCompletion,
-  closeCompletion,
-  acceptCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
@@ -12,9 +10,9 @@ import {
 } from '@codemirror/autocomplete';
 import { EditorView, keymap } from '@codemirror/view';
 import { api, type LspCompletionItem } from '../../../lib/api';
-import { isLspSupported } from './sync';
+import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos } from './pos';
-import { createSnippetCompletionSource } from '../snippets';
+import { getSnippetCompletionsForLanguage, getLangForFilename } from '../snippets';
 import { applyTextEditsToView } from './applyEdit';
 import { renderMarkdownToDom } from './markdown';
 
@@ -70,6 +68,17 @@ function getKindInfo(kind?: number): { typeName: string; letter: string } {
   }
 }
 
+import {
+  detectIsAfterDot,
+  getKeywordOptions,
+  getSnippetOptions,
+} from './completionLogic.ts';
+export {
+  detectIsAfterDot,
+  getKeywordOptions,
+  getSnippetOptions,
+};
+
 /**
  * Format markdown documentation for CodeMirror completion info popover.
  */
@@ -87,7 +96,7 @@ function renderDocContent(doc: string | { kind?: string; value: string } | any):
 }
 
 /**
- * CompletionSource calling the LSP server with debouncing / stale check.
+ * Clean, robust completion source using standard CodeMirror 6 patterns.
  */
 export function createLspCompletionSource(getPath: () => string | null): CompletionSource {
   return async (context: CompletionContext): Promise<CompletionResult | null> => {
@@ -105,26 +114,33 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
     }
 
     const from = word ? word.from : context.pos;
+    const prefix = word ? word.text.toLowerCase() : '';
     const lspPos = offsetToLspPos(context.state.doc, context.pos);
 
-    let docAborted = false;
-    context.addEventListener('abort', () => {
-      docAborted = true;
-    }, { onDocChange: true });
+    const charBeforePos = word ? word.from - 1 : context.pos - 1;
+    const charBefore = charBeforePos >= 0 ? context.state.sliceDoc(charBeforePos, charBeforePos + 1) : '';
+    const isAfterDot = charBefore === '.';
+    const triggerKind = isAfterDot ? 2 : (context.explicit ? 1 : 1);
+    const triggerCharacter = isAfterDot ? '.' : undefined;
 
+    const keywords = getKeywordsForPath(path);
+    const keywordOptions = getKeywordOptions(keywords, prefix, isAfterDot);
+
+    const lang = getLangForFilename(path);
+    const allSnippets = lang ? getSnippetCompletionsForLanguage(lang) : [];
+    const snippetOptions = getSnippetOptions(allSnippets, prefix, isAfterDot);
+
+    let lspOptions: Completion[] = [];
     try {
-      const response = await api.lsp.completion(path, lspPos.line, lspPos.character);
-      if (context.aborted || docAborted) return null;
-
+      await flushPending(path);
+      const response = await api.lsp.completion(path, lspPos.line, lspPos.character, triggerKind, triggerCharacter);
       const rawItems: LspCompletionItem[] = Array.isArray(response)
         ? response
         : response && Array.isArray((response as any).items)
         ? (response as any).items
         : [];
 
-      if (rawItems.length === 0) return null;
-
-      const options: Completion[] = rawItems.map((item) => {
+      lspOptions = rawItems.map((item) => {
         const { typeName, letter } = getKindInfo(item.kind);
 
         const completion: Completion & { _kindLetter?: string } = {
@@ -179,17 +195,76 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
 
         return completion;
       });
-
-      return {
-        from,
-        options,
-        validFor: /^[\w$]*$/,
-      };
-    } catch (e) {
-      console.error('LSP completion error:', e);
+    } catch (_) {
+      const fallbackOptions = [...snippetOptions, ...keywordOptions];
+      if (fallbackOptions.length > 0) {
+        return {
+          from,
+          options: fallbackOptions,
+          validFor: /^[\w$]*$/,
+        };
+      }
       return null;
     }
+
+    const lspLabels = new Set(lspOptions.map((o) => o.label));
+    const filteredKeywords = keywordOptions.filter((kw) => !lspLabels.has(kw.label));
+    const filteredSnippets = snippetOptions.filter((s) => !lspLabels.has(s.label));
+    const combinedOptions = [...filteredSnippets, ...filteredKeywords, ...lspOptions];
+
+    if (combinedOptions.length === 0) {
+      const fallbackOptions = [...snippetOptions, ...keywordOptions];
+      if (fallbackOptions.length > 0) {
+        return {
+          from,
+          options: fallbackOptions,
+          validFor: /^[\w$]*$/,
+        };
+      }
+      return null;
+    }
+
+    return {
+      from,
+      options: combinedOptions,
+      validFor: /^[\w$]*$/,
+    };
   };
+}
+
+const DART_KEYWORDS = [
+  'await', 'async', 'yield', 'class', 'extension', 'enum', 'mixin',
+  'final', 'var', 'const', 'return', 'if', 'else', 'switch', 'case', 'default',
+  'try', 'catch', 'finally', 'throw', 'rethrow', 'void', 'dynamic', 'bool',
+  'int', 'double', 'String', 'List', 'Map', 'Set', 'Future', 'Stream',
+  'Widget', 'BuildContext', 'State', 'StatelessWidget', 'StatefulWidget',
+  'true', 'false', 'null', 'import', 'export', 'part', 'library', 'as',
+  'show', 'hide', 'is', 'new', 'this', 'super', 'static', 'abstract',
+  'implements', 'with', 'extends', 'override', 'required', 'late', 'factory',
+  'get', 'set',
+];
+
+const KOTLIN_KEYWORDS = [
+  'fun', 'val', 'var', 'class', 'data', 'sealed', 'interface', 'object',
+  'override', 'suspend', 'private', 'public', 'protected', 'internal',
+  'companion', 'init', 'constructor', 'return', 'if', 'else', 'when',
+  'for', 'while', 'try', 'catch', 'finally', 'throw', 'null', 'true', 'false',
+  'import', 'package', 'this', 'super',
+];
+
+const SWIFT_KEYWORDS = [
+  'func', 'let', 'var', 'class', 'struct', 'enum', 'protocol', 'extension',
+  'override', 'private', 'public', 'open', 'fileprivate', 'internal',
+  'init', 'return', 'if', 'else', 'switch', 'case', 'default', 'for',
+  'while', 'try', 'catch', 'throw', 'nil', 'true', 'false', 'import',
+  'self', 'super', 'guard', 'defer',
+];
+
+function getKeywordsForPath(path: string): string[] {
+  if (/\.dart$/.test(path)) return DART_KEYWORDS;
+  if (/\.(kt|kts)$/.test(path)) return KOTLIN_KEYWORDS;
+  if (/\.swift$/.test(path)) return SWIFT_KEYWORDS;
+  return [];
 }
 
 /**
@@ -205,6 +280,12 @@ export const completionTheme = EditorView.theme({
     minWidth: '340px !important',
     maxWidth: '520px !important',
     fontFamily: "'JetBrains Mono', monospace !important",
+    zIndex: '9999 !important',
+    pointerEvents: 'auto !important',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    zIndex: '9999 !important',
+    pointerEvents: 'auto !important',
   },
   '.cm-tooltip-autocomplete::after': {
     content: '"⏎ insert · ⇥ replace · ⌃Space docs"',
@@ -337,7 +418,6 @@ export function createLspAutocompleteExtension(getPath: () => string | null): Ex
   return [
     autocompletion({
       override: [
-        createSnippetCompletionSource(getPath),
         createLspCompletionSource(getPath),
       ],
       activateOnTyping: true,
@@ -356,5 +436,8 @@ export function createLspAutocompleteExtension(getPath: () => string | null): Ex
       ],
     }),
     completionTheme,
+    keymap.of([
+      { key: 'Alt-/', run: startCompletion },
+    ]),
   ];
 }

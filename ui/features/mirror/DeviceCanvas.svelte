@@ -265,7 +265,38 @@
     });
   }
 
+  function handleGlobalMouseDown(e: MouseEvent) {
+    const target = e.target as HTMLElement | null;
+    if (!target?.closest('.phone-bezel')) {
+      mirrorStore.isFocused = false;
+    }
+  }
+
   function handleKeyDown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target?.isContentEditable ||
+      target?.closest('.cm-editor') ||
+      target?.closest('.search-palette') ||
+      target?.closest('.modal-backdrop') ||
+      target?.closest('.terminal-container') ||
+      target?.closest('.run-output-panel') ||
+      activeEl instanceof HTMLInputElement ||
+      activeEl instanceof HTMLTextAreaElement ||
+      activeEl?.isContentEditable ||
+      activeEl?.closest('.cm-editor') ||
+      activeEl?.closest('.search-palette') ||
+      activeEl?.closest('.modal-backdrop') ||
+      activeEl?.closest('.terminal-container') ||
+      activeEl?.closest('.run-output-panel')
+    ) {
+      mirrorStore.isFocused = false;
+      return;
+    }
+
     if (!mirrorStore.isFocused || isViewOnly) return;
 
     // Shift+Escape or Escape releases focus back to editor
@@ -309,6 +340,7 @@
     initDecoder();
     mirrorStore.registerFrameCallback(handlePacket);
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('mousedown', handleGlobalMouseDown, true);
 
     // Initial canvas render
     if (canvasEl && ctx) {
@@ -335,6 +367,7 @@
   onDestroy(() => {
     mirrorStore.unregisterFrameCallback();
     window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('mousedown', handleGlobalMouseDown, true);
     window.removeEventListener('mousemove', handleMouseMove);
     window.removeEventListener('mouseup', handleMouseUp);
     if (decoder && decoder.state !== 'closed') {

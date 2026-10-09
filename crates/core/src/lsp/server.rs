@@ -388,9 +388,22 @@ impl Drop for Server {
 
 /// Build the client capabilities JSON for the initialize request.
 fn client_capabilities(root_uri: &str) -> Value {
+    let name = root_uri
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("workspace");
+
     json!({
         "processId": std::process::id(),
         "rootUri": root_uri,
+        "workspaceFolders": [
+            {
+                "uri": root_uri,
+                "name": name
+            }
+        ],
         "capabilities": {
             "textDocument": {
                 "synchronization": {
@@ -408,7 +421,8 @@ fn client_capabilities(root_uri: &str) -> Value {
                         "resolveSupport": {
                             "properties": ["documentation"]
                         }
-                    }
+                    },
+                    "contextSupport": true
                 },
                 "hover": {
                     "contentFormat": ["markdown", "plaintext"]
@@ -452,4 +466,18 @@ fn client_capabilities(root_uri: &str) -> Value {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_capabilities_context_support() {
+        let caps = client_capabilities("file:///workspace");
+        assert_eq!(
+            caps["capabilities"]["textDocument"]["completion"]["contextSupport"],
+            true
+        );
+    }
 }

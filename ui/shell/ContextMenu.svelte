@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { placeMenu, placeSubmenu, calculateSubmenuHeight } from './menuPos';
+  import { portal } from './portal';
 
   export interface MenuItem {
     id?: string;
@@ -233,7 +234,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="context-menu-root">
+<div class="context-menu-root" use:portal>
   <div
     bind:this={menuEl}
     class="context-menu"
@@ -343,8 +344,13 @@
 
 <style>
   .context-menu-root {
-    position: relative;
-    z-index: 1000;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    z-index: 99999;
+    pointer-events: none;
   }
 
   .context-menu {
@@ -362,6 +368,8 @@
     gap: 1px;
     user-select: none;
     font-family: 'Geist', system-ui, -apple-system, sans-serif;
+    z-index: 99999;
+    pointer-events: auto;
   }
 
   .context-menu::-webkit-scrollbar {
@@ -379,7 +387,7 @@
 
   .submenu-cascading {
     width: 220px;
-    z-index: 1001;
+    z-index: 100000;
   }
 
   .menu-header-label {

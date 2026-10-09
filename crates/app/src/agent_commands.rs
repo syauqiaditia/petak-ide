@@ -1,7 +1,9 @@
 use petak_core::agent::{
-    HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult, MemoryItem,
-    PendingPermissionRequest, PromptResponse, Proposal, Skill, SkillSummary, SlotConfig,
-    SlotManager, SlotSummary, TeamConfig, UsageReport,
+    get_all_role_scopes, HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult,
+    MemoryItem, MemorySnippet, PendingPermissionRequest, PromptResponse, Proposal,
+    PrunedContextResult, RoleScopeInfo, SelfHealPhase, SelfHealResult, SelfHealStatus, Skill,
+    SkillSummary, SlotConfig, SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig,
+    UsageReport, WorktreeInfo,
 };
 use std::sync::Arc;
 use tauri::Manager;
@@ -96,6 +98,31 @@ pub async fn agent_detect_hermes(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// ── Multi-Engine Detection ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_supported_engines(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<SupportedEngineInfo>, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::get_supported_engines(root.as_deref()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Role Tool Scopes ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_get_role_scopes() -> Result<Vec<RoleScopeInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(get_all_role_scopes()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 // ── Team configuration & slot management ───────────────────────────────────
@@ -473,6 +500,164 @@ pub async fn agent_skill_delete(
     let effective_root = resolve_effective_root(&app, root);
     tauri::async_runtime::spawn_blocking(move || {
         petak_core::agent::delete_skill(effective_root.as_deref(), &name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Smart Context & Memory ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_prune_context(
+    file_path: String,
+    line: Option<u32>,
+    symbol: Option<String>,
+) -> Result<PrunedContextResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = std::path::Path::new(&file_path);
+        petak_core::agent::prune_file_context(p, line, symbol)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_get_relevant_memory(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    active_file: Option<String>,
+) -> Result<Vec<MemorySnippet>, String> {
+    sync_project_root(&app, &state.manager);
+    let root = state.manager.project_root();
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::get_domain_relevant_memory(
+            root.as_deref(),
+            active_file.as_deref(),
+        ))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Worktree Cockpit & Lane Management ──────────────────────────────────────
+
+fn resolve_worktree_root(
+    app: &tauri::AppHandle,
+    state: &tauri::State<'_, AgentState>,
+) -> Result<std::path::PathBuf, String> {
+    sync_project_root(app, &state.manager);
+    if let Some(r) = state.manager.project_root() {
+        return Ok(r);
+    }
+    if let Some(r) = resolve_effective_root(app, None) {
+        return Ok(r);
+    }
+    std::env::current_dir().map_err(|e| format!("Failed to determine working directory: {}", e))
+}
+
+#[tauri::command]
+pub async fn agent_worktree_list(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+) -> Result<Vec<WorktreeInfo>, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || petak_core::agent::list_worktrees(&root))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_worktree_create(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+    branch: String,
+    base_branch: Option<String>,
+) -> Result<WorktreeInfo, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::create_worktree(&root, &task_id, &branch, base_branch.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_worktree_diff(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+) -> Result<String, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::get_worktree_diff(&root, &task_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_worktree_remove(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+    delete_branch: bool,
+) -> Result<(), String> {
+    let root = resolve_worktree_root(&app, &state)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::remove_worktree(&root, &task_id, delete_branch)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Self-Healing Loop Management ────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn agent_trigger_self_heal(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AgentState>,
+    task_id: String,
+    active_file: String,
+) -> Result<SelfHealResult, String> {
+    let root = resolve_worktree_root(&app, &state)?;
+
+    if let Some(run_state) = app.try_state::<crate::commands::RunState>() {
+        if let Ok(runs) = run_state.inner.runs.lock() {
+            for (_, run) in runs.iter() {
+                if let crate::commands::ActiveRun::Flutter(fr) = run {
+                    petak_core::run::set_active_flutter_runner(Some(fr.clone()));
+                    break;
+                }
+            }
+        }
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::agent::trigger_self_heal(&task_id, &active_file, Some(&root))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn agent_get_self_heal_status(
+    _app: tauri::AppHandle,
+    _state: tauri::State<'_, AgentState>,
+    task_id: String,
+) -> Result<SelfHealStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(petak_core::agent::get_self_heal_status(&task_id).unwrap_or_else(|| {
+            SelfHealStatus {
+                task_id: task_id.clone(),
+                active_file: String::new(),
+                status: SelfHealPhase::Idle,
+                attempt: 0,
+                max_attempts: 3,
+                error: None,
+                last_verified_at: None,
+            }
+        }))
     })
     .await
     .map_err(|e| e.to_string())?

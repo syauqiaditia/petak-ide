@@ -1,13 +1,27 @@
 import type { EditorState } from '@codemirror/state';
 
+export interface TabViewState {
+  scrollTop?: number;
+  scrollLeft?: number;
+  cursorHead?: number;
+  cursorAnchor?: number;
+}
+
 export interface TabItem {
   path: string;
   name: string;
   savedContent: string;
   dirty: boolean;
   state?: EditorState;
+  scrollTop?: number;
+  scrollLeft?: number;
+  cursorHead?: number;
+  cursorAnchor?: number;
   externalConflict?: boolean;
   pendingDiskContent?: string;
+  findOpen?: boolean;
+  findQuery?: string;
+  findMode?: 'find' | 'replace';
 }
 
 class TabsManager {
@@ -58,6 +72,27 @@ class TabsManager {
       this.openToken += 1;
       this.recordRecentFile(path);
     }
+  }
+
+  saveViewState(path: string, viewState: TabViewState) {
+    const tab = this.tabs.find((t) => t.path === path);
+    if (tab) {
+      if (viewState.scrollTop !== undefined) tab.scrollTop = viewState.scrollTop;
+      if (viewState.scrollLeft !== undefined) tab.scrollLeft = viewState.scrollLeft;
+      if (viewState.cursorHead !== undefined) tab.cursorHead = viewState.cursorHead;
+      if (viewState.cursorAnchor !== undefined) tab.cursorAnchor = viewState.cursorAnchor;
+    }
+  }
+
+  getViewState(path: string): TabViewState | undefined {
+    const tab = this.tabs.find((t) => t.path === path);
+    if (!tab) return undefined;
+    return {
+      scrollTop: tab.scrollTop,
+      scrollLeft: tab.scrollLeft,
+      cursorHead: tab.cursorHead,
+      cursorAnchor: tab.cursorAnchor,
+    };
   }
 
   closeTab(path: string): boolean {

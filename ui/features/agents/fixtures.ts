@@ -6,6 +6,9 @@ import type {
   ChatMessage,
   UsageReport,
   TeamConfig,
+  WorktreeInfo,
+  SelfHealStatus,
+  SelfHealResult,
 } from './types';
 
 export const DEMO_HERMES_DETECTION: HermesDetectionResult = {
@@ -362,3 +365,87 @@ export const DEMO_USAGE_REPORTS: Record<string, UsageReport> = {
     displayText: 'tidak melapor',
   },
 };
+
+export const DEMO_WORKTREES: WorktreeInfo[] = [
+  {
+    task_id: 't_29e9668a',
+    path: '/mnt/storage/uqi-projects/petak-p4m-wt-core',
+    branch: 'wt/worktree-cockpit-core',
+    base_branch: 'main',
+    head_sha: 'a5171cb',
+    is_dirty: false,
+    created_at: Date.now() - 1000 * 60 * 25,
+  },
+  {
+    task_id: 't_41ab160d',
+    path: '/mnt/storage/uqi-projects/petak-p4m-wt-ui',
+    branch: 'wt/worktree-cockpit-ui',
+    base_branch: 'main',
+    head_sha: '8264eda',
+    is_dirty: true,
+    created_at: Date.now() - 1000 * 60 * 12,
+  },
+];
+
+export const DEMO_SELF_HEAL_STATUS: Record<string, SelfHealStatus> = {
+  't_default': {
+    task_id: 't_default',
+    active_file: 'lib/main.dart',
+    status: 'idle',
+    attempt: 0,
+    max_attempts: 3,
+    last_verified_at: 1791367200000,
+  },
+  't_hot_reload': {
+    task_id: 't_hot_reload',
+    active_file: 'lib/views/home.dart',
+    status: 'hot_reloading',
+    attempt: 1,
+    max_attempts: 3,
+    last_verified_at: 1791367210000,
+  },
+  't_testing': {
+    task_id: 't_testing',
+    active_file: 'lib/views/login.dart',
+    status: 'testing',
+    attempt: 1,
+    max_attempts: 3,
+    last_verified_at: 1791367220000,
+  },
+  't_passed': {
+    task_id: 't_passed',
+    active_file: 'lib/widgets/card.dart',
+    status: 'passed',
+    attempt: 1,
+    max_attempts: 3,
+    last_verified_at: 1791367230000,
+  },
+  't_failed': {
+    task_id: 't_failed',
+    active_file: 'lib/utils/api.dart',
+    status: 'failed',
+    attempt: 1,
+    max_attempts: 3,
+    error: 'Maestro flow test failure on assertion #3',
+    last_verified_at: 1791367240000,
+  },
+  't_paused': {
+    task_id: 't_paused',
+    active_file: 'lib/utils/api.dart',
+    status: 'paused',
+    attempt: 3,
+    max_attempts: 3,
+    error: 'Max retry attempts exhausted',
+    last_verified_at: 1791367250000,
+  },
+};
+
+export const DEMO_SELF_HEAL_RESULT: SelfHealResult = {
+  task_id: 't_default',
+  success: true,
+  attempts: 1,
+  status: 'passed',
+  message: 'Verification PASS: hot reload and tests succeeded',
+};
+
+

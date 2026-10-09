@@ -2,10 +2,22 @@
   import { onMount } from 'svelte';
   import { agentsStore } from './agents.svelte';
   import type { SlotConfig, HermesProfileInfo, PermissionMode, AgentKind } from './types';
-  import { ALL_PRESET_MODELS } from './agentsLogic';
+  import {
+    ALL_PRESET_MODELS,
+    getModelsForEngine,
+    resetModelOnEngineChange,
+    getStandardTeamPreset,
+    getRoleScopeBadge,
+    inferRoleFromSlot,
+    normalizeRole,
+    ALL_AVAILABLE_TOOLS,
+    getEffectiveToolsForSlot,
+    getRoleScopeDescription,
+  } from './agentsLogic';
 
   let localSlots = $state<SlotConfig[]>([]);
   let isSaving = $state(false);
+  let expandedAdvanced = $state<Record<string, boolean>>({});
 
   let hermes = $derived(agentsStore.hermesDetection);
 
@@ -27,6 +39,9 @@
         id: newId,
         label: `Agent ${localSlots.length + 1}`,
         kind: 'claude-code',
+        engine: 'claude-code',
+        role: 'senior',
+        customWhitelist: null,
         command: null,
         hermesProfile: null,
         model: 'claude-3-7-sonnet',
@@ -41,17 +56,67 @@
     localSlots = localSlots.filter((_, i) => i !== idx);
   }
 
+  function handleEngineChange(idx: number, newEngine: string) {
+    const slot = localSlots[idx];
+    if (!slot) return;
+    const oldEngine = slot.engine || slot.kind;
+    slot.engine = newEngine;
+    slot.kind = newEngine === 'codex' ? 'openai' : (newEngine === 'custom' ? 'acp-custom' : newEngine);
+    if (oldEngine !== newEngine) {
+      slot.model = resetModelOnEngineChange(newEngine, slot.model, hermes?.profiles);
+      slot.fallbackModel = null;
+    }
+  }
+
+  function handleRoleChange(idx: number, newRole: string) {
+    const slot = localSlots[idx];
+    if (!slot) return;
+    slot.role = newRole;
+  }
+
+  function toggleAdvanced(slotId: string) {
+    expandedAdvanced[slotId] = !expandedAdvanced[slotId];
+  }
+
+  function handleToggleCustomTool(idx: number, tool: string) {
+    const slot = localSlots[idx];
+    if (!slot) return;
+    const current = getEffectiveToolsForSlot(slot);
+    let updated: string[];
+    if (current.includes(tool)) {
+      updated = current.filter((t) => t !== tool);
+    } else {
+      updated = [...current, tool];
+    }
+    slot.customWhitelist = updated;
+  }
+
+  function handleResetSlotWhitelist(idx: number) {
+    const slot = localSlots[idx];
+    if (!slot) return;
+    slot.customWhitelist = null;
+  }
+
+  function handleApplyStandardTeamPreset() {
+    const preset = getStandardTeamPreset();
+    localSlots = JSON.parse(JSON.stringify(preset.slots || preset));
+  }
+
   async function handleAddHermesProfile(profile: HermesProfileInfo) {
     const newId = `hermes-${profile.name}-${Date.now().toString(36)}`;
+    const inferredRole = inferRoleFromSlot({ hermesProfile: profile.name, id: newId });
     localSlots = [
       ...localSlots,
       {
         id: newId,
         label: profile.name.charAt(0).toUpperCase() + profile.name.slice(1),
         kind: 'hermes',
+        engine: 'hermes',
+        role: inferredRole,
+        customWhitelist: null,
         command: null,
         hermesProfile: profile.name,
-        model: profile.model || 'auto',
+        model: profile.model || 'ag/gemini-3.8-flash-high',
         fallbackModel: null,
         permission: 'ask',
         cwd: 'project',
@@ -145,9 +210,19 @@
           <div class="section-title">
             <span>Daftar Slot Agen Proyek ({localSlots.length})</span>
           </div>
-          <button class="add-slot-btn" onclick={addEmptySlot}>
-            + Tambah Slot
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button
+              class="preset-team-btn"
+              type="button"
+              onclick={handleApplyStandardTeamPreset}
+              title="Terapkan preset Manager (Antigravity Opus), Senior (Claude Code Sonnet), Reviewer (Gemini Flash)"
+            >
+              ⚡ Gunakan Susunan Tim Standar
+            </button>
+            <button class="add-slot-btn" onclick={addEmptySlot}>
+              + Tambah Slot
+            </button>
+          </div>
         </div>
 
         {#if localSlots.length === 0}
@@ -165,19 +240,23 @@
                   </div>
 
                   <div class="field-group">
-                    <label>Kind</label>
-                    <select bind:value={slot.kind}>
-                      <option value="claude-code">Claude Code ACP</option>
+                    <label>Engine / Platform</label>
+                    <select
+                      value={slot.engine || slot.kind}
+                      onchange={(e) => handleEngineChange(idx, (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="antigravity">Antigravity (via 9Router)</option>
+                      <option value="claude-code">Claude Code CLI</option>
+                      <option value="codex">OpenAI Codex</option>
                       <option value="hermes">Hermes Agent</option>
                       <option value="acp-custom">Custom ACP Command</option>
-                      <option value="openai">OpenAI Compatible (A5)</option>
                     </select>
                   </div>
 
                   <div class="field-group">
-                    <label>Model</label>
+                    <label>Model (Terkunci)</label>
                     <select bind:value={slot.model}>
-                      {#each ALL_PRESET_MODELS as m}
+                      {#each getModelsForEngine(slot.engine || slot.kind, hermes?.profiles) as m}
                         <option value={m.id}>{m.name} ({m.id})</option>
                       {/each}
                     </select>
@@ -203,6 +282,44 @@
                     </select>
                   </div>
 
+                  <div class="field-group">
+                    <label>Role / Otoritas</label>
+                    <select
+                      value={slot.role || inferRoleFromSlot(slot)}
+                      onchange={(e) => handleRoleChange(idx, (e.target as HTMLSelectElement).value)}
+                    >
+                      <option value="manager">Manager</option>
+                      <option value="senior">Senior</option>
+                      <option value="senior2">Senior 2</option>
+                      <option value="techlead">Techlead</option>
+                      <option value="reviewer">Reviewer</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+
+                  <div class="field-group badge-group">
+                    <label>Tool Scoping</label>
+                    <span
+                      class="role-scope-badge"
+                      title={getRoleScopeDescription(slot.role || inferRoleFromSlot(slot))}
+                    >
+                      {getRoleScopeBadge(slot.role || inferRoleFromSlot(slot))}
+                    </span>
+                  </div>
+
+                  <div class="field-group adv-btn-group">
+                    <label>&nbsp;</label>
+                    <button
+                      type="button"
+                      class="adv-toggle-btn"
+                      class:active={expandedAdvanced[slot.id]}
+                      onclick={() => toggleAdvanced(slot.id)}
+                      title="Toggle Advanced Mode untuk kustomisasi whitelist tool"
+                    >
+                      ⚙️ Advanced {expandedAdvanced[slot.id] ? '▲' : '▼'}
+                    </button>
+                  </div>
+
                   <button class="remove-slot-btn" onclick={() => removeSlot(idx)} title="Hapus slot ini">
                     ✕
                   </button>
@@ -217,6 +334,38 @@
                   <div class="row-sub">
                     <span class="sub-label">Command:</span>
                     <input type="text" bind:value={slot.command} placeholder="e.g. opencode acp --model x" />
+                  </div>
+                {/if}
+
+                {#if expandedAdvanced[slot.id]}
+                  <div class="row-advanced-whitelist">
+                    <div class="adv-whitelist-header">
+                      <span class="adv-title">
+                        🛡️ Custom Whitelist Override ({getEffectiveToolsForSlot(slot).length} tool aktif):
+                      </span>
+                      {#if slot.customWhitelist && slot.customWhitelist.length > 0}
+                        <button
+                          type="button"
+                          class="reset-whitelist-btn"
+                          onclick={() => handleResetSlotWhitelist(idx)}
+                        >
+                          Reset ke Default Role
+                        </button>
+                      {/if}
+                    </div>
+                    <div class="tools-grid">
+                      {#each ALL_AVAILABLE_TOOLS as tool}
+                        {@const isAllowed = getEffectiveToolsForSlot(slot).includes(tool)}
+                        <label class="tool-checkbox-item" class:checked={isAllowed}>
+                          <input
+                            type="checkbox"
+                            checked={isAllowed}
+                            onchange={() => handleToggleCustomTool(idx, tool)}
+                          />
+                          <span class="tool-name">{tool}</span>
+                        </label>
+                      {/each}
+                    </div>
                   </div>
                 {/if}
               </div>
@@ -437,6 +586,23 @@
     border-radius: 3px;
   }
 
+  .preset-team-btn {
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    color: #60a5fa;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .preset-team-btn:hover {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
   .add-slot-btn {
     background: #233428;
     border: 1px solid #35573d;
@@ -573,5 +739,113 @@
 
   .footer-btn.save-btn:disabled {
     opacity: 0.5;
+  }
+
+  .role-scope-badge {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #60a5fa;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .adv-btn-group {
+    flex: 0 0 auto;
+  }
+
+  .adv-toggle-btn {
+    background: #1e2026;
+    border: 1px solid #323540;
+    color: #9aa0a6;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .adv-toggle-btn:hover,
+  .adv-toggle-btn.active {
+    background: #282b35;
+    border-color: #3b82f6;
+    color: #93c5fd;
+  }
+
+  .row-advanced-whitelist {
+    margin-top: 4px;
+    padding: 8px 10px;
+    background: #141519;
+    border: 1px dashed #30343f;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .adv-whitelist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+  }
+
+  .adv-title {
+    color: #8b949e;
+    font-weight: 500;
+  }
+
+  .reset-whitelist-btn {
+    background: transparent;
+    border: 1px solid #3b82f6;
+    color: #60a5fa;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 9px;
+    cursor: pointer;
+  }
+
+  .reset-whitelist-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+  }
+
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 4px;
+  }
+
+  .tool-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: #8b949e;
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  .tool-checkbox-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .tool-checkbox-item.checked {
+    color: #e6edf3;
+  }
+
+  .tool-checkbox-item input[type='checkbox'] {
+    cursor: pointer;
+    accent-color: #3b82f6;
+  }
+
+  .tool-name {
+    font-family: monospace;
   }
 </style>

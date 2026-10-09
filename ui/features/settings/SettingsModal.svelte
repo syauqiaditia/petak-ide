@@ -13,6 +13,16 @@
     getModelDescription,
     PROVIDER_MODELS,
     ALL_PRESET_MODELS,
+    getModelsForEngine,
+    resetModelOnEngineChange,
+    getStandardTeamPreset,
+    formatEngineName,
+    getRoleScopeBadge,
+    inferRoleFromSlot,
+    normalizeRole,
+    ALL_AVAILABLE_TOOLS,
+    getEffectiveToolsForSlot,
+    getRoleScopeDescription,
   } from '../agents/agentsLogic';
   import AccountsSettings from '../accounts/AccountsSettings.svelte';
   import { keymapStore, keyEventToShortcut, type ConflictInfo } from './keymapStore.svelte';
@@ -80,19 +90,24 @@
   });
 
   function handleProviderChange() {
-    const models = getModelsForProvider(activeProvider);
-    const recommended = models.find((m) => m.recommended) || models[0];
-    if (recommended) {
-      activeModelId = recommended.id;
-      isCustomModel = false;
-      customModelId = '';
-      if (selectedConfigSlotId) {
-        agentsStore.updateSlotConfig(selectedConfigSlotId, {
-          model: activeModelId,
-          kind: activeProvider === 'hermes' ? 'hermes' : 'acp-custom',
-        });
-      }
+    activeModelId = resetModelOnEngineChange(activeProvider, activeModelId, hermesDetection?.profiles);
+    isCustomModel = false;
+    customModelId = '';
+    if (selectedConfigSlotId) {
+      agentsStore.updateSlotConfig(selectedConfigSlotId, {
+        model: activeModelId,
+        engine: activeProvider,
+        kind: activeProvider === 'hermes' ? 'hermes' : activeProvider === 'claude-code' ? 'claude-code' : (activeProvider === 'codex' ? 'openai' : 'acp-custom'),
+      });
     }
+  }
+
+  async function handleApplyStandardTeamPreset() {
+    const preset = getStandardTeamPreset();
+    const slots = preset.slots || preset;
+    await api.agentSaveTeam({ version: 1, slots });
+    await agentsStore.loadTeam();
+    await agentsStore.loadSlots();
   }
 
   function handleModelSelectChange(e: Event) {
@@ -132,8 +147,56 @@
   let newBotIcon = $state('⚡');
   let newBotPlatform = $state('antigravity');
   let newBotModel = $state('ag/gemini-3.8-flash-high');
+  let newBotRole = $state('senior');
   let newBotPermission = $state<PermissionMode>('ask');
   let isAddingBot = $state(false);
+
+  let isAdvancedScopingOpen = $state(false);
+
+  let currentSlotRole = $derived.by(() => {
+    if (!currentSlot?.config) return 'senior';
+    return currentSlot.config.role || inferRoleFromSlot(currentSlot.config);
+  });
+
+  let currentEffectiveTools = $derived.by(() => {
+    if (!currentSlot?.config) return [];
+    return getEffectiveToolsForSlot(currentSlot.config);
+  });
+
+  let hasCustomWhitelist = $derived.by(() => {
+    return Array.isArray(currentSlot?.config?.customWhitelist) && currentSlot.config.customWhitelist.length > 0;
+  });
+
+  function handleSlotRoleChange(e: Event) {
+    const role = (e.target as HTMLSelectElement).value;
+    if (selectedConfigSlotId) {
+      agentsStore.updateSlotConfig(selectedConfigSlotId, {
+        role,
+      });
+    }
+  }
+
+  function handleToggleSlotTool(tool: string) {
+    if (!selectedConfigSlotId || !currentSlot?.config) return;
+    const current = getEffectiveToolsForSlot(currentSlot.config);
+    let updated: string[];
+    if (current.includes(tool)) {
+      updated = current.filter((t) => t !== tool);
+    } else {
+      updated = [...current, tool];
+    }
+    agentsStore.updateSlotConfig(selectedConfigSlotId, {
+      customWhitelist: updated,
+    });
+  }
+
+  function handleResetSlotCustomWhitelist() {
+    if (selectedConfigSlotId) {
+      agentsStore.updateSlotConfig(selectedConfigSlotId, {
+        customWhitelist: null,
+      });
+    }
+  }
 
   async function handleAddBotSubmit() {
     if (!newBotLabel.trim()) return;
@@ -142,7 +205,10 @@
       const newSlot = {
         id: `slot-${Date.now().toString(36)}`,
         label: `${newBotIcon} ${newBotLabel.trim()}`,
-        kind: newBotPlatform === 'hermes' ? 'hermes' : newBotPlatform === 'claude-code' ? 'claude-code' : 'acp-custom',
+        kind: newBotPlatform === 'hermes' ? 'hermes' : newBotPlatform === 'claude-code' ? 'claude-code' : (newBotPlatform === 'codex' ? 'openai' : 'acp-custom'),
+        engine: newBotPlatform,
+        role: newBotRole,
+        customWhitelist: null,
         command: newBotPlatform === 'claude-code' ? 'npx @agentclientprotocol/claude-agent-acp' : null,
         hermesProfile: newBotPlatform === 'hermes' ? newBotLabel.toLowerCase() : null,
         model: newBotModel,
@@ -452,6 +518,9 @@
         id: `s${idx + 1}`,
         label: p.name.charAt(0).toUpperCase() + p.name.slice(1),
         kind: 'hermes',
+        engine: 'hermes',
+        role: inferRoleFromSlot({ hermesProfile: p.name, id: `s${idx + 1}` }),
+        customWhitelist: null,
         command: null,
         hermesProfile: p.name,
         model: (p as any).model || 'claude-3-7-sonnet',
@@ -900,17 +969,10 @@
                       value={isCustomModel ? 'custom' : activeModelId}
                       onchange={handleModelSelectChange}
                     >
-                      <optgroup label="Model {activeProvider.toUpperCase()}">
-                        {#each getModelsForProvider(activeProvider) as m}
+                      <optgroup label="Model {activeProvider.toUpperCase()} (Terkunci)">
+                        {#each getModelsForEngine(activeProvider, hermesDetection?.profiles) as m}
                           <option value={m.id}>
                             {m.name} — {m.id} {m.recommended ? '★ (Rekomendasi)' : ''}
-                          </option>
-                        {/each}
-                      </optgroup>
-                      <optgroup label="Penyedia Lain (Cepat Ganti)">
-                        {#each ALL_PRESET_MODELS.filter((m) => !getModelsForProvider(activeProvider).some((pm) => pm.id === m.id)) as m}
-                          <option value={m.id}>
-                            {m.name} — {m.id}
                           </option>
                         {/each}
                       </optgroup>
@@ -954,6 +1016,28 @@
                       <button type="button" class="pill-btn flex-1" class:active={activePermissionMode === 'full'} onclick={() => handleSetPermission('full')}>Full</button>
                     </div>
                   </div>
+
+                  <div>
+                    <label class="field-label" for="slot-role-select">Role / Wewenang Agen:</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <select
+                        id="slot-role-select"
+                        class="setting-select-box flex-1"
+                        value={currentSlotRole}
+                        onchange={handleSlotRoleChange}
+                      >
+                        <option value="manager">Manager</option>
+                        <option value="senior">Senior</option>
+                        <option value="senior2">Senior 2</option>
+                        <option value="techlead">Techlead</option>
+                        <option value="reviewer">Reviewer</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                      <span class="role-scope-badge" title={getRoleScopeDescription(currentSlotRole)}>
+                        {getRoleScopeBadge(currentSlotRole)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Fallback Chain (3-Tier) -->
@@ -988,6 +1072,60 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Advanced Tool Scoping Whitelist Override -->
+                <div class="tool-scoping-override-section" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle, #282a33);">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span class="field-label" style="margin-bottom: 0;">Tool Scoping (Least Privilege Gateway):</span>
+                      <span class="role-scope-badge" style="font-size: 10px; padding: 1px 6px;">
+                        {getRoleScopeBadge(currentSlotRole)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      class="pill-btn adv-toggle-btn"
+                      class:active={isAdvancedScopingOpen}
+                      onclick={() => (isAdvancedScopingOpen = !isAdvancedScopingOpen)}
+                      style="font-size: 11px; padding: 2px 10px;"
+                    >
+                      ⚙️ Advanced {isAdvancedScopingOpen ? '▲' : '▼'}
+                    </button>
+                  </div>
+
+                  {#if isAdvancedScopingOpen}
+                    <div class="advanced-scoping-box" style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px dashed var(--border-subtle, #30363d);">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 11px; color: var(--text-secondary);">
+                          Custom Whitelist ({currentEffectiveTools.length} tool aktif):
+                        </span>
+                        {#if hasCustomWhitelist}
+                          <button
+                            type="button"
+                            class="action-btn"
+                            style="font-size: 10px; padding: 2px 8px;"
+                            onclick={handleResetSlotCustomWhitelist}
+                          >
+                            Reset ke Default Role
+                          </button>
+                        {/if}
+                      </div>
+                      <div class="tools-checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px;">
+                        {#each ALL_AVAILABLE_TOOLS as tool}
+                          {@const isAllowed = currentEffectiveTools.includes(tool)}
+                          <label class="tool-checkbox-item" style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: {isAllowed ? 'var(--text-primary)' : 'var(--text-muted)'}; cursor: pointer;">
+                            <input
+                              type="checkbox"
+                              checked={isAllowed}
+                              onchange={() => handleToggleSlotTool(tool)}
+                            />
+                            <span class="mono">{tool}</span>
+                          </label>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
               </div>
 
               <!-- Section 1.5: Tim Bot Proyek (.petak/team.json) & Tambah Bot Manual -->
@@ -1000,9 +1138,14 @@
                     </div>
                     <span class="setting-hint">Daftar bot yang bertugas di proyek ini. Anda bebas menambah bot baru, mengubah model, atau menghapus bot.</span>
                   </div>
-                  <button class="pill-btn active" style="padding: 6px 14px;" onclick={() => (isAddBotFormOpen = !isAddBotFormOpen)}>
-                    {isAddBotFormOpen ? '✕ Tutup Form' : '+ Tambah Bot Manual'}
-                  </button>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="pill-btn preset-standard-btn" onclick={handleApplyStandardTeamPreset} title="Terapkan preset Manager (Antigravity Opus), Senior (Claude Code Sonnet), Reviewer (Gemini Flash)">
+                      ⚡ Gunakan Susunan Tim Standar
+                    </button>
+                    <button class="pill-btn active" style="padding: 6px 14px;" onclick={() => (isAddBotFormOpen = !isAddBotFormOpen)}>
+                      {isAddBotFormOpen ? '✕ Tutup Form' : '+ Tambah Bot Manual'}
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Form Tambah Bot Baru (Manual) -->
@@ -1058,13 +1201,25 @@
                       </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: flex-end;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items: flex-end;">
                       <div>
                         <label class="field-label" for="new-bot-model">Model Pilihan:</label>
                         <select id="new-bot-model" class="setting-select-box full-width" bind:value={newBotModel}>
                           {#each getModelsForProvider(newBotPlatform) as m}
                             <option value={m.id}>{m.name} ({m.id}) {m.recommended ? '★' : ''}</option>
                           {/each}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label class="field-label" for="new-bot-role">Role Otoritas:</label>
+                        <select id="new-bot-role" class="setting-select-box full-width" bind:value={newBotRole}>
+                          <option value="manager">Manager</option>
+                          <option value="senior">Senior</option>
+                          <option value="senior2">Senior 2</option>
+                          <option value="techlead">Techlead</option>
+                          <option value="reviewer">Reviewer</option>
+                          <option value="custom">Custom</option>
                         </select>
                       </div>
 
@@ -1102,10 +1257,15 @@
                           </span>
                         </div>
                         <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
-                          Platform: <strong style="color: var(--text-secondary);">{slot.kind}</strong>
+                          Platform: <strong style="color: var(--text-secondary);">{formatEngineName(slot.config?.engine || slot.kind)}</strong>
                         </div>
                         <div style="font-size: 11px; color: var(--accent); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                           {slot.config?.model || 'auto'}
+                        </div>
+                        <div style="margin-top: 6px;">
+                          <span class="role-scope-badge" style="font-size: 10px; padding: 2px 6px;">
+                            {getRoleScopeBadge(slot.config?.role || inferRoleFromSlot(slot.config))}
+                          </span>
                         </div>
                       </div>
 
@@ -1301,6 +1461,32 @@
                     class="toggle-checkbox"
                     checked={agentsStore.isSelfImproveActive}
                     onchange={() => agentsStore.toggleSelfImprove()}
+                  />
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-meta">
+                    <span class="setting-label">LSP Context Pruning (Outline & Diagnostics)</span>
+                    <span class="setting-hint">Pangkas 60–80% token dengan mengekstrak signature simbol, fungsi, class outline, dan diagnostics aktif.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    class="toggle-checkbox"
+                    checked={settingsStore.lspContextPruning}
+                    onchange={(e) => settingsStore.setLspContextPruning((e.target as HTMLInputElement).checked)}
+                  />
+                </div>
+
+                <div class="setting-item-row">
+                  <div class="setting-meta">
+                    <span class="setting-label">Domain-Aware Memory Filtering</span>
+                    <span class="setting-hint">Saring aturan memori Obsidian berdasarkan domain berkas aktif dan suntikkan otomatis via header <code>[PROJECT CONVENTIONS: &lt;DOMAIN&gt;]</code>.</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    class="toggle-checkbox"
+                    checked={settingsStore.domainMemoryFiltering}
+                    onchange={(e) => settingsStore.setDomainMemoryFiltering((e.target as HTMLInputElement).checked)}
                   />
                 </div>
               </div>
@@ -2630,5 +2816,18 @@
     background: rgba(59, 130, 246, 0.15);
     color: #60a5fa;
     border-color: rgba(59, 130, 246, 0.3);
+  }
+
+  .role-scope-badge {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #60a5fa;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
   }
 </style>

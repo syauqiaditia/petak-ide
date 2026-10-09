@@ -32,8 +32,36 @@ import type {
   MemoryItem,
   SkillSummary,
   Skill,
+  SupportedEngineInfo,
+  EnginePlatformOption,
+  RoleScopeInfo,
+  SymbolOutline,
+  DiagnosticSnippet,
+  PrunedContextResult,
+  MemorySnippet,
+  WorktreeInfo,
+  SelfHealPhase,
+  SelfHealStatus,
+  SelfHealResult,
 } from '../features/agents/types.ts';
-export type { ProviderQuotaInfo, LlmQuotaReport, MemoryItem, SkillSummary, Skill };
+export type {
+  ProviderQuotaInfo,
+  LlmQuotaReport,
+  MemoryItem,
+  SkillSummary,
+  Skill,
+  SupportedEngineInfo,
+  EnginePlatformOption,
+  RoleScopeInfo,
+  SymbolOutline,
+  DiagnosticSnippet,
+  PrunedContextResult,
+  MemorySnippet,
+  WorktreeInfo,
+  SelfHealPhase,
+  SelfHealStatus,
+  SelfHealResult,
+};
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
 export type { UnlistenFn };
@@ -949,9 +977,11 @@ export const api = {
     completion(
       path: string,
       line: number,
-      character: number
+      character: number,
+      triggerKind?: number,
+      triggerCharacter?: string
     ): Promise<LspCompletionList | LspCompletionItem[] | null> {
-      return invoke('lsp_completion', { path, line, character });
+      return invoke('lsp_completion', { path, line, character, triggerKind, triggerCharacter });
     },
 
     completionResolve(path: string, item: any): Promise<LspCompletionItem> {
@@ -2131,6 +2161,93 @@ export const api = {
     return invoke<HermesDetectionResult>('agent_detect_hermes');
   },
 
+  async agentGetSupportedEngines(): Promise<SupportedEngineInfo[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return [
+        {
+          id: 'hermes',
+          name: 'Hermes Agent',
+          detected: true,
+          available: true,
+          status: 'Hermes profiles found',
+          allowedModels: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4-6-thinking', 'anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+          models: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4-6-thinking', 'anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+          defaultModel: 'ag/gemini-3.8-flash-high',
+          description: 'Daemon profil lokal Hermes CLI',
+        },
+        {
+          id: 'claude-code',
+          name: 'Claude Code CLI',
+          detected: true,
+          available: true,
+          status: 'npx found',
+          allowedModels: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'],
+          models: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-opus'],
+          defaultModel: 'claude-3-7-sonnet',
+          description: 'Anthropic Standalone CLI via ACP',
+        },
+        {
+          id: 'antigravity',
+          name: 'Antigravity (via 9Router)',
+          detected: true,
+          available: true,
+          status: '9Router online',
+          allowedModels: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'],
+          models: ['ag/gemini-3.8-flash-high', 'ag/claude-opus-4.1', 'ag/claude-opus-4-6-thinking'],
+          defaultModel: 'ag/gemini-3.8-flash-high',
+          description: 'Google Gemini & Claude Opus via 9Router proxy',
+        },
+        {
+          id: 'openai',
+          name: 'OpenAI Codex',
+          detected: true,
+          available: true,
+          status: 'API key found',
+          allowedModels: ['gpt-4o', 'o3-mini', 'o1'],
+          models: ['gpt-4o', 'o3-mini', 'o1'],
+          defaultModel: 'gpt-4o',
+          description: 'OpenAI Autonomous Agent via ACP',
+        },
+        {
+          id: 'codex',
+          name: 'OpenAI Codex',
+          detected: true,
+          available: true,
+          status: 'API key found',
+          allowedModels: ['gpt-4o', 'o3-mini', 'o1'],
+          models: ['gpt-4o', 'o3-mini', 'o1'],
+          defaultModel: 'gpt-4o',
+          description: 'OpenAI Autonomous Agent via ACP',
+        },
+        {
+          id: 'acp-custom',
+          name: 'Custom ACP Command',
+          detected: true,
+          available: true,
+          status: 'Custom command',
+          allowedModels: [],
+          models: ['custom-model'],
+          defaultModel: 'custom-model',
+          description: 'Perintah terminal bebas via stdio ACP',
+        },
+      ];
+    }
+    return invoke<SupportedEngineInfo[]>('agent_get_supported_engines');
+  },
+
+  async agentGetRoleScopes(): Promise<RoleScopeInfo[]> {
+    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+      const { ROLE_SCOPE_DEFINITIONS } = await import('../features/agents/agentsLogic.ts');
+      return ROLE_SCOPE_DEFINITIONS;
+    }
+    try {
+      return await invoke<RoleScopeInfo[]>('agent_get_role_scopes');
+    } catch {
+      const { ROLE_SCOPE_DEFINITIONS } = await import('../features/agents/agentsLogic.ts');
+      return ROLE_SCOPE_DEFINITIONS;
+    }
+  },
+
   async agentLoadTeam(): Promise<TeamConfig> {
     if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       const { DEMO_TEAM_CONFIG } = await import('../features/agents/fixtures');
@@ -2375,6 +2492,73 @@ export const api = {
     }
     return invoke<boolean>('agent_skill_delete', { name, root: root || null });
   },
+
+  async agentPruneContext(filePath: string, line?: number, symbol?: string): Promise<PrunedContextResult> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockContextStore.pruneContext(filePath, line, symbol);
+    }
+    return invoke<PrunedContextResult>('agent_prune_context', {
+      filePath,
+      line: line ?? null,
+      symbol: symbol ?? null,
+    });
+  },
+
+  async agentGetRelevantMemory(activeFile?: string): Promise<MemorySnippet[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockContextStore.getRelevantMemory(activeFile);
+    }
+    return invoke<MemorySnippet[]>('agent_get_relevant_memory', {
+      activeFile: activeFile ?? null,
+    });
+  },
+
+  async agentWorktreeList(): Promise<WorktreeInfo[]> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockWorktreeStore.list();
+    }
+    return invoke<WorktreeInfo[]>('agent_worktree_list');
+  },
+
+  async agentWorktreeCreate(taskId: string, branch: string, baseBranch?: string): Promise<WorktreeInfo> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockWorktreeStore.create(taskId, branch, baseBranch);
+    }
+    return invoke<WorktreeInfo>('agent_worktree_create', {
+      taskId,
+      branch,
+      baseBranch: baseBranch ?? null,
+    });
+  },
+
+  async agentWorktreeDiff(taskId: string): Promise<string> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockWorktreeStore.diff(taskId);
+    }
+    return invoke<string>('agent_worktree_diff', { taskId });
+  },
+
+  async agentWorktreeRemove(taskId: string, deleteBranch: boolean): Promise<void> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      mockWorktreeStore.remove(taskId, deleteBranch);
+      return;
+    }
+    return invoke('agent_worktree_remove', { taskId, deleteBranch });
+  },
+
+  async agentTriggerSelfHeal(taskId: string, activeFile: string): Promise<SelfHealResult> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSelfHealStore.trigger(taskId, activeFile);
+    }
+    return invoke<SelfHealResult>('agent_trigger_self_heal', { taskId, activeFile });
+  },
+
+  async agentGetSelfHealStatus(taskId: string): Promise<SelfHealStatus> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return mockSelfHealStore.getStatus(taskId);
+    }
+    return invoke<SelfHealStatus>('agent_get_self_heal_status', { taskId });
+  },
 };
 
 const mockFlowStore = {
@@ -2555,3 +2739,180 @@ const mockSkillStore = {
     return true;
   },
 };
+
+const mockContextStore = {
+  pruneContext(filePath: string, line?: number, symbol?: string): PrunedContextResult {
+    const totalLines = 250;
+    const prunedLines = 175;
+    const estimatedTokensSaved = Math.round(prunedLines * 3.5);
+    const fileName = filePath.split('/').pop() || filePath;
+    return {
+      filePath,
+      totalLines,
+      prunedLines,
+      estimatedTokensSaved,
+      symbolOutline: [
+        {
+          name: fileName.replace(/\.[^.]+$/, ''),
+          kind: 'module',
+          line: line || 1,
+          signature: `export class ${fileName.replace(/\.[^.]+$/, '')}`,
+          children: [
+            {
+              name: symbol || 'execute',
+              kind: 'method',
+              line: line || 10,
+              signature: `${symbol || 'execute'}(): void`,
+            },
+          ],
+        },
+      ],
+      diagnostics: [],
+      compactSummary: `Outline for ${fileName}: 1 class, 1 method. Pruned ${prunedLines}/${totalLines} lines (~70% token saved).`,
+    };
+  },
+
+  getRelevantMemory(activeFile?: string): MemorySnippet[] {
+    const ext = activeFile ? activeFile.split('.').pop()?.toLowerCase() : '';
+    let domain = 'general';
+    if (ext === 'dart') domain = 'flutter';
+    else if (ext === 'rs') domain = 'rust';
+    else if (ext === 'svelte' || ext === 'ts' || ext === 'js') domain = 'frontend';
+
+    return [
+      {
+        domain,
+        sourceFile: `${domain}-rules.md`,
+        title: `${domain.toUpperCase()} Conventions`,
+        content: `Standard conventions and best practices for domain ${domain}.`,
+      },
+    ];
+  },
+};
+
+const mockWorktreeStore = {
+  worktrees: [
+    {
+      task_id: 't_29e9668a',
+      path: '/mnt/storage/uqi-projects/petak-p4m-wt-core',
+      branch: 'wt/worktree-cockpit-core',
+      base_branch: 'main',
+      head_sha: 'a5171cb',
+      is_dirty: false,
+      created_at: Date.now() - 1000 * 60 * 25,
+    },
+    {
+      task_id: 't_41ab160d',
+      path: '/mnt/storage/uqi-projects/petak-p4m-wt-ui',
+      branch: 'wt/worktree-cockpit-ui',
+      base_branch: 'main',
+      head_sha: '8264eda',
+      is_dirty: true,
+      created_at: Date.now() - 1000 * 60 * 12,
+    },
+  ] as WorktreeInfo[],
+
+  list(): WorktreeInfo[] {
+    return JSON.parse(JSON.stringify(this.worktrees));
+  },
+
+  create(taskId: string, branch: string, baseBranch?: string): WorktreeInfo {
+    const existing = this.worktrees.find((w) => w.task_id === taskId);
+    if (existing) return JSON.parse(JSON.stringify(existing));
+    const created: WorktreeInfo = {
+      task_id: taskId,
+      path: `/mnt/storage/uqi-projects/petak-wt/${taskId}`,
+      branch,
+      base_branch: baseBranch || 'main',
+      head_sha: '8264eda',
+      is_dirty: false,
+      created_at: Date.now(),
+    };
+    this.worktrees.push(created);
+    return JSON.parse(JSON.stringify(created));
+  },
+
+  diff(taskId: string): string {
+    const wt = this.worktrees.find((w) => w.task_id === taskId);
+    if (!wt) return '';
+    return [
+      `diff --git a/ui/features/agents/WorktreeLanes.svelte b/ui/features/agents/WorktreeLanes.svelte`,
+      `index a5171cb..8264eda 100644`,
+      `--- a/ui/features/agents/WorktreeLanes.svelte`,
+      `+++ b/ui/features/agents/WorktreeLanes.svelte`,
+      `@@ -1,5 +1,12 @@`,
+      `+// Worktree changes for ${taskId} (${wt.branch})`,
+      `+export interface WorktreeInfo {`,
+      `+  task_id: '${taskId}';`,
+      `+}`,
+    ].join('\n');
+  },
+
+  remove(taskId: string, _deleteBranch: boolean): void {
+    const idx = this.worktrees.findIndex((w) => w.task_id === taskId);
+    if (idx !== -1) {
+      this.worktrees.splice(idx, 1);
+    }
+  },
+};
+
+const mockSelfHealStore = {
+  statuses: new Map<string, SelfHealStatus>([
+    [
+      't_default',
+      {
+        task_id: 't_default',
+        active_file: 'lib/main.dart',
+        status: 'idle' as SelfHealPhase,
+        attempt: 0,
+        max_attempts: 3,
+        last_verified_at: Date.now(),
+      },
+    ],
+  ]),
+
+  getStatus(taskId: string): SelfHealStatus {
+    const existing = this.statuses.get(taskId);
+    if (existing) return { ...existing };
+    const created: SelfHealStatus = {
+      task_id: taskId,
+      active_file: 'lib/main.dart',
+      status: 'idle',
+      attempt: 0,
+      max_attempts: 3,
+      last_verified_at: Date.now(),
+    };
+    this.statuses.set(taskId, created);
+    return { ...created };
+  },
+
+  trigger(taskId: string, activeFile: string): SelfHealResult {
+    const current = this.getStatus(taskId);
+    current.active_file = activeFile;
+    current.attempt = Math.min(current.max_attempts, current.attempt + 1);
+    const newStatus: SelfHealPhase = current.attempt >= current.max_attempts ? 'paused' : 'passed';
+    current.status = newStatus;
+    current.last_verified_at = Date.now();
+    this.statuses.set(taskId, current);
+    return {
+      task_id: taskId,
+      success: current.status === 'passed',
+      attempts: current.attempt,
+      status: current.status,
+      message:
+        current.status === 'passed'
+          ? 'Verification PASS: hot reload and tests succeeded'
+          : 'Self-Heal Paused (3/3 attempts failed)',
+      diagnosis_prompt:
+        current.status === 'paused'
+          ? 'Periksa kegagalan pengujian pada ' + activeFile
+          : undefined,
+    };
+  },
+};
+
+export const agentTriggerSelfHeal = api.agentTriggerSelfHeal.bind(api);
+export const agentGetSelfHealStatus = api.agentGetSelfHealStatus.bind(api);
+
+
+

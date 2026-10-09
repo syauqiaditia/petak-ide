@@ -486,26 +486,58 @@ impl FlutterRun {
                                         finished,
                                     });
                                 }
-                                "app.log" => {
+                                "app.log" | "device.log" | "device.logMessage" | "app.deviceOutput" => {
                                     let log = params
                                         .get("log")
+                                        .or_else(|| params.get("message"))
+                                        .or_else(|| params.get("output"))
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("")
                                         .to_string();
+                                    let is_err = params
+                                        .get("error")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false)
+                                        || params
+                                            .get("level")
+                                            .and_then(|v| v.as_str())
+                                            .map(|l| l.eq_ignore_ascii_case("error"))
+                                            .unwrap_or(false)
+                                        || params
+                                            .get("stream")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.eq_ignore_ascii_case("stderr"))
+                                            .unwrap_or(false);
+                                    let stream = if is_err {
+                                        OutputStream::Stderr
+                                    } else {
+                                        OutputStream::Stdout
+                                    };
                                     let _ = tx_worker.send(RunEvent::Output {
-                                        stream: OutputStream::Stdout,
+                                        stream,
                                         line: log.clone(),
                                     });
                                     check_auxiliary(&shared_worker, &tx_worker, &log);
                                 }
-                                "daemon.logMessage" => {
+                                "daemon.logMessage" | "daemon.showMessage" => {
                                     let message = params
                                         .get("message")
+                                        .or_else(|| params.get("log"))
                                         .and_then(|v| v.as_str())
                                         .unwrap_or("")
                                         .to_string();
+                                    let is_err = params
+                                        .get("level")
+                                        .and_then(|v| v.as_str())
+                                        .map(|l| l.eq_ignore_ascii_case("error"))
+                                        .unwrap_or(false);
+                                    let stream = if is_err {
+                                        OutputStream::Stderr
+                                    } else {
+                                        OutputStream::Stdout
+                                    };
                                     let _ = tx_worker.send(RunEvent::Output {
-                                        stream: OutputStream::Stdout,
+                                        stream,
                                         line: message.clone(),
                                     });
                                     check_auxiliary(&shared_worker, &tx_worker, &message);
@@ -605,6 +637,11 @@ impl FlutterRun {
             spawn_duration,
             tx,
         })
+    }
+
+    /// Trigger hot reload (`reload(false)`).
+    pub fn hot_reload(&mut self) -> Result<ReloadResult, FlutterRunError> {
+        self.reload(false)
     }
 
     /// Trigger hot reload (`full == false`) or hot restart (`full == true`).
@@ -719,6 +756,48 @@ impl Drop for FlutterRun {
             let _ = self.stop();
         }
     }
+}
+
+static ACTIVE_FLUTTER_RUNNER: OnceLock<Mutex<Option<Arc<Mutex<FlutterRun>>>>> = OnceLock::new();
+
+/// Set the currently active Flutter runner instance.
+pub fn set_active_flutter_runner(runner: Option<Arc<Mutex<FlutterRun>>>) {
+    let lock = ACTIVE_FLUTTER_RUNNER.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = lock.lock() {
+        *guard = runner;
+    }
+}
+
+/// Check if a Flutter runner is active and running.
+pub fn is_flutter_runner_active() -> bool {
+    let lock = ACTIVE_FLUTTER_RUNNER.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = lock.lock() {
+        if let Some(ref runner) = *guard {
+            if let Ok(r) = runner.lock() {
+                return r.is_running();
+            }
+        }
+    }
+    false
+}
+
+/// Trigger hot reload on the active Flutter runner, if any.
+pub fn hot_reload() -> Result<ReloadResult, FlutterRunError> {
+    let lock = ACTIVE_FLUTTER_RUNNER.get_or_init(|| Mutex::new(None));
+    let maybe_runner = {
+        if let Ok(guard) = lock.lock() {
+            guard.clone()
+        } else {
+            None
+        }
+    };
+    if let Some(runner) = maybe_runner {
+        let mut r = runner.lock().map_err(|_| FlutterRunError::ProcessTerminated)?;
+        if r.is_running() {
+            return r.hot_reload();
+        }
+    }
+    Err(FlutterRunError::ProcessTerminated)
 }
 
 #[cfg(test)]

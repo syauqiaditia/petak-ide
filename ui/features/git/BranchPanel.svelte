@@ -9,6 +9,7 @@
   } from './branchTreeLogic';
   import { computeWindowing } from './windowingLogic';
   import CompareBranchModal from './CompareBranchModal.svelte';
+  import { portal } from '../../shell/portal';
 
   let { onSelectTab } = $props<{
     onSelectTab?: (tab: 'commit' | 'log' | 'conflict' | 'stash') => void;
@@ -609,7 +610,8 @@
   {#if branchContextMenuVisible && selectedBranch}
     <div
       class="branch-context-menu"
-      style="left: {branchContextMenuPos.x}px; top: {branchContextMenuPos.y}px;"
+      use:portal
+      style="top: {branchContextMenuPos.y}px; left: {branchContextMenuPos.x}px;"
       role="menu"
       tabindex="-1"
     >
@@ -693,8 +695,8 @@
   {#if remoteContextMenuVisible && selectedRemoteBranch}
     <div
       class="branch-context-menu"
-      style:left="{remoteContextMenuPos.x}px"
-      style:top="{remoteContextMenuPos.y}px"
+      use:portal
+      style="top: {remoteContextMenuPos.y}px; left: {remoteContextMenuPos.x}px;"
     >
       <button
         class="b-menu-item"
@@ -909,6 +911,7 @@
 <svelte:window
   onkeydown={handleWindowKeyDown}
   onpointerdown={handleWindowPointerDown}
+  onmousedown={handleWindowPointerDown}
 />
 
 <style>
@@ -1257,12 +1260,12 @@
 
   /* Context Menu */
   .branch-context-menu {
-    position: fixed;
-    z-index: 1000;
-    background: #1e2025;
-    border: 1px solid #34363d;
-    border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    position: fixed !important;
+    z-index: 99999 !important;
+    background: #1e1f22 !important;
+    border: 1px solid #383a42 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
     padding: 4px 0;
     width: 200px;
   }

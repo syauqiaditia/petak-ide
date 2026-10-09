@@ -1,11 +1,20 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { formatUsageText, ALL_PRESET_MODELS, getModelDisplayName } from './agentsLogic';
+  import {
+    formatUsageText,
+    ALL_PRESET_MODELS,
+    getModelDisplayName,
+    formatEngineName,
+    getRoleScopeBadge,
+    inferRoleFromSlot,
+    getRoleScopeDescription,
+  } from './agentsLogic';
   import AgentChat from './AgentChat.svelte';
   import ProposedEdits from './ProposedEdits.svelte';
   import QuotaUsageView from './QuotaUsageView.svelte';
   import MemoryView from './MemoryView.svelte';
+  import WorktreeLanes from './WorktreeLanes.svelte';
   import TeamEditor from './TeamEditor.svelte';
   import FixWithAgentModal from './FixWithAgentModal.svelte';
   import { settingsStore } from '../settings/settingsStore.svelte';
@@ -16,7 +25,8 @@
     onClose?: () => void;
   }>();
 
-  let activeSubTab = $state<'chat' | 'diff' | 'quota' | 'memory'>('chat');
+  // Subtabs: 'chat' | 'diff' | 'quota' | 'memory' (legacy contract)
+  let activeSubTab = $state<'chat' | 'lanes' | 'diff' | 'quota' | 'memory'>('chat');
   const SAVED_PANEL_WIDTH_KEY = 'petak_agent_panel_width';
   let panelWidth = $state(
     typeof localStorage !== 'undefined' && localStorage.getItem(SAVED_PANEL_WIDTH_KEY)
@@ -60,6 +70,12 @@
     const prof = (activeSlot.config?.hermesProfile || activeSlot.label || '').toLowerCase();
     const match = HERMES_PROFILES.find((p) => prof.includes(p.id) || p.id === prof);
     return match ? match.id : 'default';
+  });
+
+  let activeSlotRole = $derived.by(() => {
+    if (activeSlot?.config?.role) return activeSlot.config.role;
+    if (activeSlot?.config) return inferRoleFromSlot(activeSlot.config);
+    return activeProfileId;
   });
 
   let currentModelName = $derived(
@@ -156,30 +172,187 @@
   <!-- Left resize handle -->
   <div class="resize-handle" onmousedown={startResize} role="separator" aria-label="Resize panel"></div>
 
-  <!-- Single Unified 38px Header (Anti-Cramp V2) -->
+  <!-- Clean Responsive 2-Row Header (Linear / Raycast Style) -->
   <div class="agent-unified-header panel-header">
-    <div class="header-left">
-      <!-- Hermes 6 Bot Profiles Dropdown Selector -->
-      <div class="bot-selector-wrap">
-        <select
-          class="bot-select-dropdown"
-          value={activeProfileId}
-          onchange={handleProfileSelect}
-          aria-label="Hermes Bot Profile Selector"
-        >
-          {#each HERMES_PROFILES as p}
-            {@const pStatus = getProfileStatus(p.id)}
-            <option value={p.id}>
-              {p.label} ({p.role}) · {pStatus === 'busy' ? '⚡ Busy' : '● Ready'}
-            </option>
-          {/each}
-        </select>
-        <span
-          class="runtime-status-dot"
-          class:busy={getProfileStatus(activeProfileId) === 'busy'}
-          class:ready={getProfileStatus(activeProfileId) === 'ready'}
-          title="Runtime: {getProfileStatus(activeProfileId)}"
-        ></span>
+    <!-- Baris 1: Top Navigation & Primary Actions -->
+    <div class="header-primary-row">
+      <div class="primary-left header-left">
+        <!-- Hermes Bot Profiles Dropdown Selector -->
+        <div class="bot-selector-wrap">
+          <select
+            class="bot-select-dropdown"
+            value={activeProfileId}
+            onchange={handleProfileSelect}
+            aria-label="Hermes Bot Profile Selector"
+          >
+            {#each HERMES_PROFILES as p}
+              {@const pStatus = getProfileStatus(p.id)}
+              <option value={p.id}>
+                {p.label} ({p.role}) · {pStatus === 'busy' ? '⚡ Busy' : '● Ready'}
+              </option>
+            {/each}
+          </select>
+          <span
+            class="runtime-status-dot"
+            class:busy={getProfileStatus(activeProfileId) === 'busy'}
+            class:ready={getProfileStatus(activeProfileId) === 'ready'}
+            title="Runtime: {getProfileStatus(activeProfileId)}"
+          ></span>
+        </div>
+
+        <!-- + New Chat & History Sessions Action Buttons -->
+        <div class="session-actions-group">
+          <button
+            type="button"
+            class="panel-icon-btn session-switcher-btn"
+            class:active={agentsStore.isHistoryOpen}
+            onclick={() => agentsStore.toggleHistory()}
+            title="Ganti sesi percakapan"
+            aria-label="Session Switcher"
+          >
+            <span class="session-switcher-title">💬 {agentsStore.activeSession?.title || 'Percakapan'}</span>
+            <span class="session-switcher-arrow">▼</span>
+          </button>
+
+          <button
+            type="button"
+            class="panel-icon-btn new-chat-btn"
+            onclick={() => agentsStore.newSession()}
+            title="Mulai percakapan baru (+ New Chat)"
+            aria-label="New Chat"
+          >
+            <span class="btn-icon">+</span>
+            <span class="btn-text">New</span>
+          </button>
+
+          <button
+            type="button"
+            class="panel-icon-btn history-btn"
+            class:active={agentsStore.isHistoryOpen}
+            onclick={() => agentsStore.toggleHistory()}
+            title="Lihat riwayat percakapan sebelumnya"
+            aria-label="History Sessions"
+          >
+            ⏱️
+            {#if agentsStore.savedSessions.length > 0}
+              <span class="history-count">{agentsStore.savedSessions.length}</span>
+            {/if}
+          </button>
+        </div>
+      </div>
+
+      <div class="primary-right agent-header-actions">
+        <!-- Back to Chat when on secondary views -->
+        {#if activeSubTab !== 'chat'}
+          <button
+            class="subtab-btn back-chat"
+            onclick={() => (activeSubTab = 'chat')}
+            title="Kembali ke Chat"
+          >
+            ← Chat
+          </button>
+        {/if}
+
+        <!-- Concise Subtabs: Chat, Lanes & Diff (with hunk count badge) -->
+        <div class="agent-subtab-group">
+          <button
+            class="subtab-btn"
+            class:active={activeSubTab === 'chat'}
+            onclick={() => (activeSubTab = 'chat')}
+          >
+            Chat
+          </button>
+          <button
+            class="subtab-btn lanes"
+            class:active={activeSubTab === 'lanes'}
+            onclick={() => (activeSubTab = 'lanes')}
+            title="Lanes Cockpit"
+          >
+            ⚡ Lanes
+          </button>
+          {#if pendingHunkCount > 0 || pendingProposalCount > 0 || activeSubTab === 'diff'}
+            <button
+              class="subtab-btn diff"
+              class:active={activeSubTab === 'diff'}
+              onclick={() => (activeSubTab = 'diff')}
+              title="Proposed Edits"
+            >
+              Diff
+              {#if pendingHunkCount > 0}
+                <span class="diff-badge">{pendingHunkCount}</span>
+              {:else if pendingProposalCount > 0}
+                <span class="diff-badge">{pendingProposalCount}</span>
+              {/if}
+            </button>
+          {/if}
+        </div>
+
+        <!-- Action group kanan: ⋯ More menu (Quota, Memory, Settings) dan ✕ Close button -->
+        <div class="header-action-group">
+          <!-- More Menu Dropdown: Quota, Memory, Settings -->
+          <div class="more-menu-wrap">
+            <button
+              class="header-action-btn more-btn"
+              class:active={isMoreMenuOpen || activeSubTab === 'quota' || activeSubTab === 'memory'}
+              onclick={() => (isMoreMenuOpen = !isMoreMenuOpen)}
+              title="Menu Lainnya (Quota, Memory, Settings)"
+              aria-label="More Options"
+            >
+              ⋯
+            </button>
+
+            {#if isMoreMenuOpen}
+              <div class="more-menu-backdrop" onclick={() => (isMoreMenuOpen = false)} role="presentation"></div>
+              <div class="more-menu-dropdown" role="menu" onclick={() => (isMoreMenuOpen = false)}>
+                <button
+                  class="more-menu-item"
+                  class:active={activeSubTab === 'quota'}
+                  onclick={() => (activeSubTab = 'quota')}
+                  role="menuitem"
+                  title="Quota & Usage"
+                >
+                  <span class="item-icon">📊</span>
+                  <span>Quota & Usage</span>
+                </button>
+                <button
+                  class="more-menu-item"
+                  class:active={activeSubTab === 'memory'}
+                  onclick={() => (activeSubTab = 'memory')}
+                  role="menuitem"
+                  title="Memory"
+                >
+                  <span class="item-icon">📓</span>
+                  <span>Memory</span>
+                </button>
+                <div class="more-menu-divider"></div>
+                <button
+                  class="more-menu-item"
+                  onclick={() => settingsStore.open('agents')}
+                  role="menuitem"
+                >
+                  <span class="item-icon">⚙️</span>
+                  <span>Pengaturan AI Agents</span>
+                </button>
+              </div>
+            {/if}
+          </div>
+
+          <!-- Close Panel Button -->
+          <button class="close-panel-btn" onclick={onClose} aria-label="Close Agents Panel" title="Tutup panel (⌘6)">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Baris 2: Context & Runtime Metadata Bar -->
+    <div class="header-meta-row">
+      <!-- Engine Badge -->
+      <div
+        class="dynamic-engine-badge"
+        title="Engine: {formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}"
+      >
+        <span class="engine-pill-text">{formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}</span>
       </div>
 
       <!-- Dynamic Active Model Dropdown Selector (Interactive in-chat model switch) -->
@@ -226,127 +399,13 @@
         <span class="dropdown-chevron">▾</span>
       </div>
 
-      <!-- + New Chat & History Sessions Action Buttons -->
-      <div class="session-actions-group">
-        <button
-          type="button"
-          class="panel-icon-btn new-chat-btn"
-          onclick={() => agentsStore.newSession()}
-          title="Mulai percakapan baru (+ New Chat)"
-          aria-label="New Chat"
-        >
-          <span class="btn-icon">+</span>
-          <span class="btn-text">New</span>
-        </button>
-
-        <button
-          type="button"
-          class="panel-icon-btn history-btn"
-          class:active={agentsStore.isHistoryOpen}
-          onclick={() => agentsStore.toggleHistory()}
-          title="Lihat riwayat percakapan sebelumnya"
-          aria-label="History Sessions"
-        >
-          ⏱️
-          {#if agentsStore.savedSessions.length > 0}
-            <span class="history-count">{agentsStore.savedSessions.length}</span>
-          {/if}
-        </button>
+      <!-- Tool Scoping Protection Indicator -->
+      <div
+        class="tool-scoping-badge"
+        title="Least-privilege gateway aktif: {getRoleScopeBadge(activeSlotRole)}. {getRoleScopeDescription(activeSlotRole)}"
+      >
+        <span class="tool-scoping-text">🛡️ Tool Scoping: Active</span>
       </div>
-    </div>
-
-    <div class="agent-header-actions">
-      <!-- Back to Chat when on secondary views -->
-      {#if activeSubTab !== 'chat'}
-        <button
-          class="subtab-btn back-chat"
-          onclick={() => (activeSubTab = 'chat')}
-          title="Kembali ke Chat"
-        >
-          ← Chat
-        </button>
-      {/if}
-
-      <!-- Concise Subtabs: Chat & Diff (with hunk count badge) -->
-      <div class="agent-subtab-group">
-        {#if activeSubTab === 'chat'}
-          <button
-            class="subtab-btn"
-            class:active={activeSubTab === 'chat'}
-            onclick={() => (activeSubTab = 'chat')}
-          >
-            Chat
-          </button>
-        {/if}
-        {#if pendingHunkCount > 0 || pendingProposalCount > 0 || activeSubTab === 'diff'}
-          <button
-            class="subtab-btn diff"
-            class:active={activeSubTab === 'diff'}
-            onclick={() => (activeSubTab = 'diff')}
-            title="Proposed Edits"
-          >
-            Diff
-            {#if pendingHunkCount > 0}
-              <span class="diff-badge">{pendingHunkCount}</span>
-            {:else if pendingProposalCount > 0}
-              <span class="diff-badge">{pendingProposalCount}</span>
-            {/if}
-          </button>
-        {/if}
-      </div>
-
-      <!-- More Menu Dropdown: Quota, Memory, Settings -->
-      <div class="more-menu-wrap">
-        <button
-          class="header-action-btn more-btn"
-          class:active={isMoreMenuOpen || activeSubTab === 'quota' || activeSubTab === 'memory'}
-          onclick={() => (isMoreMenuOpen = !isMoreMenuOpen)}
-          title="Menu Lainnya (Quota, Memory, Settings)"
-          aria-label="More Options"
-        >
-          ⋯
-        </button>
-
-        {#if isMoreMenuOpen}
-          <div class="more-menu-backdrop" onclick={() => (isMoreMenuOpen = false)} role="presentation"></div>
-          <div class="more-menu-dropdown" role="menu" onclick={() => (isMoreMenuOpen = false)}>
-            <button
-              class="more-menu-item"
-              class:active={activeSubTab === 'quota'}
-              onclick={() => (activeSubTab = 'quota')}
-              role="menuitem"
-              title="Quota & Usage"
-            >
-              <span class="item-icon">📊</span>
-              <span>Quota & Usage</span>
-            </button>
-            <button
-              class="more-menu-item"
-              class:active={activeSubTab === 'memory'}
-              onclick={() => (activeSubTab = 'memory')}
-              role="menuitem"
-              title="Memory"
-            >
-              <span class="item-icon">📓</span>
-              <span>Memory</span>
-            </button>
-            <div class="more-menu-divider"></div>
-            <button
-              class="more-menu-item"
-              onclick={() => settingsStore.open('agents')}
-              role="menuitem"
-            >
-              <span class="item-icon">⚙️</span>
-              <span>Pengaturan AI Agents</span>
-            </button>
-          </div>
-        {/if}
-      </div>
-
-      <!-- Close Panel Button -->
-      <button class="close-panel-btn" onclick={onClose} aria-label="Close Agents Panel" title="Tutup panel (⌘6)">
-        ✕
-      </button>
     </div>
   </div>
 
@@ -366,7 +425,7 @@
               <div class="empty-sessions">Belum ada riwayat percakapan yang tersimpan.</div>
             {:else}
               {#each agentsStore.savedSessions as sess (sess.id)}
-                <div class="session-row" onclick={() => agentsStore.loadSession(sess)} role="button" tabindex="0">
+                <div class="session-row" onclick={() => { agentsStore.loadSession(sess); activeSubTab = 'chat'; }} role="button" tabindex="0">
                   <div class="session-info">
                     <div class="session-snippet">{sess.title}</div>
                     <div class="session-meta-line">
@@ -392,6 +451,8 @@
 
     {#if activeSubTab === 'chat'}
       <AgentChat />
+    {:else if activeSubTab === 'lanes'}
+      <WorktreeLanes />
     {:else if activeSubTab === 'diff'}
       <ProposedEdits />
     {:else if activeSubTab === 'quota'}
@@ -401,9 +462,14 @@
     {/if}
   </div>
 
-  {#if activeSubTab === 'chat' || activeSubTab === 'diff'}
+  {#if activeSubTab === 'chat' || activeSubTab === 'diff' || activeSubTab === 'lanes'}
     <!-- Honest Usage Meter Footer (24px) -->
     <div class="usage-meter-footer">
+      <div class="footer-agent-badges">
+        <span class="footer-engine-badge">{formatEngineName(activeSlot?.config?.engine || activeSlot?.kind)}</span>
+        <span class="footer-model-badge">{currentModelName}</span>
+        <span class="footer-scoping-badge" title={getRoleScopeDescription(activeSlotRole)}>{getRoleScopeBadge(activeSlotRole)}</span>
+      </div>
       <span class="usage-text" class:unreported={!usageInfo.isReported}>
         {usageInfo.text}
       </span>
@@ -469,29 +535,75 @@
     background: #6ea8ff;
   }
 
-  /* Single Unified 38px Header */
+  /* Clean Responsive 2-Row Header (Linear / Raycast Style) */
   .agent-unified-header,
   .panel-header {
+    display: flex;
+    flex-direction: column;
+    background: #121317;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  /* Baris 1: Top Navigation & Primary Actions */
+  .header-primary-row {
     height: 38px;
     min-height: 38px;
-    max-height: 38px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 6px;
     padding: 0 8px;
-    background: #121317;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
     box-sizing: border-box;
+    width: 100%;
   }
 
+  .primary-left,
   .header-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     min-width: 0;
-    flex-shrink: 1;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .primary-right,
+  .agent-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .header-action-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Baris 2: Context & Runtime Metadata Bar */
+  .header-meta-row {
+    height: 28px;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    box-sizing: border-box;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .header-meta-row::-webkit-scrollbar {
+    display: none;
   }
 
   /* Hermes Bot Dropdown Selector */
@@ -499,22 +611,27 @@
     position: relative;
     display: flex;
     align-items: center;
+    min-width: 0;
+    flex-shrink: 1;
+    max-width: 130px;
   }
 
   .bot-select-dropdown {
-    background: #18191f;
+    background: #181920;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     color: #f1f2f4;
     font-size: 11px;
     font-weight: 600;
-    padding: 3px 20px 3px 5px;
-    max-width: 115px;
+    padding: 3px 18px 3px 6px;
+    width: 100%;
+    max-width: 130px;
     outline: none;
     cursor: pointer;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
+    transition: all 0.12s ease;
   }
 
   .bot-select-dropdown:hover {
@@ -524,7 +641,7 @@
 
   .runtime-status-dot {
     position: absolute;
-    right: 7px;
+    right: 6px;
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -547,13 +664,33 @@
     50% { opacity: 0.5; transform: scale(0.85); }
   }
 
+  /* Dynamic Engine Badge */
+  .dynamic-engine-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    background: rgba(59, 130, 246, 0.08);
+    color: #60a5fa;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .engine-pill-text {
+    line-height: 1;
+    white-space: nowrap;
+  }
+
   /* Dynamic Active Model Badge */
   .dynamic-model-badge {
     position: relative;
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    padding: 2px 5px;
+    padding: 2px 6px;
     border-radius: 4px;
     font-size: 10px;
     font-weight: 600;
@@ -561,6 +698,7 @@
     background: rgba(255, 255, 255, 0.04);
     color: #9da1ad;
     flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .dynamic-model-badge.interactive {
@@ -589,10 +727,43 @@
     opacity: 0.6;
   }
 
+  /* Tool Scoping Status Indicator */
+  .tool-scoping-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.08);
+    color: #34d399;
+    flex-shrink: 0;
+    cursor: default;
+    white-space: nowrap;
+  }
+
+  .tool-scoping-text {
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .footer-scoping-badge {
+    font-size: 9px;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
   .session-actions-group {
     display: flex;
     align-items: center;
     gap: 3px;
+    flex-shrink: 0;
   }
 
   .panel-icon-btn {
@@ -601,7 +772,7 @@
     gap: 3px;
     height: 22px;
     padding: 0 5px;
-    background: #18191f;
+    background: #181920;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     color: #c9cdd4;
@@ -609,12 +780,46 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .panel-icon-btn:hover {
     background: #23252e;
     color: #f1f2f4;
     border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .panel-icon-btn.session-switcher-btn {
+    max-width: 140px;
+    background: #181920;
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .panel-icon-btn.session-switcher-btn:hover {
+    background: #23252e;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .panel-icon-btn.session-switcher-btn.active {
+    background: #2a2d38;
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.4);
+  }
+
+  .session-switcher-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 110px;
+  }
+
+  .session-switcher-arrow {
+    font-size: 8px;
+    opacity: 0.7;
+    margin-left: 2px;
   }
 
   .panel-icon-btn.new-chat-btn {
@@ -645,7 +850,7 @@
 
   .sessions-dropdown-backdrop {
     position: absolute;
-    inset: 38px 0 0 0;
+    inset: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 50;
     display: flex;
@@ -963,6 +1168,7 @@
   }
 
   .panel-view-area {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -973,6 +1179,7 @@
   .usage-meter-footer {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     height: 24px;
     padding: 0 10px;
     background: #111215;
@@ -982,8 +1189,33 @@
     flex-shrink: 0;
   }
 
+  .footer-agent-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .footer-engine-badge {
+    color: #60a5fa;
+    font-weight: 600;
+  }
+
+  .footer-model-badge {
+    color: #a1a1aa;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .usage-text {
     color: #8b949e;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

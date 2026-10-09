@@ -357,9 +357,11 @@
       resizeObserver.observe(bodyElement);
     }
 
-    // Load persisted bottom panel height (Feature B)
+    // Load persisted bottom panel height (Feature B & Batch 41)
     try {
-      const savedStorage = typeof localStorage !== 'undefined' ? localStorage.getItem('petak.bottom_panel_height') : null;
+      const savedStorage = typeof localStorage !== 'undefined'
+        ? (localStorage.getItem('petak.bottomDockHeight') || localStorage.getItem('petak.bottom_panel_height'))
+        : null;
       let initialH = savedStorage ? parseInt(savedStorage, 10) : toolchainStore.config.bottom_panel_height;
       if (!initialH || isNaN(initialH)) {
         initialH = DEFAULT_BOTTOM_PANEL_HEIGHT;
@@ -406,6 +408,7 @@
   async function savePanelHeight(h: number) {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('petak.bottom_panel_height', String(h));
+      localStorage.setItem('petak.bottomDockHeight', String(h));
     }
     try {
       const cfg = await api.toolchainGetConfig();
@@ -628,6 +631,17 @@
           🔍
         </button>
       {/if}
+
+      <button
+        class="toggle-maximize-btn"
+        onclick={handleToggleMaximize}
+        title="Maximize / Restore Panel (Double-click border also works)"
+        aria-label="Maximize or Restore Panel"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+        </svg>
+      </button>
 
       <button
         class="close-panel-btn"
@@ -1075,7 +1089,8 @@
     align-items: center;
   }
 
-  .close-panel-btn {
+  .close-panel-btn,
+  .toggle-maximize-btn {
     width: 24px;
     height: 24px;
     border-radius: 5px;
@@ -1087,7 +1102,8 @@
     cursor: pointer;
   }
 
-  .close-panel-btn:hover {
+  .close-panel-btn:hover,
+  .toggle-maximize-btn:hover {
     color: #d8d9dc;
     background: #23252b;
   }

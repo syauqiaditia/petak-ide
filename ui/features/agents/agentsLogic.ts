@@ -4,7 +4,28 @@ import type {
   UsageReport,
   FixWithAgentDraft,
   SlotStatus,
+  SlotConfig,
+  TeamConfig,
+  HermesProfileInfo,
+  EnginePlatformOption,
+  RoleScopeInfo,
+  AgentRole,
+  SymbolOutline,
+  DiagnosticSnippet,
+  PrunedContextResult,
+  MemorySnippet,
+  WorktreeInfo,
+  SlotSummary,
+  SelfHealPhase,
+  SelfHealStatus,
+  SelfHealResult,
+  ChatMessage,
+  ChatSessionMeta,
+  ChatSessionData,
+  FileReference,
+  ToolCallData,
 } from './types';
+export type { FileReference, ToolCallData, ChatSessionData };
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
 
@@ -134,6 +155,82 @@ export function truncateToolOutput(text: string, maxLen = 300): { text: string; 
 }
 
 /**
+ * Formats a concise summary of tool calls by frequency (e.g. "read_file (4), terminal (2)").
+ */
+export function formatToolGroupSummary(tools: ToolCallData[] | any[]): string {
+  if (!tools || tools.length === 0) return '';
+  const counts: Record<string, number> = {};
+  const order: string[] = [];
+  for (const t of tools) {
+    const name = t?.name || 'tool';
+    if (!counts[name]) {
+      counts[name] = 0;
+      order.push(name);
+    }
+    counts[name]++;
+  }
+  return order.map((name) => `${name} (${counts[name]})`).join(', ');
+}
+
+/**
+ * Checks if a tool group accordion is collapsed. Default is true (collapsed).
+ */
+export function isToolGroupCollapsed(
+  state: Record<string, boolean> | null | undefined,
+  groupId: string
+): boolean {
+  if (!state || !(groupId in state)) return true;
+  return state[groupId] !== false;
+}
+
+/**
+ * Toggles the collapsed state for a given tool group ID.
+ */
+export function toggleToolGroupCollapsed(
+  state: Record<string, boolean>,
+  groupId: string
+): Record<string, boolean> {
+  const current = isToolGroupCollapsed(state, groupId);
+  return {
+    ...state,
+    [groupId]: !current,
+  };
+}
+
+/**
+ * Separates streaming tool calls into completed tools (folded into accordion)
+ * and the single active running tool (displayed on live line).
+ */
+export function separateStreamingToolCalls(tools: ToolCallData[] | any[]): {
+  completedTools: ToolCallData[];
+  activeRunningTool: ToolCallData | null;
+} {
+  if (!tools || tools.length === 0) {
+    return { completedTools: [], activeRunningTool: null };
+  }
+
+  let runningIndex = -1;
+  for (let i = tools.length - 1; i >= 0; i--) {
+    if (tools[i].status === 'running') {
+      runningIndex = i;
+      break;
+    }
+  }
+
+  if (runningIndex !== -1) {
+    return {
+      completedTools: tools.filter((_, idx) => idx !== runningIndex),
+      activeRunningTool: tools[runningIndex],
+    };
+  }
+
+  return {
+    completedTools: [...tools],
+    activeRunningTool: null,
+  };
+}
+
+/**
  * Composes a full, transparent prompt draft for "Fix with Agent" without stealth sending.
  */
 export function buildFixWithAgentDraft(input: {
@@ -192,7 +289,9 @@ export function applyDisciplineDirectives(
   isCaveman: boolean,
   isSelfImprove: boolean = false,
   memoryContext: string = '',
-  skillsInjection: string = ''
+  skillsInjection: string = '',
+  domainMemoryInjection: string = '',
+  prunedContextInjection: string = ''
 ): string {
   const directives: string[] = [];
 
@@ -214,6 +313,14 @@ export function applyDisciplineDirectives(
 
   if (skillsInjection && skillsInjection.trim()) {
     directives.push(skillsInjection.trim());
+  }
+
+  if (domainMemoryInjection && domainMemoryInjection.trim()) {
+    directives.push(domainMemoryInjection.trim());
+  }
+
+  if (prunedContextInjection && prunedContextInjection.trim()) {
+    directives.push(prunedContextInjection.trim());
   }
 
   if (memoryContext && memoryContext.trim()) {
@@ -340,35 +447,140 @@ export interface AgentPlatform {
 }
 
 export const AGENT_PLATFORMS: AgentPlatform[] = [
-  { id: 'antigravity', name: 'Antigravity (via 9Router)', badge: '🚀 Antigravity', desc: 'Google Gemini & Claude Opus via 9Router proxy' },
+  { id: 'hermes', name: 'Hermes Agent', badge: '🤖 Hermes', desc: 'Daemon profil lokal Hermes CLI' },
   { id: 'claude-code', name: 'Claude Code CLI', badge: '🟣 Claude Code', desc: 'Anthropic Standalone CLI via ACP' },
-  { id: 'codex', name: 'OpenAI Codex / GPT', badge: '🟢 Codex', desc: 'OpenAI Autonomous Agent via ACP' },
-  { id: 'hermes', name: 'Hermes Agent', badge: '🤖 Hermes', desc: 'Daemon profil lokal Hermes' },
+  { id: 'antigravity', name: 'Antigravity (via 9Router)', badge: '🚀 Antigravity', desc: 'Google Gemini & Claude Opus via 9Router proxy' },
+  { id: 'codex', name: 'OpenAI Codex', badge: '🟢 Codex', desc: 'OpenAI Autonomous Agent via ACP' },
+  { id: 'acp-custom', name: 'Custom ACP Command', badge: '⚙️ Custom', desc: 'Perintah terminal bebas via stdio ACP' },
   { id: 'ollama', name: 'Local Ollama', badge: '🦙 Ollama', desc: 'Model offline tanpa internet' },
   { id: 'custom', name: 'Custom ACP Command', badge: '⚙️ Custom', desc: 'Perintah terminal bebas via stdio ACP' },
 ];
 
+export const SUPPORTED_ENGINES: EnginePlatformOption[] = [
+  {
+    id: 'hermes',
+    name: 'Hermes Agent',
+    badge: '🤖 Hermes',
+    desc: 'Daemon profil lokal Hermes CLI',
+    defaultModel: 'ag/gemini-3.8-flash-high',
+    models: [
+      { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Default', recommended: true },
+      { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus Thinking', desc: 'Hermes Reasoning' },
+      { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', desc: 'Hermes Cloud' },
+      { id: 'openai/gpt-4o', name: 'OpenAI GPT-4o', desc: 'Hermes Cloud' },
+    ],
+  },
+  {
+    id: 'claude-code',
+    name: 'Claude Code CLI',
+    badge: '🟣 Claude Code',
+    desc: 'Anthropic Standalone CLI via ACP',
+    defaultModel: 'claude-3-7-sonnet',
+    models: [
+      { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
+      { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+      { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+    ],
+  },
+  {
+    id: 'antigravity',
+    name: 'Antigravity (via 9Router)',
+    badge: '🚀 Antigravity',
+    desc: 'Google Gemini & Claude Opus via 9Router proxy',
+    defaultModel: 'ag/gemini-3.8-flash-high',
+    models: [
+      { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Cepat & Hemat Kuota', recommended: true },
+      { id: 'ag/claude-opus-4.1', name: 'Claude Opus 4.1', desc: 'Arsitektur & Reasoning Kuat', recommended: true },
+      { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'Deep Reasoning Flagship' },
+    ],
+  },
+  {
+    id: 'codex',
+    name: 'OpenAI Codex',
+    badge: '🟢 Codex',
+    desc: 'OpenAI Autonomous Agent via ACP',
+    defaultModel: 'gpt-4o',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+      { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+      { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+    ],
+  },
+  {
+    id: 'acp-custom',
+    name: 'Custom ACP Command',
+    badge: '⚙️ Custom',
+    desc: 'Perintah terminal bebas via stdio ACP',
+    defaultModel: 'custom-model',
+    models: [
+      { id: 'custom-model', name: 'Custom Model ID', desc: 'Model bebas via parameter CLI' },
+    ],
+  },
+];
+
+export const ENGINE_WHITELIST_MODELS: Record<string, ModelPreset[]> = {
+  'claude-code': [
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
+    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+  ],
+  antigravity: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Cepat & Hemat Kuota', recommended: true },
+    { id: 'ag/claude-opus-4.1', name: 'Claude Opus 4.1', desc: 'Arsitektur & Reasoning Kuat', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'Deep Reasoning Flagship' },
+  ],
+  codex: [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+    { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
+    { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
+  ],
+  hermes: [
+    { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Profile Default', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus Thinking', desc: 'Hermes Profile Fallback' },
+    { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', desc: 'Hermes Cloud' },
+    { id: 'openai/gpt-4o', name: 'OpenAI GPT-4o', desc: 'Hermes Cloud' },
+  ],
+  'acp-custom': [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
+  ],
+  custom: [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
+  ],
+  ollama: [
+    { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', desc: 'Coding Lokal Terbaik (16GB)', recommended: true },
+    { id: 'qwen2.5-coder:14b', name: 'Qwen 2.5 Coder 14B', desc: 'Cepat & Akurat (Mac 16GB)' },
+    { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng untuk Mac 8GB' },
+    { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
+    { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
+  ],
+};
+
 export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
   antigravity: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Cepat, Hemat & Cerdas', recommended: true },
-    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity — Deep Reasoning & Arsitektur', recommended: true },
+    { id: 'ag/claude-opus-4.1', name: 'Claude Opus 4.1', desc: 'via Antigravity — Arsitektur & Reasoning Kuat', recommended: true },
+    { id: 'ag/claude-opus-4-6-thinking', name: 'Claude Opus 4.6 Thinking', desc: 'via Antigravity — Deep Reasoning & Arsitektur' },
     { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship' },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Standar Cepat & Akurat' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Reasoning Kuat & Multimodal' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Super Cepat & Hemat Kuota' },
   ],
   'claude-code': [
     { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship (Rekomendasi)', recommended: true },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Standar Cepat & Akurat' },
     { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
   ],
   codex: [
     { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
     { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
     { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
-    { id: 'o1-mini', name: 'o1-mini', desc: 'Reasoning Ringan' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
   ],
   hermes: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'Hermes Profile Default', recommended: true },
@@ -382,17 +594,17 @@ export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
     { id: 'qwen2.5-coder:7b', name: 'Qwen 2.5 Coder 7B', desc: 'Enteng untuk Mac 8GB' },
     { id: 'deepseek-r1:14b', name: 'DeepSeek R1 14B', desc: 'Reasoning Lokal' },
     { id: 'deepseek-r1:8b', name: 'DeepSeek R1 8B', desc: 'Reasoning Ringan 8GB' },
-    { id: 'llama3.3:70b', name: 'Llama 3.3 70B', desc: 'Model Besar Serbaguna' },
-    { id: 'llama3.1:8b', name: 'Llama 3.1 8B', desc: 'Lokal Cepat Standar' },
+  ],
+  'acp-custom': [
+    { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
   ],
   custom: [
     { id: 'custom-model', name: 'Custom Model ID', desc: 'Model custom via ACP command' },
   ],
-  // Compatibility aliases
   anthropic: [
     { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', desc: 'Hybrid Reasoning & Coding Flagship', recommended: true },
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet v2', desc: 'Coding Utama Cepat & Akurat' },
-    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', desc: 'Sangat Cepat & Hemat Token' },
+    { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', desc: 'Coding Utama Cepat & Akurat' },
+    { id: 'claude-3-opus', name: 'Claude 3 Opus', desc: 'Analisis Mendalam' },
   ],
   gemini: [
     { id: 'ag/gemini-3.8-flash-high', name: 'Gemini 3.8 Flash High', desc: 'via Antigravity — Rekomendasi Hermes', recommended: true },
@@ -401,8 +613,8 @@ export const PROVIDER_MODELS: Record<string, ModelPreset[]> = {
   ],
   openai: [
     { id: 'gpt-4o', name: 'GPT-4o', desc: 'Multimodal Omnimodel Flagship', recommended: true },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', desc: 'Hemat Token & Kencang' },
     { id: 'o3-mini', name: 'o3-mini', desc: 'STEM & Coding Reasoning' },
+    { id: 'o1', name: 'o1', desc: 'Deep Math & Logic Reasoning' },
   ],
 };
 
@@ -446,6 +658,170 @@ export function getModelDescription(modelId: string): string {
     if (found?.desc) return found.desc;
   }
   return '';
+}
+
+// ── Multi-Engine Cascading & Presets (Phase 1 ACP Gateway) ───────────────────
+
+export function getEngineOptions(): EnginePlatformOption[] {
+  return SUPPORTED_ENGINES;
+}
+
+export function normalizeEngineId(engine?: string | null): string {
+  if (!engine) return 'hermes';
+  const e = engine.trim().toLowerCase();
+  if (e === 'openai') return 'codex';
+  if (e === 'custom') return 'acp-custom';
+  return e;
+}
+
+export function getModelsForEngine(
+  engine?: string | null,
+  hermesProfiles?: HermesProfileInfo[]
+): ModelPreset[] {
+  const norm = normalizeEngineId(engine);
+  if (norm === 'hermes' && hermesProfiles && hermesProfiles.length > 0) {
+    const list: ModelPreset[] = hermesProfiles.map((p) => ({
+      id: p.model || p.name,
+      name: `Hermes: ${p.name.charAt(0).toUpperCase() + p.name.slice(1)}`,
+      desc: p.model ? `Model: ${p.model}` : 'Profil Hermes Lokal',
+      recommended: p.is_active,
+    }));
+    for (const m of (ENGINE_WHITELIST_MODELS.hermes || [])) {
+      if (!list.some((item) => item.id === m.id)) {
+        list.push(m);
+      }
+    }
+    return list;
+  }
+
+  return (
+    ENGINE_WHITELIST_MODELS[norm] ||
+    ENGINE_WHITELIST_MODELS[engine || ''] ||
+    ENGINE_WHITELIST_MODELS.antigravity
+  );
+}
+
+export function getDefaultModelForEngine(engine?: string | null): string {
+  const norm = normalizeEngineId(engine);
+  switch (norm) {
+    case 'claude-code':
+      return 'claude-3-7-sonnet';
+    case 'antigravity':
+      return 'ag/gemini-3.8-flash-high';
+    case 'codex':
+      return 'gpt-4o';
+    case 'hermes':
+      return 'ag/gemini-3.8-flash-high';
+    case 'acp-custom':
+      return 'custom-model';
+    default:
+      return 'ag/gemini-3.8-flash-high';
+  }
+}
+
+export function isModelAllowedForEngine(
+  engine: string,
+  model: string,
+  hermesProfiles?: HermesProfileInfo[]
+): boolean {
+  if (!engine || !model) return false;
+  const models = getModelsForEngine(engine, hermesProfiles);
+  return models.some((m) => m.id === model);
+}
+
+export function resetModelOnEngineChange(
+  newEngine: string,
+  _currentModel?: string | null,
+  _hermesProfiles?: HermesProfileInfo[]
+): string {
+  return getDefaultModelForEngine(newEngine);
+}
+
+export function resolveModelForEngine(
+  newEngine: string,
+  currentModel?: string | null,
+  hermesProfiles?: HermesProfileInfo[]
+): string {
+  if (currentModel && isModelAllowedForEngine(newEngine, currentModel, hermesProfiles)) {
+    return currentModel;
+  }
+  return getDefaultModelForEngine(newEngine);
+}
+
+export function getStandardTeamPreset(cwd: string = 'project'): TeamConfig & SlotConfig[] {
+  const slots: SlotConfig[] = [
+    {
+      id: 'manager',
+      label: '👑 Manager',
+      kind: 'antigravity',
+      engine: 'antigravity',
+      role: 'manager',
+      model: 'ag/claude-opus-4.1',
+      fallbackModel: 'ag/claude-opus-4-6-thinking',
+      permission: 'ask',
+      cwd,
+    },
+    {
+      id: 'senior',
+      label: '⚡ Senior',
+      kind: 'claude-code',
+      engine: 'claude-code',
+      role: 'senior',
+      model: 'claude-3-7-sonnet',
+      fallbackModel: 'claude-3-5-sonnet',
+      permission: 'ask',
+      cwd,
+    },
+    {
+      id: 'reviewer',
+      label: '🔍 Reviewer',
+      kind: 'antigravity',
+      engine: 'antigravity',
+      role: 'reviewer',
+      model: 'ag/gemini-3.8-flash-high',
+      fallbackModel: null,
+      permission: 'ask',
+      cwd,
+    },
+  ];
+
+  const result = slots as any;
+  result.version = 1;
+  result.slots = slots;
+  return result;
+}
+
+export function formatEngineName(engine?: string | null): string {
+  if (!engine) return 'Hermes';
+  const e = engine.toLowerCase();
+  if (e.includes('antigravity')) return 'Antigravity';
+  if (e.includes('claude')) return 'Claude Code';
+  if (e.includes('codex') || e.includes('openai')) return 'Codex';
+  if (e.includes('hermes')) return 'Hermes';
+  if (e.includes('custom') || e.includes('acp')) return 'Custom ACP';
+  if (e.includes('ollama')) return 'Ollama';
+  return engine;
+}
+
+export function getEngineShortBadge(engine?: string | null): string {
+  if (!engine) return 'H';
+  const e = engine.toLowerCase();
+  if (e.includes('antigravity')) return 'AG';
+  if (e.includes('claude')) return 'C';
+  if (e.includes('codex') || e.includes('openai')) return 'CX';
+  if (e.includes('hermes')) return 'H';
+  if (e.includes('custom') || e.includes('acp')) return 'ACP';
+  if (e.includes('ollama')) return 'OL';
+  return 'A';
+}
+
+export function formatShortModelName(model?: string | null): string {
+  if (!model) return '';
+  let m = model;
+  if (m.startsWith('ag/')) m = m.slice(3);
+  if (m.startsWith('anthropic/')) m = m.slice(10);
+  if (m.startsWith('openai/')) m = m.slice(7);
+  return m;
 }
 
 /**
@@ -560,7 +936,9 @@ export function renderChatMarkdown(raw: string | null | undefined): string {
       }
       codeText = codeText.replace(/^\n+|\n+$/g, '');
       const escapedCode = escapeHtml(codeText);
-      const langHeader = lang ? `<div class="chat-code-header"><span class="chat-code-lang">${escapeHtml(lang)}</span></div>` : '';
+      const langSpan = lang ? `<span class="chat-code-lang">${escapeHtml(lang)}</span>` : `<span class="chat-code-lang">code</span>`;
+      const copyBtn = `<button class="code-copy-btn" type="button" title="Salin kode">📋 Salin</button>`;
+      const langHeader = `<div class="chat-code-header">${langSpan}${copyBtn}</div>`;
       const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : '';
       htmlParts.push(
         `<div class="chat-code-wrapper">${langHeader}<pre class="chat-code-block"><code${langClass}>${escapedCode}</code></pre></div>`
@@ -654,6 +1032,1008 @@ export function renderChatMarkdown(raw: string | null | undefined): string {
 
   return htmlParts.join('');
 }
+
+// ── Role-Based Tool Scoping (Phase 2 Least Privilege Gateway) ────────────────
+
+export const ROLE_SCOPE_BADGES: Record<string, string> = {
+  manager: 'Tools: Scoped (Read/Plan only)',
+  senior: 'Tools: Scoped (Implement & Build)',
+  senior2: 'Tools: Scoped (UI & Toolchain)',
+  techlead: 'Tools: Scoped (Architecture & Review)',
+  reviewer: 'Tools: Scoped (QA & Test runner only)',
+  custom: 'Tools: Scoped (Custom)',
+};
+
+export const DEFAULT_ROLE_WHITELISTS: Record<string, string[]> = {
+  manager: ['read_file', 'list_directory', 'search_files', 'kanban_create', 'kanban_list', 'kanban_show'],
+  senior: ['read_file', 'write_file', 'patch', 'search_files', 'terminal', 'git_worktree'],
+  senior2: ['read_file', 'write_file', 'patch', 'search_files', 'terminal', 'flutter_run'],
+  techlead: ['git_merge', 'git_checkout', 'review_diff', 'device_control', 'terminal', 'kanban_unblock'],
+  reviewer: ['read_file', 'search_files', 'git_diff', 'run_test', 'kanban_complete', 'kanban_request_changes'],
+  custom: [],
+};
+
+export const ROLE_BLACKLISTS: Record<string, string[]> = {
+  manager: ['write_file', 'patch', 'terminal', 'kanban_complete'],
+  senior: ['kanban_complete'],
+  senior2: ['kanban_complete'],
+  techlead: ['write_file', 'patch'],
+  reviewer: ['write_file', 'patch', 'terminal'],
+  custom: [],
+};
+
+export const ALL_AVAILABLE_TOOLS: string[] = [
+  'read_file',
+  'write_file',
+  'patch',
+  'search_files',
+  'list_directory',
+  'terminal',
+  'git_diff',
+  'git_checkout',
+  'git_merge',
+  'git_worktree',
+  'review_diff',
+  'device_control',
+  'run_test',
+  'flutter_run',
+  'kanban_create',
+  'kanban_list',
+  'kanban_show',
+  'kanban_complete',
+  'kanban_unblock',
+  'kanban_request_changes',
+];
+
+export const ROLE_SCOPE_DEFINITIONS: RoleScopeInfo[] = [
+  {
+    role: 'manager',
+    badge: 'Tools: Scoped (Read/Plan only)',
+    description: 'Least-privilege gateway aktif: peran Manager dibatasi ke operasi read, inspect & kanban plan.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.manager,
+    blacklist: ROLE_BLACKLISTS.manager,
+  },
+  {
+    role: 'senior',
+    badge: 'Tools: Scoped (Implement & Build)',
+    description: 'Least-privilege gateway aktif: peran Senior dibatasi ke read, code edit, cargo build & git worktree.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.senior,
+    blacklist: ROLE_BLACKLISTS.senior,
+  },
+  {
+    role: 'senior2',
+    badge: 'Tools: Scoped (UI & Toolchain)',
+    description: 'Least-privilege gateway aktif: peran Senior 2 dibatasi ke read, code edit, npm/vite build & flutter toolchain.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.senior2,
+    blacklist: ROLE_BLACKLISTS.senior2,
+  },
+  {
+    role: 'techlead',
+    badge: 'Tools: Scoped (Architecture & Review)',
+    description: 'Least-privilege gateway aktif: peran Techlead dibatasi ke git merge, review diff, device control & release build.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.techlead,
+    blacklist: ROLE_BLACKLISTS.techlead,
+  },
+  {
+    role: 'reviewer',
+    badge: 'Tools: Scoped (QA & Test runner only)',
+    description: 'Least-privilege gateway aktif: peran Reviewer dibatasi ke test runners, diff checks & review decisions.',
+    defaultWhitelist: DEFAULT_ROLE_WHITELISTS.reviewer,
+    blacklist: ROLE_BLACKLISTS.reviewer,
+  },
+  {
+    role: 'custom',
+    badge: 'Tools: Scoped (Custom)',
+    description: 'Least-privilege gateway aktif: daftar tool ditentukan kustom oleh konfigurasi pengguna.',
+    defaultWhitelist: [],
+    blacklist: [],
+  },
+];
+
+/**
+ * Normalizes role string to standard identifier (manager, senior, senior2, techlead, reviewer, custom).
+ */
+export function normalizeRole(role?: string | null): string {
+  if (!role) return 'custom';
+  const r = role.trim().toLowerCase();
+  if (r === 'manager') return 'manager';
+  if (r === 'senior') return 'senior';
+  if (r === 'senior2' || r === 'senior-2' || r === 'senior_2' || r === 'senior 2') return 'senior2';
+  if (r === 'techlead' || r === 'tech-lead' || r === 'tech_lead' || r === 'tech lead') return 'techlead';
+  if (r === 'reviewer') return 'reviewer';
+  if (r === 'custom') return 'custom';
+  return r;
+}
+
+/**
+ * Infers role from slot properties (role field, hermesProfile, id, label).
+ */
+export function inferRoleFromSlot(slot?: Partial<SlotConfig> | null): string {
+  if (!slot) return 'custom';
+  if (slot.role) return normalizeRole(slot.role);
+  const candidate = `${slot.hermesProfile || ''} ${slot.id || ''} ${slot.label || ''}`.toLowerCase();
+  if (candidate.includes('senior2') || candidate.includes('senior 2') || candidate.includes('senior-2')) return 'senior2';
+  if (candidate.includes('senior')) return 'senior';
+  if (candidate.includes('manager')) return 'manager';
+  if (candidate.includes('techlead') || candidate.includes('tech lead')) return 'techlead';
+  if (candidate.includes('reviewer')) return 'reviewer';
+  return 'custom';
+}
+
+/**
+ * Returns role scoping label/badge for a given role or slot configuration.
+ */
+export function getRoleScopeBadge(roleOrSlot?: string | Partial<SlotConfig> | null): string {
+  let role = 'custom';
+  if (typeof roleOrSlot === 'string') {
+    role = normalizeRole(roleOrSlot);
+  } else if (roleOrSlot && typeof roleOrSlot === 'object') {
+    role = inferRoleFromSlot(roleOrSlot);
+  }
+  return ROLE_SCOPE_BADGES[role] || ROLE_SCOPE_BADGES.custom;
+}
+
+/**
+ * Returns default tool whitelist array for the specified role.
+ */
+export function getDefaultToolsForRole(role?: string | null): string[] {
+  const norm = normalizeRole(role);
+  return DEFAULT_ROLE_WHITELISTS[norm] ? [...DEFAULT_ROLE_WHITELISTS[norm]] : [];
+}
+
+/**
+ * Returns the effective tools whitelist for a slot, respecting customWhitelist overrides.
+ */
+export function getEffectiveToolsForSlot(slot: Partial<SlotConfig>): string[] {
+  if (Array.isArray(slot.customWhitelist) && slot.customWhitelist.length > 0) {
+    return [...slot.customWhitelist];
+  }
+  const role = inferRoleFromSlot(slot);
+  return getDefaultToolsForRole(role);
+}
+
+/**
+ * Checks whether a tool is allowed for the given slot.
+ */
+export function isToolAllowedForSlot(slot: Partial<SlotConfig>, toolName: string): boolean {
+  if (!toolName) return false;
+  const allowed = getEffectiveToolsForSlot(slot);
+  return allowed.includes(toolName.trim().toLowerCase());
+}
+
+/**
+ * Validates, trims, and deduplicates an arbitrary list of tool names.
+ */
+export function validateCustomWhitelist(tools: unknown): string[] {
+  if (!Array.isArray(tools)) return [];
+  const set = new Set<string>();
+  for (const item of tools) {
+    if (typeof item === 'string' && item.trim()) {
+      set.add(item.trim().toLowerCase());
+    }
+  }
+  return Array.from(set);
+}
+
+/**
+ * Returns descriptive human tooltip for the role scoping policy.
+ */
+export function getRoleScopeDescription(role?: string | null): string {
+  const norm = normalizeRole(role);
+  const def = ROLE_SCOPE_DEFINITIONS.find((d) => d.role === norm);
+  return def ? def.description : 'Least-privilege gateway aktif untuk slot agen ini.';
+}
+
+// ── Smart Context & Semantic Memory Helpers (Phase 3) ───────────────────────
+
+/**
+ * Computes percentage of lines / tokens saved through smart pruning.
+ */
+export function calculateSavingsPercentage(totalLines: number, prunedLines: number): number {
+  if (totalLines <= 0) return 0;
+  const pct = Math.round((prunedLines / totalLines) * 100);
+  return Math.max(0, Math.min(100, pct));
+}
+
+export const computeTokenSavingsPercentage = calculateSavingsPercentage;
+
+/**
+ * Formats token savings badge / pill label.
+ * E.g. "⚡ Pruned (~70% token saved)"
+ */
+export function formatTokenSavingsPill(savings: number | PrunedContextResult): string {
+  let pct: number;
+  if (typeof savings === 'number') {
+    pct = Math.round(savings);
+  } else if (savings && typeof savings === 'object') {
+    pct = calculateSavingsPercentage(savings.totalLines, savings.prunedLines);
+  } else {
+    pct = 0;
+  }
+  return `⚡ Pruned (~${pct}% token saved)`;
+}
+
+/**
+ * Formats pruned context (symbols outline and diagnostics) into prompt text block.
+ */
+export function formatPrunedContextForPrompt(pruned: PrunedContextResult | null | undefined): string {
+  if (!pruned || !pruned.filePath) return '';
+  const parts: string[] = [];
+  parts.push(`[PRUNED LSP CONTEXT: ${pruned.filePath}]`);
+  if (pruned.compactSummary) {
+    parts.push(pruned.compactSummary);
+  }
+  if (Array.isArray(pruned.symbolOutline) && pruned.symbolOutline.length > 0) {
+    parts.push('Symbols Outline:');
+    const renderOutline = (items: SymbolOutline[], indent = '  ') => {
+      for (const s of items) {
+        parts.push(`${indent}- ${s.kind} ${s.name} (line ${s.line}): ${s.signature}`);
+        if (s.children && s.children.length > 0) {
+          renderOutline(s.children, indent + '  ');
+        }
+      }
+    };
+    renderOutline(pruned.symbolOutline);
+  }
+  if (Array.isArray(pruned.diagnostics) && pruned.diagnostics.length > 0) {
+    parts.push('Active Diagnostics:');
+    for (const d of pruned.diagnostics) {
+      parts.push(`  - [${d.severity.toUpperCase()}] Line ${d.line}: ${d.message}`);
+    }
+  }
+  parts.push('[/PRUNED LSP CONTEXT]');
+  return parts.join('\n');
+}
+
+/**
+ * Formats domain memory snippets into prompt header convention blocks:
+ * [PROJECT CONVENTIONS: <DOMAIN>]
+ */
+export function formatDomainMemoryForPrompt(snippets: MemorySnippet[] | null | undefined): string {
+  if (!snippets || !Array.isArray(snippets) || snippets.length === 0) return '';
+
+  const grouped: Record<string, MemorySnippet[]> = {};
+  for (const s of snippets) {
+    const domainKey = (s.domain || 'GENERAL').trim().toUpperCase();
+    if (!grouped[domainKey]) {
+      grouped[domainKey] = [];
+    }
+    grouped[domainKey].push(s);
+  }
+
+  const sections: string[] = [];
+  for (const [domain, list] of Object.entries(grouped)) {
+    const lines: string[] = [];
+    lines.push(`[PROJECT CONVENTIONS: ${domain}]`);
+    for (const item of list) {
+      if (item.title) {
+        lines.push(`### ${item.title}`);
+      }
+      if (item.content) {
+        lines.push(item.content.trim());
+      }
+    }
+    lines.push(`[/PROJECT CONVENTIONS: ${domain}]`);
+    sections.push(lines.join('\n'));
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Evaluates whether LSP context pruning is enabled from persisted storage value.
+ */
+export function isLspPruningEnabled(storageValue?: string | null): boolean {
+  return storageValue !== 'false';
+}
+
+/**
+ * Evaluates whether domain-aware memory filtering is enabled from persisted storage value.
+ */
+export function isDomainMemoryEnabled(storageValue?: string | null): boolean {
+  return storageValue !== 'false';
+}
+
+/**
+ * Builds prompt with smart context & domain memory with graceful fallback
+ * when pruning is disabled or backend fails.
+ */
+export function buildSmartContextPrompt(
+  rawPrompt: string,
+  pruned?: PrunedContextResult | null,
+  memory?: MemorySnippet[] | null
+): string {
+  const parts: string[] = [];
+
+  if (memory && Array.isArray(memory) && memory.length > 0) {
+    const memFormatted = formatDomainMemoryForPrompt(memory);
+    if (memFormatted) {
+      parts.push(memFormatted);
+    }
+  }
+
+  if (pruned && pruned.filePath) {
+    const prunedFormatted = formatPrunedContextForPrompt(pruned);
+    if (prunedFormatted) {
+      parts.push(prunedFormatted);
+    }
+  }
+
+  parts.push(rawPrompt.trim());
+  return parts.join('\n\n');
+}
+
+/**
+ * Multi-Agent Worktree Lane Cockpit helpers (Phase 4)
+ */
+
+/**
+ * Formats elapsed seconds into mm:ss (or hh:mm:ss if >= 1 hour).
+ */
+export function formatRuntimeSeconds(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  if (mins >= 60) {
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hrs.toString().padStart(2, '0')}:${remMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Formats worktree created_at timestamp into live runtime string (mm:ss).
+ */
+export function formatWorktreeRuntime(createdAt: number, nowMs: number = Date.now()): string {
+  if (!createdAt || createdAt <= 0) return '00:00';
+  const createdMs = createdAt < 1e11 ? createdAt * 1000 : createdAt;
+  const elapsedSec = Math.max(0, Math.floor((nowMs - createdMs) / 1000));
+  return formatRuntimeSeconds(elapsedSec);
+}
+
+/**
+ * Resolves bot avatar, title, role and status for a worktree lane.
+ */
+export function resolveWorktreeBotInfo(
+  wt: WorktreeInfo,
+  slots?: SlotSummary[]
+): {
+  title: string;
+  avatar: string;
+  role: string;
+  status: 'RUNNING' | 'READY' | 'BLOCKED' | 'DONE';
+} {
+  const key = `${wt.task_id} ${wt.branch}`.toLowerCase();
+
+  // Try matching active slot first
+  if (slots && Array.isArray(slots)) {
+    const matchedSlot = slots.find(
+      (s) =>
+        s.id.toLowerCase() === wt.task_id.toLowerCase() ||
+        key.includes(s.label.toLowerCase()) ||
+        (s.config?.hermesProfile && key.includes(s.config.hermesProfile.toLowerCase()))
+    );
+    if (matchedSlot) {
+      const isRunning = matchedSlot.status === 'busy' || wt.is_dirty;
+      const status: 'RUNNING' | 'READY' | 'BLOCKED' | 'DONE' = isRunning
+        ? 'RUNNING'
+        : matchedSlot.status === 'ready'
+        ? 'READY'
+        : matchedSlot.status === 'stopped' || matchedSlot.status === 'crashed'
+        ? 'BLOCKED'
+        : 'READY';
+      const role = matchedSlot.config?.hermesProfile || matchedSlot.label.toLowerCase();
+      let avatar = '⚡';
+      if (role.includes('manager')) avatar = '👑';
+      else if (role.includes('techlead')) avatar = '🧠';
+      else if (role.includes('reviewer')) avatar = '🔍';
+      else if (role.includes('designer')) avatar = '🎨';
+      return {
+        title: matchedSlot.label,
+        avatar,
+        role,
+        status,
+      };
+    }
+  }
+
+  // Fallback by branch / task keywords
+  let title = 'Senior2 (UI)';
+  let avatar = '⚡';
+  let role = 'senior2';
+
+  if (key.includes('core') || key.includes('rust') || key.includes('backend')) {
+    title = 'Senior (Rust)';
+    avatar = '⚡';
+    role = 'senior';
+  } else if (key.includes('ui') || key.includes('svelte') || key.includes('frontend')) {
+    title = 'Senior2 (UI)';
+    avatar = '⚡';
+    role = 'senior2';
+  } else if (key.includes('review') || key.includes('qa')) {
+    title = 'Reviewer (QA)';
+    avatar = '🔍';
+    role = 'reviewer';
+  } else if (key.includes('techlead') || key.includes('arch')) {
+    title = 'Techlead (System)';
+    avatar = '🧠';
+    role = 'techlead';
+  } else if (key.includes('manager') || key.includes('plan')) {
+    title = 'Manager (Planner)';
+    avatar = '👑';
+    role = 'manager';
+  }
+
+  const status: 'RUNNING' | 'READY' | 'BLOCKED' | 'DONE' = wt.is_dirty ? 'RUNNING' : 'READY';
+
+  return { title, avatar, role, status };
+}
+
+/**
+ * Aggregates cockpit summary statistics from worktrees list.
+ */
+export function aggregateWorktreeStats(worktrees: WorktreeInfo[]): {
+  total: number;
+  running: number;
+  dirty: number;
+} {
+  if (!Array.isArray(worktrees)) {
+    return { total: 0, running: 0, dirty: 0 };
+  }
+  const total = worktrees.length;
+  const dirty = worktrees.filter((w) => w.is_dirty).length;
+  const running = dirty > 0 ? dirty : Math.min(total, 1);
+  return { total, running, dirty };
+}
+
+/**
+ * Resolves Self-Heal display status label, icon, and css class.
+ */
+export function formatSelfHealStatus(
+  status: SelfHealPhase | string = 'idle',
+  attempt: number = 0,
+  maxAttempts: number = 3
+): {
+  label: string;
+  icon: string;
+  cssClass: string;
+} {
+  switch (status) {
+    case 'hot_reloading':
+      return {
+        label: '⚡ Hot Reloading Flutter...',
+        icon: '⚡',
+        cssClass: 'self-heal-hot-reloading',
+      };
+    case 'testing':
+      return {
+        label: '🧪 Running Maestro flow...',
+        icon: '🧪',
+        cssClass: 'self-heal-testing',
+      };
+    case 'passed':
+      return {
+        label: '✅ Verification PASS',
+        icon: '✅',
+        cssClass: 'self-heal-passed',
+      };
+    case 'failed':
+      return {
+        label: `⚠️ Test Failed -> Triggering Self-Fix Loop (${attempt}/${maxAttempts})`,
+        icon: '⚠️',
+        cssClass: 'self-heal-failed',
+      };
+    case 'paused':
+      return {
+        label: `🛑 Self-Heal Paused (${maxAttempts}/${maxAttempts} attempts failed)`,
+        icon: '🛑',
+        cssClass: 'self-heal-paused',
+      };
+    case 'idle':
+    default:
+      return {
+        label: '🔄 Self-Heal: Auto (Hot Reload + Test)',
+        icon: '🔄',
+        cssClass: 'self-heal-idle',
+      };
+  }
+}
+
+/**
+ * Resolves a compact chip representation for card lanes.
+ */
+export function resolveSelfHealChip(status?: SelfHealStatus | null): {
+  label: string;
+  icon: string;
+  cssClass: string;
+} {
+  if (!status) {
+    return formatSelfHealStatus('idle');
+  }
+  return formatSelfHealStatus(status.status, status.attempt, status.max_attempts || 3);
+}
+
+/**
+ * Detects whether a message is an ACP activity watchdog abort or unstuck signal.
+ */
+export function isWatchdogAbortedMessage(content?: string | null): boolean {
+  if (!content || typeof content !== 'string') return false;
+  const lower = content.toLowerCase();
+  return (
+    (lower.includes('perintah') && (lower.includes('macet') || lower.includes('dibatalkan otomatis'))) ||
+    lower.includes('perintah terminal macet') ||
+    lower.includes('tidak ada aktivitas selama') ||
+    lower.includes('idle timeout') ||
+    lower.includes('watchdog timeout') ||
+    (lower.includes('watchdog') && (lower.includes('abort') || lower.includes('cancel') || lower.includes('stuck') || lower.includes('idle'))) ||
+    lower.includes('command timed out due to inactivity') ||
+    lower.includes('proses terminal macet')
+  );
+}
+
+/**
+ * Formats a user-friendly recovery alert text for watchdog abort events.
+ */
+export function formatWatchdogRecoveryText(content?: string | null): string {
+  const defaultText = '⚠️ Perintah terminal macet dibatalkan otomatis -> Melanjutkan...';
+  if (!content || typeof content !== 'string') {
+    return defaultText;
+  }
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return defaultText;
+  }
+  if (trimmed.includes('Perintah terminal macet dibatalkan otomatis') && trimmed.includes('Melanjutkan...')) {
+    return trimmed;
+  }
+  if (isWatchdogAbortedMessage(trimmed)) {
+    return defaultText;
+  }
+  return trimmed.startsWith('⚠️') ? trimmed : `⚠️ ${trimmed}`;
+}
+
+/**
+ * Generates a unique session ID prefixed with sess-.
+ */
+export function generateSessionId(): string {
+  return `sess-${Date.now()}`;
+}
+
+/**
+ * Builds a clean prompt envelope separating user-visible text from backend LLM prompt payload.
+ */
+export interface CleanPromptEnvelope {
+  displayContent: string;
+  formattedPrompt: string;
+  fileReferences?: FileReference[];
+  metadata?: Record<string, any>;
+}
+
+export function buildCleanPromptEnvelope(
+  userInput: string,
+  options?: {
+    isPonytail?: boolean;
+    isCaveman?: boolean;
+    isSelfImprove?: boolean;
+    memoryContext?: string;
+    skillsInjection?: string;
+    domainMemoryInjection?: string;
+    prunedContextInjection?: string;
+    referencePrefix?: string;
+    fileReferences?: FileReference[];
+  }
+): CleanPromptEnvelope {
+  const cleanInput = (userInput || '').trim();
+  let refPrefix = options?.referencePrefix || '';
+  if (options?.fileReferences && options.fileReferences.length > 0) {
+    const refLines = options.fileReferences.map((r) => {
+      const loc = `${r.path}${r.line ? `:${r.line}` : ''}${r.endLine && r.endLine !== r.line ? `-${r.endLine}` : ''}`;
+      return `- ${loc}`;
+    });
+    refPrefix = `${refPrefix}[REFERENSI BERKAS:\n${refLines.join('\n')}\n]\n\n`;
+  }
+  const fullPromptText = `${refPrefix}${cleanInput}`;
+  const formattedPrompt = applyDisciplineDirectives(
+    fullPromptText,
+    !!options?.isPonytail,
+    !!options?.isCaveman,
+    !!options?.isSelfImprove,
+    options?.memoryContext || '',
+    options?.skillsInjection || '',
+    options?.domainMemoryInjection || '',
+    options?.prunedContextInjection || ''
+  );
+  return {
+    displayContent: cleanInput,
+    formattedPrompt,
+    fileReferences: options?.fileReferences,
+    metadata:
+      options?.fileReferences && options.fileReferences.length > 0
+        ? { fileReferences: options.fileReferences }
+        : undefined,
+  };
+}
+
+/**
+ * Opens a referenced file in the editor tabs and jumps to line if specified.
+ */
+export async function openReferencedFile(
+  filePath: string,
+  line?: number,
+  deps?: {
+    tabsManager?: {
+      tabs: Array<{ path: string; name: string; savedContent?: string }>;
+      openTab: (path: string, name: string, content: string) => any;
+    };
+    api?: {
+      readFile: (path: string) => Promise<string>;
+    };
+    gotoLine?: (line: number, col?: number) => void;
+  }
+): Promise<void> {
+  if (!filePath) return;
+  const fileName = filePath.split('/').pop() || filePath;
+  const tm =
+    deps?.tabsManager ||
+    (typeof window !== 'undefined' ? (window as any).__PETAK_TABS_MANAGER__ : undefined);
+  const fileApi =
+    deps?.api || (typeof window !== 'undefined' ? (window as any).__PETAK_API__ : undefined);
+
+  let content = '';
+  const existing = tm?.tabs?.find((t: any) => t.path === filePath);
+  if (existing) {
+    content = existing.savedContent || '';
+  } else if (fileApi?.readFile) {
+    try {
+      content = await fileApi.readFile(filePath);
+    } catch {
+      content = '';
+    }
+  }
+
+  tm?.openTab?.(filePath, fileName, content);
+
+  const jump =
+    deps?.gotoLine ||
+    (typeof window !== 'undefined' ? (window as any).__PETAK_GOTO_LINE__ : undefined);
+  if (line !== undefined && line !== null && jump) {
+    jump(line, 1);
+  }
+}
+
+/**
+ * Routes an LLM agent response to either the active chat history or to savedSessions,
+ * preventing cross-talk into a newly created session.
+ */
+export function routePromptResponse(
+  dispatchSessionId: string,
+  activeSessionId: string,
+  agentMsg: ChatMessage,
+  currentActiveMessages: ChatMessage[],
+  savedSessions: ChatSessionMeta[]
+): {
+  isTargetActive: boolean;
+  updatedActiveMessages: ChatMessage[];
+  updatedSavedSessions: ChatSessionMeta[];
+} {
+  if (dispatchSessionId === activeSessionId) {
+    return {
+      isTargetActive: true,
+      updatedActiveMessages: [...currentActiveMessages, agentMsg],
+      updatedSavedSessions: savedSessions,
+    };
+  }
+
+  // Dispatched session is stale / backgrounded -> Route to savedSessions
+  const existingIndex = savedSessions.findIndex((s) => s.id === dispatchSessionId);
+  let updatedSaved: ChatSessionMeta[];
+  if (existingIndex !== -1) {
+    const session = savedSessions[existingIndex];
+    const newMsgs = [...session.messages, agentMsg];
+    const updatedMeta: ChatSessionMeta = {
+      ...session,
+      messages: newMsgs,
+      messageCount: newMsgs.length,
+    };
+    updatedSaved = [
+      ...savedSessions.slice(0, existingIndex),
+      updatedMeta,
+      ...savedSessions.slice(existingIndex + 1),
+    ];
+  } else {
+    const newSessionMeta: ChatSessionMeta = {
+      id: dispatchSessionId,
+      slotId: 'default',
+      title: (agentMsg.content || '').slice(0, 48),
+      createdAt: agentMsg.timestamp,
+      messageCount: 1,
+      messages: [agentMsg],
+    };
+    updatedSaved = [newSessionMeta, ...savedSessions].slice(0, 50);
+  }
+
+  return {
+    isTargetActive: false,
+    updatedActiveMessages: currentActiveMessages,
+    updatedSavedSessions: updatedSaved,
+  };
+}
+
+/**
+ * Computes whether the agent interface is busy.
+ * Agent is busy if not aborted by watchdog, and either streaming is active or slot status is 'busy'.
+ */
+export function computeIsBusy(
+  isWatchdogAborted: boolean,
+  isStreaming: boolean,
+  slotStatus?: string | null
+): boolean {
+  return !isWatchdogAborted && (isStreaming || slotStatus === 'busy');
+}
+
+/**
+ * Migrates legacy chat sessions (v1) and active chat history to isolated v2 format.
+ */
+export function migrateV1SessionsToV2(
+  savedSessionsV1: any[] | null | undefined,
+  activeHistoryV1?: any
+): Record<string, ChatSessionData> {
+  const result: Record<string, ChatSessionData> = {};
+
+  if (Array.isArray(savedSessionsV1)) {
+    for (const s of savedSessionsV1) {
+      if (!s || !s.id) continue;
+      result[s.id] = {
+        id: s.id,
+        slotId: s.slotId || 'default',
+        title: s.title || (s.messages?.[0]?.content ? s.messages[0].content.slice(0, 48) : 'Percakapan'),
+        createdAt: s.createdAt || Date.now(),
+        updatedAt: s.updatedAt || s.createdAt || Date.now(),
+        messages: Array.isArray(s.messages) ? [...s.messages] : [],
+        fileReferences: Array.isArray(s.fileReferences) ? [...s.fileReferences] : [],
+        modelId: s.modelId || null,
+        isStreaming: false,
+        streamingContent: '',
+        activeToolCalls: [],
+        activeThought: '',
+      };
+    }
+  }
+
+  // Active chat history migration
+  if (activeHistoryV1) {
+    const rawHistory = activeHistoryV1.chatHistory && typeof activeHistoryV1.chatHistory === 'object'
+      ? activeHistoryV1.chatHistory
+      : (!Array.isArray(activeHistoryV1) && typeof activeHistoryV1 === 'object' ? activeHistoryV1 : null);
+
+    const fileRefs: FileReference[] = Array.isArray(activeHistoryV1.fileReferences)
+      ? activeHistoryV1.fileReferences
+      : [];
+
+    if (rawHistory) {
+      for (const [slotId, msgs] of Object.entries(rawHistory)) {
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          const sessId = `migrated-${slotId}`;
+          if (!result[sessId]) {
+            result[sessId] = {
+              id: sessId,
+              slotId,
+              title: msgs[0]?.content ? msgs[0].content.slice(0, 48) : `Sesi ${slotId}`,
+              createdAt: msgs[0]?.timestamp || Date.now(),
+              updatedAt: msgs[msgs.length - 1]?.timestamp || Date.now(),
+              messages: [...msgs],
+              fileReferences: [...fileRefs],
+              modelId: null,
+              isStreaming: false,
+              streamingContent: '',
+              activeToolCalls: [],
+              activeThought: '',
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Resolves the target session ID for an incoming stream event.
+ * Uses event.Update.session_id if valid in sessions, or falls back to slotActiveSession[slot_id], or fallback ID.
+ */
+export function resolveTargetSessionId(
+  eventSessionId: string | undefined | null,
+  slotId: string | undefined | null,
+  sessions: Record<string, ChatSessionData>,
+  slotActiveSession: Record<string, string>,
+  fallbackActiveSessionId?: string
+): string | null {
+  // 1. Direct match with known frontend session ID
+  if (eventSessionId && sessions[eventSessionId]) {
+    return eventSessionId;
+  }
+  // 2. Active session bound to this slot
+  if (slotId && slotActiveSession[slotId] && sessions[slotActiveSession[slotId]]) {
+    return slotActiveSession[slotId];
+  }
+  // 3. Fallback to active session currently viewed
+  if (fallbackActiveSessionId && sessions[fallbackActiveSessionId]) {
+    return fallbackActiveSessionId;
+  }
+  return null;
+}
+
+/**
+ * Pure function to apply stream chunk / tool call updates to an isolated ChatSessionData.
+ */
+export function applyStreamUpdateToSession(
+  session: ChatSessionData,
+  update: any
+): ChatSessionData {
+  if (!update) return session;
+
+  let streamingContent = session.streamingContent || '';
+  let activeToolCalls = session.activeToolCalls ? [...session.activeToolCalls] : [];
+  let activeThought = session.activeThought || '';
+  let isStreaming = session.isStreaming;
+
+  const sessionUpdate = update.sessionUpdate;
+
+  if (sessionUpdate === 'agent_message_chunk') {
+    const text = extractChunkText(update.content !== undefined ? update.content : update);
+    if (text) {
+      streamingContent += text;
+      if (isWatchdogAbortedMessage(text)) {
+        isStreaming = false;
+      }
+    }
+  } else if (sessionUpdate === 'tool_call') {
+    const toolName = update.title || update.kind || 'tool';
+    const toolId = update.toolCallId || `tool-${Date.now()}`;
+    const newTool: ToolCallData = {
+      name: toolName,
+      status: 'running',
+      arguments: update.locations?.[0] ? { path: update.locations[0].path } : undefined,
+      output: '',
+    };
+    const existingIdx = activeToolCalls.findIndex((t: any) => (t as any)._id === toolId);
+    if (existingIdx !== -1) {
+      activeToolCalls[existingIdx] = { ...activeToolCalls[existingIdx], ...newTool };
+    } else {
+      (newTool as any)._id = toolId;
+      activeToolCalls.push(newTool);
+    }
+  } else if (sessionUpdate === 'tool_call_update') {
+    const toolId = update.toolCallId;
+    const outText = extractChunkText(update.content);
+    const status = update.status === 'completed' ? 'completed' : update.status === 'failed' ? 'failed' : 'running';
+    const existingIdx = activeToolCalls.findIndex((t: any) => (t as any)._id === toolId);
+    if (existingIdx !== -1) {
+      const current = activeToolCalls[existingIdx];
+      activeToolCalls[existingIdx] = {
+        ...current,
+        status,
+        output: outText || current.output,
+      };
+    } else {
+      activeToolCalls.push({
+        name: update.kind || 'tool',
+        status,
+        output: outText,
+      });
+    }
+  } else if (sessionUpdate === 'agent_thought_chunk') {
+    const thought = extractChunkText(update.content);
+    if (thought) {
+      activeThought = thought.trim();
+    }
+  } else if (!sessionUpdate) {
+    const text = extractChunkText(update);
+    if (text) {
+      streamingContent += text;
+    }
+  }
+
+  return {
+    ...session,
+    isStreaming,
+    streamingContent,
+    activeToolCalls,
+    activeThought,
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Routes a stream event to the appropriate isolated session without leaking into other sessions.
+ */
+export function routeStreamEvent(
+  event: any,
+  sessions: Record<string, ChatSessionData>,
+  slotActiveSession: Record<string, string>,
+  activeSessionId?: string
+): {
+  targetSessionId: string | null;
+  updatedSessions: Record<string, ChatSessionData>;
+} {
+  if (!event || !event.Update) {
+    return { targetSessionId: null, updatedSessions: sessions };
+  }
+
+  const { slot_id, session_id, update } = event.Update;
+  const targetId = resolveTargetSessionId(session_id, slot_id, sessions, slotActiveSession, activeSessionId);
+
+  if (!targetId || !sessions[targetId]) {
+    return { targetSessionId: null, updatedSessions: sessions };
+  }
+
+  const updatedSession = applyStreamUpdateToSession(sessions[targetId], update);
+  return {
+    targetSessionId: targetId,
+    updatedSessions: {
+      ...sessions,
+      [targetId]: updatedSession,
+    },
+  };
+}
+
+/**
+ * Sanitizes sessions and messages to ensure all sessions and messages have unique valid IDs.
+ * Guarantees no data loss for title, timestamps, messages, or metadata.
+ */
+export function sanitizeSessions(
+  sessions: Record<string, any> | null | undefined
+): Record<string, ChatSessionData> {
+  const result: Record<string, ChatSessionData> = {};
+  if (!sessions || typeof sessions !== 'object' || Array.isArray(sessions)) {
+    return result;
+  }
+
+  for (const [key, rawSess] of Object.entries(sessions)) {
+    if (!rawSess || typeof rawSess !== 'object') continue;
+    const sessId = rawSess.id || key || generateSessionId();
+    const rawMessages = Array.isArray(rawSess.messages) ? rawSess.messages : [];
+
+    const seenIds = new Set<string>();
+    const messages: ChatMessage[] = rawMessages.map((m: any, idx: number) => {
+      let msgId = m && m.id ? String(m.id) : `msg-${sessId}-${idx}`;
+      if (seenIds.has(msgId)) {
+        msgId = `${msgId}-${idx}`;
+      }
+      seenIds.add(msgId);
+      return {
+        ...m,
+        id: msgId,
+      };
+    });
+
+    result[sessId] = {
+      ...rawSess,
+      id: sessId,
+      slotId: rawSess.slotId || 'default',
+      title: rawSess.title || 'Percakapan',
+      createdAt: rawSess.createdAt || Date.now(),
+      updatedAt: rawSess.updatedAt || rawSess.createdAt || Date.now(),
+      messages,
+      fileReferences: Array.isArray(rawSess.fileReferences) ? [...rawSess.fileReferences] : [],
+      modelId: rawSess.modelId || null,
+      isStreaming: Boolean(rawSess.isStreaming),
+      streamingContent: rawSess.streamingContent || '',
+      activeToolCalls: Array.isArray(rawSess.activeToolCalls) ? [...rawSess.activeToolCalls] : [],
+      activeThought: rawSess.activeThought || '',
+    };
+  }
+
+  return result;
+}
+
+
+
+
+
+
 
 
 

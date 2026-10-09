@@ -2,6 +2,8 @@ import { Prec } from '@codemirror/state';
 import {
   keymap,
   EditorView,
+  activateHover,
+  closeHoverTooltips,
   type KeyBinding,
 } from '@codemirror/view';
 import {
@@ -16,6 +18,7 @@ import {
 import { indentMore, indentLess } from '@codemirror/commands';
 import { getCM } from '@replit/codemirror-vim';
 import { acceptGhostText, dismissGhostText } from './ghostText.ts';
+import { acceptGhostDiff, dismissGhostDiff } from './ghostDiff.ts';
 
 /**
  * Returns true if Vim mode is active AND NOT in insert mode (i.e. normal or visual mode).
@@ -28,6 +31,71 @@ export function isVimInNormalOrVisualMode(view: EditorView): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Line comment toggle for any selection or line.
+ * Inserts or removes `// ` at the line indent level without relying on language facets.
+ */
+export function toggleCommentForView(view: EditorView): boolean {
+  if (view.state.readOnly) return false;
+  const { state } = view;
+  const doc = state.doc;
+  const sel = state.selection.main;
+
+  const startLine = doc.lineAt(sel.from);
+  const endLine = doc.lineAt(sel.to);
+
+  const lines: { number: number; from: number; to: number; text: string }[] = [];
+  for (let n = startLine.number; n <= endLine.number; n++) {
+    lines.push(doc.line(n));
+  }
+
+  const commentToken = '//';
+  const nonEmptyLines = lines.filter((l) => l.text.trim().length > 0);
+  if (nonEmptyLines.length === 0) {
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: `${commentToken} ` },
+    });
+    return true;
+  }
+
+  const allCommented = nonEmptyLines.every((l) => {
+    const trimmed = l.text.trimStart();
+    return trimmed.startsWith(commentToken);
+  });
+
+  const changes: { from: number; to: number; insert: string }[] = [];
+
+  if (allCommented) {
+    for (const l of nonEmptyLines) {
+      const match = l.text.match(/^(\s*)(\/\/ ?)/);
+      if (match) {
+        const indent = match[1];
+        const commentPrefix = match[2];
+        const commentStart = l.from + indent.length;
+        const commentEnd = commentStart + commentPrefix.length;
+        changes.push({ from: commentStart, to: commentEnd, insert: '' });
+      }
+    }
+  } else {
+    let minIndent = Infinity;
+    for (const l of nonEmptyLines) {
+      const match = l.text.match(/^\s*/);
+      const indentLen = match ? match[0].length : 0;
+      if (indentLen < minIndent) minIndent = indentLen;
+    }
+    if (minIndent === Infinity) minIndent = 0;
+
+    for (const l of lines) {
+      if (l.text.trim().length === 0) continue;
+      const insertPos = l.from + Math.min(minIndent, l.text.length);
+      changes.push({ from: insertPos, to: insertPos, insert: `${commentToken} ` });
+    }
+  }
+
+  view.dispatch({ changes });
+  return true;
 }
 
 /**
@@ -77,7 +145,12 @@ export function createEditorKeyBindings(): KeyBinding[] {
           return true;
         }
 
-        // 2. Accept inline ghost text if present
+        // 2. Accept inline ghost diff if present
+        if (acceptGhostDiff(view)) {
+          return true;
+        }
+
+        // 3. Accept inline ghost text if present
         if (acceptGhostText(view)) {
           return true;
         }
@@ -143,7 +216,13 @@ export function createEditorKeyBindings(): KeyBinding[] {
         if (closeCompletion(view)) {
           return true;
         }
-        // 2. Dismiss inline ghost-text if active
+        // 2. Dismiss hover tooltip if active
+        view.dispatch({ effects: closeHoverTooltips });
+        // 3. Dismiss inline ghost diff if active
+        if (dismissGhostDiff(view)) {
+          return true;
+        }
+        // 4. Dismiss inline ghost-text if active
         if (dismissGhostText(view)) {
           return true;
         }
@@ -152,8 +231,41 @@ export function createEditorKeyBindings(): KeyBinding[] {
       },
     },
     {
+      key: 'Mod-/',
+      run: (view: EditorView) => toggleCommentForView(view),
+    },
+    {
       key: 'Ctrl-Space',
       run: startCompletion,
+    },
+    {
+      key: 'Alt-/',
+      run: startCompletion,
+    },
+    {
+      key: 'Alt-Space',
+      run: startCompletion,
+    },
+    {
+      key: 'F1',
+      run: (v: EditorView) => {
+        activateHover(v, v.state.selection.main.head, 1);
+        return true;
+      },
+    },
+    {
+      key: 'Ctrl-q',
+      run: (v: EditorView) => {
+        activateHover(v, v.state.selection.main.head, 1);
+        return true;
+      },
+    },
+    {
+      key: 'Ctrl-j',
+      run: (v: EditorView) => {
+        activateHover(v, v.state.selection.main.head, 1);
+        return true;
+      },
     },
   ];
 }

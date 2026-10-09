@@ -67,13 +67,14 @@ pub async fn lsp_did_change(
     changes: Vec<serde_json::Value>,
 ) -> Result<(), String> {
     let registry = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let handle = tauri::async_runtime::spawn_blocking(move || {
         let p = std::path::Path::new(&path);
         let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
         if let Some(lang) = petak_core::lsp::Lang::from_extension(ext) {
             let _ = registry.did_change(p, lang, version, &changes, None);
         }
     });
+    handle.await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -119,6 +120,8 @@ pub async fn lsp_completion(
     path: String,
     line: u32,
     character: u32,
+    trigger_kind: Option<u32>,
+    trigger_character: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let registry = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -127,13 +130,20 @@ pub async fn lsp_completion(
         let lang = petak_core::lsp::Lang::from_extension(ext)
             .ok_or_else(|| "unsupported language".to_string())?;
         let uri = petak_core::lsp::registry::path_to_uri(p);
-        let params = serde_json::json!({
+        let mut params = serde_json::json!({
             "textDocument": { "uri": uri },
             "position": { "line": line, "character": character }
         });
-        registry
-            .request(p, lang, "textDocument/completion", &params, None)
-            .map_err(|e| format!("{:?}", e))
+        if let Some(kind) = trigger_kind {
+            let mut ctx = serde_json::json!({ "triggerKind": kind });
+            if let Some(ref ch) = trigger_character {
+                ctx["triggerCharacter"] = serde_json::json!(ch);
+            }
+            params["context"] = ctx;
+        }
+        let res = registry
+            .request(p, lang, "textDocument/completion", &params, None);
+        res.map_err(|e| format!("{:?}", e))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -179,9 +189,16 @@ pub async fn lsp_hover(
             "textDocument": { "uri": uri },
             "position": { "line": line, "character": character }
         });
-        registry
-            .request(p, lang, "textDocument/hover", &params, None)
-            .map_err(|e| format!("{:?}", e))
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
+            let _ = writeln!(f, "[LSP_HOVER] path={} line={} char={}", path, line, character);
+        }
+        let res = registry
+            .request(p, lang, "textDocument/hover", &params, None);
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
+            let _ = writeln!(f, "[LSP_HOVER_RES] is_ok={}", res.is_ok());
+        }
+        res.map_err(|e| format!("{:?}", e))
     })
     .await
     .map_err(|e| e.to_string())?

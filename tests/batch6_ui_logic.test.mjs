@@ -43,6 +43,7 @@ const STORE_DEFS = {
   skillsStore: path.resolve(uiRoot, 'features/agents/skillsStore.svelte.ts'),
   updateStore: path.resolve(uiRoot, 'features/updater/updateStore.svelte.ts'),
   breakpointStore: path.resolve(uiRoot, 'features/editor/breakpoints.svelte.ts'),
+  navPopupStore: path.resolve(uiRoot, 'features/editor/lsp/nav.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {

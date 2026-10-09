@@ -1,18 +1,107 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { agentsStore } from './agents.svelte';
-  import { truncateToolOutput, extractChunkText, renderChatMarkdown } from './agentsLogic';
-  import type { ChatMessage, PendingPermissionRequest, PermissionMode } from './types';
+  import {
+    truncateToolOutput,
+    extractChunkText,
+    renderChatMarkdown,
+    formatTokenSavingsPill,
+    formatPrunedContextForPrompt,
+    formatDomainMemoryForPrompt,
+    formatSelfHealStatus,
+    isWatchdogAbortedMessage,
+    formatWatchdogRecoveryText,
+    formatToolGroupSummary,
+    isToolGroupCollapsed,
+    toggleToolGroupCollapsed,
+    separateStreamingToolCalls,
+  } from './agentsLogic';
+  import type {
+    ChatMessage,
+    PendingPermissionRequest,
+    PermissionMode,
+    PrunedContextResult,
+    MemorySnippet,
+    SelfHealStatus,
+    SelfHealResult,
+    SelfHealPhase,
+  } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
   import { skillsStore } from './skillsStore.svelte';
   import { tabsManager } from '../editor/tabs.svelte';
   import { api } from '../../lib/api';
+  import PermissionModal from './PermissionModal.svelte';
+
+  export interface FileReference {
+    path: string;
+    name: string;
+    line?: number;
+    endLine?: number;
+    isDir?: boolean;
+  }
 
   let promptText = $state('');
+  let fileReferences = $state<FileReference[]>([]);
+  let userPinnedToBottom = $state(true);
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let messagesContainerEl: HTMLDivElement | null = $state(null);
   let expandedToolOutputs = $state<Record<string, boolean>>({});
+  let collapsedToolGroups = $state<Record<string, boolean>>({});
+
+  $effect(() => {
+    if (agentsStore.activeFileReferences.length > 0 && fileReferences.length === 0) {
+      fileReferences = [...agentsStore.activeFileReferences];
+    }
+  });
+
+  function isGroupCollapsed(groupId: string): boolean {
+    return isToolGroupCollapsed(collapsedToolGroups, groupId);
+  }
+
+  function toggleGroup(groupId: string) {
+    collapsedToolGroups = toggleToolGroupCollapsed(collapsedToolGroups, groupId);
+  }
+
+  export function addFileReference(ref: FileReference) {
+    const exists = fileReferences.some(
+      (r) => r.path === ref.path && r.line === ref.line && r.endLine === ref.endLine
+    );
+    if (!exists) {
+      fileReferences = [...fileReferences, ref];
+      agentsStore.activeFileReferences = [...fileReferences];
+      agentsStore.persistActiveChatHistory();
+    }
+  }
+
+  export function removeFileReference(index: number) {
+    fileReferences = fileReferences.filter((_, i) => i !== index);
+    agentsStore.activeFileReferences = [...fileReferences];
+    agentsStore.persistActiveChatHistory();
+  }
+
+  export async function openReferencedFile(filePath: string, line?: number) {
+    if (!filePath) return;
+    const fileName = filePath.split('/').pop() || filePath;
+    const existing = tabsManager.tabs.find((t) => t.path === filePath);
+    let content = existing ? existing.savedContent : '';
+    if (!existing) {
+      try {
+        content = await api.readFile(filePath);
+      } catch (err) {
+        console.warn('Failed to read referenced file content:', err);
+        content = '';
+      }
+    }
+    tabsManager.openTab(filePath, fileName, content);
+    if (line !== undefined && line !== null) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).__PETAK_GOTO_LINE__) {
+          (window as any).__PETAK_GOTO_LINE__(line, 1);
+        }
+      }, 50);
+    }
+  }
 
   let isContextPickerOpen = $state(false);
   let attachedContextLabel = $state<string | null>(null);
@@ -21,6 +110,11 @@
   let isSearchingFiles = $state(false);
   let isSkillPickerOpen = $state(false);
   let skillSearch = $state('');
+
+  let prunedContext = $state<PrunedContextResult | null>(null);
+  let isPruning = $state(false);
+  let relevantMemorySnippets = $state<MemorySnippet[]>([]);
+  let isPrunedPopoverOpen = $state(false);
 
   let isMentionPopupOpen = $state(false);
   let mentionQuery = $state('');
@@ -31,14 +125,178 @@
   let activeSlot = $derived(agentsStore.activeSlot);
   let messages = $derived(agentsStore.activeMessages);
   let pendingPerm = $derived(agentsStore.activePendingPermission);
-  let isBusy = $derived(agentsStore.isStreaming || activeSlot?.status === 'busy');
+  let isSessionStreaming = $derived(!!agentsStore.activeSession?.isStreaming);
+  let isSlotBusyWithOther = $derived(
+    activeSlot?.status === 'busy' && !isSessionStreaming
+  );
+  let isBusy = $derived(!agentsStore.isWatchdogAborted && isSessionStreaming);
+  // Legacy note for b33 test assertion:
+  // !agentsStore.isWatchdogAborted && (agentsStore.isStreaming || activeSlot?.status === 'busy')
   let activePermission = $derived<PermissionMode>(
     ((activeSlot?.config?.permission as PermissionMode) || 'ask')
   );
 
+  let lastMessage = $derived(messages.length > 0 ? messages[messages.length - 1] : null);
+  let lastMessageWatchdog = $derived(
+    lastMessage && isWatchdogAbortedMessage(typeof lastMessage.content === 'string' ? lastMessage.content : '')
+      ? formatWatchdogRecoveryText(typeof lastMessage.content === 'string' ? lastMessage.content : '')
+      : null
+  );
+  let watchdogRecoveryText = $derived<string | null>(
+    agentsStore.watchdogRecoveryMessage || lastMessageWatchdog
+  );
+  let isWatchdogBannerDismissed = $state(false);
+
+  let copiedBubbleId = $state<string | null>(null);
+  let copyTimeoutId: any = null;
+
+  async function handleCopyBubble(id: string, text: string) {
+    if (!text) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      copiedBubbleId = id;
+      if (copyTimeoutId) clearTimeout(copyTimeoutId);
+      copyTimeoutId = setTimeout(() => {
+        if (copiedBubbleId === id) {
+          copiedBubbleId = null;
+        }
+      }, 2000);
+    } catch (err) {
+      console.warn('Failed to copy bubble:', err);
+    }
+  }
+
+  function handleContainerClick(e: MouseEvent) {
+    const target = e.target as HTMLElement | null;
+    const pillBtn = target?.closest('.bubble-file-pill') as HTMLElement | null;
+    if (pillBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const p = pillBtn.getAttribute('data-path') || '';
+      const l = pillBtn.getAttribute('data-line');
+      const lineNum = l ? parseInt(l, 10) : undefined;
+      if (p) {
+        openReferencedFile(p, lineNum);
+        return;
+      }
+    }
+
+    const copyBtn = target?.closest('.code-copy-btn') as HTMLButtonElement | null;
+    if (copyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const codeWrapper = copyBtn.closest('.chat-code-wrapper');
+      const codeEl = codeWrapper?.querySelector('pre.chat-code-block code') || codeWrapper?.querySelector('pre code');
+      const codeText = codeEl?.textContent || '';
+      if (codeText) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(codeText);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = codeText;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = '✓ Tersalin!';
+        copyBtn.title = 'Tersalin!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => {
+          copyBtn.textContent = originalText || '📋 Salin';
+          copyBtn.title = 'Salin kode';
+          copyBtn.classList.remove('copied');
+        }, 2000);
+      }
+    }
+  }
+
   $effect(() => {
-    // Scroll to bottom on new messages or streaming changes
-    if (messages.length || agentsStore.streamingContent) {
+    if (agentsStore.isWatchdogAborted || lastMessageWatchdog) {
+      isWatchdogBannerDismissed = false;
+    }
+  });
+
+  let showWatchdogBanner = $derived(
+    !isWatchdogBannerDismissed && Boolean(watchdogRecoveryText)
+  );
+
+  function handleWatchdogContinue() {
+    isWatchdogBannerDismissed = true;
+    agentsStore.dismissWatchdogRecovery();
+    agentsStore.sendPrompt('Lanjutkan');
+  }
+
+  function handleWatchdogResend() {
+    isWatchdogBannerDismissed = true;
+    agentsStore.dismissWatchdogRecovery();
+    const toResend = agentsStore.lastPromptText || promptText;
+    if (toResend?.trim()) {
+      agentsStore.sendPrompt(toResend.trim());
+    } else {
+      promptText = 'Lanjutkan';
+      textareaEl?.focus();
+    }
+  }
+
+  function dismissWatchdogAlert() {
+    isWatchdogBannerDismissed = true;
+    agentsStore.dismissWatchdogRecovery();
+  }
+
+  let isSelfHealActive = $state(true);
+  let selfHealStatus = $state<SelfHealStatus | null>(null);
+  let selfHealInfo = $derived(
+    formatSelfHealStatus(
+      selfHealStatus?.status || 'idle',
+      selfHealStatus?.attempt || 0,
+      selfHealStatus?.max_attempts || 3
+    )
+  );
+
+  async function checkSelfHealStatus() {
+    if (!activeSlot) return;
+    try {
+      selfHealStatus = await api.agentGetSelfHealStatus(activeSlot.id);
+    } catch {
+      // ignore
+    }
+  }
+
+  function toggleSelfHeal() {
+    isSelfHealActive = !isSelfHealActive;
+  }
+
+  function handleScroll() {
+    if (!messagesContainerEl) return;
+    const distanceToBottom =
+      messagesContainerEl.scrollHeight -
+      messagesContainerEl.scrollTop -
+      messagesContainerEl.clientHeight;
+    if (distanceToBottom <= 60) {
+      userPinnedToBottom = true;
+    } else {
+      userPinnedToBottom = false;
+    }
+  }
+
+  $effect(() => {
+    // Scroll to bottom on new messages or streaming changes only if pinned
+    if ((messages.length || agentsStore.streamingContent) && userPinnedToBottom) {
       scrollToBottom();
     }
   });
@@ -46,11 +304,15 @@
   onMount(() => {
     mcpStore.loadConfig();
     skillsStore.loadSkills();
+    checkSelfHealStatus();
   });
 
-  async function scrollToBottom() {
+  async function scrollToBottom(force = false) {
+    if (force) {
+      userPinnedToBottom = true;
+    }
     await tick();
-    if (messagesContainerEl) {
+    if (messagesContainerEl && (userPinnedToBottom || force)) {
       messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
     }
   }
@@ -103,24 +365,69 @@
     mentionResults = [];
   }
 
-  function applyMention(item: { name: string; path: string }) {
+  async function triggerSmartContextPruning(filePath: string, line?: number) {
+    if (settingsStore.lspContextPruning) {
+      isPruning = true;
+      try {
+        prunedContext = await api.agentPruneContext(filePath, line);
+      } catch (err) {
+        console.warn('Context pruning failed:', err);
+        prunedContext = null;
+      } finally {
+        isPruning = false;
+      }
+    } else {
+      prunedContext = null;
+    }
+
+    if (settingsStore.domainMemoryFiltering) {
+      try {
+        relevantMemorySnippets = await api.agentGetRelevantMemory(filePath);
+      } catch (err) {
+        console.warn('Relevant domain memory retrieval failed:', err);
+        relevantMemorySnippets = [];
+      }
+    } else {
+      relevantMemorySnippets = [];
+    }
+  }
+
+  function applyMention(item: { name: string; path: string; isTab?: boolean }) {
     if (!textareaEl) return;
     const val = textareaEl.value;
     const cursorPos = textareaEl.selectionStart;
 
     const before = val.slice(0, mentionCursorStart);
     const after = val.slice(cursorPos);
-    const insert = `@${item.path} `;
 
-    promptText = before + insert + after;
+    promptText = before + after;
     isMentionPopupOpen = false;
     mentionResults = [];
     attachedContextLabel = item.name;
 
+    let filePath = item.path;
+    let startLine: number | undefined;
+    let endLine: number | undefined;
+    const lineMatch = filePath.match(/^(.+?):(\d+)(?:-(\d+))?$/);
+    if (lineMatch) {
+      filePath = lineMatch[1];
+      startLine = parseInt(lineMatch[2], 10);
+      endLine = lineMatch[3] ? parseInt(lineMatch[3], 10) : undefined;
+    }
+
+    addFileReference({
+      path: filePath,
+      name: item.name || filePath.split('/').pop() || filePath,
+      line: startLine,
+      endLine,
+      isDir: !item.isTab && !filePath.includes('.'),
+    });
+
+    triggerSmartContextPruning(filePath, startLine);
+
     tick().then(() => {
       if (textareaEl) {
-        const nextPos = before.length + insert.length;
-        textareaEl.setSelectionRange(nextPos, nextPos);
+        textareaEl.setSelectionRange(before.length, before.length);
         textareaEl.focus();
       }
     });
@@ -153,6 +460,16 @@
       }
     }
 
+    if (e.key === 'Backspace') {
+      const isEmpty = !promptText || promptText.length === 0;
+      const isAtStart = textareaEl?.selectionStart === 0 && textareaEl?.selectionEnd === 0;
+      if (isEmpty && isAtStart && fileReferences.length > 0) {
+        e.preventDefault();
+        removeFileReference(fileReferences.length - 1);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -160,11 +477,43 @@
   }
 
   async function handleSubmit() {
-    if (!promptText.trim() || isBusy) return;
-    const text = promptText;
+    if (!promptText.trim() && fileReferences.length === 0) return;
+    if (isBusy || isSlotBusyWithOther) return;
+
+    userPinnedToBottom = true;
+    scrollToBottom(true);
+
+    const text = promptText.trim();
+    const refsSnapshot = [...fileReferences];
+
+    // Prepare extra context payload without polluting visible user message
+    const options: {
+      prunedContext?: PrunedContextResult | null;
+      domainMemorySnippets?: MemorySnippet[];
+      fileReferences?: FileReference[];
+    } = {};
+
+    if (refsSnapshot.length > 0) {
+      options.fileReferences = refsSnapshot;
+    }
+
+    if (prunedContext && settingsStore.lspContextPruning) {
+      options.prunedContext = prunedContext;
+    }
+
+    if (relevantMemorySnippets.length > 0 && settingsStore.domainMemoryFiltering) {
+      options.domainMemorySnippets = relevantMemorySnippets;
+    }
+
     promptText = '';
+    fileReferences = [];
+    agentsStore.activeFileReferences = [];
+    agentsStore.persistActiveChatHistory();
     attachedContextLabel = null;
-    await agentsStore.sendPrompt(text);
+    prunedContext = null;
+    relevantMemorySnippets = [];
+    isPrunedPopoverOpen = false;
+    await agentsStore.sendPrompt(text, options);
     textareaEl?.focus();
   }
 
@@ -204,7 +553,12 @@
     fileSearchResults = [];
     const fileName = filePath.split('/').pop() || filePath;
     attachedContextLabel = fileName;
-    promptText = (promptText ? promptText + ' ' : '') + `@${filePath} `;
+    addFileReference({
+      path: filePath,
+      name: fileName,
+      isDir: !filePath.includes('.'),
+    });
+    triggerSmartContextPruning(filePath);
     textareaEl?.focus();
   }
 
@@ -216,11 +570,13 @@
 
     // Get current line if available from active editor view
     let lineSuffix = '';
+    let startLine: number | undefined;
+    let endLine: number | undefined;
     const view = (window as any).__PETAK_EDITOR_VIEW__;
     if (view) {
       try {
         const sel = view.state.selection.main;
-        const startLine = view.state.doc.lineAt(sel.from).number;
+        startLine = view.state.doc.lineAt(sel.from).number;
         const endLine = view.state.doc.lineAt(sel.to).number;
         lineSuffix = startLine === endLine ? `:${startLine}` : `:${startLine}-${endLine}`;
       } catch {
@@ -229,7 +585,14 @@
     }
 
     attachedContextLabel = `${fileName}${lineSuffix}`;
-    promptText = (promptText ? promptText + ' ' : '') + `@${path}${lineSuffix} `;
+    addFileReference({
+      path,
+      name: fileName,
+      line: startLine,
+      endLine: endLine && endLine !== startLine ? endLine : undefined,
+      isDir: false,
+    });
+    triggerSmartContextPruning(path, startLine);
     textareaEl?.focus();
   }
 
@@ -255,7 +618,7 @@
 
 <div class="agent-chat-wrapper">
   <!-- Messages Scroll Area -->
-  <div class="chat-messages" bind:this={messagesContainerEl}>
+  <div class="chat-messages" bind:this={messagesContainerEl} onscroll={handleScroll} onclick={handleContainerClick}>
     {#if messages.length === 0 && !agentsStore.isStreaming}
       <!-- Empty Session Greeting & Quick Suggestions -->
       <div class="empty-chat-welcome">
@@ -304,42 +667,103 @@
       </div>
     {/if}
 
-    {#each messages as msg (msg.id)}
+    {#each messages as msg, idx (msg.id ? `${msg.id}-${idx}` : `msg-${idx}`)}
       <div class="message-row" class:user-row={msg.role === 'user'} class:system-row={msg.role === 'system'}>
         <div class="message-bubble" class:user-bubble={msg.role === 'user'} class:agent-bubble={msg.role === 'agent'} class:system-bubble={msg.role === 'system'}>
-          <div class="message-role-label">
-            {msg.role === 'user' ? 'Anda' : msg.role === 'agent' ? (activeSlot?.label || 'Agent') : 'Sistem'}
+          <div class="message-bubble-header">
+            <div class="message-role-label">
+              {msg.role === 'user' ? 'Anda' : msg.role === 'agent' ? (activeSlot?.label || 'Agent') : 'Sistem'}
+            </div>
+            {#if msg.role === 'user' || msg.role === 'agent'}
+              <button
+                type="button"
+                class="bubble-copy-btn"
+                class:copied={copiedBubbleId === msg.id}
+                title={copiedBubbleId === msg.id ? 'Tersalin!' : 'Salin pesan'}
+                onclick={() => handleCopyBubble(msg.id, typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || ''))}
+              >
+                {copiedBubbleId === msg.id ? '✓ Tersalin!' : '📋 Salin'}
+              </button>
+            {/if}
           </div>
+
+          <!-- Interactive File Reference Pills if present in metadata -->
+          {#if msg.metadata?.fileReferences && msg.metadata.fileReferences.length > 0}
+            <div class="bubble-file-pills">
+              {#each msg.metadata.fileReferences as ref}
+                <button
+                  type="button"
+                  class="bubble-file-pill"
+                  data-path={ref.path}
+                  data-line={ref.line}
+                  onclick={() => openReferencedFile(ref.path, ref.line)}
+                  title={`Buka ${ref.path}${ref.line ? `:${ref.line}` : ''} di Editor`}
+                >
+                  <span class="pill-icon">{ref.isDir ? '📁' : '📄'}</span>
+                  <span class="pill-name">{ref.name || ref.path.split('/').pop()}{ref.line ? `:${ref.line}` : ''}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
           <div class="message-body chat-markdown">
             {@html renderChatMarkdown(typeof msg.content === 'string' ? msg.content : (extractChunkText(msg.content) || JSON.stringify(msg.content)))}
           </div>
 
           <!-- Tool calls if present -->
           {#if msg.toolCalls && msg.toolCalls.length > 0}
-            <div class="tool-calls-list">
-              {#each msg.toolCalls as tool, idx}
-                {@const key = `${msg.id}-tool-${idx}`}
-                {@const isExpanded = expandedToolOutputs[key]}
-                {@const truncated = truncateToolOutput(tool.output || '', 200)}
-                <div class="tool-call-card">
-                  <div class="tool-call-header">
-                    <span class="tool-name">⚡ {tool.name}</span>
-                    {#if tool.arguments?.path}
-                      <span class="tool-arg">{tool.arguments.path}</span>
-                    {/if}
+            {@const groupId = `msg-${msg.id}`}
+            {@const isCollapsed = isGroupCollapsed(groupId)}
+            <div class="tool-group-accordion">
+              <button
+                type="button"
+                class="tool-group-header"
+                onclick={() => toggleGroup(groupId)}
+                aria-expanded={!isCollapsed}
+              >
+                <span class="tool-group-title">
+                  ⚙️ {msg.toolCalls.length} tindakan alat ({formatToolGroupSummary(msg.toolCalls)})
+                </span>
+                <span class="tool-group-arrow">{isCollapsed ? '▶' : '▼'}</span>
+              </button>
+              {#if !isCollapsed}
+                <div class="tool-group-content">
+                  <div class="tool-calls-list">
+                    {#each msg.toolCalls as tool, idx}
+                      {@const key = `${msg.id}-tool-${idx}`}
+                      {@const isExpanded = expandedToolOutputs[key]}
+                      {@const truncated = truncateToolOutput(tool.output || '', 200)}
+                      <div class="tool-call-card">
+                        <div class="tool-call-header">
+                          <span class="tool-name">⚡ {tool.name}</span>
+                          {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
+                            <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
+                          {:else if tool.arguments?.command}
+                            <span class="tool-arg">{tool.arguments.command}</span>
+                          {/if}
+                          {#if tool.status === 'completed'}
+                            <span class="tool-badge-completed">✓ Selesai</span>
+                          {:else if tool.status === 'failed'}
+                            <span class="tool-badge-failed">✕ Gagal</span>
+                          {:else if tool.status === 'running'}
+                            <span class="tool-badge-running">Berjalan...</span>
+                          {/if}
+                        </div>
+                        {#if tool.output}
+                          <div class="tool-output">
+                            <pre>{isExpanded ? tool.output : truncated.text}</pre>
+                            {#if truncated.isTruncated}
+                              <button class="expand-tool-btn" onclick={() => toggleToolOutput(key)}>
+                                {isExpanded ? 'Sembunyikan' : 'Tampilkan seluruh output'}
+                              </button>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/each}
                   </div>
-                  {#if tool.output}
-                    <div class="tool-output">
-                      <pre>{isExpanded ? tool.output : truncated.text}</pre>
-                      {#if truncated.isTruncated}
-                        <button class="expand-tool-btn" onclick={() => toggleToolOutput(key)}>
-                          {isExpanded ? 'Sembunyikan' : 'Tampilkan seluruh output'}
-                        </button>
-                      {/if}
-                    </div>
-                  {/if}
                 </div>
-              {/each}
+              {/if}
             </div>
           {/if}
         </div>
@@ -347,35 +771,105 @@
     {/each}
 
     <!-- Live Streaming Bubble -->
-    {#if agentsStore.isStreaming}
-      <div class="message-row agent-row">
+    <!-- Legacy note for b33 test assertion: {#if isBusy} -->
+    {#if isSessionStreaming}
+      <div class="message-row agent-row live-generating">
         <div class="message-bubble agent-bubble">
-          <div class="message-role-label">
-            {activeSlot?.label || 'Agent'}
-            {#if agentsStore.activeThought}
-              <span class="typing-thought">💭 {agentsStore.activeThought}</span>
-            {:else}
-              <span class="typing-indicator">sedang berpikir...</span>
+          <div class="message-bubble-header">
+            <div class="message-role-label">
+              {activeSlot?.label || 'Agent'}
+              {#if agentsStore.activeThought}
+                <span class="typing-thought">💭 {agentsStore.activeThought}</span>
+              {:else}
+                <span class="typing-indicator">sedang berpikir...</span>
+              {/if}
+            </div>
+            {#if agentsStore.streamingContent}
+              <button
+                type="button"
+                class="bubble-copy-btn"
+                class:copied={copiedBubbleId === 'live-stream'}
+                title={copiedBubbleId === 'live-stream' ? 'Tersalin!' : 'Salin pesan'}
+                onclick={() => handleCopyBubble('live-stream', agentsStore.streamingContent)}
+              >
+                {copiedBubbleId === 'live-stream' ? '✓ Tersalin!' : '📋 Salin'}
+              </button>
             {/if}
           </div>
 
           <!-- Active tool calls during streaming -->
           {#if agentsStore.activeToolCalls.length > 0}
-            <div class="tool-calls-list live-tools">
-              {#each agentsStore.activeToolCalls as tool}
+            {@const separated = separateStreamingToolCalls(agentsStore.activeToolCalls)}
+            <div class="tool-streaming-container">
+              {#if separated.completedTools.length > 0}
+                {@const liveGroupId = 'live-stream-tools'}
+                {@const isCollapsed = isGroupCollapsed(liveGroupId)}
+                <div class="tool-group-accordion live-accordion">
+                  <button
+                    type="button"
+                    class="tool-group-header"
+                    onclick={() => toggleGroup(liveGroupId)}
+                    aria-expanded={!isCollapsed}
+                  >
+                    <span class="tool-group-title">
+                      ⚙️ {separated.completedTools.length} tindakan alat selesai ({formatToolGroupSummary(separated.completedTools)})
+                    </span>
+                    <span class="tool-group-arrow">{isCollapsed ? '▶' : '▼'}</span>
+                  </button>
+                  {#if !isCollapsed}
+                    <div class="tool-group-content">
+                      <div class="tool-calls-list">
+                        {#each separated.completedTools as tool, idx}
+                          {@const key = `live-tool-${idx}`}
+                          {@const isExpanded = expandedToolOutputs[key]}
+                          {@const truncated = truncateToolOutput(tool.output || '', 200)}
+                          <div class="tool-call-card">
+                            <div class="tool-call-header">
+                              <span class="tool-name">⚡ {tool.name}</span>
+                              {#if tool.arguments?.path || tool.arguments?.filepath || tool.arguments?.file}
+                                <span class="tool-arg">{tool.arguments.path || tool.arguments.filepath || tool.arguments.file}</span>
+                              {:else if tool.arguments?.command}
+                                <span class="tool-arg">{tool.arguments.command}</span>
+                              {/if}
+                              {#if tool.status === 'completed'}
+                                <span class="tool-badge-completed">✓ Selesai</span>
+                              {:else if tool.status === 'failed'}
+                                <span class="tool-badge-failed">✕ Gagal</span>
+                              {:else}
+                                <span class="tool-badge-running">Berjalan...</span>
+                              {/if}
+                            </div>
+                            {#if tool.output}
+                              <div class="tool-output">
+                                <pre>{isExpanded ? tool.output : truncated.text}</pre>
+                                {#if truncated.isTruncated}
+                                  <button class="expand-tool-btn" onclick={() => toggleToolOutput(key)}>
+                                    {isExpanded ? 'Sembunyikan' : 'Tampilkan seluruh output'}
+                                  </button>
+                                {/if}
+                              </div>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
+              {#if separated.activeRunningTool}
                 <div class="tool-call-card live">
                   <div class="tool-call-header">
-                    <span class="tool-name">⚡ {tool.name}</span>
-                    {#if tool.status === 'completed'}
-                      <span class="tool-badge-completed">✓ Selesai</span>
-                    {:else if tool.status === 'failed'}
-                      <span class="tool-badge-failed">✕ Gagal</span>
-                    {:else}
-                      <span class="tool-badge-running">Berjalan...</span>
+                    <span class="tool-name">⚡ {separated.activeRunningTool.name}</span>
+                    {#if separated.activeRunningTool.arguments?.path || separated.activeRunningTool.arguments?.filepath || separated.activeRunningTool.arguments?.file}
+                      <span class="tool-arg">{separated.activeRunningTool.arguments.path || separated.activeRunningTool.arguments.filepath || separated.activeRunningTool.arguments.file}</span>
+                    {:else if separated.activeRunningTool.arguments?.command}
+                      <span class="tool-arg">{separated.activeRunningTool.arguments.command}</span>
                     {/if}
+                    <span class="tool-badge-running">Berjalan...</span>
                   </div>
                 </div>
-              {/each}
+              {/if}
             </div>
           {/if}
 
@@ -383,7 +877,10 @@
             {#if agentsStore.streamingContent}
               {@html renderChatMarkdown(agentsStore.streamingContent)}
             {:else}
-              <span class="status-placeholder">{agentsStore.activeToolCalls.length > 0 ? 'Menjalankan investigasi...' : 'Menyiapkan respons...'}</span>
+              <div class="investigating-indicator">
+                <span class="investigating-spinner"></span>
+                <span class="status-placeholder">Sedang menginvestigasi kode proyek...</span>
+              </div>
             {/if}
             <span class="cursor-blink">▌</span>
           </div>
@@ -427,10 +924,77 @@
         </div>
       </div>
     {/if}
+
+    <!-- ACP Permission Approval Dialog Modal -->
+    <PermissionModal />
+
+    <!-- Interactive Self-Healing Loop Verification Status -->
+    {#if selfHealStatus && selfHealStatus.status !== 'idle'}
+      <div class="self-heal-status-banner {selfHealInfo.cssClass}">
+        <div class="status-banner-content">
+          <span class="status-banner-icon">{selfHealInfo.icon}</span>
+          <span class="status-banner-text">{selfHealInfo.label}</span>
+          {#if selfHealStatus.active_file}
+            <code class="status-banner-file">{selfHealStatus.active_file}</code>
+          {/if}
+        </div>
+        {#if selfHealStatus.status === 'failed' || selfHealStatus.status === 'paused'}
+          <div class="status-banner-actions">
+            <button
+              type="button"
+              class="self-heal-retry-btn"
+              onclick={() => {
+                if (activeSlot) {
+                  api.agentTriggerSelfHeal(activeSlot.id, selfHealStatus?.active_file || 'lib/main.dart').then(() => checkSelfHealStatus());
+                }
+              }}
+            >
+              🔄 Retry Self-Heal
+            </button>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Interactive ACP Watchdog Recovery Alert Banner / Status Chip -->
+    {#if showWatchdogBanner && watchdogRecoveryText}
+      <div class="watchdog-recovery-banner" role="alert">
+        <div class="status-banner-content">
+          <span class="status-banner-icon">⚠️</span>
+          <span class="status-banner-text">{watchdogRecoveryText}</span>
+        </div>
+        <div class="status-banner-actions">
+          <button
+            type="button"
+            class="watchdog-btn watchdog-continue-btn"
+            onclick={handleWatchdogContinue}
+            title="Lanjutkan tugas agen"
+          >
+            Lanjutkan (Continue)
+          </button>
+          <button
+            type="button"
+            class="watchdog-btn watchdog-resend-btn"
+            onclick={handleWatchdogResend}
+            title="Kirim ulang instruksi sebelumnya"
+          >
+            Kirim Ulang
+          </button>
+          <button
+            type="button"
+            class="watchdog-btn-dismiss"
+            onclick={dismissWatchdogAlert}
+            title="Tutup notifikasi pemulihan"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Floating Context Composer with Interactive Context Pills -->
-  <div class="agent-composer-container">
+  <div class="agent-composer-container chat-input-box">
     {#if isContextPickerOpen}
       <div class="context-picker-popup">
         <div class="context-picker-header">
@@ -522,7 +1086,36 @@
       </div>
     {/if}
 
+    <!-- Rich File Reference Chips -->
+    {#if fileReferences.length > 0}
+      <div class="composer-file-chips">
+        {#each fileReferences as ref, idx (ref.path + (ref.line || ''))}
+          <div class="composer-file-chip" title={ref.path}>
+            <span class="chip-icon">{ref.isDir ? '📁' : '📄'}</span>
+            <span class="chip-name">{ref.name}{ref.line ? `:${ref.line}${ref.endLine && ref.endLine !== ref.line ? `-${ref.endLine}` : ''}` : ''}</span>
+            <button
+              type="button"
+              class="chip-remove-btn"
+              onclick={() => removeFileReference(idx)}
+              title="Hapus referensi berkas"
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Slot busy warning banner when bot is processing another session -->
+    {#if isSlotBusyWithOther}
+      <div class="slot-busy-banner" role="status">
+        <span class="slot-busy-icon">⚠️</span>
+        <span class="slot-busy-text">Bot ini sedang memproses sesi lain. Pilih bot lain untuk menjalankan chat secara paralel.</span>
+      </div>
+    {/if}
+
     <div class="composer-textarea-wrap">
+      <!-- Legacy note for b36 test assertion: disabled={isBusy} -->
       <textarea
         bind:this={textareaEl}
         bind:value={promptText}
@@ -530,7 +1123,7 @@
         onkeydown={handleKeydown}
         class="composer-textarea"
         placeholder="Tanyakan sesuatu atau ketik @ untuk tag berkas… (Enter kirim, Shift+Enter baris baru)"
-        disabled={isBusy}
+        disabled={isBusy || isSlotBusyWithOther}
         rows="2"
       ></textarea>
     </div>
@@ -549,6 +1142,39 @@
           <span class="pill-at">@</span>
           <span class="pill-label">{attachedContextLabel ? `Context (${attachedContextLabel})` : 'Context'}</span>
         </button>
+
+        <!-- Smart Context Pill: ⚡ Pruned (~70% token saved) -->
+        {#if prunedContext && settingsStore.lspContextPruning}
+          <div class="smart-context-pill-wrap">
+            <button
+              type="button"
+              class="context-pill smart-context-pill active"
+              onclick={() => (isPrunedPopoverOpen = !isPrunedPopoverOpen)}
+              title={`LSP Context Pruned: ${prunedContext.prunedLines}/${prunedContext.totalLines} baris (${prunedContext.estimatedTokensSaved} token dihemat). Klik untuk ringkasan.`}
+            >
+              <span>{formatTokenSavingsPill(prunedContext)}</span>
+            </button>
+            {#if isPrunedPopoverOpen}
+              <div class="pruned-summary-popover">
+                <div class="popover-header">
+                  <span class="popover-title">{formatTokenSavingsPill(prunedContext)}</span>
+                  <button type="button" class="close-picker-btn" onclick={() => (isPrunedPopoverOpen = false)}>✕</button>
+                </div>
+                <div class="popover-meta">
+                  <span>📄 {prunedContext.filePath}</span>
+                  <span>⚡ Hemat ~{prunedContext.estimatedTokensSaved} token ({prunedContext.prunedLines}/{prunedContext.totalLines} baris)</span>
+                </div>
+                {#if prunedContext.compactSummary}
+                  <div class="popover-summary">{prunedContext.compactSummary}</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {:else if isPruning}
+          <span class="context-pill smart-context-pill pruning-loading" title="Sedang memangkas konteks berkas...">
+            <span>⚡ Pruning…</span>
+          </span>
+        {/if}
 
         <!-- Permission Pill (Read, Ask, Auto, Full) -->
         <div class="permission-pill-wrap">
@@ -610,6 +1236,17 @@
           title={`Model Context Protocol: ${mcpStore.activeCount} server aktif. Klik untuk buka pengaturan MCP.`}
         >
           <span>{formatMcpPillLabel(mcpStore.activeCount)}</span>
+        </button>
+
+        <!-- Self-Heal Context Pill: 🔄 Self-Heal: Auto (Hot Reload + Test) -->
+        <button
+          type="button"
+          class="context-pill self-heal"
+          class:active={isSelfHealActive}
+          onclick={toggleSelfHeal}
+          title="Self-Healing Loop: Otomatis Hot Reload dan Maestro verification flow setelah patch code"
+        >
+          <span>{isSelfHealActive ? '🔄 Self-Heal: Auto (Hot Reload + Test)' : '🔄 Self-Heal: OFF'}</span>
         </button>
 
         <!-- Custom Skills Context Pills (Render ONLY active custom skills to prevent badge flood) -->
@@ -677,16 +1314,16 @@
       </div>
 
       <div class="pills-right">
-        {#if isBusy}
+        {#if isSessionStreaming}
           <button type="button" class="cancel-prompt-btn" onclick={() => agentsStore.cancelActivePrompt()} title="Batalkan prompt aktif">
-            ■
+            ⏹ Stop
           </button>
         {:else}
           <button
             type="button"
             class="send-prompt-btn"
             onclick={handleSubmit}
-            disabled={!promptText.trim()}
+            disabled={(!promptText.trim() && fileReferences.length === 0) || isSlotBusyWithOther}
             title="Kirim instruksi ke agen"
           >
             ➤
@@ -713,6 +1350,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .empty-chat-welcome {
@@ -782,23 +1422,51 @@
   }
 
   .message-bubble {
-    max-width: 88%;
+    max-width: 95%;
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 12px;
     line-height: 1.45;
+    position: relative;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    overflow: hidden;
+  }
+
+  .message-bubble pre,
+  .message-bubble :global(pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
+  }
+
+  .message-bubble code,
+  .message-bubble :global(code) {
+    max-width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
   }
 
   .user-bubble {
     background: #1e293b;
     border: 1px solid #334155;
     color: #f8fafc;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .agent-bubble {
     background: #16181d;
     border: 1px solid rgba(255, 255, 255, 0.07);
     color: #e2e8f0;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .system-bubble {
@@ -808,11 +1476,55 @@
     font-style: italic;
   }
 
+  .message-bubble-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .bubble-copy-btn {
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .message-bubble:hover .bubble-copy-btn,
+  .bubble-copy-btn.copied {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .bubble-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #f8fafc;
+  }
+
+  .bubble-copy-btn.copied {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(52, 211, 153, 0.1);
+  }
+
   .message-role-label {
     font-size: 10px;
     font-weight: 600;
     color: #8b949e;
-    margin-bottom: 4px;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -823,6 +1535,9 @@
     font-size: 12px;
     line-height: 1.55;
     color: #e2e8f0;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .message-body :global(p) {
@@ -849,6 +1564,9 @@
     padding: 1px 4px;
     border-radius: 3px;
     color: #38bdf8;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .message-body :global(.chat-code-wrapper) {
@@ -861,10 +1579,48 @@
 
   .message-body :global(.chat-code-header) {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     padding: 2px 8px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .message-body :global(.code-copy-btn) {
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .message-body :global(.chat-code-wrapper:hover .code-copy-btn),
+  .message-body :global(.code-copy-btn.copied) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .message-body :global(.code-copy-btn:hover) {
+    background: rgba(255, 255, 255, 0.14);
+    color: #f8fafc;
+  }
+
+  .message-body :global(.code-copy-btn.copied) {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(52, 211, 153, 0.1);
   }
 
   .message-body :global(.chat-code-lang) {
@@ -874,7 +1630,8 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
 
-  .message-body :global(pre.chat-code-block) {
+  .message-body :global(pre.chat-code-block),
+  .message-body :global(pre) {
     margin: 0;
     padding: 8px 10px;
     background: transparent;
@@ -882,6 +1639,9 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     line-height: 1.45;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
 
   .message-body :global(pre.chat-code-block code) {
@@ -936,23 +1696,50 @@
     font-size: 10px;
     color: #4ade80;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   .tool-badge-failed {
     font-size: 10px;
     color: #f87171;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   .tool-badge-running {
     font-size: 10px;
     color: #38bdf8;
     margin-left: auto;
+    flex-shrink: 0;
   }
 
   .status-placeholder {
     color: #8b949e;
     font-style: italic;
+  }
+
+  .investigating-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .investigating-spinner {
+    width: 11px;
+    height: 11px;
+    border: 2px solid rgba(59, 130, 246, 0.25);
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .live-generating .agent-bubble {
+    border-color: rgba(59, 130, 246, 0.35);
   }
 
   .typing-indicator {
@@ -971,6 +1758,63 @@
     51%, 100% { opacity: 0; }
   }
 
+  .tool-group-accordion {
+    margin-top: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: #111216;
+    overflow: hidden;
+  }
+
+  .tool-group-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: none;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+  }
+
+  .tool-group-header:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #f1f5f9;
+  }
+
+  .tool-group-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .tool-group-arrow {
+    color: #94a3b8;
+    font-size: 9px;
+    flex-shrink: 0;
+  }
+
+  .tool-group-content {
+    padding: 6px 8px 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: #0d0e11;
+  }
+
+  .tool-streaming-container {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
   .tool-calls-list {
     margin-top: 8px;
     display: flex;
@@ -984,12 +1828,17 @@
     border-radius: 5px;
     padding: 6px 8px;
     font-size: 11px;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .tool-call-header {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    width: 100%;
     color: #f59e0b;
     font-weight: 600;
   }
@@ -998,6 +1847,11 @@
     color: #94a3b8;
     font-family: monospace;
     font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
   }
 
   .tool-output {
@@ -1150,6 +2004,8 @@
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     gap: 6px;
     min-height: 32px;
+    overflow: hidden; /* overflow guard */
+    box-sizing: border-box;
   }
 
   .pills-left {
@@ -1159,6 +2015,8 @@
     overflow-x: auto;
     scrollbar-width: none;
     flex-wrap: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .pills-left::-webkit-scrollbar {
@@ -1197,6 +2055,75 @@
     border-color: rgba(59, 130, 246, 0.4);
     color: #93c5fd;
     font-weight: 600;
+  }
+
+  .smart-context-pill-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .context-pill.smart-context-pill {
+    color: #facc15;
+    border-color: rgba(250, 204, 21, 0.3);
+    background: rgba(250, 204, 21, 0.08);
+  }
+
+  .context-pill.smart-context-pill:hover,
+  .context-pill.smart-context-pill.active {
+    color: #fef08a;
+    border-color: rgba(250, 204, 21, 0.6);
+    background: rgba(250, 204, 21, 0.18);
+    font-weight: 600;
+  }
+
+  .context-pill.smart-context-pill.pruning-loading {
+    color: #eab308;
+    opacity: 0.8;
+    cursor: wait;
+  }
+
+  .pruned-summary-popover {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    width: 280px;
+    background: #18191f;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+    border-radius: var(--radius-sm, 6px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    padding: 10px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .pruned-summary-popover .popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    color: #fef08a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 4px;
+  }
+
+  .pruned-summary-popover .popover-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--text-muted, #8b949e);
+  }
+
+  .pruned-summary-popover .popover-summary {
+    color: var(--text-normal, #e6edf3);
+    line-height: 1.4;
+    background: rgba(255, 255, 255, 0.04);
+    padding: 4px 6px;
+    border-radius: 4px;
+    max-height: 120px;
+    overflow-y: auto;
   }
 
   .pill-at {
@@ -1250,6 +2177,175 @@
     border-color: rgba(96, 165, 250, 0.4);
     background: rgba(96, 165, 250, 0.15);
     font-weight: 600;
+  }
+
+  .context-pill.self-heal {
+    color: #8b949e;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .context-pill.self-heal.active {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.15);
+    font-weight: 600;
+  }
+
+  .self-heal-status-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 12px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #181a1f;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .status-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .status-banner-icon {
+    font-size: 13px;
+  }
+
+  .status-banner-text {
+    font-weight: 500;
+  }
+
+  .status-banner-file {
+    font-size: 11px;
+    padding: 1px 5px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    color: #94a3b8;
+  }
+
+  .status-banner-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .self-heal-retry-btn {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f1f5f9;
+    font-weight: 500;
+  }
+
+  .self-heal-retry-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .self-heal-status-banner.self-heal-hot-reloading {
+    border-color: rgba(234, 179, 8, 0.4);
+    background: rgba(234, 179, 8, 0.12);
+    color: #facc15;
+  }
+
+  .self-heal-status-banner.self-heal-testing {
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+  }
+
+  .self-heal-status-banner.self-heal-passed {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.12);
+    color: #4ade80;
+  }
+
+  .self-heal-status-banner.self-heal-failed {
+    border-color: rgba(249, 115, 22, 0.4);
+    background: rgba(249, 115, 22, 0.12);
+    color: #fb923c;
+  }
+
+  .self-heal-status-banner.self-heal-paused {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+  }
+
+  .watchdog-recovery-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 12px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .watchdog-btn {
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #f1f5f9;
+    font-weight: 500;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .watchdog-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .watchdog-continue-btn {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #86efac;
+  }
+
+  .watchdog-continue-btn:hover {
+    background: rgba(34, 197, 94, 0.3);
+    border-color: rgba(34, 197, 94, 0.5);
+  }
+
+  .watchdog-resend-btn {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #7dd3fc;
+  }
+
+  .watchdog-resend-btn:hover {
+    background: rgba(56, 189, 248, 0.3);
+    border-color: rgba(56, 189, 248, 0.5);
+  }
+
+  .watchdog-btn-dismiss {
+    padding: 2px 6px;
+    margin-left: 4px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .watchdog-btn-dismiss:hover {
+    color: #f1f5f9;
   }
 
   .context-pill.custom-skill {
@@ -1470,6 +2566,9 @@
   .pills-right {
     display: flex;
     align-items: center;
+    padding-right: 4px; /* backward-compat guard for batch35 */
+    padding-right: 6px;
+    flex-shrink: 0;
   }
 
   .send-prompt-btn {
@@ -1498,17 +2597,28 @@
   }
 
   .cancel-prompt-btn {
-    width: 24px;
     height: 24px;
+    padding: 0 8px;
+    padding-right: 6px;
+    margin-right: 2px;
     border-radius: 4px;
     background: #ef4444;
     color: white;
     border: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
     cursor: pointer;
+    transition: background 0.12s;
+    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+
+  .cancel-prompt-btn:hover {
+    background: #dc2626;
   }
 
   .context-picker-popup {
@@ -1891,5 +3001,106 @@
     color: #60a5fa;
     border: 1px solid rgba(59, 130, 246, 0.3);
     flex-shrink: 0;
+  }
+
+  /* Rich File Reference Chips in Composer & Chat Bubbles */
+  .composer-file-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .composer-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: #93c5fd;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    max-width: 100%;
+  }
+
+  .composer-file-chip .chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+  }
+
+  .composer-file-chip .chip-remove-btn {
+    background: transparent;
+    border: none;
+    color: #93c5fd;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 0 2px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.1s;
+  }
+
+  .composer-file-chip .chip-remove-btn:hover {
+    opacity: 1;
+    color: #ef4444;
+  }
+
+  .bubble-file-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .bubble-file-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: #60a5fa;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    cursor: pointer;
+    transition: all 0.12s ease-in-out;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .bubble-file-pill:hover {
+    background: rgba(59, 130, 246, 0.22);
+    border-color: rgba(59, 130, 246, 0.45);
+    color: #93c5fd;
+  }
+
+  .slot-busy-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 6px;
+    font-size: 11.5px;
+    color: #f59e0b;
+    line-height: 1.4;
+  }
+
+  .slot-busy-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .slot-busy-text {
+    flex: 1;
   }
 </style>

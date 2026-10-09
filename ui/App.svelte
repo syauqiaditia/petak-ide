@@ -286,6 +286,12 @@
 
   async function handleOpenFile(filePath: string, line?: number, col?: number) {
     try {
+      if (editorComponent?.deactivateCenterDiff) {
+        editorComponent.deactivateCenterDiff();
+      }
+      if (gitStore.centerDiff) {
+        gitStore.closeCenterDiff();
+      }
       const existing = tabsManager.tabs.find((t) => t.path === filePath);
       const filename = filePath.split('/').filter(Boolean).pop() || '';
       if (!existing) {
@@ -949,6 +955,22 @@
     -webkit-user-select: none;
     overflow: hidden;
     z-index: 4;
+  }
+  .agent-panel-slot :global(.chat-messages),
+  .agent-panel-slot :global(.message-bubble),
+  .agent-panel-slot :global(.message-body),
+  .agent-panel-slot :global(.user-bubble),
+  .agent-panel-slot :global(.agent-bubble),
+  .agent-panel-slot :global(pre),
+  .agent-panel-slot :global(code),
+  :global(.chat-messages),
+  :global(.message-bubble),
+  :global(.message-body),
+  :global(.user-bubble),
+  :global(.agent-bubble) {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    cursor: text;
   }
   .agent-toolbar-top {
     height: 40px;

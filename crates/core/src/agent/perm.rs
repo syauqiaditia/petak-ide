@@ -6,6 +6,8 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 
+pub use super::policy::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PermissionMode {
@@ -157,6 +159,18 @@ impl PermissionManager {
         }
     }
 
+    pub fn evaluate_with_role(
+        &self,
+        mode: PermissionMode,
+        tool_call: &Value,
+        role_scope: &RoleToolScope,
+    ) -> PermissionDecision {
+        if let Err(reason) = role_scope.check_tool_call(tool_call) {
+            return PermissionDecision::Denied { reason };
+        }
+        self.evaluate(mode, tool_call)
+    }
+
     /// Handles a permission request synchronously, waiting for user response if needed.
     pub fn request_permission(
         &self,
@@ -166,6 +180,46 @@ impl PermissionManager {
         tool_call: &Value,
         timeout: Duration,
     ) -> Result<bool, String> {
+        self.request_permission_with_role(slot_id, session_id, mode, tool_call, None, timeout)
+    }
+
+    pub fn request_permission_with_role(
+        &self,
+        slot_id: &str,
+        session_id: &str,
+        mode: PermissionMode,
+        tool_call: &Value,
+        role_scope: Option<&RoleToolScope>,
+        timeout: Duration,
+    ) -> Result<bool, String> {
+        self.request_permission_with_role_cb(
+            slot_id,
+            session_id,
+            mode,
+            tool_call,
+            role_scope,
+            timeout,
+            |_| {},
+        )
+    }
+
+    pub fn request_permission_with_role_cb<F>(
+        &self,
+        slot_id: &str,
+        session_id: &str,
+        mode: PermissionMode,
+        tool_call: &Value,
+        role_scope: Option<&RoleToolScope>,
+        timeout: Duration,
+        on_ask: F,
+    ) -> Result<bool, String>
+    where
+        F: FnOnce(&PendingPermissionRequest),
+    {
+        if let Some(scope) = role_scope {
+            scope.check_tool_call(tool_call)?;
+        }
+
         match self.evaluate(mode, tool_call) {
             PermissionDecision::Approved => Ok(true),
             PermissionDecision::Denied { reason } => Err(reason),
@@ -188,8 +242,10 @@ impl PermissionManager {
                 let (tx, rx) = mpsc::channel();
                 {
                     let mut pend = self.pending.lock().unwrap();
-                    pend.insert(req_id.clone(), (req, tx));
+                    pend.insert(req_id.clone(), (req.clone(), tx));
                 }
+
+                on_ask(&req);
 
                 match rx.recv_timeout(timeout) {
                     Ok(allowed) => Ok(allowed),
@@ -300,5 +356,47 @@ mod tests {
 
         let result = handle.join().unwrap().unwrap();
         assert!(result);
+    }
+
+    #[test]
+    fn test_perm_manager_with_role_scope() {
+        let mgr = PermissionManager::default();
+        let mgr_scope = RoleToolScope::for_role(ROLE_MANAGER, None);
+
+        // Manager calling write_file should be denied immediately at RPC layer
+        let write_tc = serde_json::json!({
+            "name": "write_file",
+            "arguments": { "path": "lib.rs", "content": "hello" }
+        });
+        let decision = mgr.evaluate_with_role(PermissionMode::Full, &write_tc, &mgr_scope);
+        assert_eq!(
+            decision,
+            PermissionDecision::Denied {
+                reason: "ToolExecutionDenied: Role manager does not have permission to execute write_file".to_string()
+            }
+        );
+
+        let err = mgr
+            .request_permission_with_role(
+                "slot-mgr",
+                "sess-1",
+                PermissionMode::Full,
+                &write_tc,
+                Some(&mgr_scope),
+                Duration::from_millis(50),
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            "ToolExecutionDenied: Role manager does not have permission to execute write_file"
+        );
+
+        // Manager calling read_file should be approved in Full mode
+        let read_tc = serde_json::json!({
+            "name": "read_file",
+            "arguments": { "path": "lib.rs" }
+        });
+        let decision = mgr.evaluate_with_role(PermissionMode::Full, &read_tc, &mgr_scope);
+        assert_eq!(decision, PermissionDecision::Approved);
     }
 }
