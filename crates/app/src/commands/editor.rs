@@ -120,6 +120,8 @@ pub async fn lsp_completion(
     path: String,
     line: u32,
     character: u32,
+    trigger_kind: Option<u32>,
+    trigger_character: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let registry = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -128,19 +130,19 @@ pub async fn lsp_completion(
         let lang = petak_core::lsp::Lang::from_extension(ext)
             .ok_or_else(|| "unsupported language".to_string())?;
         let uri = petak_core::lsp::registry::path_to_uri(p);
-        let params = serde_json::json!({
+        let mut params = serde_json::json!({
             "textDocument": { "uri": uri },
             "position": { "line": line, "character": character }
         });
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
-            let _ = writeln!(f, "[LSP_COMPLETION] path={} line={} char={}", path, line, character);
+        if let Some(kind) = trigger_kind {
+            let mut ctx = serde_json::json!({ "triggerKind": kind });
+            if let Some(ref ch) = trigger_character {
+                ctx["triggerCharacter"] = serde_json::json!(ch);
+            }
+            params["context"] = ctx;
         }
         let res = registry
             .request(p, lang, "textDocument/completion", &params, None);
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("/tmp/petak_lsp.log") {
-            let _ = writeln!(f, "[LSP_COMPLETION_RES] is_ok={}", res.is_ok());
-        }
         res.map_err(|e| format!("{:?}", e))
     })
     .await

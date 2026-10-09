@@ -977,9 +977,11 @@ export const api = {
     completion(
       path: string,
       line: number,
-      character: number
+      character: number,
+      triggerKind?: number,
+      triggerCharacter?: string
     ): Promise<LspCompletionList | LspCompletionItem[] | null> {
-      return invoke('lsp_completion', { path, line, character });
+      return invoke('lsp_completion', { path, line, character, triggerKind, triggerCharacter });
     },
 
     completionResolve(path: string, item: any): Promise<LspCompletionItem> {
