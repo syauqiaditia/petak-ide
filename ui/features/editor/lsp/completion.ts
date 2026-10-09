@@ -14,7 +14,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { api, type LspCompletionItem } from '../../../lib/api';
 import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos } from './pos';
-import { createSnippetCompletionSource } from '../snippets';
+import { getSnippetCompletionsForLanguage, getLangForFilename } from '../snippets';
 import { applyTextEditsToView } from './applyEdit';
 import { renderMarkdownToDom } from './markdown';
 
@@ -124,13 +124,56 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
       boost: 10,
     }));
 
+    const lang = getLangForFilename(path);
+    const allSnippets = lang ? getSnippetCompletionsForLanguage(lang) : [];
+    const snippetOptions = (
+      prefix ? allSnippets.filter((s) => s.label.toLowerCase().startsWith(prefix)) : allSnippets
+    ).map((opt) => ({
+      ...opt,
+      boost: -99,
+    }));
+
     try {
       // Ensure LSP server has the freshest document content before requesting completion
       await flushPending(path);
-      if (context.aborted || docAborted) return null;
+      if (context.aborted || docAborted) {
+        const fallbackOptions = [...snippetOptions, ...keywordOptions];
+        if (fallbackOptions.length > 0) {
+          return {
+            from,
+            options: fallbackOptions,
+            validFor: /^[\w$]*$/,
+          };
+        }
+        return null;
+      }
 
-      const response = await api.lsp.completion(path, lspPos.line, lspPos.character);
-      if (context.aborted || docAborted) return null;
+      let timer: any;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('LSP completion timeout')), 1500);
+      });
+      const lspPromise = (async () => {
+        return await api.lsp.completion(path, lspPos.line, lspPos.character);
+      })();
+
+      let response: any;
+      try {
+        response = await Promise.race([lspPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (context.aborted || docAborted) {
+        const fallbackOptions = [...snippetOptions, ...keywordOptions];
+        if (fallbackOptions.length > 0) {
+          return {
+            from,
+            options: fallbackOptions,
+            validFor: /^[\w$]*$/,
+          };
+        }
+        return null;
+      }
 
       const rawItems: LspCompletionItem[] = Array.isArray(response)
         ? response
@@ -194,10 +237,11 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
         return completion;
       });
 
-      // De-duplicate keywords if LSP already provided them
+      // De-duplicate snippets and keywords if LSP already provided them
       const lspLabels = new Set(lspOptions.map((o) => o.label));
       const filteredKeywords = keywordOptions.filter((kw) => !lspLabels.has(kw.label));
-      const combinedOptions = [...filteredKeywords, ...lspOptions];
+      const filteredSnippets = snippetOptions.filter((s) => !lspLabels.has(s.label));
+      const combinedOptions = [...filteredSnippets, ...filteredKeywords, ...lspOptions];
 
       if (combinedOptions.length === 0) return null;
 
@@ -207,10 +251,11 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
         validFor: /^[\w$]*$/,
       };
     } catch (e) {
-      if (keywordOptions.length > 0) {
+      const fallbackOptions = [...snippetOptions, ...keywordOptions];
+      if (fallbackOptions.length > 0) {
         return {
           from,
-          options: keywordOptions,
+          options: fallbackOptions,
           validFor: /^[\w$]*$/,
         };
       }
@@ -267,6 +312,12 @@ export const completionTheme = EditorView.theme({
     minWidth: '340px !important',
     maxWidth: '520px !important',
     fontFamily: "'JetBrains Mono', monospace !important",
+    zIndex: '99999 !important',
+    pointerEvents: 'auto !important',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    zIndex: '99999 !important',
+    pointerEvents: 'auto !important',
   },
   '.cm-tooltip-autocomplete::after': {
     content: '"⏎ insert · ⇥ replace · ⌃Space docs"',
@@ -399,7 +450,6 @@ export function createLspAutocompleteExtension(getPath: () => string | null): Ex
   return [
     autocompletion({
       override: [
-        createSnippetCompletionSource(getPath),
         createLspCompletionSource(getPath),
       ],
       activateOnTyping: true,
@@ -418,5 +468,8 @@ export function createLspAutocompleteExtension(getPath: () => string | null): Ex
       ],
     }),
     completionTheme,
+    keymap.of([
+      { key: 'Alt-/', run: startCompletion },
+    ]),
   ];
 }
