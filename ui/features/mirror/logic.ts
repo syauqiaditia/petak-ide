@@ -262,3 +262,54 @@ export function nalsToAvcc(data: Uint8Array): Uint8Array {
   }
   return out;
 }
+
+/**
+ * Checks whether an event target or active element belongs to an IDE input, editor, or dialog
+ * where keystrokes should not be intercepted by device mirroring.
+ */
+export function shouldReleaseMirrorFocus(
+  target: {
+    tagName?: string;
+    isContentEditable?: boolean;
+    closest?: (selector: string) => any;
+  } | null | undefined,
+  activeElement?: {
+    tagName?: string;
+    isContentEditable?: boolean;
+    closest?: (selector: string) => any;
+  } | null | undefined
+): boolean {
+  const check = (el: any): boolean => {
+    if (!el) return false;
+    if (typeof HTMLInputElement !== 'undefined' && el instanceof HTMLInputElement) return true;
+    if (typeof HTMLTextAreaElement !== 'undefined' && el instanceof HTMLTextAreaElement) return true;
+    const tag = (el.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+    if (el.isContentEditable) return true;
+    if (typeof el.closest === 'function') {
+      return Boolean(
+        el.closest('.cm-editor') ||
+        el.closest('.search-palette') ||
+        el.closest('.modal-backdrop') ||
+        el.closest('.terminal-container') ||
+        el.closest('.run-output-panel')
+      );
+    }
+    return false;
+  };
+
+  return check(target) || check(activeElement);
+}
+
+/**
+ * Checks whether a mousedown target is outside the phone bezel.
+ */
+export function isOutsidePhoneBezel(
+  target: { closest?: (selector: string) => any } | null | undefined
+): boolean {
+  if (!target) return true;
+  if (typeof target.closest === 'function') {
+    return !target.closest('.phone-bezel');
+  }
+  return true;
+}
