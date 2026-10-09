@@ -83,23 +83,13 @@ test('b41: 3. TerminalPanel persists petak.bottomDockHeight and provides toggle 
   );
 });
 
-test('b41: 4. Editor.svelte scopes global body tooltip selector and protects context menus from top:0/transparent glitch', () => {
+test('b41/b42: 4. Editor.svelte completely eliminates global body tooltip hacks and protects context menus', () => {
   const editorCode = fs.readFileSync(path.join(uiRoot, 'features/editor/Editor.svelte'), 'utf8');
 
-  // Selector must NOT blindly match all body > div:not(#app)
+  // Selector must NOT match any body > div:not(#app)
   assert.ok(
-    !editorCode.includes(':global(body > div:not(#app)) {'),
-    'Editor.svelte must not have unconstrained :global(body > div:not(#app)) rule'
-  );
-
-  // Must explicitly scope to cm-tooltip / cm- classes and exclude context menus
-  assert.ok(
-    editorCode.includes(':not(.branch-context-menu)'),
-    'Editor.svelte must exclude .branch-context-menu from tooltip positioning'
-  );
-  assert.ok(
-    editorCode.includes(':has(.cm-tooltip)') || editorCode.includes('[class*="cm-"]'),
-    'Editor.svelte must constrain tooltip container to .cm-tooltip or cm- class'
+    !editorCode.includes(':global(body > div:not(#app)'),
+    'Editor.svelte must not contain :global(body > div:not(#app)) hacks'
   );
 
   // Exposes deactivateCenterDiff helper

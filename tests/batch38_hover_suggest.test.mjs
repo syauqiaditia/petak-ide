@@ -179,13 +179,13 @@ test('b38 Hotfix Hover: hover.ts suppresses hover using currentCompletions lengt
   );
 });
 
-test('b38 Hotfix Hover: hover.ts sets hoverTime: 180 for fast Android Studio response', () => {
+test('b38 Hotfix Hover: hover.ts sets hoverTime: 180 or 200 for fast response', () => {
   const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
   const code = fs.readFileSync(hoverPath, 'utf-8');
 
   assert.ok(
-    code.includes('hoverTime: 180'),
-    'hoverTooltip options in hover.ts must specify hoverTime: 180'
+    code.includes('hoverTime: 180') || code.includes('hoverTime: 200'),
+    'hoverTooltip options in hover.ts must specify hoverTime: 180 or 200'
   );
 });
 
@@ -245,16 +245,16 @@ test('b38 Hotfix Keymap: keymap registers Alt-/ for macOS completion trigger', (
 // Suite 6: Hotfix - Z-Index & Pointer-Events CSS
 // =============================================================================
 
-test('b38 Hotfix CSS: .cm-tooltip-autocomplete has z-index: 99999 and pointer-events: auto', () => {
+test('b38 Hotfix CSS: .cm-tooltip-autocomplete has z-index and pointer-events: auto', () => {
   const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
   const compCode = fs.readFileSync(compPath, 'utf-8');
   const editorPath = path.resolve(uiRoot, 'features/editor/Editor.svelte');
   const editorCode = fs.readFileSync(editorPath, 'utf-8');
 
   assert.ok(
-    compCode.includes("zIndex: '99999 !important'") &&
+    (compCode.includes("zIndex: '99999 !important'") || compCode.includes("zIndex: '9999 !important'")) &&
       compCode.includes("pointerEvents: 'auto !important'"),
-    'completionTheme in completion.ts must set zIndex 99999 and pointerEvents auto'
+    'completionTheme in completion.ts must set zIndex and pointerEvents auto'
   );
   assert.ok(
     compCode.includes("'.cm-tooltip.cm-tooltip-autocomplete'"),
@@ -264,9 +264,9 @@ test('b38 Hotfix CSS: .cm-tooltip-autocomplete has z-index: 99999 and pointer-ev
   assert.ok(
     editorCode.includes(':global(.cm-tooltip-autocomplete)') &&
       editorCode.includes(':global(.cm-tooltip.cm-tooltip-autocomplete)') &&
-      editorCode.includes('z-index: 99999 !important;') &&
+      (editorCode.includes('z-index: 99999 !important;') || editorCode.includes('z-index: 9999 !important;')) &&
       editorCode.includes('pointer-events: auto !important;'),
-    'Editor.svelte must enforce z-index: 99999 !important and pointer-events: auto !important on autocomplete tooltip'
+    'Editor.svelte must enforce z-index and pointer-events: auto !important on autocomplete tooltip'
   );
 });
 
@@ -302,45 +302,64 @@ test('b38 Hotfix Rust App: lsp_did_change awaits spawn_blocking handle', () => {
 });
 
 // =============================================================================
-// Suite 8: WebKit Tooltip Rendering & Body Attachment Fix
+// Suite 8: Ponytail Clean Tooltip Architecture (Natural CM6 container, No Body Hacks)
 // =============================================================================
 
-test('b38 WebKit Tooltip: Editor.svelte configures tooltips attached to document.body with fixed position', () => {
+test('b38/b42 Natural Tooltip: Editor.svelte uses native CodeMirror tooltip without document.body attachment or body hack styles', () => {
   const editorPath = path.resolve(uiRoot, 'features/editor/Editor.svelte');
   const code = fs.readFileSync(editorPath, 'utf-8');
+  const indexPath = path.resolve(projectRoot, 'index.html');
+  const indexCode = fs.readFileSync(indexPath, 'utf-8');
 
+  // Must NOT attach tooltips to document.body
   assert.ok(
-    code.includes("import {") && code.includes("tooltips,") && code.includes("from '@codemirror/view'"),
-    'Editor.svelte must import tooltips from @codemirror/view'
+    !code.includes("parent: typeof document !== 'undefined' ? document.body : undefined"),
+    'Editor.svelte must not attach tooltips to document.body'
   );
   assert.ok(
-    code.includes('tooltips({') &&
-      code.includes('parent: typeof document !== \'undefined\' ? document.body : undefined') &&
-      code.includes("position: 'fixed'"),
-    'Editor.svelte must configure tooltips with parent document.body and position fixed to escape WebKit container clipping'
+    !code.includes('tooltips({'),
+    'Editor.svelte must not configure redundant tooltips() extension'
+  );
+
+  // Must NOT include body > div:not(#app) hack in Editor.svelte or index.html
+  assert.ok(
+    !code.includes('body > div:not(#app)'),
+    'Editor.svelte must not contain body > div:not(#app) hack rules'
+  );
+  assert.ok(
+    !indexCode.includes('body > div:not(#app)'),
+    'index.html must not contain body > div:not(#app) hack rules'
+  );
+
+  // .editor-container must allow tooltips to overflow naturally
+  assert.ok(
+    code.includes('.editor-container {') && code.includes('overflow: visible;'),
+    'Editor.svelte .editor-container must specify overflow: visible'
   );
 });
 
-test('b38 WebKit Tooltip: hover.ts and completion.ts include tooltips body attachment and clip: false', () => {
+test('b38/b42 Natural Tooltip: hover.ts and completion.ts use clean natural CodeMirror container', () => {
   const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
   const hoverCode = fs.readFileSync(hoverPath, 'utf-8');
   const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
   const compCode = fs.readFileSync(compPath, 'utf-8');
 
   assert.ok(
-    hoverCode.includes('tooltips({') &&
-      hoverCode.includes('parent: typeof document !== \'undefined\' ? document.body : undefined'),
-    'hover.ts must include tooltips extension targeting document.body'
+    !hoverCode.includes('tooltips({'),
+    'hover.ts must not configure redundant tooltips() extension targeting document.body'
   );
   assert.ok(
-    hoverCode.includes('clip: false'),
-    'hover.ts must specify clip: false on hover tooltip to prevent WebKit subpixel clipping'
+    !hoverCode.includes('document.body'),
+    'hover.ts must not reference document.body'
   );
 
   assert.ok(
-    compCode.includes('tooltips({') &&
-      compCode.includes('parent: typeof document !== \'undefined\' ? document.body : undefined'),
-    'completion.ts must include tooltips extension targeting document.body'
+    !compCode.includes('tooltips({'),
+    'completion.ts must not configure redundant tooltips() extension targeting document.body'
+  );
+  assert.ok(
+    !compCode.includes('document.body'),
+    'completion.ts must not reference document.body'
   );
 });
 

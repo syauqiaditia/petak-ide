@@ -611,7 +611,7 @@
     <div
       class="branch-context-menu"
       use:portal
-      style="left: {branchContextMenuPos.x}px; top: {branchContextMenuPos.y}px;"
+      style="top: {branchContextMenuPos.y}px; left: {branchContextMenuPos.x}px;"
       role="menu"
       tabindex="-1"
     >
@@ -696,8 +696,7 @@
     <div
       class="branch-context-menu"
       use:portal
-      style:left="{remoteContextMenuPos.x}px"
-      style:top="{remoteContextMenuPos.y}px"
+      style="top: {remoteContextMenuPos.y}px; left: {remoteContextMenuPos.x}px;"
     >
       <button
         class="b-menu-item"
