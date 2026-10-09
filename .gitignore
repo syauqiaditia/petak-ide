@@ -28,3 +28,6 @@ build_outputs/
 # Test & Coverage Outputs
 coverage/
 .nyc_output/
+
+# Temporary Agent Task Files
+TASK-*.md
