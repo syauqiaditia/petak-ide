@@ -683,6 +683,10 @@
     view?.focus();
   }
 
+  export function deactivateCenterDiff() {
+    isCenterDiffActive = false;
+  }
+
   export function gotoLine(line: number, col: number = 1, options?: { center?: boolean }) {
     if (!view) return;
     const doc = view.state.doc;
@@ -1552,7 +1556,8 @@
     pointer-events: none !important;
     user-select: none !important;
   }
-  :global(body > div:not(#app)) {
+  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu):has(.cm-tooltip)),
+  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu)[class*="cm-"]) {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -1567,7 +1572,8 @@
     z-index: 99999 !important;
     overflow: visible !important;
   }
-  :global(body > div:not(#app) .cm-tooltip) {
+  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu):has(.cm-tooltip) .cm-tooltip),
+  :global(body > div:not(#app):not(.branch-context-menu):not(.file-context-menu)[class*="cm-"] .cm-tooltip) {
     pointer-events: auto !important;
   }
   :global(.cm-tooltip) {

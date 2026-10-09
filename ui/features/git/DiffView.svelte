@@ -136,7 +136,7 @@
     return { name, dir };
   }
 
-  async function jumpToSource() {
+  async function jumpToSource(line?: number) {
     if (!activePath) return;
     const existing = tabsManager.tabs.find(
       (t) =>
@@ -144,7 +144,9 @@
         (gitStore.root && t.path === `${gitStore.root}/${activePath}`) ||
         t.path.endsWith('/' + activePath)
     );
+    let targetPath = activePath;
     if (existing) {
+      targetPath = existing.path;
       tabsManager.setActive(existing.path);
     } else {
       const fullPath =
@@ -152,7 +154,7 @@
           ? `${gitStore.root}/${activePath}`
           : activePath;
       let content = '';
-      let targetPath = activePath;
+      targetPath = activePath;
       try {
         content = await api.readFile(fullPath);
         targetPath = fullPath;
@@ -170,6 +172,16 @@
     if (gitStore.centerDiff) {
       gitStore.closeCenterDiff();
     }
+    const resolvedLine = typeof line === 'number' && line > 0
+      ? line
+      : hunks[currentHunkIdx]?.lines.find((l) => l.newNo)?.newNo || hunks[currentHunkIdx]?.lines.find((l) => l.oldNo)?.oldNo;
+    if (typeof resolvedLine === 'number' && resolvedLine > 0) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && (window as any).__PETAK_GOTO_LINE__) {
+          (window as any).__PETAK_GOTO_LINE__(resolvedLine, 1, { center: true });
+        }
+      }, 50);
+    }
   }
 </script>
 
@@ -185,11 +197,12 @@
         <span class="file-name">{name}</span>
         <button
           class="jump-source-btn"
-          onclick={jumpToSource}
+          onclick={() => jumpToSource()}
           title="Buka berkas di editor"
-          aria-label="Buka berkas di editor"
+          aria-label="Jump to Source / Edit File"
         >
-          ✏️
+          <span class="jump-icon">✏️</span>
+          <span class="jump-label">Edit File</span>
         </button>
         {#if dir}
           <span class="file-dir">{dir}</span>
@@ -339,7 +352,11 @@
                   <!-- Diff Lines -->
                   <div class="sbs-rows code">
                     {#each sbsHunk.rows as row, rowIdx (rowIdx)}
-                      <div class="sbs-row sbs-cell left {row.left.kind}">
+                      <div
+                        class="sbs-row sbs-cell left {row.left.kind}"
+                        ondblclick={() => jumpToSource(row.left.lineNo || row.right.lineNo)}
+                        title="Double-click to edit file at this line"
+                      >
                         <span class="gutter">{row.left.lineNo ?? ''}</span>
                         <span class="cell-text">
                           {#if row.left.tokens && row.left.tokens.length > 0}
@@ -385,7 +402,11 @@
                   <!-- Diff Lines -->
                   <div class="sbs-rows code">
                     {#each sbsHunk.rows as row, rowIdx (rowIdx)}
-                      <div class="sbs-row sbs-cell right {row.right.kind}">
+                      <div
+                        class="sbs-row sbs-cell right {row.right.kind}"
+                        ondblclick={() => jumpToSource(row.right.lineNo || row.left.lineNo)}
+                        title="Double-click to edit file at this line"
+                      >
                         <span class="gutter">{row.right.lineNo ?? ''}</span>
                         <span class="cell-text">
                           {#if row.right.tokens && row.right.tokens.length > 0}
@@ -438,7 +459,11 @@
                 </div>
                 <div class="unified-rows code">
                   {#each hunk.lines as line, lineIdx (lineIdx)}
-                    <div class="unified-row {line.kind}">
+                    <div
+                      class="unified-row {line.kind}"
+                      ondblclick={() => jumpToSource(line.newNo || line.oldNo)}
+                      title="Double-click to edit file at this line"
+                    >
                       <span class="gutter old">{line.oldNo ?? ''}</span>
                       <span class="gutter new">{line.newNo ?? ''}</span>
                       <span class="sign">
@@ -500,23 +525,34 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
+    gap: 4px;
     height: 22px;
-    padding: 0;
-    font-size: 12px;
-    background: transparent;
-    border: 1px solid transparent;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 500;
+    background: #2b2d30;
+    border: 1px solid #3e4249;
     border-radius: 4px;
     cursor: pointer;
-    color: #9da5b4;
+    color: #e6edf3;
     transition: all 0.15s ease;
     flex-shrink: 0;
   }
 
   .jump-source-btn:hover {
-    background: #2b2d30;
-    border-color: #3e4249;
+    background: #35383f;
+    border-color: #525866;
     color: #ffffff;
+  }
+
+  .jump-icon {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .jump-label {
+    font-size: 11px;
+    font-weight: 500;
   }
 
   .file-icon {

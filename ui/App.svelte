@@ -286,6 +286,12 @@
 
   async function handleOpenFile(filePath: string, line?: number, col?: number) {
     try {
+      if (editorComponent?.deactivateCenterDiff) {
+        editorComponent.deactivateCenterDiff();
+      }
+      if (gitStore.centerDiff) {
+        gitStore.closeCenterDiff();
+      }
       const existing = tabsManager.tabs.find((t) => t.path === filePath);
       const filename = filePath.split('/').filter(Boolean).pop() || '';
       if (!existing) {

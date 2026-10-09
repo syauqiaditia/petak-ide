@@ -912,6 +912,7 @@
 <svelte:window
   onkeydown={handleWindowKeyDown}
   onpointerdown={handleWindowPointerDown}
+  onmousedown={handleWindowPointerDown}
 />
 
 <style>
@@ -1260,12 +1261,12 @@
 
   /* Context Menu */
   .branch-context-menu {
-    position: fixed;
-    z-index: 99999;
-    background: #1e2025;
-    border: 1px solid #34363d;
-    border-radius: 8px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    position: fixed !important;
+    z-index: 99999 !important;
+    background: #1e1f22 !important;
+    border: 1px solid #383a42 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
     padding: 4px 0;
     width: 200px;
   }
