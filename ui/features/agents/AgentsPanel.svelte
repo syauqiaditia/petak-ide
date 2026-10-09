@@ -204,6 +204,18 @@
         <div class="session-actions-group">
           <button
             type="button"
+            class="panel-icon-btn session-switcher-btn"
+            class:active={agentsStore.isHistoryOpen}
+            onclick={() => agentsStore.toggleHistory()}
+            title="Ganti sesi percakapan"
+            aria-label="Session Switcher"
+          >
+            <span class="session-switcher-title">💬 {agentsStore.activeSession?.title || 'Percakapan'}</span>
+            <span class="session-switcher-arrow">▼</span>
+          </button>
+
+          <button
+            type="button"
             class="panel-icon-btn new-chat-btn"
             onclick={() => agentsStore.newSession()}
             title="Mulai percakapan baru (+ New Chat)"
@@ -413,7 +425,7 @@
               <div class="empty-sessions">Belum ada riwayat percakapan yang tersimpan.</div>
             {:else}
               {#each agentsStore.savedSessions as sess (sess.id)}
-                <div class="session-row" onclick={() => agentsStore.loadSession(sess)} role="button" tabindex="0">
+                <div class="session-row" onclick={() => { agentsStore.loadSession(sess); activeSubTab = 'chat'; }} role="button" tabindex="0">
                   <div class="session-info">
                     <div class="session-snippet">{sess.title}</div>
                     <div class="session-meta-line">
@@ -776,6 +788,38 @@
     background: #23252e;
     color: #f1f2f4;
     border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .panel-icon-btn.session-switcher-btn {
+    max-width: 140px;
+    background: #181920;
+    color: #e2e8f0;
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .panel-icon-btn.session-switcher-btn:hover {
+    background: #23252e;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .panel-icon-btn.session-switcher-btn.active {
+    background: #2a2d38;
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.4);
+  }
+
+  .session-switcher-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 110px;
+  }
+
+  .session-switcher-arrow {
+    font-size: 8px;
+    opacity: 0.7;
+    margin-left: 2px;
   }
 
   .panel-icon-btn.new-chat-btn {

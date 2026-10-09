@@ -1979,6 +1979,57 @@ export function routeStreamEvent(
   };
 }
 
+/**
+ * Sanitizes sessions and messages to ensure all sessions and messages have unique valid IDs.
+ * Guarantees no data loss for title, timestamps, messages, or metadata.
+ */
+export function sanitizeSessions(
+  sessions: Record<string, any> | null | undefined
+): Record<string, ChatSessionData> {
+  const result: Record<string, ChatSessionData> = {};
+  if (!sessions || typeof sessions !== 'object' || Array.isArray(sessions)) {
+    return result;
+  }
+
+  for (const [key, rawSess] of Object.entries(sessions)) {
+    if (!rawSess || typeof rawSess !== 'object') continue;
+    const sessId = rawSess.id || key || generateSessionId();
+    const rawMessages = Array.isArray(rawSess.messages) ? rawSess.messages : [];
+
+    const seenIds = new Set<string>();
+    const messages: ChatMessage[] = rawMessages.map((m: any, idx: number) => {
+      let msgId = m && m.id ? String(m.id) : `msg-${sessId}-${idx}`;
+      if (seenIds.has(msgId)) {
+        msgId = `${msgId}-${idx}`;
+      }
+      seenIds.add(msgId);
+      return {
+        ...m,
+        id: msgId,
+      };
+    });
+
+    result[sessId] = {
+      ...rawSess,
+      id: sessId,
+      slotId: rawSess.slotId || 'default',
+      title: rawSess.title || 'Percakapan',
+      createdAt: rawSess.createdAt || Date.now(),
+      updatedAt: rawSess.updatedAt || rawSess.createdAt || Date.now(),
+      messages,
+      fileReferences: Array.isArray(rawSess.fileReferences) ? [...rawSess.fileReferences] : [],
+      modelId: rawSess.modelId || null,
+      isStreaming: Boolean(rawSess.isStreaming),
+      streamingContent: rawSess.streamingContent || '',
+      activeToolCalls: Array.isArray(rawSess.activeToolCalls) ? [...rawSess.activeToolCalls] : [],
+      activeThought: rawSess.activeThought || '',
+    };
+  }
+
+  return result;
+}
+
+
 
 
 

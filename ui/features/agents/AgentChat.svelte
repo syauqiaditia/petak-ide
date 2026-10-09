@@ -667,7 +667,7 @@
       </div>
     {/if}
 
-    {#each messages as msg (msg.id)}
+    {#each messages as msg, idx (msg.id ? `${msg.id}-${idx}` : `msg-${idx}`)}
       <div class="message-row" class:user-row={msg.role === 'user'} class:system-row={msg.role === 'system'}>
         <div class="message-bubble" class:user-bubble={msg.role === 'user'} class:agent-bubble={msg.role === 'agent'} class:system-bubble={msg.role === 'system'}>
           <div class="message-bubble-header">
