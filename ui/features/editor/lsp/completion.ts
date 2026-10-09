@@ -107,9 +107,6 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
     const from = word ? word.from : context.pos;
     const lspPos = offsetToLspPos(context.state.doc, context.pos);
 
-    // Ensure LSP server has the freshest document content before requesting completion
-    flushPending(path);
-
     let docAborted = false;
     context.addEventListener('abort', () => {
       docAborted = true;
@@ -128,6 +125,10 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
     }));
 
     try {
+      // Ensure LSP server has the freshest document content before requesting completion
+      await flushPending(path);
+      if (context.aborted || docAborted) return null;
+
       const response = await api.lsp.completion(path, lspPos.line, lspPos.character);
       if (context.aborted || docAborted) return null;
 

@@ -334,11 +334,14 @@ impl Registry {
             docs_for_key.insert(uri.clone(), doc.clone());
         }
 
-        let mut servers = self.servers.lock().unwrap();
-        let (managed, started_fresh) = self.ensure_alive(&mut servers, &key)?;
+        let (server, started_fresh) = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, started_fresh) = self.ensure_alive(&mut servers, &key)?;
+            (Arc::clone(&managed.server), started_fresh)
+        };
 
         if !started_fresh {
-            managed.server.notify("textDocument/didOpen", &did_open_params(&doc))?;
+            server.notify("textDocument/didOpen", &did_open_params(&doc))?;
         }
 
         Ok(())
@@ -383,10 +386,14 @@ impl Registry {
             }
         }
 
-        let mut servers = self.servers.lock().unwrap();
-        let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+        let server = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+            managed.last_activity = self.clock.now();
+            Arc::clone(&managed.server)
+        };
 
-        managed.server.notify(
+        server.notify(
             "textDocument/didChange",
             &json!({
                 "textDocument": { "uri": &uri, "version": version },
@@ -427,7 +434,6 @@ impl Registry {
             }
         }
 
-        managed.last_activity = self.clock.now();
         Ok(())
     }
 
@@ -452,16 +458,19 @@ impl Registry {
             }
         }
 
-        let mut servers = self.servers.lock().unwrap();
-        let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+        let server = {
+            let mut servers = self.servers.lock().unwrap();
+            let (managed, _) = self.ensure_alive(&mut servers, &key)?;
+            managed.last_activity = self.clock.now();
+            Arc::clone(&managed.server)
+        };
         let mut params = json!({
             "textDocument": { "uri": &uri }
         });
         if let Some(t) = text {
             params["text"] = json!(t);
         }
-        managed.server.notify("textDocument/didSave", &params)?;
-        managed.last_activity = self.clock.now();
+        server.notify("textDocument/didSave", &params)?;
         Ok(())
     }
 
@@ -483,15 +492,24 @@ impl Registry {
             }
         }
 
-        let mut servers = self.servers.lock().unwrap();
-        if let Some(managed) = servers.get_mut(&key) {
-            managed.last_activity = self.clock.now();
-            if managed.server.is_alive() {
-                let _ = managed.server.notify(
-                    "textDocument/didClose",
-                    &json!({ "textDocument": { "uri": &uri } }),
-                );
+        let server_opt = {
+            let mut servers = self.servers.lock().unwrap();
+            if let Some(managed) = servers.get_mut(&key) {
+                managed.last_activity = self.clock.now();
+                if managed.server.is_alive() {
+                    Some(Arc::clone(&managed.server))
+                } else {
+                    None
+                }
+            } else {
+                None
             }
+        };
+        if let Some(server) = server_opt {
+            let _ = server.notify(
+                "textDocument/didClose",
+                &json!({ "textDocument": { "uri": &uri } }),
+            );
         }
         Ok(())
     }
@@ -542,31 +560,44 @@ impl Registry {
             lang,
             root: root.to_path_buf(),
         };
-        let servers = self.servers.lock().unwrap();
-        if let Some(managed) = servers.get(&key) {
-            managed.server.respond(id, result)
-        } else {
-            Err(ServerError::ServerDied)
-        }
+        let server = {
+            let servers = self.servers.lock().unwrap();
+            if let Some(managed) = servers.get(&key) {
+                Arc::clone(&managed.server)
+            } else {
+                return Err(ServerError::ServerDied);
+            }
+        };
+        server.respond(id, result)
     }
 
     /// Respond to a server-initiated applyEdit request.
     pub fn respond_apply_edit(&self, id: &Value, applied: bool) -> Result<(), ServerError> {
         let result = json!({ "applied": applied });
         let key_opt = self.pending_apply_edits.lock().unwrap().remove(&id.to_string());
-        let servers = self.servers.lock().unwrap();
-        if let Some(key) = key_opt {
-            if let Some(managed) = servers.get(&key) {
-                return managed.server.respond(id, &result);
+        let (server_for_key, fallback_servers) = {
+            let servers = self.servers.lock().unwrap();
+            let matched = key_opt.as_ref().and_then(|key| servers.get(key)).map(|m| Arc::clone(&m.server));
+            if matched.is_some() {
+                (matched, Vec::new())
+            } else {
+                let fallbacks = servers
+                    .values()
+                    .filter(|m| m.server.is_alive())
+                    .map(|m| Arc::clone(&m.server))
+                    .collect::<Vec<_>>();
+                (None, fallbacks)
             }
+        };
+
+        if let Some(server) = server_for_key {
+            return server.respond(id, &result);
         }
-        // Fallback: send to any alive server
+
         let mut sent = false;
-        for (_, managed) in servers.iter() {
-            if managed.server.is_alive() {
-                let _ = managed.server.respond(id, &result);
-                sent = true;
-            }
+        for server in fallback_servers {
+            let _ = server.respond(id, &result);
+            sent = true;
         }
         if sent {
             Ok(())
