@@ -2,6 +2,8 @@ import { Prec } from '@codemirror/state';
 import {
   keymap,
   EditorView,
+  activateHover,
+  closeHoverTooltips,
   type KeyBinding,
 } from '@codemirror/view';
 import {
@@ -214,11 +216,13 @@ export function createEditorKeyBindings(): KeyBinding[] {
         if (closeCompletion(view)) {
           return true;
         }
-        // 2. Dismiss inline ghost diff if active
+        // 2. Dismiss hover tooltip if active
+        view.dispatch({ effects: closeHoverTooltips });
+        // 3. Dismiss inline ghost diff if active
         if (dismissGhostDiff(view)) {
           return true;
         }
-        // 3. Dismiss inline ghost-text if active
+        // 4. Dismiss inline ghost-text if active
         if (dismissGhostText(view)) {
           return true;
         }
@@ -237,6 +241,31 @@ export function createEditorKeyBindings(): KeyBinding[] {
     {
       key: 'Alt-/',
       run: startCompletion,
+    },
+    {
+      key: 'Alt-Space',
+      run: startCompletion,
+    },
+    {
+      key: 'F1',
+      run: (v: EditorView) => {
+        activateHover(v, v.state.selection.main.head, 1);
+        return true;
+      },
+    },
+    {
+      key: 'Ctrl-q',
+      run: (v: EditorView) => {
+        activateHover(v, v.state.selection.main.head, 1);
+        return true;
+      },
+    },
+    {
+      key: 'Ctrl-j',
+      run: (v: EditorView) => {
+        activateHover(v, v.state.selection.main.head, 1);
+        return true;
+      },
     },
   ];
 }

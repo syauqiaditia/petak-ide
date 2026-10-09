@@ -300,3 +300,64 @@ test('b38 Hotfix Rust App: lsp_did_change awaits spawn_blocking handle', () => {
     'lsp_did_change must await spawn_blocking handle'
   );
 });
+
+// =============================================================================
+// Suite 8: WebKit Tooltip Rendering & Body Attachment Fix
+// =============================================================================
+
+test('b38 WebKit Tooltip: Editor.svelte configures tooltips attached to document.body with fixed position', () => {
+  const editorPath = path.resolve(uiRoot, 'features/editor/Editor.svelte');
+  const code = fs.readFileSync(editorPath, 'utf-8');
+
+  assert.ok(
+    code.includes("import {") && code.includes("tooltips,") && code.includes("from '@codemirror/view'"),
+    'Editor.svelte must import tooltips from @codemirror/view'
+  );
+  assert.ok(
+    code.includes('tooltips({') &&
+      code.includes('parent: typeof document !== \'undefined\' ? document.body : undefined') &&
+      code.includes("position: 'fixed'"),
+    'Editor.svelte must configure tooltips with parent document.body and position fixed to escape WebKit container clipping'
+  );
+});
+
+test('b38 WebKit Tooltip: hover.ts and completion.ts include tooltips body attachment and clip: false', () => {
+  const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
+  const hoverCode = fs.readFileSync(hoverPath, 'utf-8');
+  const compPath = path.resolve(uiRoot, 'features/editor/lsp/completion.ts');
+  const compCode = fs.readFileSync(compPath, 'utf-8');
+
+  assert.ok(
+    hoverCode.includes('tooltips({') &&
+      hoverCode.includes('parent: typeof document !== \'undefined\' ? document.body : undefined'),
+    'hover.ts must include tooltips extension targeting document.body'
+  );
+  assert.ok(
+    hoverCode.includes('clip: false'),
+    'hover.ts must specify clip: false on hover tooltip to prevent WebKit subpixel clipping'
+  );
+
+  assert.ok(
+    compCode.includes('tooltips({') &&
+      compCode.includes('parent: typeof document !== \'undefined\' ? document.body : undefined'),
+    'completion.ts must include tooltips extension targeting document.body'
+  );
+});
+
+test('b38 WebKit Tooltip: user-select text styling is applied to hover tooltips', () => {
+  const hoverPath = path.resolve(uiRoot, 'features/editor/lsp/hover.ts');
+  const hoverCode = fs.readFileSync(hoverPath, 'utf-8');
+  const editorPath = path.resolve(uiRoot, 'features/editor/Editor.svelte');
+  const editorCode = fs.readFileSync(editorPath, 'utf-8');
+
+  assert.ok(
+    hoverCode.includes("userSelect: 'text !important'") &&
+      hoverCode.includes("webkitUserSelect: 'text !important'"),
+    'hoverTheme must set userSelect and webkitUserSelect text !important'
+  );
+  assert.ok(
+    editorCode.includes('user-select: text !important;') &&
+      editorCode.includes('-webkit-user-select: text !important;'),
+    'Editor.svelte must enforce user-select and -webkit-user-select on hover tooltip'
+  );
+});

@@ -1,4 +1,4 @@
-import { hoverTooltip, EditorView, closeHoverTooltips, keymap, type Tooltip } from '@codemirror/view';
+import { hoverTooltip, EditorView, closeHoverTooltips, keymap, tooltips, activateHover, type Tooltip } from '@codemirror/view';
 import { currentCompletions } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
 import { api, type LspHover, type LspPosition } from '../../../lib/api';
@@ -29,7 +29,9 @@ export const hoverTheme = EditorView.theme({
     border: '1px solid #383a42 !important',
     borderRadius: '8px !important',
     boxShadow: '0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important',
-    maxWidth: 'min(560px, calc(100vw - 420px), calc(100% - 24px)) !important',
+    minWidth: '280px !important',
+    width: 'max-content !important',
+    maxWidth: 'min(640px, calc(100vw - 64px)) !important',
     maxHeight: '280px !important',
     overflowY: 'auto !important',
     overflowX: 'auto !important',
@@ -40,6 +42,8 @@ export const hoverTheme = EditorView.theme({
     scrollbarColor: '#3c3f4a transparent !important',
     boxSizing: 'border-box !important',
     pointerEvents: 'auto !important',
+    userSelect: 'text !important',
+    webkitUserSelect: 'text !important',
   },
   '.cm-tooltip-hover::-webkit-scrollbar, .cm-tooltip.cm-tooltip-hover::-webkit-scrollbar, .cm-tooltip.cm-lsp-hover-tooltip::-webkit-scrollbar': {
     width: '6px !important',
@@ -204,6 +208,12 @@ export const hoverTheme = EditorView.theme({
   },
 });
 
+export const triggerHoverAtCursor = (view: EditorView): boolean => {
+  const head = view.state.selection.main.head;
+  activateHover(view, head, 1);
+  return true;
+};
+
 const hoverKeymap = keymap.of([
   {
     key: 'Escape',
@@ -211,6 +221,22 @@ const hoverKeymap = keymap.of([
       view.dispatch({ effects: closeHoverTooltips });
       return false; // let Vim or editor handle if needed
     },
+  },
+  {
+    key: 'F1',
+    run: triggerHoverAtCursor,
+  },
+  {
+    key: 'Ctrl-q',
+    run: triggerHoverAtCursor,
+  },
+  {
+    key: 'Ctrl-j',
+    run: triggerHoverAtCursor,
+  },
+  {
+    key: 'Mod-q',
+    run: triggerHoverAtCursor,
   },
 ]);
 
@@ -249,6 +275,10 @@ const hoverMemoryCache = new Map<string, CachedHover>();
 
 export function createLspHoverExtension(getPath: () => string | null): Extension {
   return [
+    tooltips({
+      parent: typeof document !== 'undefined' ? document.body : undefined,
+      position: 'fixed',
+    }),
     hoverTooltip(
       async (view: EditorView, pos: number): Promise<Tooltip | null> => {
         // If autocomplete suggestions are currently open, hover must not appear (like Android Studio)
@@ -368,6 +398,7 @@ function buildHoverTooltip(
     pos: from,
     end: to,
     above: adaptive.above,
+    clip: false,
     create(view: EditorView) {
       const dom = document.createElement('div');
       dom.className = 'cm-lsp-hover-tooltip';

@@ -10,7 +10,7 @@ import {
   type CompletionResult,
   type CompletionSource,
 } from '@codemirror/autocomplete';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, tooltips } from '@codemirror/view';
 import { api, type LspCompletionItem } from '../../../lib/api';
 import { isLspSupported, flushPending } from './sync';
 import { offsetToLspPos } from './pos';
@@ -150,7 +150,7 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
 
       let timer: any;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('LSP completion timeout')), 1500);
+        timer = setTimeout(() => reject(new Error('LSP completion timeout')), 4000);
       });
       const lspPromise = (async () => {
         return await api.lsp.completion(path, lspPos.line, lspPos.character);
@@ -448,6 +448,10 @@ export const completionTheme = EditorView.theme({
  */
 export function createLspAutocompleteExtension(getPath: () => string | null): Extension {
   return [
+    tooltips({
+      parent: typeof document !== 'undefined' ? document.body : undefined,
+      position: 'fixed',
+    }),
     autocompletion({
       override: [
         createLspCompletionSource(getPath),

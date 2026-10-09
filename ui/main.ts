@@ -600,6 +600,40 @@ if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
         };
       }
 
+      // LSP Language Server mocks for browser preview
+      if (cmd === 'lsp_hover') {
+        const line = args?.line ?? 0;
+        const char = args?.character ?? 0;
+        const p = args?.path ?? '';
+        const fileName = p.split('/').pop() || 'symbol';
+        return {
+          contents: {
+            kind: 'markdown',
+            value: `### \`${fileName}\`\n\n\`\`\`dart\n// LSP Hover Definition (Preview)\nclass ${fileName.replace(/\.[^.]+$/, '')} {\n  final String title;\n}\n\`\`\`\n\nType and documentation info at line ${line + 1}, column ${char + 1}.`,
+          },
+          range: null,
+        };
+      }
+      if (cmd === 'lsp_completion') {
+        return {
+          isIncomplete: false,
+          items: [
+            { label: 'TransferCubit', kind: 7, detail: 'class TransferCubit', documentation: 'State management cubit for transfer operations' },
+            { label: 'TransferState', kind: 7, detail: 'class TransferState', documentation: 'Immutable state for transfer flow' },
+            { label: 'repo', kind: 6, detail: 'TransferRepository repo', documentation: 'Repository handling transfer data' },
+            { label: 'limitService', kind: 6, detail: 'LimitService limitService', documentation: 'Service validating daily and monthly limits' },
+            { label: 'renderTotalAmount', kind: 3, detail: 'fun renderTotalAmount(total, voucher): Double', documentation: 'Calculates total amount after discount' },
+            { label: 'loadAccount', kind: 2, detail: 'Future<void> loadAccount()', documentation: 'Fetches bank account information' },
+          ],
+        };
+      }
+      if (cmd === 'lsp_completion_resolve') {
+        return args?.item || null;
+      }
+      if (cmd === 'lsp_did_open' || cmd === 'lsp_did_change' || cmd === 'lsp_did_save' || cmd === 'lsp_did_close') {
+        return null;
+      }
+
       // GitLab MR Viewer (Phase 5)
       if (cmd === 'mr_get_token_scope') {
         if (typeof window !== 'undefined' && window.location.search.includes('no-token')) {

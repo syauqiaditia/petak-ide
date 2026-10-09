@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import {
     EditorView,
+    tooltips,
     lineNumbers,
     highlightActiveLine,
     highlightActiveLineGutter,
@@ -596,6 +597,10 @@
     return EditorState.create({
       doc: content,
       extensions: [
+        tooltips({
+          parent: typeof document !== 'undefined' ? document.body : undefined,
+          position: 'fixed',
+        }),
         createEditorKeymapExtension(),
         EditorState.allowMultipleSelections.of(true),
         vimCompartment.of(editorSettings.vimMode ? vim() : []),
@@ -632,12 +637,12 @@
         lintGutter(),
         lintTheme,
         createCodeFoldingExtension(),
-        createLspSyncExtension(() => currentSwappedPath || filePath || null),
-        createLspAutocompleteExtension(() => currentSwappedPath || filePath || null),
-        createLspHoverExtension(() => currentSwappedPath || filePath || null),
-        createLspNavExtension(() => currentSwappedPath || filePath || null, gotoLine),
+        createLspSyncExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null),
+        createLspAutocompleteExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null),
+        createLspHoverExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null),
+        createLspNavExtension(() => tabsManager.activePath || currentSwappedPath || filePath || null, gotoLine),
         createGhostTextExtension({
-          getPath: () => currentSwappedPath || filePath || null,
+          getPath: () => tabsManager.activePath || currentSwappedPath || filePath || null,
           isEnabled: () => editorSettings.ghostText,
         }),
         ghostDiffExtension(),
@@ -1547,6 +1552,24 @@
     pointer-events: none !important;
     user-select: none !important;
   }
+  :global(body > div:not(#app)) {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    pointer-events: none !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+  }
+  :global(body > div:not(#app) .cm-tooltip) {
+    pointer-events: auto !important;
+  }
   :global(.cm-tooltip) {
     z-index: 9999 !important;
   }
@@ -1560,12 +1583,15 @@
     border: 1px solid #383a42 !important;
     border-radius: 8px !important;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65), 0 2px 6px rgba(0, 0, 0, 0.4) !important;
-    overflow: hidden !important;
     z-index: 9999 !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
   }
   :global(.cm-tooltip-hover) {
     background-color: #1e1f22 !important;
-    max-width: min(560px, calc(100vw - 420px), calc(100% - 24px)) !important;
+    min-width: 280px !important;
+    width: max-content !important;
+    max-width: min(640px, calc(100vw - 64px)) !important;
     max-height: 280px !important;
     overflow-y: auto !important;
     overflow-x: auto !important;
@@ -1575,6 +1601,8 @@
     scrollbar-color: #3c3f4a transparent !important;
     box-sizing: border-box !important;
     pointer-events: auto !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
   }
   :global(.cm-tooltip.cm-tooltip-hover .cm-lsp-hover-tooltip),
   :global(.cm-lsp-hover-tooltip) {
