@@ -71,16 +71,27 @@ test('b49 Editor: VCS Gutter styles and gutterElement zero padding', () => {
 
   assert.ok(
     editorCode.includes(':global(.cm-vcs-gutter) {') &&
-      editorCode.includes('width: 6px !important;') &&
-      editorCode.includes('min-width: 6px !important;'),
-    'Editor must style .cm-vcs-gutter with 6px width'
+      editorCode.includes('width: 5px !important;') &&
+      editorCode.includes('min-width: 5px !important;'),
+    'Editor must style .cm-vcs-gutter with 5px width'
   );
 
   assert.ok(
     editorCode.includes(':global(.cm-vcs-gutter .cm-gutterElement) {') &&
       editorCode.includes('padding: 0 !important;') &&
-      editorCode.includes('width: 6px !important;'),
-    'Editor must override .cm-gutterElement padding to 0 and width to 6px'
+      editorCode.includes('width: 5px !important;') &&
+      editorCode.includes('position: relative !important;'),
+    'Editor must override .cm-gutterElement padding to 0, width to 5px, and position relative'
+  );
+
+  assert.ok(
+    editorCode.includes(':global(.cm-vcs-marker) {') &&
+      editorCode.includes('position: absolute !important;') &&
+      editorCode.includes('top: 0 !important;') &&
+      editorCode.includes('bottom: 0 !important;') &&
+      editorCode.includes('left: 1px !important;') &&
+      editorCode.includes('width: 3.5px !important;'),
+    'Editor must style .cm-vcs-marker with full line height and 3.5px width'
   );
 
   assert.ok(

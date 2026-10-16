@@ -206,6 +206,10 @@ class VcsGutterMarker extends GutterMarker {
     this.kind = kind;
   }
 
+  eq(other: GutterMarker) {
+    return other instanceof VcsGutterMarker && other.kind === this.kind;
+  }
+
   toDOM() {
     const el = document.createElement('div');
     el.className = `cm-vcs-marker cm-vcs-${this.kind}`;
@@ -230,6 +234,41 @@ export const vcsChangesStateField = StateField.define<Map<number, VcsChangeKind>
   },
 });
 
+export const vcsGutterTheme = EditorView.theme({
+  '.cm-vcs-gutter': {
+    width: '5px !important',
+    minWidth: '5px !important',
+    backgroundColor: 'transparent !important',
+    marginRight: '2px !important',
+  },
+  '.cm-vcs-gutter .cm-gutterElement': {
+    padding: '0 !important',
+    margin: '0 !important',
+    width: '5px !important',
+    display: 'flex !important',
+    alignItems: 'stretch !important',
+    justifyContent: 'center !important',
+    position: 'relative !important',
+  },
+  '.cm-vcs-marker': {
+    position: 'absolute !important',
+    top: '0 !important',
+    bottom: '0 !important',
+    left: '1px !important',
+    width: '3.5px !important',
+    borderRadius: '1.5px !important',
+  },
+  '.cm-vcs-added': {
+    backgroundColor: '#4ade80 !important',
+  },
+  '.cm-vcs-modified': {
+    backgroundColor: '#3882f6 !important',
+  },
+  '.cm-vcs-deleted': {
+    backgroundColor: '#f07a74 !important',
+  },
+});
+
 export function createVcsGutterExtension() {
   return [
     vcsChangesStateField,
@@ -244,6 +283,7 @@ export function createVcsGutterExtension() {
         return new VcsGutterMarker(change);
       },
     }),
+    vcsGutterTheme,
   ];
 }
 

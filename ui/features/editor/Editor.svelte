@@ -1566,24 +1566,27 @@
 
 <style>
   :global(.cm-vcs-gutter) {
-    width: 6px !important;
-    min-width: 6px !important;
+    width: 5px !important;
+    min-width: 5px !important;
     background-color: transparent !important;
     margin-right: 2px !important;
   }
   :global(.cm-vcs-gutter .cm-gutterElement) {
     padding: 0 !important;
     margin: 0 !important;
-    width: 6px !important;
+    width: 5px !important;
     display: flex !important;
     align-items: stretch !important;
     justify-content: center !important;
+    position: relative !important;
   }
   :global(.cm-vcs-marker) {
-    width: 4px !important;
-    min-height: 22px !important;
-    height: 100% !important;
-    border-radius: 2px !important;
+    position: absolute !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 1px !important;
+    width: 3.5px !important;
+    border-radius: 1.5px !important;
   }
   :global(.cm-vcs-added) {
     background-color: #4ade80 !important;
