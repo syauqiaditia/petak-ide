@@ -49,9 +49,9 @@ test('b37 ACP Approval 1: PermissionModal.svelte exists and implements Allow / D
     'PermissionModal must have Deny button'
   );
   assert.ok(
-    modalSrc.includes('api.agentRespondPermission(reqId, true)') ||
-      modalSrc.includes('api.agentRespondPermission'),
-    'PermissionModal must invoke api.agentRespondPermission'
+    modalSrc.includes('agentsStore.respondPermission(reqId, true)') ||
+      modalSrc.includes('agentsStore.respondPermission'),
+    'PermissionModal must delegate permission response to agentsStore'
   );
   assert.ok(
     modalSrc.includes('agentsStore.respondPermission'),

@@ -211,20 +211,31 @@ pub fn test_mcp_server(
 
     // Capture stdout in background thread
     let (tx, rx) = mpsc::channel::<Result<String, std::io::Error>>();
-    let stdout_handle = stdout.map(|so| {
+    let _stdout_handle = stdout.map(|so| {
         let tx_clone = tx;
         std::thread::spawn(move || {
-            let mut r = BufReader::new(so);
-            let mut line = String::new();
-            match r.read_line(&mut line) {
-                Ok(n) if n > 0 => {
-                    let _ = tx_clone.send(Ok(line));
-                }
-                Ok(_) => {
-                    // EOF on stdout
-                }
-                Err(e) => {
-                    let _ = tx_clone.send(Err(e));
+            let r = BufReader::new(so);
+            for line_res in r.lines() {
+                match line_res {
+                    Ok(line) => {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                            if val.get("id") == Some(&serde_json::json!(1))
+                                || val.get("result").is_some()
+                                || val.get("error").is_some()
+                            {
+                                let _ = tx_clone.send(Ok(line));
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx_clone.send(Err(e));
+                        break;
+                    }
                 }
             }
         })
@@ -233,6 +244,10 @@ pub fn test_mcp_server(
     let timeout = Duration::from_secs(5);
     let test_res = match rx.recv_timeout(timeout) {
         Ok(Ok(line)) => {
+            if let Some(mut child) = guard.0.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
             let latency = start.elapsed().as_millis() as u64;
             let trimmed = line.trim();
             let server_info = if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {

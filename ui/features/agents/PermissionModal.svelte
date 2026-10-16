@@ -47,7 +47,6 @@
     const reqId = activePerm.requestId;
     isSubmitting = true;
     try {
-      await api.agentRespondPermission(reqId, true);
       await agentsStore.respondPermission(reqId, true);
       onAllow?.(reqId);
     } catch (err) {
@@ -63,7 +62,6 @@
     const reqId = activePerm.requestId;
     isSubmitting = true;
     try {
-      await api.agentRespondPermission(reqId, false);
       await agentsStore.respondPermission(reqId, false);
       onDeny?.(reqId);
     } catch (err) {

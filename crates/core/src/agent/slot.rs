@@ -708,6 +708,10 @@ impl SlotManager {
                 Ok(slot_to_summary(slot))
             }
             Err(e) => {
+                if let Some(client) = slot.client.take() {
+                    let _ = client.kill();
+                }
+                slot.session_id = None;
                 slot.status = SlotStatus::Failed {
                     reason: e.to_string(),
                 };
@@ -930,13 +934,25 @@ impl SlotManager {
         )?;
 
         // 1. Initialize handshake (timeout 15s)
-        let init_res = client.initialize(Duration::from_secs(15))?;
+        let init_res = match client.initialize(Duration::from_secs(15)) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = client.kill();
+                return Err(e);
+            }
+        };
 
         // 2. Session/new handshake (timeout 15s)
         let mcp_servers = super::mcp::load_mcp_config(project_root)
             .map(|cfg| super::mcp::active_acp_servers(&cfg))
             .unwrap_or_default();
-        let sess_res = client.session_new(&cwd_str, &mcp_servers, Duration::from_secs(15))?;
+        let sess_res = match client.session_new(&cwd_str, &mcp_servers, Duration::from_secs(15)) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = client.kill();
+                return Err(e);
+            }
+        };
 
         // Extract capabilities
         let mut caps = SlotCapabilities {

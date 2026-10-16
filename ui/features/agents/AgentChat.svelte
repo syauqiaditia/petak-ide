@@ -577,8 +577,11 @@
       try {
         const sel = view.state.selection.main;
         startLine = view.state.doc.lineAt(sel.from).number;
-        const endLine = view.state.doc.lineAt(sel.to).number;
-        lineSuffix = startLine === endLine ? `:${startLine}` : `:${startLine}-${endLine}`;
+        const toLine = view.state.doc.lineAt(sel.to).number;
+        if (toLine > startLine) {
+          endLine = toLine;
+        }
+        lineSuffix = (startLine && endLine) ? `:${startLine}-${endLine}` : (startLine ? `:${startLine}` : '');
       } catch {
         // ignore
       }

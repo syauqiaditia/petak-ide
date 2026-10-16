@@ -312,16 +312,31 @@ pub async fn agent_list_project_memory(
     .map_err(|e| e.to_string())?
 }
 
+fn sanitize_memory_filename(filename: &str) -> Result<String, String> {
+    let trimmed = filename.trim();
+    if trimmed.is_empty() {
+        return Err("Nama file memory tidak boleh kosong".to_string());
+    }
+    if trimmed.contains("..") || trimmed.contains('/') || trimmed.contains('\\') {
+        return Err("Karakter path traversal tidak diperbolehkan dalam nama file memory".to_string());
+    }
+    if !trimmed.to_ascii_lowercase().ends_with(".md") {
+        return Err("Hanya file markdown (.md) yang diperbolehkan di dalam memory".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
 #[tauri::command]
 pub async fn agent_read_project_memory(
     app: tauri::AppHandle,
     state: tauri::State<'_, AgentState>,
     filename: String,
 ) -> Result<String, String> {
+    let safe_name = sanitize_memory_filename(&filename)?;
     sync_project_root(&app, &state.manager);
     let root = state.manager.project_root();
     tauri::async_runtime::spawn_blocking(move || {
-        petak_core::agent::read_project_memory(root.as_deref(), &filename)
+        petak_core::agent::read_project_memory(root.as_deref(), &safe_name)
             .map_err(|e| e.to_string())
     })
     .await
@@ -335,10 +350,11 @@ pub async fn agent_save_project_memory(
     filename: String,
     content: String,
 ) -> Result<(), String> {
+    let safe_name = sanitize_memory_filename(&filename)?;
     sync_project_root(&app, &state.manager);
     let root = state.manager.project_root();
     tauri::async_runtime::spawn_blocking(move || {
-        petak_core::agent::save_project_memory(root.as_deref(), &filename, &content)
+        petak_core::agent::save_project_memory(root.as_deref(), &safe_name, &content)
             .map_err(|e| e.to_string())
     })
     .await
@@ -355,7 +371,8 @@ pub async fn agent_open_in_obsidian(
     let root = state.manager.project_root();
     let mem_dir = petak_core::agent::resolve_memory_dir(root.as_deref());
     let target = if let Some(f) = filename {
-        mem_dir.join(f)
+        let safe_name = sanitize_memory_filename(&f)?;
+        mem_dir.join(safe_name)
     } else {
         mem_dir
     };
