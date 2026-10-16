@@ -162,6 +162,7 @@ export interface CreateMrParams {
   assigneeIds?: number[];
   reviewerIds?: number[];
   removeSourceBranch?: boolean;
+  squash?: boolean;
 }
 
 export interface MergeStatusEvaluation {

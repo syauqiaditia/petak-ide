@@ -4,6 +4,7 @@
   import MrList from './MrList.svelte';
   import MrDetail from './MrDetail.svelte';
   import MrCreateModal from './MrCreateModal.svelte';
+  import { gitStore } from '../git/git.svelte';
 
   let { folderPath = '' } = $props<{ folderPath?: string }>();
   let isCreateModalOpen = $state(false);
@@ -78,7 +79,7 @@
 
 <MrCreateModal
   open={isCreateModalOpen}
-  currentBranch="feat/phase4-run"
+  currentBranch={gitStore.branch?.head || gitStore.currentBranch || 'main'}
   onClose={() => (isCreateModalOpen = false)}
   onSubmit={async (params) => {
     await mrStore.createMr(params);

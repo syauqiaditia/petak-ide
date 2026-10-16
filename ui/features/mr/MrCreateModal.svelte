@@ -71,6 +71,7 @@
         title: title.trim(),
         description: description.trim(),
         removeSourceBranch: deleteSourceBranch,
+        squash: squashCommits,
       });
       onClose();
     } catch (e: any) {

@@ -460,6 +460,8 @@ pub struct CreateMrParams {
     pub reviewer_ids: Option<Vec<u64>>,
     #[serde(alias = "removeSourceBranch", default)]
     pub remove_source_branch: Option<bool>,
+    #[serde(default)]
+    pub squash: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

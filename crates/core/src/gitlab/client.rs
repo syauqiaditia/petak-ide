@@ -65,6 +65,7 @@ struct CacheEntry {
     created_at: Instant,
     ttl: Option<Duration>,
     size_bytes: usize,
+    page_info: Option<PageInfo>,
 }
 
 pub struct GitLabCache {
@@ -84,14 +85,14 @@ impl GitLabCache {
         }
     }
 
-    pub fn get(&mut self, key: &str) -> Option<(Option<String>, String, bool)> {
-        let (etag, body, is_fresh) = {
+    pub fn get(&mut self, key: &str) -> Option<(Option<String>, String, bool, Option<PageInfo>)> {
+        let (etag, body, is_fresh, page_info) = {
             let entry = self.entries.get(key)?;
             let is_fresh = match entry.ttl {
                 Some(ttl) => entry.created_at.elapsed() < ttl,
                 None => true, // immutable
             };
-            (entry.etag.clone(), entry.body.clone(), is_fresh)
+            (entry.etag.clone(), entry.body.clone(), is_fresh, entry.page_info.clone())
         };
 
         // Move key to the end of order queue for LRU tracking
@@ -100,7 +101,7 @@ impl GitLabCache {
             self.order.push_back(key.to_string());
         }
 
-        Some((etag, body, is_fresh))
+        Some((etag, body, is_fresh, page_info))
     }
 
     pub fn insert(
@@ -109,6 +110,17 @@ impl GitLabCache {
         etag: Option<String>,
         body: String,
         ttl: Option<Duration>,
+    ) {
+        self.insert_with_page_info(key, etag, body, ttl, None);
+    }
+
+    pub fn insert_with_page_info(
+        &mut self,
+        key: String,
+        etag: Option<String>,
+        body: String,
+        ttl: Option<Duration>,
+        page_info: Option<PageInfo>,
     ) {
         let entry_size = key.len() + body.len() + etag.as_ref().map(|s| s.len()).unwrap_or(0);
         if entry_size > self.max_bytes {
@@ -141,6 +153,7 @@ impl GitLabCache {
             created_at: Instant::now(),
             ttl,
             size_bytes: entry_size,
+            page_info,
         };
 
         self.current_bytes += entry_size;
@@ -311,7 +324,7 @@ impl GitLabClient {
             lock.get(&key)
         };
 
-        if let Some((_, body, is_fresh)) = &cached {
+        if let Some((_, body, is_fresh, _)) = &cached {
             if *is_fresh {
                 return Ok((body.clone(), None));
             }
@@ -322,7 +335,7 @@ impl GitLabClient {
             req = req.set("PRIVATE-TOKEN", token);
         }
 
-        if let Some((Some(ref etag), _, _)) = cached {
+        if let Some((Some(ref etag), _, _, _)) = cached {
             req = req.set("If-None-Match", etag);
         }
 
@@ -346,7 +359,7 @@ impl GitLabClient {
                     let mut lock = self.cache.lock().unwrap();
                     lock.touch(&key);
                 }
-                if let Some((_, body, _)) = cached {
+                if let Some((_, body, _, _)) = cached {
                     Ok((body, None))
                 } else {
                     Err(GitLabError::Http {
@@ -481,19 +494,19 @@ impl GitLabClient {
             lock.get(&key)
         };
 
-        if let Some((_, body, is_fresh)) = &cached {
+        if let Some((_, body, is_fresh, cached_page_info)) = &cached {
             if *is_fresh {
                 let items: Vec<MergeRequest> =
                     serde_json::from_str(body).map_err(|e| GitLabError::Parse(e.to_string()))?;
                 return Ok(PaginatedList {
                     items,
-                    pagination: PageInfo {
+                    pagination: cached_page_info.clone().unwrap_or(PageInfo {
                         page,
                         per_page,
                         next_page: None,
                         total_pages: None,
                         total: None,
-                    },
+                    }),
                 });
             }
         }
@@ -502,7 +515,7 @@ impl GitLabClient {
         if let Some(token) = &self.token {
             req = req.set("PRIVATE-TOKEN", token);
         }
-        if let Some((Some(ref etag), _, _)) = cached {
+        if let Some((Some(ref etag), _, _, _)) = cached {
             req = req.set("If-None-Match", etag);
         }
 
@@ -513,18 +526,18 @@ impl GitLabClient {
                     let mut lock = self.cache.lock().unwrap();
                     lock.touch(&key);
                 }
-                if let Some((_, body, _)) = cached {
+                if let Some((_, body, _, cached_page_info)) = cached {
                     let items: Vec<MergeRequest> = serde_json::from_str(&body)
                         .map_err(|e| GitLabError::Parse(e.to_string()))?;
                     return Ok(PaginatedList {
                         items,
-                        pagination: PageInfo {
+                        pagination: cached_page_info.unwrap_or(PageInfo {
                             page,
                             per_page,
                             next_page: None,
                             total_pages: None,
                             total: None,
-                        },
+                        }),
                     });
                 } else {
                     return Err(GitLabError::Http {
@@ -588,11 +601,12 @@ impl GitLabClient {
 
         {
             let mut lock = self.cache.lock().unwrap();
-            lock.insert(
+            lock.insert_with_page_info(
                 key,
                 etag,
                 body.clone(),
                 Some(Duration::from_secs(30)),
+                Some(page_info.clone()),
             );
         }
 
@@ -1062,6 +1076,9 @@ impl GitLabClient {
         }
         if let Some(rm) = params.remove_source_branch {
             map.insert("remove_source_branch".into(), serde_json::json!(rm));
+        }
+        if let Some(sq) = params.squash {
+            map.insert("squash".into(), serde_json::json!(sq));
         }
 
         let payload = serde_json::Value::Object(map);

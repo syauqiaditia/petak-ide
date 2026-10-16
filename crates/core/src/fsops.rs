@@ -458,6 +458,17 @@ pub fn copy_into(root: &Path, srcs: &[&str], dest_dir: &str) -> io::Result<Vec<S
             ));
         }
 
+        if src_path.is_dir() {
+            let canonical_src = src_path.canonicalize()?;
+            let canonical_dest = dest_path.canonicalize()?;
+            if canonical_dest == canonical_src || canonical_dest.starts_with(&canonical_src) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Cannot copy directory into itself or its subdirectory",
+                ));
+            }
+        }
+
         let file_name = src_path
             .file_name()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid source file name"))?

@@ -209,8 +209,22 @@ pub fn prune(store: &Path, max_age_days: u64, max_bytes: u64) -> io::Result<()> 
     // Filter by age (label entries preserved)
     entries.retain(|e| e.kind == "label" || now_ms.saturating_sub(e.ts_ms) <= max_age_ms);
 
-    // Calculate total blob bytes
     let blobs_dir = store.join("blobs");
+
+    // Clean orphan blobs first (unreferenced blobs from age pruning or deleted entries)
+    if blobs_dir.exists() {
+        let referenced_blobs: HashSet<&str> = entries.iter().map(|e| e.blob.as_str()).collect();
+        if let Ok(dir_entries) = fs::read_dir(&blobs_dir) {
+            for entry in dir_entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if !referenced_blobs.contains(name.as_str()) && !name.starts_with('.') {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    // Calculate total blob bytes of surviving referenced blobs
     if blobs_dir.exists() {
         let mut total_bytes: u64 = 0;
         let mut blob_sizes = std::collections::HashMap::new();
@@ -252,17 +266,15 @@ pub fn prune(store: &Path, max_age_days: u64, max_bytes: u64) -> io::Result<()> 
                 }
             }
             entries = remaining;
-        }
-    }
 
-    // Orphan blobs cleanup: remove any blob not referenced by surviving entries
-    let referenced_blobs: HashSet<&str> = entries.iter().map(|e| e.blob.as_str()).collect();
-    if blobs_dir.exists() {
-        if let Ok(dir_entries) = fs::read_dir(&blobs_dir) {
-            for entry in dir_entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if !referenced_blobs.contains(name.as_str()) && !name.starts_with('.') {
-                    let _ = fs::remove_file(entry.path());
+            // Remove blobs that became orphans due to max_bytes pruning
+            let surviving_blobs: HashSet<&str> = entries.iter().map(|e| e.blob.as_str()).collect();
+            if let Ok(dir_entries) = fs::read_dir(&blobs_dir) {
+                for entry in dir_entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if !surviving_blobs.contains(name.as_str()) && !name.starts_with('.') {
+                        let _ = fs::remove_file(entry.path());
+                    }
                 }
             }
         }
