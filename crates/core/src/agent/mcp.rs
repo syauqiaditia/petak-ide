@@ -215,6 +215,7 @@ pub fn test_mcp_server(
         let tx_clone = tx;
         std::thread::spawn(move || {
             let r = BufReader::new(so);
+            let mut first_line: Option<String> = None;
             for line_res in r.lines() {
                 match line_res {
                     Ok(line) => {
@@ -222,21 +223,27 @@ pub fn test_mcp_server(
                         if trimmed.is_empty() {
                             continue;
                         }
+                        if first_line.is_none() {
+                            first_line = Some(line.clone());
+                        }
                         if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
                             if val.get("id") == Some(&serde_json::json!(1))
                                 || val.get("result").is_some()
                                 || val.get("error").is_some()
                             {
                                 let _ = tx_clone.send(Ok(line));
-                                break;
+                                return;
                             }
                         }
                     }
                     Err(e) => {
                         let _ = tx_clone.send(Err(e));
-                        break;
+                        return;
                     }
                 }
+            }
+            if let Some(fl) = first_line {
+                let _ = tx_clone.send(Ok(fl));
             }
         })
     });
