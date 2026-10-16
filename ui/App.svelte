@@ -315,7 +315,7 @@
     }
   }
 
-  let staticActions = (
+  let staticActions = $derived(
     buildStaticActions({
       handlePickFolder,
       editorComponent,
@@ -386,7 +386,7 @@
       rootEntries = list;
       recentFolders = await api.addRecentFolder(folderPath);
       api.recentProjectsAdd(folderPath).catch(() => {});
-      api.lspRestart(folderPath).catch(() => {});
+      api.lspRestart().catch(() => {});
       api.suggestIndexBuild(folderPath).catch(() => {});
       if (watchedRoot !== folderPath) {
         await api.watchRoot(folderPath);

@@ -163,7 +163,6 @@ export async function applyWorkspaceEdit(
       // Tab is currently open in editor
       if (tabsManager.activePath === filePath && activeView) {
         applyTextEditsToView(activeView, edits);
-        openTab.savedContent = activeView.state.doc.toString();
         tabsManager.markDirty(filePath, true);
       } else if (openTab.state) {
         // Background tab with EditorState
@@ -176,8 +175,22 @@ export async function applyWorkspaceEdit(
         changes.sort((a, b) => a.from - b.from || a.to - b.to);
         const tr = openTab.state.update({ changes });
         openTab.state = tr.state;
-        openTab.savedContent = tr.state.doc.toString();
         tabsManager.markDirty(filePath, true);
+      } else {
+        // Background tab without EditorState yet -> apply to disk and refresh savedContent
+        const diskEdits = edits.map((e) => ({
+          start_line: e.range.start.line,
+          start_character: e.range.start.character,
+          end_line: e.range.end.line,
+          end_character: e.range.end.character,
+          new_text: processSnippet(e.newText).cleanText,
+        }));
+        await api.lsp.applyWorkspaceEditDisk(filePath, diskEdits);
+        try {
+          const fresh = await api.readFile(filePath);
+          openTab.savedContent = fresh;
+          tabsManager.markDirty(filePath, false);
+        } catch (_) {}
       }
     } else {
       // File is not open in any tab -> apply to disk via Tauri command

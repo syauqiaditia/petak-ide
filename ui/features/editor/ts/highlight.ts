@@ -278,11 +278,9 @@ export class TreeSitterHighlighter {
     for (const { from, to } of view.visibleRanges) {
       if (from >= to) continue;
 
-      // In web-tree-sitter (UTF-16 in JS), byte offsets in C WASM are char index * 2.
-      // Passing char indices directly halves the queried range.
       const captures = this.query.captures(this.tree.rootNode, {
-        startIndex: from * 2,
-        endIndex: to * 2,
+        startIndex: from,
+        endIndex: to,
       });
 
       const items: { from: number; to: number; deco: Decoration }[] = [];

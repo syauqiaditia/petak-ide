@@ -720,6 +720,7 @@
       api.suggestIndexUpdate(active.path).catch(() => {});
       tabsManager.markSaved(active.path, currentText);
       onTabSave(active.path, currentText);
+      onTabSaveProp?.(active.path, currentText);
       onStatusChange?.(`Saved ${active.name}`);
     } catch (e) {
       console.error('Failed to save file:', active.path, e);
