@@ -130,6 +130,7 @@ class RunStore {
   private unlistenDevices: UnlistenFn | null = null;
   private unlistenDeviceReady: UnlistenFn | null = null;
   private unlistenGradleDaemon: UnlistenFn | null = null;
+  private unlistenEmulatorStatus: UnlistenFn | null = null;
   private initialized = false;
   private isWatchingDevices = false;
   private initPromise: Promise<void> | null = null;
@@ -229,7 +230,7 @@ class RunStore {
         }
 
         try {
-          await api.onEmulatorStatus((event) => {
+          this.unlistenEmulatorStatus = await api.onEmulatorStatus((event) => {
             this.handleEmulatorStatus(event);
           });
         } catch (e) {
@@ -817,9 +818,17 @@ class RunStore {
       this.unlistenDevices();
       this.unlistenDevices = null;
     }
+    if (this.unlistenDeviceReady) {
+      this.unlistenDeviceReady();
+      this.unlistenDeviceReady = null;
+    }
     if (this.unlistenGradleDaemon) {
       this.unlistenGradleDaemon();
       this.unlistenGradleDaemon = null;
+    }
+    if (this.unlistenEmulatorStatus) {
+      this.unlistenEmulatorStatus();
+      this.unlistenEmulatorStatus = null;
     }
     this.initialized = false;
     this.isWatchingDevices = false;

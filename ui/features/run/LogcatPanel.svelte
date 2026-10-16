@@ -24,8 +24,6 @@
 
   let searchInput = $state<string>(logcatStore.searchQuery);
   let tagInput = $state<string>(logcatStore.tagFilter);
-  let caseSensitive = $state(false);
-  let isRegex = $state(false);
   let currentMatchIdx = $state(0);
 
   function handlePrevMatch() {
@@ -221,22 +219,16 @@
         />
         <button
           class="opt-btn"
-          class:active={caseSensitive}
-          onclick={() => {
-            caseSensitive = !caseSensitive;
-            logcatStore.setCaseSensitive(caseSensitive);
-          }}
+          class:active={logcatStore.caseSensitive}
+          onclick={() => logcatStore.toggleCaseSensitive()}
           title="Match Case (Aa)"
         >
           Aa
         </button>
         <button
           class="opt-btn"
-          class:active={isRegex}
-          onclick={() => {
-            isRegex = !isRegex;
-            logcatStore.setIsRegex(isRegex);
-          }}
+          class:active={logcatStore.isRegex}
+          onclick={() => logcatStore.toggleRegex()}
           title="Use Regular Expression (.*)"
         >
           .*

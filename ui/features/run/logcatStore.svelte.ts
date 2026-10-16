@@ -91,8 +91,18 @@ class LogcatStore {
     this.scheduleRafUpdate();
   }
 
+  toggleCaseSensitive() {
+    this.caseSensitive = !this.caseSensitive;
+    this.scheduleRafUpdate();
+  }
+
   setIsRegex(val: boolean) {
     this.isRegex = val;
+    this.scheduleRafUpdate();
+  }
+
+  toggleRegex() {
+    this.isRegex = !this.isRegex;
     this.scheduleRafUpdate();
   }
 
