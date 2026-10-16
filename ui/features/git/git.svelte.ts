@@ -189,13 +189,16 @@ class GitStore {
 
   // Push modal state
   isPushModalOpen = $state<boolean>(false);
+  pushTargetBranch = $state<string>('');
 
-  openPushModal() {
+  openPushModal(branchName?: string) {
+    this.pushTargetBranch = branchName || this.branch?.head || this.currentBranch || '';
     this.isPushModalOpen = true;
   }
 
   closePushModal() {
     this.isPushModalOpen = false;
+    this.pushTargetBranch = '';
   }
 
   // Rebase branch modal state (ala Android Studio)

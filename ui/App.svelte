@@ -23,6 +23,7 @@
   import { toolchainStore } from './features/toolchain/toolchainStore.svelte';
   import { settingsStore } from './features/settings/settingsStore.svelte';
   import SettingsModal from './features/settings/SettingsModal.svelte';
+  import PushModal from './features/git/PushModal.svelte';
   import RebaseBranchModal from './features/git/RebaseBranchModal.svelte';
   import CommitPanel from './features/git/CommitPanel.svelte';
   import DashboardView from './features/dashboard/DashboardView.svelte';
@@ -888,8 +889,29 @@
     />
   {/if}
 
+  {#if gitStore.isPushModalOpen}
+    <PushModal />
+  {/if}
+
   {#if gitStore.isRebaseModalOpen}
     <RebaseBranchModal onClose={() => gitStore.closeRebaseModal()} />
+  {/if}
+
+  <!-- Floating Toast with Undo button -->
+  {#if gitStore.toast}
+    <div class="git-floating-toast {gitStore.toast.type || 'info'}">
+      <span class="toast-msg">{gitStore.toast.message}</span>
+      {#if gitStore.toast.backupRef}
+        <button
+          class="toast-undo-btn"
+          onclick={() => gitStore.undoBackup(gitStore.toast!.backupRef!)}
+          title="Restore repository state before this operation"
+        >
+          Undo
+        </button>
+      {/if}
+      <button class="toast-close-btn" onclick={() => gitStore.clearToast()}>✕</button>
+    </div>
   {/if}
 </div>
 
@@ -1042,5 +1064,77 @@
     letter-spacing: 0.5px;
     pointer-events: none;
     z-index: 9999;
+  }
+
+  /* Floating Toast */
+  .git-floating-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: #1f232b;
+    border: 1px solid #343b47;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    font-size: 13px;
+    color: #d8d9dc;
+    animation: toast-in 0.2s ease-out;
+  }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .git-floating-toast.success {
+    border-color: #2e4d35;
+    background: #16241b;
+    color: #b7e8c3;
+  }
+
+  .git-floating-toast.error {
+    border-color: #552a2d;
+    background: #2a1618;
+    color: #f0a6a2;
+  }
+
+  .git-floating-toast.warning {
+    border-color: #4a3d22;
+    background: #241e12;
+    color: #f0cf8e;
+  }
+
+  .toast-undo-btn {
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: none;
+    background: #6ea8ff;
+    color: #0e1a2e;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .toast-undo-btn:hover {
+    background: #8ec0ff;
+  }
+
+  .toast-close-btn {
+    background: none;
+    border: none;
+    color: #8b8f98;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 0;
+  }
+
+  .toast-close-btn:hover {
+    color: #ffffff;
   }
 </style>

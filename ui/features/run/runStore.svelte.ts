@@ -564,7 +564,7 @@ class RunStore {
     if (event.state === 'running') {
       this.stopAutoPolling();
       this.refreshDevices().then(() => {
-        this.selectDevice(event.id);
+        this.selectDevice(event.serial || event.id);
       }).catch(() => {});
     } else if (event.state === 'failed') {
       this.stopAutoPolling();

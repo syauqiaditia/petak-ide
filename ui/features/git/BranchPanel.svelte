@@ -394,6 +394,19 @@
     >
       Log
     </button>
+    <div class="panel-tab-spacer"></div>
+    <button class="panel-action-btn" onclick={() => gitStore.fetchRemote()} title="Fetch from remote">
+      Fetch
+    </button>
+    <button class="panel-action-btn" onclick={() => gitStore.pullRemote('rebase')} title="Update / Pull (Rebase)">
+      Pull
+    </button>
+    <button class="panel-action-btn" onclick={() => gitStore.openPushModal()} title="Push commits to remote">
+      Push…
+      {#if gitStore.branch?.ahead && gitStore.branch.ahead > 0}
+        <span class="ahead-badge">{gitStore.branch.ahead}</span>
+      {/if}
+    </button>
   </div>
 
   <!-- Branch Search Filter -->
@@ -629,8 +642,9 @@
       <button
         class="b-menu-item"
         onclick={() => {
+          const bName = selectedBranch!.name;
           branchContextMenuVisible = false;
-          gitStore.openPushModal();
+          gitStore.openPushModal(bName);
         }}
       >
         <span>Push…</span>
@@ -987,6 +1001,41 @@
     gap: 8px;
     border-bottom: 1px solid #222428;
     flex-shrink: 0;
+  }
+
+  .panel-tab-spacer {
+    flex: 1;
+  }
+
+  .panel-action-btn {
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid #2d3039;
+    background: #1a1c22;
+    color: #b9bcc3;
+    font-size: 11.5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.1s;
+  }
+
+  .panel-action-btn:hover {
+    color: #e6e7ea;
+    background: #252830;
+    border-color: #3d424f;
+  }
+
+  .ahead-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: #2a3a55;
+    color: #6ea8ff;
+    line-height: 15px;
   }
 
   .panel-tab {

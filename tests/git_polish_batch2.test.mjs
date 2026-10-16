@@ -248,3 +248,26 @@ test('git polish 8: editor-container is kept persistently mounted without DOM de
     'Editor.svelte must guarantee view.dom is attached to container'
   );
 });
+
+test('git push fix: push modal and target branch wiring across components', () => {
+  const gitStoreCode = fs.readFileSync(path.join(uiRoot, 'features/git/git.svelte.ts'), 'utf8');
+  assert.ok(gitStoreCode.includes('pushTargetBranch = $state<string>(\'\')'), 'gitStore must declare pushTargetBranch');
+  assert.ok(gitStoreCode.includes('openPushModal(branchName?: string)'), 'openPushModal must accept optional branchName');
+  assert.ok(gitStoreCode.includes('this.pushTargetBranch = \'\''), 'closePushModal must clear pushTargetBranch');
+
+  const pushModalCode = fs.readFileSync(path.join(uiRoot, 'features/git/PushModal.svelte'), 'utf8');
+  assert.ok(pushModalCode.includes('gitStore.closePushModal()'), 'PushModal must call gitStore.closePushModal');
+  assert.ok(pushModalCode.includes('pushSetUpstream = !upstream'), 'PushModal must auto set upstream when missing');
+
+  const appCode = fs.readFileSync(path.join(uiRoot, 'App.svelte'), 'utf8');
+  assert.ok(appCode.includes('<PushModal />'), 'App.svelte must render PushModal');
+  assert.ok(appCode.includes('git-floating-toast'), 'App.svelte must render git-floating-toast');
+
+  const branchPanelCode = fs.readFileSync(path.join(uiRoot, 'features/git/BranchPanel.svelte'), 'utf8');
+  assert.ok(branchPanelCode.includes('gitStore.openPushModal('), 'BranchPanel context menu must pass selected branch');
+  assert.ok(branchPanelCode.includes('gitStore.fetchRemote()'), 'BranchPanel must have Fetch button');
+  assert.ok(branchPanelCode.includes('gitStore.pullRemote('), 'BranchPanel must have Pull button');
+
+  const termPanelCode = fs.readFileSync(path.join(uiRoot, 'features/terminal/TerminalPanel.svelte'), 'utf8');
+  assert.ok(termPanelCode.includes('<ConflictView'), 'TerminalPanel must render ConflictView in git dock');
+});

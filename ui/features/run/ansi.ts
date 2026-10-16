@@ -223,24 +223,48 @@ export function formatRunLogLineHtml(
 
   return tokens
     .map((token) => {
-      let content = escapeHtml(token.text);
+      let content = '';
+      const text = token.text;
 
       if (searchRegex) {
         searchRegex.lastIndex = 0;
-        content = content.replace(searchRegex, (matched) => {
-          const activeClass = isActiveLineMatch ? ' is-active' : '';
-          return `<mark class="run-search-highlight${activeClass}">${matched}</mark>`;
-        });
+        let lastIdx = 0;
+        let match: RegExpExecArray | null;
+        const activeClass = isActiveLineMatch ? ' is-active' : '';
+
+        while ((match = searchRegex.exec(text)) !== null) {
+          const matchIndex = match.index;
+          const matchLength = match[0].length;
+          if (matchLength === 0) {
+            searchRegex.lastIndex++;
+            continue;
+          }
+
+          if (matchIndex > lastIdx) {
+            content += escapeHtml(text.slice(lastIdx, matchIndex));
+          }
+          content += `<mark class="run-search-highlight${activeClass}">${escapeHtml(match[0])}</mark>`;
+          lastIdx = matchIndex + matchLength;
+        }
+
+        if (lastIdx < text.length) {
+          content += escapeHtml(text.slice(lastIdx));
+        }
+        if (!content) {
+          content = escapeHtml(text);
+        }
       } else {
-        const lowerText = content.toLowerCase();
+        const lowerText = text.toLowerCase();
         const lowerQ = q.toLowerCase();
-        if (lowerText.includes(lowerQ)) {
-          const idx = lowerText.indexOf(lowerQ);
-          const before = content.slice(0, idx);
-          const matched = content.slice(idx, idx + q.length);
-          const after = content.slice(idx + q.length);
+        const idx = lowerText.indexOf(lowerQ);
+        if (idx !== -1) {
+          const before = escapeHtml(text.slice(0, idx));
+          const matched = escapeHtml(text.slice(idx, idx + q.length));
+          const after = escapeHtml(text.slice(idx + q.length));
           const activeClass = isActiveLineMatch ? ' is-active' : '';
           content = `${before}<mark class="run-search-highlight${activeClass}">${matched}</mark>${after}`;
+        } else {
+          content = escapeHtml(text);
         }
       }
 

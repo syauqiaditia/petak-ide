@@ -222,7 +222,10 @@
         <button
           class="opt-btn"
           class:active={caseSensitive}
-          onclick={() => (caseSensitive = !caseSensitive)}
+          onclick={() => {
+            caseSensitive = !caseSensitive;
+            logcatStore.setCaseSensitive(caseSensitive);
+          }}
           title="Match Case (Aa)"
         >
           Aa
@@ -230,7 +233,10 @@
         <button
           class="opt-btn"
           class:active={isRegex}
-          onclick={() => (isRegex = !isRegex)}
+          onclick={() => {
+            isRegex = !isRegex;
+            logcatStore.setIsRegex(isRegex);
+          }}
           title="Use Regular Expression (.*)"
         >
           .*

@@ -173,6 +173,8 @@ export interface LogcatFilter {
   search: string;
   packageMine: boolean;
   appPid: number | null;
+  caseSensitive?: boolean;
+  isRegex?: boolean;
 }
 
 export function defaultLogcatFilter(): LogcatFilter {
@@ -182,6 +184,8 @@ export function defaultLogcatFilter(): LogcatFilter {
     search: '',
     packageMine: false,
     appPid: null,
+    caseSensitive: false,
+    isRegex: false,
   };
 }
 
@@ -195,18 +199,37 @@ export function matchesFilter(line: LogItem, filter: LogcatFilter): boolean {
     }
   }
   if (filter.tag) {
-    const t = filter.tag.trim().toLowerCase();
-    if (t && !line.tag.toLowerCase().includes(t)) {
-      return false;
+    const t = filter.tag.trim();
+    if (t) {
+      if (filter.isRegex) {
+        try {
+          const re = new RegExp(t, filter.caseSensitive ? '' : 'i');
+          if (!re.test(line.tag)) return false;
+        } catch {
+          if (!line.tag.toLowerCase().includes(t.toLowerCase())) return false;
+        }
+      } else if (filter.caseSensitive) {
+        if (!line.tag.includes(t)) return false;
+      } else {
+        if (!line.tag.toLowerCase().includes(t.toLowerCase())) return false;
+      }
     }
   }
   if (filter.search) {
-    const q = filter.search.trim().toLowerCase();
+    const q = filter.search.trim();
     if (q) {
-      const matchMsg = line.msg.toLowerCase().includes(q);
-      const matchTag = line.tag.toLowerCase().includes(q);
-      if (!matchMsg && !matchTag) {
-        return false;
+      if (filter.isRegex) {
+        try {
+          const re = new RegExp(q, filter.caseSensitive ? '' : 'i');
+          if (!re.test(line.msg) && !re.test(line.tag)) return false;
+        } catch {
+          if (!line.msg.toLowerCase().includes(q.toLowerCase()) && !line.tag.toLowerCase().includes(q.toLowerCase())) return false;
+        }
+      } else if (filter.caseSensitive) {
+        if (!line.msg.includes(q) && !line.tag.includes(q)) return false;
+      } else {
+        const qLower = q.toLowerCase();
+        if (!line.msg.toLowerCase().includes(qLower) && !line.tag.toLowerCase().includes(qLower)) return false;
       }
     }
   }
@@ -224,22 +247,59 @@ export function filterLogLines(lines: LogItem[], filter: LogcatFilter): LogItem[
     return lines;
   }
 
-  const tagLower = filter.tag.trim().toLowerCase();
-  const searchLower = filter.search.trim().toLowerCase();
+  const rawTag = filter.tag.trim();
+  const rawSearch = filter.search.trim();
   const minWeight = LEVEL_WEIGHT[filter.minLevel];
   const filterPid = filter.packageMine ? filter.appPid : null;
+  const isCase = Boolean(filter.caseSensitive);
+  const isRegex = Boolean(filter.isRegex);
+
+  let searchRe: RegExp | null = null;
+  if (rawSearch && isRegex) {
+    try {
+      searchRe = new RegExp(rawSearch, isCase ? '' : 'i');
+    } catch {
+      searchRe = null;
+    }
+  }
+
+  let tagRe: RegExp | null = null;
+  if (rawTag && isRegex) {
+    try {
+      tagRe = new RegExp(rawTag, isCase ? '' : 'i');
+    } catch {
+      tagRe = null;
+    }
+  }
+
+  const searchTarget = isCase ? rawSearch : rawSearch.toLowerCase();
+  const tagTarget = isCase ? rawTag : rawTag.toLowerCase();
 
   const result: LogItem[] = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (LEVEL_WEIGHT[l.level] < minWeight) continue;
     if (filterPid !== null && l.pid !== filterPid) continue;
-    if (tagLower && !l.tag.toLowerCase().includes(tagLower)) continue;
-    if (searchLower) {
-      if (!l.msg.toLowerCase().includes(searchLower) && !l.tag.toLowerCase().includes(searchLower)) {
-        continue;
+
+    if (rawTag) {
+      if (tagRe) {
+        if (!tagRe.test(l.tag)) continue;
+      } else {
+        const tStr = isCase ? l.tag : l.tag.toLowerCase();
+        if (!tStr.includes(tagTarget)) continue;
       }
     }
+
+    if (rawSearch) {
+      if (searchRe) {
+        if (!searchRe.test(l.msg) && !searchRe.test(l.tag)) continue;
+      } else {
+        const mStr = isCase ? l.msg : l.msg.toLowerCase();
+        const tStr = isCase ? l.tag : l.tag.toLowerCase();
+        if (!mStr.includes(searchTarget) && !tStr.includes(searchTarget)) continue;
+      }
+    }
+
     result.push(l);
   }
   return result;

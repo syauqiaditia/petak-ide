@@ -135,6 +135,14 @@ test('b31 Polish UI 2b: formatRunLogLineHtml highlights search matches', () => {
   // Active line match gets "is-active" class
   const activeHtml = formatRunLogLineHtml(rawLine, 'stdout', 'timeout', true);
   assert.match(activeHtml, /<mark class="run-search-highlight is-active">timeout<\/mark>/);
+
+  // Search query on line with special characters (&, <, >) does not corrupt HTML entities
+  const lineWithEntities = 'List<Map<String, dynamic>> & results';
+  const entityHtml = formatRunLogLineHtml(lineWithEntities, 'stdout', '<Map', false);
+  assert.equal(
+    entityHtml,
+    'List<mark class="run-search-highlight">&lt;Map</mark>&lt;String, dynamic&gt;&gt; &amp; results'
+  );
 });
 
 // =============================================================================

@@ -17,6 +17,8 @@ class LogcatStore {
   tagFilter = $state<string>('');
   searchQuery = $state<string>('');
   packageMine = $state<boolean>(false);
+  caseSensitive = $state<boolean>(false);
+  isRegex = $state<boolean>(false);
 
   // Playback & view states
   isPaused = $state<boolean>(false);
@@ -79,7 +81,19 @@ class LogcatStore {
       search: this.searchQuery,
       packageMine: this.packageMine,
       appPid: runStore.pid,
+      caseSensitive: this.caseSensitive,
+      isRegex: this.isRegex,
     };
+  }
+
+  setCaseSensitive(val: boolean) {
+    this.caseSensitive = val;
+    this.scheduleRafUpdate();
+  }
+
+  setIsRegex(val: boolean) {
+    this.isRegex = val;
+    this.scheduleRafUpdate();
   }
 
   applyFilter() {

@@ -95,6 +95,12 @@ impl IosSimulatorSession {
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+
         let mut child = cmd.spawn().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::Other,
@@ -200,7 +206,15 @@ impl IosSimulatorSession {
             // Kill child on thread exit
             if let Ok(mut guard) = child_arc2.lock() {
                 if let Some(mut proc) = guard.take() {
+                    #[cfg(unix)]
+                    {
+                        let pid = proc.id() as i32;
+                        unsafe {
+                            libc::killpg(pid, libc::SIGKILL);
+                        }
+                    }
                     let _ = proc.kill();
+                    let _ = proc.wait();
                 }
             }
         });
@@ -266,7 +280,15 @@ impl IosSimulatorSession {
     pub fn stop(&self) {
         if let Ok(mut guard) = self.child.lock() {
             if let Some(mut proc) = guard.take() {
+                #[cfg(unix)]
+                {
+                    let pid = proc.id() as i32;
+                    unsafe {
+                        libc::killpg(pid, libc::SIGKILL);
+                    }
+                }
                 let _ = proc.kill();
+                let _ = proc.wait();
             }
         }
         if let Ok(mut guard) = self.daemon_stdin.lock() {

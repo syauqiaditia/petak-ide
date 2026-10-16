@@ -123,6 +123,7 @@ pub fn load_secure_token() -> io::Result<Option<String>> {
     }
 
     // Fallback: check standard ~/.gitlab-pat or ~/.gitlab_token
+    #[cfg(not(test))]
     if let Some(home) = dirs::home_dir() {
         for name in &[".gitlab-pat", ".gitlab_token"] {
             let p = home.join(name);
@@ -375,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_accounts_token_storage_lifecycle() {
-        let test_token = "«redacted:glpat-…»";
+        let test_token = "token_test_12345";
         save_secure_token(test_token).unwrap();
 
         let loaded = load_secure_token().unwrap();

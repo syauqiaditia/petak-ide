@@ -108,7 +108,7 @@
       {:else if activeItem?.group === 'Emulator'}
         {@html ANDROID_EMULATOR_SVG}
       {:else if activeItem?.connection === 'connected'}
-        {#if activeItem.transportBadge === 'Wi-Fi'}
+        {#if activeItem.transport === 'wifi'}
           {@html DEVICE_WIFI_SVG}
         {:else}
           {@html DEVICE_USB_SVG}
@@ -208,7 +208,7 @@
               title={tooltip}
             >
               <span class="item-custom-icon">
-                {#if item.transportBadge === 'Wi-Fi'}
+                {#if item.transport === 'wifi'}
                   {@html DEVICE_WIFI_SVG}
                 {:else}
                   {@html DEVICE_USB_SVG}
@@ -269,7 +269,7 @@
               tabindex="-1"
             >
               <span class="item-custom-icon">
-                {#if item.transportBadge === 'Wi-Fi'}
+                {#if item.transport === 'wifi'}
                   {@html DEVICE_WIFI_SVG}
                 {:else}
                   {@html DEVICE_USB_SVG}

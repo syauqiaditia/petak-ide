@@ -292,3 +292,37 @@ test('b34 Logcat Fix 5: Filter logic synchronization for tag and search queries'
   assert.equal(bufferItems[1].id, 4);
   assert.equal(bufferItems[2].id, 5);
 });
+
+test('b34 Logcat Fix 6: Case sensitive and regex search in Logcat', () => {
+  const sampleLogs = [
+    { id: 1, level: 'I', tag: 'AuthService', msg: 'User login SUCCESS with Token123', ts: '10-07 10:00:00.000', pid: 100, tid: 101 },
+    { id: 2, level: 'D', tag: 'authservice', msg: 'Token validation success', ts: '10-07 10:00:01.000', pid: 100, tid: 102 },
+    { id: 3, level: 'E', tag: 'Database', msg: 'Error code: 404 & id < 10', ts: '10-07 10:00:02.000', pid: 100, tid: 103 },
+  ];
+
+  const baseFilter = {
+    minLevel: 'V',
+    tag: '',
+    search: '',
+    packageMine: false,
+    appPid: null,
+  };
+
+  // Case-sensitive search
+  const caseMatch = filterLogLines(sampleLogs, { ...baseFilter, search: 'SUCCESS', caseSensitive: true });
+  assert.equal(caseMatch.length, 1);
+  assert.equal(caseMatch[0].id, 1);
+
+  const caseMismatch = filterLogLines(sampleLogs, { ...baseFilter, search: 'Success', caseSensitive: true });
+  assert.equal(caseMismatch.length, 0);
+
+  // Regex search
+  const regexMatch = filterLogLines(sampleLogs, { ...baseFilter, search: 'code:\\s+\\d+', isRegex: true });
+  assert.equal(regexMatch.length, 1);
+  assert.equal(regexMatch[0].id, 3);
+
+  // Regex tag match
+  const regexTag = filterLogLines(sampleLogs, { ...baseFilter, tag: '^Auth', caseSensitive: true, isRegex: true });
+  assert.equal(regexTag.length, 1);
+  assert.equal(regexTag[0].tag, 'AuthService');
+});

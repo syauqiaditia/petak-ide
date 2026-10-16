@@ -14,6 +14,7 @@
   import BranchPanel from '../git/BranchPanel.svelte';
   import LogView from '../git/LogView.svelte';
   import CommitDetail from '../git/CommitDetail.svelte';
+  import ConflictView from '../git/ConflictView.svelte';
   import { gitStore } from '../git/git.svelte';
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
   import { runStore } from '../run/runStore.svelte';
@@ -700,9 +701,13 @@
   {#if activeSection === 'git'}
     <div class="panel-body git-body">
       <div class="git-dock-layout">
-        <BranchPanel onSelectTab={(t) => (gitStore.activeSubTab = t)} />
-        <LogView />
-        <CommitDetail />
+        {#if gitStore.activeSubTab === 'conflict'}
+          <ConflictView onClose={() => (gitStore.activeSubTab = 'log')} />
+        {:else}
+          <BranchPanel onSelectTab={(t) => (gitStore.activeSubTab = t)} />
+          <LogView />
+          <CommitDetail />
+        {/if}
       </div>
     </div>
   {/if}
