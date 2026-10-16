@@ -44,6 +44,7 @@ const STORE_DEFS = {
   updateStore: path.resolve(uiRoot, 'features/updater/updateStore.svelte.ts'),
   breakpointStore: path.resolve(uiRoot, 'features/editor/breakpoints.svelte.ts'),
   navPopupStore: path.resolve(uiRoot, 'features/editor/lsp/nav.svelte.ts'),
+  vcsTrackerStore: path.resolve(uiRoot, 'features/editor/vcsTracker.svelte.ts'),
 };
 
 function extractStoreMethods(filePath) {

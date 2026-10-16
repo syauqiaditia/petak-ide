@@ -78,7 +78,11 @@
     setVcsChangesEffect,
     setBlameLinesEffect,
     computeVcsLineChanges,
+    computeVcsHunks,
+    type VcsHunk,
   } from './vcsGutter';
+  import { vcsTrackerStore } from './vcsTracker.svelte';
+  import VcsDiffPopup from './VcsDiffPopup.svelte';
   import { createIndentGuidesExtension } from './indentGuides';
   import NavUsagesPopup from './NavUsagesPopup.svelte';
   import ImagePreview from './ImagePreview.svelte';
@@ -122,6 +126,7 @@
   let findReplaceInitialQuery = $state('');
   let findReplaceRef = $state<any>(null);
   let editorDocVersion = $state(0);
+  let currentHunks = $state<VcsHunk[]>([]);
 
   let isCenterDiffActive = $state(false);
 
@@ -602,6 +607,11 @@
     const initialBps = filePath ? breakpointStore.getBreakpoints(filePath) : [];
     const activeTabItem = filePath ? tabsManager.tabs.find((t) => t.path === filePath) : null;
     const initialVcsBase = activeTabItem ? (activeTabItem.gitHeadContent ?? activeTabItem.savedContent) : null;
+    if (initialVcsBase !== null) {
+      currentHunks = computeVcsHunks(initialVcsBase, content);
+    } else {
+      currentHunks = [];
+    }
     const initialVcsMap = initialVcsBase !== null ? computeVcsLineChanges(initialVcsBase, content) : undefined;
     return EditorState.create({
       doc: content,
@@ -632,7 +642,11 @@
         ]),
         darculaTheme,
         searchHighlightField,
-        createVcsGutterExtension(initialVcsMap),
+        createVcsGutterExtension(initialVcsMap, (lineNum, v) => {
+          if (currentHunks.length > 0) {
+            vcsTrackerStore.openForLine(lineNum, v, currentHunks, currentSwappedPath || undefined);
+          }
+        }),
         createInlineBlameExtension(),
         createIndentGuidesExtension(),
         highlightTheme,
@@ -661,6 +675,7 @@
               const isDirty = currentText !== active.savedContent;
               tabsManager.markDirty(active.path, isDirty);
               const baseText = active.gitHeadContent ?? active.savedContent;
+              currentHunks = computeVcsHunks(baseText, currentText);
               const vcsMap = computeVcsLineChanges(baseText, currentText);
               queueMicrotask(() => {
                 view?.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
@@ -742,6 +757,7 @@
 
     if (view && tabsManager.activeTab?.path === tab.path) {
       const baseText = tab.gitHeadContent ?? tab.savedContent;
+      currentHunks = computeVcsHunks(baseText, view.state.doc.toString());
       const vcsMap = computeVcsLineChanges(baseText, view.state.doc.toString());
       view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
     }
@@ -1214,6 +1230,7 @@
 
         // Compute VCS gutter markers
         const baseText = active.gitHeadContent ?? active.savedContent;
+        currentHunks = computeVcsHunks(baseText, active.state.doc.toString());
         const vcsMap = computeVcsLineChanges(baseText, active.state.doc.toString());
         view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
         refreshTabVcsBase(active);
@@ -1434,6 +1451,7 @@
     />
 
     <NavUsagesPopup gotoLineFn={gotoLine} />
+    <VcsDiffPopup getView={() => view} />
 
     {#if renameStore.visible}
       <div

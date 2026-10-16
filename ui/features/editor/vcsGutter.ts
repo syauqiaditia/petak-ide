@@ -11,32 +11,62 @@ import type { GitBlameLine } from '../../lib/api';
 
 export type VcsChangeKind = 'added' | 'modified' | 'deleted';
 
+export interface VcsHunk {
+  id: number;
+  kind: VcsChangeKind;
+  startNewLine: number;
+  endNewLine: number;
+  startOldLine: number;
+  endOldLine: number;
+  origCode: string;
+  currCode: string;
+  lines: number[];
+}
+
 /**
- * Computes line-by-line VCS status (added, modified, deleted) by comparing original vs current text.
- * Uses a line-based LCS algorithm with common prefix/suffix optimization.
+ * Computes change hunks between original (HEAD) and current text using a line-based LCS algorithm.
  */
-export function computeVcsLineChanges(
+export function computeVcsHunks(
   originalText: string,
   currentText: string
-): Map<number, VcsChangeKind> {
-  const result = new Map<number, VcsChangeKind>();
-  if (originalText === currentText) return result;
+): VcsHunk[] {
+  const hunks: VcsHunk[] = [];
+  if (originalText === currentText) return hunks;
 
   const oldLines = originalText.split('\n');
   const newLines = currentText.split('\n');
 
   // If original was completely empty
   if (originalText === '' || (oldLines.length === 1 && oldLines[0] === '')) {
-    for (let i = 1; i <= newLines.length; i++) {
-      result.set(i, 'added');
-    }
-    return result;
+    const lines = Array.from({ length: newLines.length }, (_, i) => i + 1);
+    hunks.push({
+      id: 1,
+      kind: 'added',
+      startNewLine: 1,
+      endNewLine: newLines.length,
+      startOldLine: 0,
+      endOldLine: 0,
+      origCode: '',
+      currCode: currentText,
+      lines,
+    });
+    return hunks;
   }
 
   // If new text is completely empty
   if (currentText === '' || (newLines.length === 1 && newLines[0] === '')) {
-    result.set(1, 'deleted');
-    return result;
+    hunks.push({
+      id: 1,
+      kind: 'deleted',
+      startNewLine: 1,
+      endNewLine: 1,
+      startOldLine: 1,
+      endOldLine: oldLines.length,
+      origCode: originalText,
+      currCode: '',
+      lines: [1],
+    });
+    return hunks;
   }
 
   // 1. Trim common prefix
@@ -60,25 +90,25 @@ export function computeVcsLineChanges(
   const midNew = newLines.slice(prefixLen, newLines.length - suffixLen);
 
   if (midOld.length === 0 && midNew.length === 0) {
-    return result;
+    return hunks;
   }
 
   // Fallback for massive diffs (> 2000 lines in middle) to prevent DP table blowup
   if (midOld.length > 2000 || midNew.length > 2000 || midOld.length * midNew.length > 4_000_000) {
     const minLen = Math.min(midOld.length, midNew.length);
-    for (let i = 0; i < minLen; i++) {
-      result.set(prefixLen + i + 1, 'modified');
-    }
-    for (let i = minLen; i < midNew.length; i++) {
-      result.set(prefixLen + i + 1, 'added');
-    }
-    if (midNew.length < midOld.length) {
-      const boundaryLine = Math.max(1, Math.min(newLines.length, prefixLen + midNew.length + 1));
-      if (!result.has(boundaryLine)) {
-        result.set(boundaryLine, 'deleted');
-      }
-    }
-    return result;
+    const lines = Array.from({ length: midNew.length }, (_, i) => prefixLen + i + 1);
+    hunks.push({
+      id: 1,
+      kind: 'modified',
+      startNewLine: prefixLen + 1,
+      endNewLine: prefixLen + midNew.length,
+      startOldLine: prefixLen + 1,
+      endOldLine: prefixLen + midOld.length,
+      origCode: midOld.join('\n'),
+      currCode: midNew.join('\n'),
+      lines,
+    });
+    return hunks;
   }
 
   // 3. Compute LCS DP table
@@ -124,50 +154,90 @@ export function computeVcsLineChanges(
 
   // 5. Group into change hunks
   let k = 0;
+  let hunkId = 1;
   while (k < ops.length) {
     if (ops[k].type === 'keep') {
       k++;
       continue;
     }
 
-    let delCount = 0;
-    const addedLines: number[] = [];
+    const deletedOldLines: number[] = [];
+    const addedNewLines: number[] = [];
     const hunkStartNewLine = ops[k].newLineNum;
 
     while (k < ops.length && ops[k].type !== 'keep') {
       if (ops[k].type === 'del') {
-        delCount++;
+        deletedOldLines.push(ops[k].oldLineNum);
       } else if (ops[k].type === 'add') {
-        addedLines.push(ops[k].newLineNum);
+        addedNewLines.push(ops[k].newLineNum);
       }
       k++;
     }
 
-    const addCount = addedLines.length;
+    const delCount = deletedOldLines.length;
+    const addCount = addedNewLines.length;
 
-    if (delCount === 0 && addCount > 0) {
-      // Pure addition
-      for (const lineNum of addedLines) {
-        result.set(lineNum, 'added');
-      }
-    } else if (delCount > 0 && addCount > 0) {
-      // Replacement (both deleted and added lines in this hunk)
-      const paired = Math.min(delCount, addCount);
-      for (let p = 0; p < paired; p++) {
-        result.set(addedLines[p], 'modified');
-      }
-      for (let p = paired; p < addCount; p++) {
-        result.set(addedLines[p], 'added');
-      }
-    } else if (delCount > 0 && addCount === 0) {
-      // Pure deletion
-      const boundaryLine = Math.max(1, Math.min(newLines.length, hunkStartNewLine));
+    let kind: VcsChangeKind = 'modified';
+    if (delCount > 0 && addCount === 0) kind = 'deleted';
+    else if (delCount === 0 && addCount > 0) kind = 'added';
+    else kind = 'modified';
+
+    const startNewLine = addedNewLines.length > 0 ? addedNewLines[0] : Math.max(1, Math.min(newLines.length, hunkStartNewLine));
+    const endNewLine = addedNewLines.length > 0 ? addedNewLines[addedNewLines.length - 1] : startNewLine;
+    const startOldLine = deletedOldLines.length > 0 ? deletedOldLines[0] : prefixLen;
+    const endOldLine = deletedOldLines.length > 0 ? deletedOldLines[deletedOldLines.length - 1] : prefixLen;
+
+    const origCode = deletedOldLines.map((idx) => oldLines[idx - 1] ?? '').join('\n');
+    const currCode = addedNewLines.map((idx) => newLines[idx - 1] ?? '').join('\n');
+
+    hunks.push({
+      id: hunkId++,
+      kind,
+      startNewLine,
+      endNewLine,
+      startOldLine,
+      endOldLine,
+      origCode,
+      currCode,
+      lines: addedNewLines.length > 0 ? addedNewLines : [startNewLine],
+    });
+  }
+
+  return hunks;
+}
+
+/**
+ * Computes line-by-line VCS status (added, modified, deleted) by comparing original vs current text.
+ * Uses computeVcsHunks to populate the line change map accurately.
+ */
+export function computeVcsLineChanges(
+  originalText: string,
+  currentText: string
+): Map<number, VcsChangeKind> {
+  const result = new Map<number, VcsChangeKind>();
+  const hunks = computeVcsHunks(originalText, currentText);
+  for (const hunk of hunks) {
+    if (hunk.kind === 'deleted') {
+      const boundaryLine = Math.max(1, hunk.startNewLine);
       if (!result.has(boundaryLine)) {
         result.set(boundaryLine, 'deleted');
       }
+    } else if (hunk.kind === 'added') {
+      for (const line of hunk.lines) {
+        result.set(line, 'added');
+      }
+    } else if (hunk.kind === 'modified') {
+      const delCount = hunk.endOldLine >= hunk.startOldLine ? (hunk.endOldLine - hunk.startOldLine + 1) : 0;
+      const addCount = hunk.lines.length;
+      const paired = Math.min(delCount, addCount);
+      for (let p = 0; p < paired; p++) {
+        result.set(hunk.lines[p], 'modified');
+      }
+      for (let p = paired; p < addCount; p++) {
+        result.set(hunk.lines[p], 'added');
+      }
     }
   }
-
   return result;
 }
 
@@ -213,7 +283,7 @@ class VcsGutterMarker extends GutterMarker {
   toDOM() {
     const el = document.createElement('div');
     el.className = `cm-vcs-marker cm-vcs-${this.kind}`;
-    el.title = `Git ${this.kind}`;
+    el.title = `Git ${this.kind} (click to view diff)`;
     return el;
   }
 }
@@ -251,6 +321,7 @@ export const vcsGutterTheme = EditorView.theme({
     alignItems: 'stretch !important',
     justifyContent: 'center !important',
     position: 'relative !important',
+    cursor: 'pointer !important',
   },
   '.cm-vcs-marker': {
     position: 'absolute !important',
@@ -259,6 +330,13 @@ export const vcsGutterTheme = EditorView.theme({
     left: '1px !important',
     width: '3.5px !important',
     borderRadius: '1.5px !important',
+    cursor: 'pointer !important',
+    transition: 'width 0.12s ease, filter 0.12s ease',
+  },
+  '.cm-vcs-marker:hover': {
+    width: '5px !important',
+    left: '0px !important',
+    filter: 'brightness(1.25)',
   },
   '.cm-vcs-added': {
     backgroundColor: '#4ade80 !important',
@@ -271,7 +349,10 @@ export const vcsGutterTheme = EditorView.theme({
   },
 });
 
-export function createVcsGutterExtension(initialMap?: Map<number, VcsChangeKind>) {
+export function createVcsGutterExtension(
+  initialMap?: Map<number, VcsChangeKind>,
+  onGutterClick?: (lineNum: number, view: EditorView, event: MouseEvent) => void
+) {
   return [
     initialMap ? vcsChangesStateField.init(() => initialMap) : vcsChangesStateField,
     gutter({
@@ -289,6 +370,14 @@ export function createVcsGutterExtension(initialMap?: Map<number, VcsChangeKind>
           update.docChanged ||
           update.transactions.some((tr) => tr.effects.some((e) => e.is(setVcsChangesEffect)))
         );
+      },
+      domEventHandlers: {
+        click(view, line, event) {
+          if (!onGutterClick) return false;
+          const lineObj = view.state.doc.lineAt(line.from);
+          onGutterClick(lineObj.number, view, event as MouseEvent);
+          return true;
+        },
       },
     }),
     vcsGutterTheme,
