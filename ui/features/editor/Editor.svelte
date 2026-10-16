@@ -600,6 +600,9 @@
 
   function createEditorState(content: string, filename: string, filePath?: string): EditorState {
     const initialBps = filePath ? breakpointStore.getBreakpoints(filePath) : [];
+    const activeTabItem = filePath ? tabsManager.tabs.find((t) => t.path === filePath) : null;
+    const initialVcsBase = activeTabItem ? (activeTabItem.gitHeadContent ?? activeTabItem.savedContent) : null;
+    const initialVcsMap = initialVcsBase !== null ? computeVcsLineChanges(initialVcsBase, content) : undefined;
     return EditorState.create({
       doc: content,
       extensions: [
@@ -629,7 +632,7 @@
         ]),
         darculaTheme,
         searchHighlightField,
-        createVcsGutterExtension(),
+        createVcsGutterExtension(initialVcsMap),
         createInlineBlameExtension(),
         createIndentGuidesExtension(),
         highlightTheme,
@@ -1039,7 +1042,6 @@
     if (active) {
       active.state = initialState;
       onTabOpen(active.path, active.savedContent);
-      refreshTabVcsBase(active);
     }
 
     view = new EditorView({
@@ -1047,6 +1049,10 @@
       parent: container,
     });
     editorDocVersion++;
+
+    if (active) {
+      refreshTabVcsBase(active);
+    }
 
     onScrollHandler = () => {
       if (currentSwappedPath && view) {
@@ -1573,7 +1579,9 @@
   }
   :global(.cm-vcs-gutter .cm-gutterElement) {
     padding: 0 !important;
-    margin: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-bottom: 0 !important;
     width: 5px !important;
     display: flex !important;
     align-items: stretch !important;

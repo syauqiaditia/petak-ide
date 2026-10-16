@@ -243,7 +243,9 @@ export const vcsGutterTheme = EditorView.theme({
   },
   '.cm-vcs-gutter .cm-gutterElement': {
     padding: '0 !important',
-    margin: '0 !important',
+    marginLeft: '0 !important',
+    marginRight: '0 !important',
+    marginBottom: '0 !important',
     width: '5px !important',
     display: 'flex !important',
     alignItems: 'stretch !important',
@@ -269,9 +271,9 @@ export const vcsGutterTheme = EditorView.theme({
   },
 });
 
-export function createVcsGutterExtension() {
+export function createVcsGutterExtension(initialMap?: Map<number, VcsChangeKind>) {
   return [
-    vcsChangesStateField,
+    initialMap ? vcsChangesStateField.init(() => initialMap) : vcsChangesStateField,
     gutter({
       class: 'cm-vcs-gutter',
       lineMarker(view, line) {
@@ -281,6 +283,12 @@ export function createVcsGutterExtension() {
         const change = map.get(lineObj.number);
         if (!change) return null;
         return new VcsGutterMarker(change);
+      },
+      lineMarkerChange(update) {
+        return (
+          update.docChanged ||
+          update.transactions.some((tr) => tr.effects.some((e) => e.is(setVcsChangesEffect)))
+        );
       },
     }),
     vcsGutterTheme,

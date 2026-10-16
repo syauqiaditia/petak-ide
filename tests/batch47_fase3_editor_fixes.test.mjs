@@ -13,22 +13,14 @@ const uiRoot = path.resolve(projectRoot, 'ui');
 // Suite 1: Tree-Sitter Highlighting Visible Ranges (from, to without * 2)
 // =============================================================================
 
-test('b47 Tree-Sitter: query captures uses exact from and to character indices without * 2', () => {
+test('b47 Tree-Sitter: query captures uses byte range (* 2) for web-tree-sitter UTF-16', () => {
   const highlightPath = path.resolve(uiRoot, 'features/editor/ts/highlight.ts');
   const code = fs.readFileSync(highlightPath, 'utf-8');
 
-  // Verify startIndex and endIndex use from and to without * 2
+  // In web-tree-sitter (UTF-16 in JS), byte offsets in C WASM are char index * 2.
   assert.ok(
-    code.includes('startIndex: from,') && code.includes('endIndex: to,'),
-    'captures() must be called with startIndex: from and endIndex: to'
-  );
-  assert.ok(
-    !code.includes('startIndex: from * 2'),
-    'must not multiply from by 2'
-  );
-  assert.ok(
-    !code.includes('endIndex: to * 2'),
-    'must not multiply to by 2'
+    code.includes('startIndex: from * 2') && code.includes('endIndex: to * 2'),
+    'captures() must be called with byte offsets (from * 2, to * 2)'
   );
 });
 
