@@ -211,7 +211,7 @@ pub fn test_mcp_server(
 
     // Capture stdout in background thread
     let (tx, rx) = mpsc::channel::<Result<String, std::io::Error>>();
-    let _stdout_handle = stdout.map(|so| {
+    let stdout_handle = stdout.map(|so| {
         let tx_clone = tx;
         std::thread::spawn(move || {
             let r = BufReader::new(so);
