@@ -148,6 +148,13 @@
     }
   });
 
+  // Refresh VCS baseline when git status changes
+  $effect(() => {
+    if (gitStore.status && tabsManager.activeTab) {
+      refreshTabVcsBase(tabsManager.activeTab);
+    }
+  });
+
   // Ensure CodeMirror view is always attached to container and measured
   $effect(() => {
     if (!isCenterDiffActive && view && container) {
@@ -650,7 +657,8 @@
               const currentText = update.state.doc.toString();
               const isDirty = currentText !== active.savedContent;
               tabsManager.markDirty(active.path, isDirty);
-              const vcsMap = computeVcsLineChanges(active.savedContent, currentText);
+              const baseText = active.gitHeadContent ?? active.savedContent;
+              const vcsMap = computeVcsLineChanges(baseText, currentText);
               queueMicrotask(() => {
                 view?.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
               });
@@ -707,6 +715,35 @@
     }, 50);
   }
 
+  async function refreshTabVcsBase(tab: TabItem | null | undefined) {
+    if (!tab || !folderPath) return;
+    const rel = getRelativePath(tab.path, folderPath);
+    const statusEntry = gitStore.statusMap.get(rel);
+    const isUntracked =
+      statusEntry &&
+      (statusEntry.worktree === 'untracked' || (statusEntry as any).status === 'untracked');
+    if (isUntracked) {
+      tab.gitHeadContent = '';
+    } else {
+      try {
+        const headText = await api.gitFileAtRef(folderPath, 'HEAD', rel);
+        if (typeof headText === 'string') {
+          tab.gitHeadContent = headText;
+        } else if (headText === null) {
+          tab.gitHeadContent = '';
+        }
+      } catch {
+        tab.gitHeadContent = null;
+      }
+    }
+
+    if (view && tabsManager.activeTab?.path === tab.path) {
+      const baseText = tab.gitHeadContent ?? tab.savedContent;
+      const vcsMap = computeVcsLineChanges(baseText, view.state.doc.toString());
+      view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+    }
+  }
+
   export async function handleSave() {
     const active = tabsManager.activeTab;
     if (!active || !view) return;
@@ -722,6 +759,7 @@
       onTabSave(active.path, currentText);
       onTabSaveProp?.(active.path, currentText);
       onStatusChange?.(`Saved ${active.name}`);
+      refreshTabVcsBase(active);
     } catch (e) {
       console.error('Failed to save file:', active.path, e);
       onStatusChange?.(`Error saving ${active.name}`);
@@ -1001,6 +1039,7 @@
     if (active) {
       active.state = initialState;
       onTabOpen(active.path, active.savedContent);
+      refreshTabVcsBase(active);
     }
 
     view = new EditorView({
@@ -1168,8 +1207,10 @@
         }
 
         // Compute VCS gutter markers
-        const vcsMap = computeVcsLineChanges(active.savedContent, active.state.doc.toString());
+        const baseText = active.gitHeadContent ?? active.savedContent;
+        const vcsMap = computeVcsLineChanges(baseText, active.state.doc.toString());
         view.dispatch({ effects: setVcsChangesEffect.of(vcsMap) });
+        refreshTabVcsBase(active);
 
         if (!findReplaceOpen) {
           view.focus();
@@ -1525,23 +1566,33 @@
 
 <style>
   :global(.cm-vcs-gutter) {
-    width: 4px !important;
+    width: 6px !important;
+    min-width: 6px !important;
     background-color: transparent !important;
     margin-right: 2px !important;
   }
+  :global(.cm-vcs-gutter .cm-gutterElement) {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 6px !important;
+    display: flex !important;
+    align-items: stretch !important;
+    justify-content: center !important;
+  }
   :global(.cm-vcs-marker) {
-    width: 3px !important;
+    width: 4px !important;
+    min-height: 22px !important;
     height: 100% !important;
-    border-radius: 1px !important;
+    border-radius: 2px !important;
   }
   :global(.cm-vcs-added) {
-    background-color: #499c54 !important;
+    background-color: #4ade80 !important;
   }
   :global(.cm-vcs-modified) {
     background-color: #3882f6 !important;
   }
   :global(.cm-vcs-deleted) {
-    background-color: #e55353 !important;
+    background-color: #f07a74 !important;
   }
   :global(.cm-inline-blame) {
     color: #6e7681 !important;

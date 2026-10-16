@@ -13,6 +13,7 @@ export interface TabItem {
   savedContent: string;
   dirty: boolean;
   state?: EditorState;
+  gitHeadContent?: string | null;
   scrollTop?: number;
   scrollLeft?: number;
   cursorHead?: number;

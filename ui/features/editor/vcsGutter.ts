@@ -13,6 +13,7 @@ export type VcsChangeKind = 'added' | 'modified' | 'deleted';
 
 /**
  * Computes line-by-line VCS status (added, modified, deleted) by comparing original vs current text.
+ * Uses a line-based LCS algorithm with common prefix/suffix optimization.
  */
 export function computeVcsLineChanges(
   originalText: string,
@@ -25,35 +26,145 @@ export function computeVcsLineChanges(
   const newLines = currentText.split('\n');
 
   // If original was completely empty
-  if (oldLines.length === 1 && oldLines[0] === '') {
+  if (originalText === '' || (oldLines.length === 1 && oldLines[0] === '')) {
     for (let i = 1; i <= newLines.length; i++) {
       result.set(i, 'added');
     }
     return result;
   }
 
-  const oldSet = new Set(oldLines);
+  // If new text is completely empty
+  if (currentText === '' || (newLines.length === 1 && newLines[0] === '')) {
+    result.set(1, 'deleted');
+    return result;
+  }
 
-  for (let i = 0; i < newLines.length; i++) {
-    const lineNum = i + 1;
-    if (i < oldLines.length) {
-      if (newLines[i] !== oldLines[i]) {
-        if (!oldSet.has(newLines[i])) {
-          result.set(lineNum, i >= oldLines.length ? 'added' : 'modified');
-        } else {
-          result.set(lineNum, 'modified');
-        }
+  // 1. Trim common prefix
+  let prefixLen = 0;
+  const maxPrefix = Math.min(oldLines.length, newLines.length);
+  while (prefixLen < maxPrefix && oldLines[prefixLen] === newLines[prefixLen]) {
+    prefixLen++;
+  }
+
+  // 2. Trim common suffix
+  let suffixLen = 0;
+  const maxSuffix = Math.min(oldLines.length - prefixLen, newLines.length - prefixLen);
+  while (
+    suffixLen < maxSuffix &&
+    oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
+  ) {
+    suffixLen++;
+  }
+
+  const midOld = oldLines.slice(prefixLen, oldLines.length - suffixLen);
+  const midNew = newLines.slice(prefixLen, newLines.length - suffixLen);
+
+  if (midOld.length === 0 && midNew.length === 0) {
+    return result;
+  }
+
+  // Fallback for massive diffs (> 2000 lines in middle) to prevent DP table blowup
+  if (midOld.length > 2000 || midNew.length > 2000 || midOld.length * midNew.length > 4_000_000) {
+    const minLen = Math.min(midOld.length, midNew.length);
+    for (let i = 0; i < minLen; i++) {
+      result.set(prefixLen + i + 1, 'modified');
+    }
+    for (let i = minLen; i < midNew.length; i++) {
+      result.set(prefixLen + i + 1, 'added');
+    }
+    if (midNew.length < midOld.length) {
+      const boundaryLine = Math.max(1, Math.min(newLines.length, prefixLen + midNew.length + 1));
+      if (!result.has(boundaryLine)) {
+        result.set(boundaryLine, 'deleted');
       }
-    } else {
-      result.set(lineNum, 'added');
+    }
+    return result;
+  }
+
+  // 3. Compute LCS DP table
+  const M = midOld.length;
+  const N = midNew.length;
+  const dp = new Int32Array((M + 1) * (N + 1));
+
+  for (let i = 0; i < M; i++) {
+    const rowOffset = (i + 1) * (N + 1);
+    const prevRowOffset = i * (N + 1);
+    const oldLine = midOld[i];
+    for (let j = 0; j < N; j++) {
+      if (oldLine === midNew[j]) {
+        dp[rowOffset + j + 1] = dp[prevRowOffset + j] + 1;
+      } else {
+        const up = dp[prevRowOffset + j + 1];
+        const left = dp[rowOffset + j];
+        dp[rowOffset + j + 1] = up > left ? up : left;
+      }
     }
   }
 
-  // If newLines is shorter than oldLines, mark deletion on the boundary line
-  if (newLines.length < oldLines.length) {
-    const boundaryLine = Math.max(1, newLines.length);
-    if (!result.has(boundaryLine)) {
-      result.set(boundaryLine, 'deleted');
+  // 4. Backtrack to find diff operations
+  type DiffOp = { type: 'keep' | 'del' | 'add'; oldLineNum: number; newLineNum: number };
+  const ops: DiffOp[] = [];
+  let i = M;
+  let j = N;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && midOld[i - 1] === midNew[j - 1]) {
+      ops.push({ type: 'keep', oldLineNum: prefixLen + i, newLineNum: prefixLen + j });
+      i--;
+      j--;
+    } else if (j > 0 && (i === 0 || dp[i * (N + 1) + (j - 1)] >= dp[(i - 1) * (N + 1) + j])) {
+      ops.push({ type: 'add', oldLineNum: prefixLen + i, newLineNum: prefixLen + j });
+      j--;
+    } else {
+      ops.push({ type: 'del', oldLineNum: prefixLen + i, newLineNum: prefixLen + j + 1 });
+      i--;
+    }
+  }
+  ops.reverse();
+
+  // 5. Group into change hunks
+  let k = 0;
+  while (k < ops.length) {
+    if (ops[k].type === 'keep') {
+      k++;
+      continue;
+    }
+
+    let delCount = 0;
+    const addedLines: number[] = [];
+    const hunkStartNewLine = ops[k].newLineNum;
+
+    while (k < ops.length && ops[k].type !== 'keep') {
+      if (ops[k].type === 'del') {
+        delCount++;
+      } else if (ops[k].type === 'add') {
+        addedLines.push(ops[k].newLineNum);
+      }
+      k++;
+    }
+
+    const addCount = addedLines.length;
+
+    if (delCount === 0 && addCount > 0) {
+      // Pure addition
+      for (const lineNum of addedLines) {
+        result.set(lineNum, 'added');
+      }
+    } else if (delCount > 0 && addCount > 0) {
+      // Replacement (both deleted and added lines in this hunk)
+      const paired = Math.min(delCount, addCount);
+      for (let p = 0; p < paired; p++) {
+        result.set(addedLines[p], 'modified');
+      }
+      for (let p = paired; p < addCount; p++) {
+        result.set(addedLines[p], 'added');
+      }
+    } else if (delCount > 0 && addCount === 0) {
+      // Pure deletion
+      const boundaryLine = Math.max(1, Math.min(newLines.length, hunkStartNewLine));
+      if (!result.has(boundaryLine)) {
+        result.set(boundaryLine, 'deleted');
+      }
     }
   }
 
