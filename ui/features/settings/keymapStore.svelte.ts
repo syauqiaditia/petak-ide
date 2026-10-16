@@ -163,7 +163,7 @@ export function keyEventToShortcut(e: KeyboardEvent): string {
     'Backspace': '⌫', 'Delete': '⌦', 'Enter': '↩', 'Tab': '⇥',
     'Escape': 'Esc', ' ': 'Space',
   };
-  parts.push(keyMap[key] || key.length === 1 ? key.toUpperCase() : (keyMap[key] || key));
+  parts.push(keyMap[key] ?? (key.length === 1 ? key.toUpperCase() : key));
 
   return parts.join('');
 }

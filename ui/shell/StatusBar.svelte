@@ -84,13 +84,17 @@
     isInstallingKls = true;
     klsProgressText = 'Downloading…';
     let unlisten: any = null;
+    let unlistenAlt: any = null;
     try {
-      unlisten = await api.onKlsInstallProgress((p) => {
+      unlisten = await api.onKotlinLsProgress((p) => {
+        klsProgressText = p.message || `${p.stage}…`;
+      });
+      unlistenAlt = await api.onKlsInstallProgress((p) => {
         klsProgressText = p.message || `${p.stage}…`;
       });
       await api.klsInstall();
       klsProgressText = 'Restarting LSP…';
-      await toolchainStore.refresh();
+      await toolchainStore.refresh(gitStore.root || runStore.root || '');
       await api.lspRestart();
       toolchainStore.showToast('Kotlin Language Server installed and ready!');
     } catch (err: any) {
@@ -99,6 +103,7 @@
       isInstallingKls = false;
       klsProgressText = '';
       if (unlisten) unlisten();
+      if (unlistenAlt) unlistenAlt();
     }
   }
 </script>

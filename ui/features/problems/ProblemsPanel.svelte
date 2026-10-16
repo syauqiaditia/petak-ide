@@ -1,6 +1,7 @@
 <script lang="ts">
   import { diagnosticsStore, type FileDiagnostic } from '../editor/lsp/diagnostics.svelte';
   import { toolchainStore } from '../toolchain/toolchainStore.svelte';
+  import { settingsStore } from '../settings/settingsStore.svelte';
 
   let {
     onSelectProblem = (_path: string, _line: number, _col: number) => {},
@@ -178,7 +179,10 @@
                 <div class="problem-action">
                   <button
                     class="open-settings-btn"
-                    onclick={() => (toolchainStore.settingsModalOpen = true)}
+                    onclick={() => {
+                      toolchainStore.settingsModalOpen = true;
+                      settingsStore.open('toolchains');
+                    }}
                   >
                     Open Settings
                   </button>

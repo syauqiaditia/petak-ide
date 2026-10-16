@@ -1,4 +1,5 @@
 import { api, type Toolchain, type ToolchainConfig, type LspStatusPayload } from '../../lib/api';
+import { settingsStore } from '../settings/settingsStore.svelte';
 
 export interface LspState {
   lang: string;
@@ -50,6 +51,7 @@ class ToolchainStore {
         const reasonStr = payload.reason || `${payload.lang} LSP failed to start`;
         this.showToast(`${payload.lang.toUpperCase()} LSP error: ${reasonStr}`, 'Open Settings', () => {
           this.settingsModalOpen = true;
+          settingsStore.open('toolchains');
         });
       }
     } else if (payload.state === 'ready') {
