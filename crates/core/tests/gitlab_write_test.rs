@@ -95,6 +95,7 @@ fn test_write_endpoints_mock_success() {
         assignee_ids: Some(vec![101]),
         reviewer_ids: Some(vec![202]),
         remove_source_branch: Some(true),
+        squash: Some(true),
     };
     let created_mr = client
         .create_merge_request("1234", &create_params)
