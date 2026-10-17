@@ -745,6 +745,7 @@ impl SlotManager {
         let slot_id_for_req = slot_id.clone();
         let listeners_for_req = Arc::clone(&listeners_ref);
         let slot_role_scope = config.role_scope();
+        let slots_ref = Arc::clone(&self.slots);
 
         let client = AcpClient::spawn_with_handler(
             &cmd_str,
@@ -778,7 +779,26 @@ impl SlotManager {
                 move |method: &str, params: Value| -> Option<Result<Value, (i64, String)>> {
                     match method {
                         "session/request_permission" => {
-                            let mode = PermissionMode::from_str_opt(&slot_permission_str);
+                            let (mode, active_role_scope) = {
+                                if let Ok(guard) = slots_ref.read() {
+                                    if let Some(s) = guard.get(&slot_id_for_req) {
+                                        (
+                                            PermissionMode::from_str_opt(&s.config.permission),
+                                            s.config.role_scope(),
+                                        )
+                                    } else {
+                                        (
+                                            PermissionMode::from_str_opt(&slot_permission_str),
+                                            slot_role_scope.clone(),
+                                        )
+                                    }
+                                } else {
+                                    (
+                                        PermissionMode::from_str_opt(&slot_permission_str),
+                                        slot_role_scope.clone(),
+                                    )
+                                }
+                            };
                             let tool_call = params
                                 .get("toolCall")
                                 .cloned()
@@ -795,7 +815,7 @@ impl SlotManager {
                                 &sess_id,
                                 mode,
                                 &tool_call,
-                                slot_role_scope.as_ref(),
+                                active_role_scope.as_ref(),
                                 Duration::from_secs(120),
                                 move |req| {
                                     let listeners = {
@@ -812,10 +832,12 @@ impl SlotManager {
                                 },
                             ) {
                                 Ok(true) => Some(Ok(serde_json::json!({
-                                    "outcome": { "outcome": "approved" }
+                                    "outcome": { "outcome": "approved" },
+                                    "granted": true
                                 }))),
                                 Ok(false) => Some(Ok(serde_json::json!({
-                                    "outcome": { "outcome": "denied" }
+                                    "outcome": { "outcome": "denied" },
+                                    "granted": false
                                 }))),
                                 Err(e) => Some(Err((-32003, e))),
                             }
