@@ -197,9 +197,14 @@ pub fn extract_tool_name(tool_call: &Value) -> Option<String> {
         return Some(s.to_string());
     }
 
-    if let Some(name) = tool_call.get("name").and_then(|v| v.as_str()) {
-        return Some(name.to_string());
+    // 1. Check rawInput / raw_input (ACP tool_call format from Hermes / Claude / Zed)
+    if let Some(raw) = tool_call.get("rawInput").or_else(|| tool_call.get("raw_input")) {
+        if let Some(name) = extract_tool_name(raw) {
+            return Some(name);
+        }
     }
+
+    // 2. Direct tool identifier fields
     if let Some(tool) = tool_call.get("tool").and_then(|v| v.as_str()) {
         return Some(tool.to_string());
     }
@@ -209,15 +214,34 @@ pub fn extract_tool_name(tool_call: &Value) -> Option<String> {
     if let Some(tool) = tool_call.get("tool_name").and_then(|v| v.as_str()) {
         return Some(tool.to_string());
     }
+    if let Some(name) = tool_call.get("name").and_then(|v| v.as_str()) {
+        return Some(name.to_string());
+    }
     if let Some(m) = tool_call.get("method").and_then(|v| v.as_str()) {
         return Some(m.to_string());
     }
-    if let Some(title) = tool_call.get("title").and_then(|v| v.as_str()) {
-        let trimmed = title.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
+
+    // 3. ACP kind discriminator
+    if let Some(kind) = tool_call.get("kind").and_then(|v| v.as_str()) {
+        if kind == "edit" {
+            return Some("write_file".to_string());
+        } else if kind == "execute" {
+            return Some("terminal".to_string());
         }
     }
+
+    // 4. ACP title / prefix heuristics
+    if let Some(title) = tool_call.get("title").and_then(|v| v.as_str()) {
+        let trimmed = title.trim();
+        if trimmed.starts_with("Approve edit:") || trimmed.starts_with("edit-approval-") {
+            return Some("write_file".to_string());
+        }
+        if trimmed.starts_with("perm-check-") {
+            return Some("terminal".to_string());
+        }
+    }
+
+    // 5. Command detection in arguments / params
     if let Some(args) = tool_call.get("arguments") {
         if let Some(cmd) = args.get("command").and_then(|v| v.as_str()) {
             if !cmd.trim().is_empty() {
@@ -235,6 +259,14 @@ pub fn extract_tool_name(tool_call: &Value) -> Option<String> {
     if let Some(cmd) = tool_call.get("command").and_then(|v| v.as_str()) {
         if !cmd.trim().is_empty() {
             return Some("terminal".to_string());
+        }
+    }
+
+    // 6. Fallback to title
+    if let Some(title) = tool_call.get("title").and_then(|v| v.as_str()) {
+        let trimmed = title.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
         }
     }
 

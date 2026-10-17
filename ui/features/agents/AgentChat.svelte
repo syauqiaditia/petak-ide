@@ -1086,12 +1086,12 @@
           <div class="perm-content">
             <div class="perm-row">
               <span class="perm-label">Alat/Perintah:</span>
-              <code class="perm-val">{pendingPerm.toolCall?.name || 'terminal'}</code>
+              <code class="perm-val">{pendingPerm.toolCall?.title || pendingPerm.toolCall?.rawInput?.tool || pendingPerm.toolCall?.raw_input?.tool || pendingPerm.toolCall?.name || 'terminal'}</code>
             </div>
-            {#if pendingPerm.toolCall?.command || pendingPerm.toolCall?.args?.command}
+            {#if pendingPerm.toolCall?.command || pendingPerm.toolCall?.args?.command || pendingPerm.toolCall?.rawInput?.arguments?.path || pendingPerm.toolCall?.raw_input?.arguments?.path}
               <div class="perm-row">
-                <span class="perm-label">Command:</span>
-                <code class="perm-code">{pendingPerm.toolCall?.command || pendingPerm.toolCall?.args?.command}</code>
+                <span class="perm-label">Target/Command:</span>
+                <code class="perm-code">{pendingPerm.toolCall?.command || pendingPerm.toolCall?.args?.command || pendingPerm.toolCall?.rawInput?.arguments?.path || pendingPerm.toolCall?.raw_input?.arguments?.path}</code>
               </div>
             {/if}
             {#if pendingPerm.toolCall?.reason}

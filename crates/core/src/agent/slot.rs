@@ -822,6 +822,29 @@ impl SlotManager {
                                 .unwrap_or("")
                                 .to_string();
 
+                            let options = params.get("options").and_then(|v| v.as_array());
+                            let allow_opt_id = options.and_then(|opts| {
+                                opts.iter().find_map(|o| {
+                                    let id = o.get("optionId").or_else(|| o.get("option_id")).and_then(|s| s.as_str())?;
+                                    if id.starts_with("allow") {
+                                        Some(id.to_string())
+                                    } else {
+                                        None
+                                    }
+                                })
+                            }).unwrap_or_else(|| "allow_once".to_string());
+
+                            let deny_opt_id = options.and_then(|opts| {
+                                opts.iter().find_map(|o| {
+                                    let id = o.get("optionId").or_else(|| o.get("option_id")).and_then(|s| s.as_str())?;
+                                    if id.starts_with("deny") || id.starts_with("reject") {
+                                        Some(id.to_string())
+                                    } else {
+                                        None
+                                    }
+                                })
+                            }).unwrap_or_else(|| "deny".to_string());
+
                             let listeners_for_ask = Arc::clone(&listeners_for_req);
                             match perm_mgr.request_permission_with_role_cb(
                                 &slot_id_for_req,
@@ -844,14 +867,40 @@ impl SlotManager {
                                     }
                                 },
                             ) {
-                                Ok(true) => Some(Ok(serde_json::json!({
-                                    "outcome": { "outcome": "approved" },
-                                    "granted": true
-                                }))),
-                                Ok(false) => Some(Ok(serde_json::json!({
-                                    "outcome": { "outcome": "denied" },
-                                    "granted": false
-                                }))),
+                                Ok(true) => {
+                                    if options.is_some() {
+                                        Some(Ok(serde_json::json!({
+                                            "outcome": {
+                                                "outcome": "selected",
+                                                "optionId": allow_opt_id,
+                                                "option_id": allow_opt_id,
+                                            },
+                                            "granted": true
+                                        })))
+                                    } else {
+                                        Some(Ok(serde_json::json!({
+                                            "outcome": { "outcome": "approved" },
+                                            "granted": true
+                                        })))
+                                    }
+                                }
+                                Ok(false) => {
+                                    if options.is_some() {
+                                        Some(Ok(serde_json::json!({
+                                            "outcome": {
+                                                "outcome": "selected",
+                                                "optionId": deny_opt_id,
+                                                "option_id": deny_opt_id,
+                                            },
+                                            "granted": false
+                                        })))
+                                    } else {
+                                        Some(Ok(serde_json::json!({
+                                            "outcome": { "outcome": "denied" },
+                                            "granted": false
+                                        })))
+                                    }
+                                }
                                 Err(e) => Some(Err((-32003, e))),
                             }
                         }

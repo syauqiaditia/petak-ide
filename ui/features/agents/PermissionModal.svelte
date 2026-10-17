@@ -19,14 +19,20 @@
   let toolName = $derived(
     activePerm?.toolCall?.name ||
     activePerm?.toolCall?.tool ||
+    activePerm?.toolCall?.rawInput?.tool ||
+    activePerm?.toolCall?.raw_input?.tool ||
+    activePerm?.toolCall?.title ||
     (activePerm?.toolCall?.command ? 'terminal' : 'Alat Sistem')
   );
 
   let commandText = $derived(
     activePerm?.toolCall?.command ||
     activePerm?.toolCall?.arguments?.command ||
+    activePerm?.toolCall?.rawInput?.arguments?.path ||
+    activePerm?.toolCall?.raw_input?.arguments?.path ||
     activePerm?.toolCall?.params?.command ||
     activePerm?.toolCall?.args?.command ||
+    activePerm?.toolCall?.title ||
     (activePerm?.toolCall?.arguments
       ? typeof activePerm.toolCall.arguments === 'string'
         ? activePerm.toolCall.arguments
