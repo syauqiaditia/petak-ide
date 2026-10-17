@@ -23,6 +23,7 @@ import type {
   PrunedContextResult,
   MemorySnippet,
   FileReference,
+  UploadedFileContent,
 } from './types';
 import {
   applyDisciplineDirectives,
@@ -519,9 +520,16 @@ class AgentsStore {
       prunedContext?: PrunedContextResult | null;
       domainMemorySnippets?: MemorySnippet[];
       fileReferences?: FileReference[];
+      uploadedFiles?: UploadedFileContent[];
     }
   ) {
-    if ((!rawPrompt.trim() && (!options?.fileReferences || options.fileReferences.length === 0)) || !this.activeSlotId) return;
+    if (
+      (!rawPrompt.trim() &&
+        (!options?.fileReferences || options.fileReferences.length === 0) &&
+        (!options?.uploadedFiles || options.uploadedFiles.length === 0)) ||
+      !this.activeSlotId
+    )
+      return;
     const slotId = this.activeSlotId;
     const dispatchSessionId = this.activeSessionId;
     const currentSessionId = dispatchSessionId;
@@ -576,6 +584,15 @@ class AgentsStore {
         .join('\n');
       refPrefix += `[REFERENSI BERKAS:\n${refList}\n]\n\n`;
     }
+    if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
+      for (const uf of options.uploadedFiles) {
+        if (uf.text && uf.text.trim()) {
+          refPrefix += `[LAMPIRAN BERKAS: ${uf.name} (${uf.path})]\n${uf.text.trim()}\n[/LAMPIRAN BERKAS]\n\n`;
+        } else {
+          refPrefix += `[LAMPIRAN BERKAS: ${uf.name} (${uf.path}) (berkas biner / tanpa teks)]\n\n`;
+        }
+      }
+    }
 
     const fullPromptText = `${refPrefix}${rawPrompt.trim()}`;
     this.lastPromptText = rawPrompt.trim();
@@ -593,15 +610,20 @@ class AgentsStore {
       prunedContextSnippet
     );
 
+    const userMetadata: Record<string, any> = {};
+    if (options?.fileReferences && options.fileReferences.length > 0) {
+      userMetadata.fileReferences = options.fileReferences;
+    }
+    if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
+      userMetadata.uploadedFiles = options.uploadedFiles;
+    }
+
     const userMsg: ChatMessage = {
       id: `usr-${Date.now()}`,
       timestamp: Date.now(),
       role: 'user',
       content: rawPrompt.trim(),
-      metadata:
-        options?.fileReferences && options.fileReferences.length > 0
-          ? { fileReferences: options.fileReferences }
-          : undefined,
+      metadata: Object.keys(userMetadata).length > 0 ? userMetadata : undefined,
     };
 
     const targetSession = this.getOrCreateSession(currentSessionId, slotId);

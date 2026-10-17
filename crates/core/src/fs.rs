@@ -68,6 +68,113 @@ pub fn read_file_base64<P: AsRef<Path>>(path: P) -> io::Result<String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UploadedFileContent {
+    pub path: String,
+    pub name: String,
+    pub text: String,
+    pub size_bytes: u64,
+    pub is_binary: bool,
+}
+
+pub fn extract_file_content<P: AsRef<Path>>(path: P) -> io::Result<UploadedFileContent> {
+    let p = path.as_ref();
+    let name = p
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file".to_string());
+    let path_str = p.to_string_lossy().to_string();
+    let metadata = fs::metadata(p)?;
+    let size_bytes = metadata.len();
+
+    let ext = p
+        .extension()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+
+    if ext == "pdf" {
+        #[cfg(target_os = "macos")]
+        {
+            let script = "import Foundation\nimport PDFKit\nguard CommandLine.arguments.count > 1 else { exit(1) }\nif let d = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1])) {\n    if let s = d.string { print(s) }\n}";
+            if let Ok(output) = std::process::Command::new("swift")
+                .arg("-e")
+                .arg(script)
+                .arg(&path_str)
+                .output()
+            {
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    return Ok(UploadedFileContent {
+                        path: path_str,
+                        name,
+                        text,
+                        size_bytes,
+                        is_binary: false,
+                    });
+                }
+            }
+        }
+        if let Ok(output) = std::process::Command::new("pdftotext")
+            .arg(&path_str)
+            .arg("-")
+            .output()
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok(UploadedFileContent {
+                    path: path_str,
+                    name,
+                    text,
+                    size_bytes,
+                    is_binary: false,
+                });
+            }
+        }
+    }
+
+    if ext == "docx" || ext == "doc" || ext == "rtf" || ext == "odt" {
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(output) = std::process::Command::new("textutil")
+                .arg("-convert")
+                .arg("txt")
+                .arg(&path_str)
+                .arg("-stdout")
+                .output()
+            {
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    return Ok(UploadedFileContent {
+                        path: path_str,
+                        name,
+                        text,
+                        size_bytes,
+                        is_binary: false,
+                    });
+                }
+            }
+        }
+    }
+
+    // Try reading as utf8 text
+    match fs::read_to_string(p) {
+        Ok(text) => Ok(UploadedFileContent {
+            path: path_str,
+            name,
+            text,
+            size_bytes,
+            is_binary: false,
+        }),
+        Err(_) => Ok(UploadedFileContent {
+            path: path_str,
+            name,
+            text: String::new(),
+            size_bytes,
+            is_binary: true,
+        }),
+    }
+}
+
 pub fn save_file<P: AsRef<Path>>(path: P, content: &str) -> io::Result<()> {
     save_file_bytes(path, content.as_bytes())
 }
@@ -285,5 +392,30 @@ mod tests {
             .decode(&encoded)
             .unwrap();
         assert_eq!(decoded, sample_bytes);
+    }
+
+    #[test]
+    fn test_extract_file_content_text_and_binary() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        
+        // Text file
+        let text_path = temp_dir.path().join("sample.dart");
+        let sample_code = "void main() { print('hello'); }";
+        fs::write(&text_path, sample_code).unwrap();
+
+        let extracted = extract_file_content(&text_path).unwrap();
+        assert_eq!(extracted.name, "sample.dart");
+        assert_eq!(extracted.text, sample_code);
+        assert!(!extracted.is_binary);
+        assert_eq!(extracted.size_bytes, sample_code.len() as u64);
+
+        // Binary file
+        let bin_path = temp_dir.path().join("blob.bin");
+        fs::write(&bin_path, vec![0x00, 0xFF, 0x80, 0xFE]).unwrap();
+
+        let extracted_bin = extract_file_content(&bin_path).unwrap();
+        assert_eq!(extracted_bin.name, "blob.bin");
+        assert!(extracted_bin.is_binary);
+        assert_eq!(extracted_bin.text, "");
     }
 }

@@ -149,6 +149,8 @@ pub fn run() {
             commands::save_file,
             commands::watch_root,
             commands::pick_folder,
+            commands::pick_files,
+            commands::extract_file_content,
             commands::git_branch,
             commands::git_status,
             commands::git_diff,

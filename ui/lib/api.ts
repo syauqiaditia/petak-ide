@@ -64,6 +64,14 @@ export type {
 };
 export type { MirrorStatus, InputEvent, MirrorInfo };
 
+export interface UploadedFileContent {
+  path: string;
+  name: string;
+  text: string;
+  size_bytes: number;
+  is_binary: boolean;
+}
+
 export type { UnlistenFn };
 
 export interface UpdateCheckResult {
@@ -624,6 +632,14 @@ export const api = {
 
   pickFolder(): Promise<string | null> {
     return invoke<string | null>('pick_folder');
+  },
+
+  pickFiles(): Promise<string[]> {
+    return invoke<string[]>('pick_files');
+  },
+
+  extractFileContent(path: string): Promise<UploadedFileContent> {
+    return invoke<UploadedFileContent>('extract_file_content', { path });
   },
 
   gitBranch(root: string): Promise<string | null> {

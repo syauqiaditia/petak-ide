@@ -25,6 +25,7 @@
     SelfHealStatus,
     SelfHealResult,
     SelfHealPhase,
+    UploadedFileContent,
   } from './types';
   import { settingsStore } from '../settings/settingsStore.svelte';
   import { mcpStore, formatMcpPillLabel } from '../settings/mcpStore.svelte';
@@ -43,6 +44,11 @@
 
   let promptText = $state('');
   let fileReferences = $state<FileReference[]>([]);
+  let uploadedFiles = $state<UploadedFileContent[]>([]);
+  let isDraggingFiles = $state(false);
+  let fileInputEl: HTMLInputElement | null = $state(null);
+  let chatWrapperEl: HTMLDivElement | null = $state(null);
+  let dragCounter = 0;
   let userPinnedToBottom = $state(true);
   let textareaEl: HTMLTextAreaElement | null = $state(null);
   let messagesContainerEl: HTMLDivElement | null = $state(null);
@@ -78,6 +84,132 @@
     fileReferences = fileReferences.filter((_, i) => i !== index);
     agentsStore.activeFileReferences = [...fileReferences];
     agentsStore.persistActiveChatHistory();
+  }
+
+  function formatBytes(bytes: number): string {
+    if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function getFileTypeIcon(name: string): string {
+    const ext = name.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') return '📕';
+    if (ext === 'docx' || ext === 'doc') return '📘';
+    if (ext === 'dart') return '🎯';
+    if (ext === 'md' || ext === 'txt') return '📝';
+    if (ext === 'json' || ext === 'yaml' || ext === 'yml' || ext === 'toml') return '⚙️';
+    if (ext === 'kt' || ext === 'swift' || ext === 'ts' || ext === 'js' || ext === 'rs') return '⚡';
+    return '📄';
+  }
+
+  export function addUploadedFile(content: UploadedFileContent) {
+    const exists = uploadedFiles.some((f) => f.path === content.path && f.name === content.name);
+    if (!exists) {
+      uploadedFiles = [...uploadedFiles, content];
+    }
+  }
+
+  export function removeUploadedFile(index: number) {
+    uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
+  }
+
+  async function handlePickFiles() {
+    try {
+      const paths = await api.pickFiles();
+      if (paths && paths.length > 0) {
+        for (const p of paths) {
+          try {
+            const extracted = await api.extractFileContent(p);
+            addUploadedFile(extracted);
+          } catch (err) {
+            console.warn('Failed to extract file content for path:', p, err);
+          }
+        }
+        return;
+      }
+    } catch {
+      fileInputEl?.click();
+    }
+  }
+
+  async function handleFileInputChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const files = input.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      await readHtml5File(files[i]);
+    }
+    input.value = '';
+  }
+
+  async function readHtml5File(file: File) {
+    const path = (file as any).path || file.name;
+    try {
+      if (path && (file as any).path) {
+        const extracted = await api.extractFileContent(path);
+        addUploadedFile(extracted);
+        return;
+      }
+    } catch {
+      // Fallback to text reading
+    }
+
+    try {
+      const text = await file.text();
+      addUploadedFile({
+        path: file.name,
+        name: file.name,
+        text,
+        size_bytes: file.size,
+        is_binary: false,
+      });
+    } catch {
+      addUploadedFile({
+        path: file.name,
+        name: file.name,
+        text: '',
+        size_bytes: file.size,
+        is_binary: true,
+      });
+    }
+  }
+
+  function handleDragEnter(e: DragEvent) {
+    e.preventDefault();
+    dragCounter++;
+    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+      isDraggingFiles = true;
+    }
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      isDraggingFiles = false;
+    }
+  }
+
+  async function handleFileDrop(e: DragEvent) {
+    e.preventDefault();
+    dragCounter = 0;
+    isDraggingFiles = false;
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      await readHtml5File(files[i]);
+    }
   }
 
   export async function openReferencedFile(filePath: string, line?: number) {
@@ -463,10 +595,16 @@
     if (e.key === 'Backspace') {
       const isEmpty = !promptText || promptText.length === 0;
       const isAtStart = textareaEl?.selectionStart === 0 && textareaEl?.selectionEnd === 0;
-      if (isEmpty && isAtStart && fileReferences.length > 0) {
-        e.preventDefault();
-        removeFileReference(fileReferences.length - 1);
-        return;
+      if (isEmpty && isAtStart) {
+        if (uploadedFiles.length > 0) {
+          e.preventDefault();
+          removeUploadedFile(uploadedFiles.length - 1);
+          return;
+        } else if (fileReferences.length > 0) {
+          e.preventDefault();
+          removeFileReference(fileReferences.length - 1);
+          return;
+        }
       }
     }
 
@@ -477,7 +615,7 @@
   }
 
   async function handleSubmit() {
-    if (!promptText.trim() && fileReferences.length === 0) return;
+    if (!promptText.trim() && fileReferences.length === 0 && uploadedFiles.length === 0) return;
     if (isBusy || isSlotBusyWithOther) return;
 
     userPinnedToBottom = true;
@@ -485,16 +623,22 @@
 
     const text = promptText.trim();
     const refsSnapshot = [...fileReferences];
+    const uploadedSnapshot = [...uploadedFiles];
 
     // Prepare extra context payload without polluting visible user message
     const options: {
       prunedContext?: PrunedContextResult | null;
       domainMemorySnippets?: MemorySnippet[];
       fileReferences?: FileReference[];
+      uploadedFiles?: UploadedFileContent[];
     } = {};
 
     if (refsSnapshot.length > 0) {
       options.fileReferences = refsSnapshot;
+    }
+
+    if (uploadedSnapshot.length > 0) {
+      options.uploadedFiles = uploadedSnapshot;
     }
 
     if (prunedContext && settingsStore.lspContextPruning) {
@@ -507,6 +651,7 @@
 
     promptText = '';
     fileReferences = [];
+    uploadedFiles = [];
     agentsStore.activeFileReferences = [];
     agentsStore.persistActiveChatHistory();
     attachedContextLabel = null;
@@ -619,7 +764,33 @@
   }
 </script>
 
-<div class="agent-chat-wrapper">
+<div
+  class="agent-chat-wrapper"
+  bind:this={chatWrapperEl}
+  ondragenter={handleDragEnter}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleFileDrop}
+  role="region"
+  aria-label="Agent Chat"
+>
+  {#if isDraggingFiles}
+    <div class="drag-drop-overlay" role="presentation">
+      <div class="drop-card">
+        <span class="drop-icon">📥</span>
+        <span class="drop-title">Drop berkas untuk dilampirkan</span>
+        <span class="drop-subtitle">PDF, DOCX, Dart, MD, TXT, JSON, dll.</span>
+      </div>
+    </div>
+  {/if}
+
+  <input
+    type="file"
+    multiple
+    bind:this={fileInputEl}
+    onchange={handleFileInputChange}
+    style="display: none;"
+  />
   <!-- Messages Scroll Area -->
   <div class="chat-messages" bind:this={messagesContainerEl} onscroll={handleScroll} onclick={handleContainerClick}>
     {#if messages.length === 0 && !agentsStore.isStreaming}
@@ -705,6 +876,19 @@
                   <span class="pill-icon">{ref.isDir ? '📁' : '📄'}</span>
                   <span class="pill-name">{ref.name || ref.path.split('/').pop()}{ref.line ? `:${ref.line}` : ''}</span>
                 </button>
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Attached Uploaded Files Badges if present in metadata -->
+          {#if msg.metadata?.uploadedFiles && msg.metadata.uploadedFiles.length > 0}
+            <div class="bubble-file-pills uploaded-pills">
+              {#each msg.metadata.uploadedFiles as uf}
+                <div class="bubble-file-pill uploaded-pill" title="{uf.path} ({formatBytes(uf.size_bytes)})">
+                  <span class="pill-icon">{getFileTypeIcon(uf.name)}</span>
+                  <span class="pill-name">{uf.name}</span>
+                  <span class="pill-size">({formatBytes(uf.size_bytes)})</span>
+                </div>
               {/each}
             </div>
           {/if}
@@ -1109,6 +1293,27 @@
       </div>
     {/if}
 
+    <!-- Uploaded File Chips -->
+    {#if uploadedFiles.length > 0}
+      <div class="composer-file-chips uploaded-chips">
+        {#each uploadedFiles as uf, idx (uf.path + idx)}
+          <div class="composer-file-chip uploaded-chip" title="{uf.path} ({formatBytes(uf.size_bytes)})">
+            <span class="chip-icon">{getFileTypeIcon(uf.name)}</span>
+            <span class="chip-name">{uf.name}</span>
+            <span class="chip-size">({formatBytes(uf.size_bytes)})</span>
+            <button
+              type="button"
+              class="chip-remove-btn"
+              onclick={() => removeUploadedFile(idx)}
+              title="Hapus lampiran berkas"
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
     <!-- Slot busy warning banner when bot is processing another session -->
     {#if isSlotBusyWithOther}
       <div class="slot-busy-banner" role="status">
@@ -1317,6 +1522,18 @@
       </div>
 
       <div class="pills-right">
+        <!-- Attach File Button -->
+        <button
+          type="button"
+          class="attach-file-btn"
+          onclick={handlePickFiles}
+          disabled={isBusy || isSlotBusyWithOther}
+          title="Lampirkan berkas (PDF, DOCX, Dart, MD, TXT, dll.)"
+          aria-label="Lampirkan berkas"
+        >
+          📎
+        </button>
+
         {#if isSessionStreaming}
           <button type="button" class="cancel-prompt-btn" onclick={() => agentsStore.cancelActivePrompt()} title="Batalkan prompt aktif">
             ⏹ Stop
@@ -1326,7 +1543,7 @@
             type="button"
             class="send-prompt-btn"
             onclick={handleSubmit}
-            disabled={(!promptText.trim() && fileReferences.length === 0) || isSlotBusyWithOther}
+            disabled={(!promptText.trim() && fileReferences.length === 0 && uploadedFiles.length === 0) || isSlotBusyWithOther}
             title="Kirim instruksi ke agen"
           >
             ➤
@@ -1339,6 +1556,7 @@
 
 <style>
   .agent-chat-wrapper {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -3105,5 +3323,99 @@
 
   .slot-busy-text {
     flex: 1;
+  }
+
+  /* Uploaded File Chips and Badges */
+  .composer-file-chip.uploaded-chip {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.3);
+    color: #d8b4fe;
+  }
+
+  .composer-file-chip .chip-size {
+    font-size: 9.5px;
+    opacity: 0.7;
+    margin-left: 2px;
+  }
+
+  .bubble-file-pill.uploaded-pill {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.3);
+    color: #d8b4fe;
+    cursor: default;
+  }
+
+  .bubble-file-pill.uploaded-pill:hover {
+    background: rgba(168, 85, 247, 0.18);
+    border-color: rgba(168, 85, 247, 0.4);
+    color: #e9d5ff;
+  }
+
+  .bubble-file-pill .pill-size {
+    font-size: 9.5px;
+    opacity: 0.7;
+    margin-left: 2px;
+  }
+
+  .attach-file-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+
+  .attach-file-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e2e8f0;
+  }
+
+  .attach-file-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Drag and drop overlay */
+  .drag-drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed #a855f7;
+    border-radius: 8px;
+    pointer-events: none;
+  }
+
+  .drop-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .drop-icon {
+    font-size: 40px;
+  }
+
+  .drop-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+
+  .drop-subtitle {
+    font-size: 12px;
+    color: #94a3b8;
   }
 </style>

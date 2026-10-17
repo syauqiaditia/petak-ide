@@ -100,6 +100,14 @@ export interface FileReference {
   isDir?: boolean;
 }
 
+export interface UploadedFileContent {
+  path: string;
+  name: string;
+  text: string;
+  size_bytes: number;
+  is_binary: boolean;
+}
+
 export interface ToolCallData {
   name: string;
   arguments?: any;

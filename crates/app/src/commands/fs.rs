@@ -213,6 +213,27 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String
 
 
 #[tauri::command]
+pub async fn pick_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let files = app.dialog().file().blocking_pick_files();
+    Ok(files
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.to_string())
+        .collect())
+}
+
+
+#[tauri::command]
+pub async fn extract_file_content(path: String) -> Result<petak_core::fs::UploadedFileContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::fs::extract_file_content(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+
+#[tauri::command]
 pub async fn index_build(
     state: tauri::State<'_, Mutex<Option<petak_core::search::FileIndex>>>,
     root: String,

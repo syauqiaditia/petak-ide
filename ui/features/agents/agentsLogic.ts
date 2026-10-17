@@ -23,9 +23,10 @@ import type {
   ChatSessionMeta,
   ChatSessionData,
   FileReference,
+  UploadedFileContent,
   ToolCallData,
 } from './types';
-export type { FileReference, ToolCallData, ChatSessionData };
+export type { FileReference, UploadedFileContent, ToolCallData, ChatSessionData };
 import type { GitDiffFile, GitHunk, GitDiffLine } from '../git/types';
 import { escapeHtml, sanitizeUrl } from '../editor/lsp/markdown.ts';
 
@@ -1607,6 +1608,7 @@ export interface CleanPromptEnvelope {
   displayContent: string;
   formattedPrompt: string;
   fileReferences?: FileReference[];
+  uploadedFiles?: UploadedFileContent[];
   metadata?: Record<string, any>;
 }
 
@@ -1622,6 +1624,7 @@ export function buildCleanPromptEnvelope(
     prunedContextInjection?: string;
     referencePrefix?: string;
     fileReferences?: FileReference[];
+    uploadedFiles?: UploadedFileContent[];
   }
 ): CleanPromptEnvelope {
   const cleanInput = (userInput || '').trim();
@@ -1632,6 +1635,16 @@ export function buildCleanPromptEnvelope(
       return `- ${loc}`;
     });
     refPrefix = `${refPrefix}[REFERENSI BERKAS:\n${refLines.join('\n')}\n]\n\n`;
+  }
+  if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
+    const fileBlocks = options.uploadedFiles.map((uf) => {
+      if (uf.text && uf.text.trim()) {
+        return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path})]\n${uf.text.trim()}\n[/LAMPIRAN BERKAS]`;
+      } else {
+        return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path}) (berkas biner / tanpa teks)]`;
+      }
+    });
+    refPrefix = `${refPrefix}${fileBlocks.join('\n\n')}\n\n`;
   }
   const fullPromptText = `${refPrefix}${cleanInput}`;
   const formattedPrompt = applyDisciplineDirectives(
@@ -1644,14 +1657,21 @@ export function buildCleanPromptEnvelope(
     options?.domainMemoryInjection || '',
     options?.prunedContextInjection || ''
   );
+
+  const metadata: Record<string, any> = {};
+  if (options?.fileReferences && options.fileReferences.length > 0) {
+    metadata.fileReferences = options.fileReferences;
+  }
+  if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
+    metadata.uploadedFiles = options.uploadedFiles;
+  }
+
   return {
     displayContent: cleanInput,
     formattedPrompt,
     fileReferences: options?.fileReferences,
-    metadata:
-      options?.fileReferences && options.fileReferences.length > 0
-        ? { fileReferences: options.fileReferences }
-        : undefined,
+    uploadedFiles: options?.uploadedFiles,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   };
 }
 
