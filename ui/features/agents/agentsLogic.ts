@@ -1151,13 +1151,20 @@ export function normalizeRole(role?: string | null): string {
  */
 export function inferRoleFromSlot(slot?: Partial<SlotConfig> | null): string {
   if (!slot) return 'custom';
-  if (slot.role) return normalizeRole(slot.role);
+  if (slot.role) {
+    const norm = normalizeRole(slot.role);
+    if (norm === 'custom' && (slot.id === 'default' || slot.label?.toLowerCase().includes('petak'))) {
+      return 'senior';
+    }
+    return norm;
+  }
   const candidate = `${slot.hermesProfile || ''} ${slot.id || ''} ${slot.label || ''}`.toLowerCase();
   if (candidate.includes('senior2') || candidate.includes('senior 2') || candidate.includes('senior-2')) return 'senior2';
   if (candidate.includes('senior')) return 'senior';
   if (candidate.includes('manager')) return 'manager';
   if (candidate.includes('techlead') || candidate.includes('tech lead')) return 'techlead';
   if (candidate.includes('reviewer')) return 'reviewer';
+  if (candidate.includes('default') || candidate.includes('petak')) return 'senior';
   return 'custom';
 }
 

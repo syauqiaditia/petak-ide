@@ -74,12 +74,25 @@ impl SlotConfig {
     }
 
     pub fn role_scope(&self) -> Option<super::policy::RoleToolScope> {
-        if let Some(ref r) = self.role {
-            Some(super::policy::RoleToolScope::for_role(r, self.custom_whitelist.clone()))
+        let role_name = self.role.as_deref().unwrap_or("").trim().to_lowercase();
+        if role_name == "senior"
+            || role_name == "senior2"
+            || role_name == "manager"
+            || role_name == "techlead"
+            || role_name == "reviewer"
+        {
+            Some(super::policy::RoleToolScope::for_role(&role_name, self.custom_whitelist.clone()))
         } else if self.custom_whitelist.is_some() {
             Some(super::policy::RoleToolScope::for_role("custom", self.custom_whitelist.clone()))
-        } else {
+        } else if self.id == "default" || self.label.to_lowercase().contains("petak") {
+            // Default Petak Agent has senior developer role scope (can read/write/terminal)
+            Some(super::policy::RoleToolScope::for_role("senior", None))
+        } else if role_name == "custom" || role_name.is_empty() {
+            // A custom slot without a custom whitelist is not restricted by role;
+            // permission mode (Ask / Auto / Read) governs execution.
             None
+        } else {
+            Some(super::policy::RoleToolScope::for_role(&role_name, None))
         }
     }
 
@@ -310,7 +323,7 @@ impl SlotManager {
                         fallback_model: Some("gemini-2.5-pro".to_string()),
                         permission: "ask".to_string(),
                         cwd: ".".to_string(),
-                        role: Some("custom".to_string()),
+                        role: Some("senior".to_string()),
                         custom_whitelist: None,
                     },
                     SlotConfig {
