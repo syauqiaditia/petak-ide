@@ -248,7 +248,7 @@ pub enum SlotEvent {
 pub type SlotEventCallback = Arc<dyn Fn(SlotEvent) + Send + Sync + 'static>;
 
 pub struct SlotManager {
-    slots: RwLock<HashMap<String, Slot>>,
+    slots: Arc<RwLock<HashMap<String, Slot>>>,
     order: RwLock<Vec<String>>,
     project_root: Mutex<Option<PathBuf>>,
     max_active_slots: usize,
@@ -268,7 +268,7 @@ impl SlotManager {
         let proposal_buffer = Arc::new(ProposalBuffer::new(project_root.clone()));
 
         Self {
-            slots: RwLock::new(HashMap::new()),
+            slots: Arc::new(RwLock::new(HashMap::new())),
             order: RwLock::new(Vec::new()),
             project_root: Mutex::new(project_root),
             max_active_slots: if max_active_slots == 0 {
