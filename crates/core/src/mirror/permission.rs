@@ -144,6 +144,7 @@ mod tests {
 
     #[test]
     fn test_permission_status_simulator_vs_physical() {
+        crate::run::device::register_simulator_udid("E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90");
         let sim_status =
             check_screen_capture_permission(Some("E1B3E035-7F2A-4B6E-9E8D-7F6335CD5E90"));
         assert_eq!(sim_status.kind, "simulator");
