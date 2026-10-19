@@ -1636,17 +1636,12 @@ export const api = {
   },
 
   async gitCheckout(root: string, branch: string, autoStash: boolean = true): Promise<CheckoutResult> {
-    try {
-      return await invoke<CheckoutResult>('git_checkout', {
-        root,
-        branch,
-        autoStash,
-        auto_stash: autoStash,
-      });
-    } catch {
-      await invoke('git_checkout_branch', { root, branch });
-      return { stashed: false, stashPopped: false, message: 'Checked out ' + branch };
-    }
+    return await invoke<CheckoutResult>('git_checkout', {
+      root,
+      branch,
+      autoStash,
+      auto_stash: autoStash,
+    });
   },
 
   async gitStage(root: string, path: string): Promise<void> {

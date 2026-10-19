@@ -578,26 +578,26 @@ pub fn checkout_with_stash(
     }
 
     // Handle remote branch checkout:
-    // If branch starts with "origin/" or "remotes/origin/":
-    let checkout_result = if let Some(stripped) = branch.strip_prefix("remotes/").or_else(|| Some(branch)) {
-        if let Some((_remote, local_name)) = stripped.split_once('/') {
-            let local_ref = format!("refs/heads/{}", local_name);
-            let local_exists = git(exec, repo, &["show-ref", "--verify", &local_ref]).is_ok();
+    // Only if branch explicitly starts with "origin/" or "remotes/origin/"
+    let checkout_result = if let Some(stripped) = branch
+        .strip_prefix("remotes/origin/")
+        .or_else(|| branch.strip_prefix("origin/"))
+    {
+        let local_ref = format!("refs/heads/{}", stripped);
+        let local_exists = git(exec, repo, &["show-ref", "--verify", &local_ref]).is_ok();
 
-            if local_exists {
-                // Local branch already exists, checkout local branch
-                git(exec, repo, &["checkout", local_name])
-            } else {
-                // Local branch doesn't exist yet: create tracking branch
-                let track_res = git(exec, repo, &["checkout", "-b", local_name, "--track", stripped]);
-                if track_res.is_ok() {
-                    track_res
-                } else {
-                    git(exec, repo, &["checkout", branch])
-                }
-            }
+        if local_exists {
+            // Local branch already exists, checkout local branch
+            git(exec, repo, &["checkout", stripped])
         } else {
-            git(exec, repo, &["checkout", branch])
+            // Local branch doesn't exist yet: create tracking branch
+            let track_target = format!("origin/{}", stripped);
+            let track_res = git(exec, repo, &["checkout", "-b", stripped, "--track", &track_target]);
+            if track_res.is_ok() {
+                track_res
+            } else {
+                git(exec, repo, &["checkout", branch])
+            }
         }
     } else {
         git(exec, repo, &["checkout", branch])
