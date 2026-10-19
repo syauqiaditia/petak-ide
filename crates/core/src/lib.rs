@@ -11,6 +11,7 @@ pub mod lsp;
 pub mod mirror;
 pub mod recent;
 pub mod run;
+pub mod sanitize;
 pub mod search;
 pub mod term;
 pub mod toolchain;

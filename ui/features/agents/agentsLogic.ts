@@ -2056,6 +2056,50 @@ export function sanitizeSessions(
   return result;
 }
 
+export interface PdfPasswordModalState {
+  isOpen: boolean;
+  filePath: string;
+  passwordInput: string;
+  error: string;
+  isSubmitting: boolean;
+}
+
+export function createInitialPdfPasswordModalState(): PdfPasswordModalState {
+  return {
+    isOpen: false,
+    filePath: '',
+    passwordInput: '',
+    error: '',
+    isSubmitting: false,
+  };
+}
+
+export function openPdfPasswordModal(filePath: string): PdfPasswordModalState {
+  return {
+    isOpen: true,
+    filePath,
+    passwordInput: '',
+    error: '',
+    isSubmitting: false,
+  };
+}
+
+export function handlePdfPasswordError(state: PdfPasswordModalState, err: any): PdfPasswordModalState {
+  const msg = String(err?.message || err || 'Password salah atau gagal membuka PDF');
+  const errorText = msg.toLowerCase().includes('password') || msg.toLowerCase().includes('incorrect')
+    ? 'Password salah. Silakan coba lagi.'
+    : msg;
+  return {
+    ...state,
+    error: errorText,
+    isSubmitting: false,
+  };
+}
+
+export function handlePdfPasswordSuccess(): PdfPasswordModalState {
+  return createInitialPdfPasswordModalState();
+}
+
 
 
 
