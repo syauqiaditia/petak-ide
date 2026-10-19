@@ -37,7 +37,7 @@ impl SanitizerRegexes {
             )
             .expect("valid jwt regex"),
             config_cred: Regex::new(
-                r#"(?i)\b(password|passwd|secret|client_secret|api_key|token)(\s*[:=]\s*["']?)([^"'\s\n]{3,})(["']?)"#,
+                r#"(?i)\b(password|passwd|secret|client_secret|api_key|token|mid|merchant_id|tid|terminal_id|kode[ _]?akses|access_code|pin|cvv|cvc2?|pan|nomor[ _]?kartu|kartu[ _]?akses)(\s*[:=]\s*["']?)([^"'\s\n]{3,})(["']?)"#,
             )
             .expect("valid config regex"),
             indonesia_nik: Regex::new(r"\b[1-9]\d{15}\b").expect("valid nik regex"),
@@ -82,7 +82,11 @@ pub fn sanitize_sensitive_data(input: &str) -> String {
         if val.starts_with("[REDACTED_") {
             return caps[0].to_string();
         }
-        let redaction = if key.to_ascii_lowercase().starts_with("pass") {
+        let key_lower = key.to_ascii_lowercase();
+        let redaction = if key_lower.starts_with("pass")
+            || key_lower.starts_with("pin")
+            || key_lower.contains("akses")
+        {
             "[REDACTED_PASSWORD]"
         } else {
             "[REDACTED_CREDENTIAL]"
@@ -171,6 +175,32 @@ token: "auth_token_value_abc"
         assert!(sanitized.contains("password: \"[REDACTED_PASSWORD]\""));
         assert!(sanitized.contains("passwd = [REDACTED_PASSWORD]"));
         assert!(sanitized.contains("client_secret: \"[REDACTED_CREDENTIAL]\""));
+    }
+
+    #[test]
+    fn test_sanitize_banking_credentials() {
+        let doc = r#"
+Parameter Integrasi Bank:
+MID: "000192837465"
+TID = 88291029
+Kode Akses: secret_access_code_99
+Kartu Akses: 5243-9812-3456-7890
+PIN: 123456
+CVV: 998
+"#;
+        let sanitized = sanitize_sensitive_data(doc);
+        assert!(!sanitized.contains("000192837465"));
+        assert!(!sanitized.contains("88291029"));
+        assert!(!sanitized.contains("secret_access_code_99"));
+        assert!(!sanitized.contains("5243-9812-3456-7890"));
+        assert!(!sanitized.contains("123456"));
+        assert!(!sanitized.contains("998"));
+        assert!(sanitized.contains("MID: \"[REDACTED_CREDENTIAL]\""));
+        assert!(sanitized.contains("TID = [REDACTED_CREDENTIAL]"));
+        assert!(sanitized.contains("Kode Akses: [REDACTED_PASSWORD]"));
+        assert!(sanitized.contains("Kartu Akses: [REDACTED_PII]"));
+        assert!(sanitized.contains("PIN: [REDACTED_PASSWORD]"));
+        assert!(sanitized.contains("CVV: [REDACTED_CREDENTIAL]"));
     }
 
     #[test]
