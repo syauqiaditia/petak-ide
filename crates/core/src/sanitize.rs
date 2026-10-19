@@ -85,7 +85,8 @@ pub fn sanitize_sensitive_data(input: &str) -> String {
         let key_lower = key.to_ascii_lowercase();
         let redaction = if key_lower.starts_with("pass")
             || key_lower.starts_with("pin")
-            || key_lower.contains("akses")
+            || key_lower == "kode akses"
+            || key_lower == "kode_akses"
         {
             "[REDACTED_PASSWORD]"
         } else {
@@ -198,7 +199,7 @@ CVV: 998
         assert!(sanitized.contains("MID: \"[REDACTED_CREDENTIAL]\""));
         assert!(sanitized.contains("TID = [REDACTED_CREDENTIAL]"));
         assert!(sanitized.contains("Kode Akses: [REDACTED_PASSWORD]"));
-        assert!(sanitized.contains("Kartu Akses: [REDACTED_PII]"));
+        assert!(sanitized.contains("Kartu Akses: [REDACTED_CREDENTIAL]"));
         assert!(sanitized.contains("PIN: [REDACTED_PASSWORD]"));
         assert!(sanitized.contains("CVV: [REDACTED_CREDENTIAL]"));
     }
