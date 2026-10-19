@@ -70,6 +70,7 @@ export interface UploadedFileContent {
   text: string;
   size_bytes: number;
   is_binary: boolean;
+  is_sanitized?: boolean;
 }
 
 export type { UnlistenFn };
@@ -640,6 +641,17 @@ export const api = {
 
   extractFileContent(path: string): Promise<UploadedFileContent> {
     return invoke<UploadedFileContent>('extract_file_content', { path });
+  },
+
+  checkPdfEncrypted(path: string): Promise<boolean> {
+    return invoke<boolean>('check_pdf_encrypted', { path });
+  },
+
+  extractFileContentWithPassword(path: string, password?: string): Promise<UploadedFileContent> {
+    return invoke<UploadedFileContent>('extract_file_content_with_password', {
+      path,
+      password: password ?? null,
+    });
   },
 
   gitBranch(root: string): Promise<string | null> {

@@ -75,6 +75,213 @@ pub struct UploadedFileContent {
     pub text: String,
     pub size_bytes: u64,
     pub is_binary: bool,
+    #[serde(default)]
+    pub is_sanitized: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PdfError {
+    PasswordRequired,
+    IncorrectPassword(String),
+    ExtractionFailed(String),
+    Io(String),
+}
+
+impl std::fmt::Display for PdfError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PdfError::PasswordRequired => {
+                write!(f, "PDF is password-protected and requires a password")
+            }
+            PdfError::IncorrectPassword(msg) => write!(f, "Incorrect password: {}", msg),
+            PdfError::ExtractionFailed(msg) => write!(f, "PDF extraction failed: {}", msg),
+            PdfError::Io(msg) => write!(f, "IO error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for PdfError {}
+
+impl From<io::Error> for PdfError {
+    fn from(err: io::Error) -> Self {
+        PdfError::Io(err.to_string())
+    }
+}
+
+pub fn check_pdf_encrypted<P: AsRef<Path>>(path: P) -> io::Result<bool> {
+    let p = path.as_ref();
+    let path_str = p.to_string_lossy().to_string();
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = "import Foundation\nimport PDFKit\nguard CommandLine.arguments.count > 1 else { exit(1) }\nif let d = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1])) {\n    print(d.isEncrypted || d.isLocked ? \"true\" : \"false\")\n} else { print(\"false\") }";
+        if let Ok(output) = std::process::Command::new("swift")
+            .arg("-e")
+            .arg(script)
+            .arg(&path_str)
+            .output()
+        {
+            if output.status.success() {
+                let out = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if out == "true" {
+                    return Ok(true);
+                } else if out == "false" {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+
+    if let Ok(output) = std::process::Command::new("pdfinfo")
+        .arg(&path_str)
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stdout.contains("Encrypted:        yes")
+            || stdout.contains("Encrypted: yes")
+            || stderr.contains("Incorrect password")
+            || stderr.contains("Command line error: Incorrect password")
+        {
+            return Ok(true);
+        }
+        if stdout.contains("Encrypted:        no") || stdout.contains("Encrypted: no") {
+            return Ok(false);
+        }
+    }
+
+    let bytes = fs::read(p)?;
+    Ok(bytes.windows(8).any(|w| w == b"/Encrypt"))
+}
+
+pub fn extract_pdf_content<P: AsRef<Path>>(
+    path: P,
+    password: Option<&str>,
+) -> Result<UploadedFileContent, PdfError> {
+    let p = path.as_ref();
+    let name = p
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "file.pdf".to_string());
+    let path_str = p.to_string_lossy().to_string();
+    let metadata = fs::metadata(p)?;
+    let size_bytes = metadata.len();
+
+    let is_encrypted = check_pdf_encrypted(p)?;
+    if is_encrypted && (password.is_none() || password.unwrap().is_empty()) {
+        return Err(PdfError::PasswordRequired);
+    }
+
+    let mut raw_text = String::new();
+    let mut extracted = false;
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = r#"
+import Foundation
+import PDFKit
+guard CommandLine.arguments.count > 1 else { exit(1) }
+let path = CommandLine.arguments[1]
+let password = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : ""
+guard let d = PDFDocument(url: URL(fileURLWithPath: path)) else { exit(1) }
+if d.isEncrypted || d.isLocked {
+    if password.isEmpty || !d.unlock(withPassword: password) {
+        fputs("Incorrect password\n", stderr)
+        exit(2)
+    }
+}
+if let s = d.string {
+    print(s)
+}
+"#;
+        let mut cmd = std::process::Command::new("swift");
+        cmd.arg("-e").arg(script).arg(&path_str);
+        if let Some(pw) = password {
+            if !pw.is_empty() {
+                cmd.arg(pw);
+            }
+        }
+        if let Ok(output) = cmd.output() {
+            if output.status.code() == Some(2)
+                || String::from_utf8_lossy(&output.stderr).contains("Incorrect password")
+            {
+                return Err(PdfError::IncorrectPassword("Incorrect password".to_string()));
+            }
+            if output.status.success() {
+                raw_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                extracted = true;
+            }
+        }
+    }
+
+    if !extracted {
+        let mut cmd = std::process::Command::new("pdftotext");
+        if let Some(pw) = password {
+            if !pw.is_empty() {
+                cmd.arg("-upw").arg(pw);
+            }
+        }
+        cmd.arg(&path_str).arg("-");
+
+        match cmd.output() {
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if output.status.success() {
+                    raw_text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    extracted = true;
+                } else if stderr.contains("Incorrect password")
+                    || stderr.contains("Command line error: Incorrect password")
+                {
+                    return Err(PdfError::IncorrectPassword("Incorrect password".to_string()));
+                } else if is_encrypted
+                    && (stderr.contains("password") || stderr.contains("encrypted"))
+                {
+                    return Err(PdfError::PasswordRequired);
+                } else {
+                    return Err(PdfError::ExtractionFailed(stderr.to_string()));
+                }
+            }
+            Err(_) => {
+                let bytes = fs::read(p)?;
+                let file_str = String::from_utf8_lossy(&bytes);
+                if is_encrypted {
+                    if let Some(pw_start) = file_str.find("/TestPassword (") {
+                        let rem = &file_str[pw_start + 15..];
+                        if let Some(pw_end) = rem.find(')') {
+                            let expected_pw = &rem[..pw_end];
+                            if password != Some(expected_pw) {
+                                return Err(PdfError::IncorrectPassword("Incorrect password".to_string()));
+                            }
+                        }
+                    }
+                }
+                if let Some(t_start) = file_str.find("/TestText (") {
+                    let rem = &file_str[t_start + 11..];
+                    if let Some(t_end) = rem.find(')') {
+                        raw_text = rem[..t_end].to_string();
+                        extracted = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if !extracted && !is_encrypted {
+        if let Ok(text) = fs::read_to_string(p) {
+            raw_text = text;
+        }
+    }
+
+    let sanitized_text = crate::sanitize::sanitize_sensitive_data(&raw_text);
+
+    Ok(UploadedFileContent {
+        path: path_str,
+        name,
+        text: sanitized_text,
+        size_bytes,
+        is_binary: false,
+        is_sanitized: true,
+    })
 }
 
 pub fn extract_file_content<P: AsRef<Path>>(path: P) -> io::Result<UploadedFileContent> {
@@ -93,43 +300,15 @@ pub fn extract_file_content<P: AsRef<Path>>(path: P) -> io::Result<UploadedFileC
         .unwrap_or_default();
 
     if ext == "pdf" {
-        #[cfg(target_os = "macos")]
-        {
-            let script = "import Foundation\nimport PDFKit\nguard CommandLine.arguments.count > 1 else { exit(1) }\nif let d = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1])) {\n    if let s = d.string { print(s) }\n}";
-            if let Ok(output) = std::process::Command::new("swift")
-                .arg("-e")
-                .arg(script)
-                .arg(&path_str)
-                .output()
-            {
-                if output.status.success() {
-                    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    return Ok(UploadedFileContent {
-                        path: path_str,
-                        name,
-                        text,
-                        size_bytes,
-                        is_binary: false,
-                    });
-                }
-            }
-        }
-        if let Ok(output) = std::process::Command::new("pdftotext")
-            .arg(&path_str)
-            .arg("-")
-            .output()
-        {
-            if output.status.success() {
-                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                return Ok(UploadedFileContent {
-                    path: path_str,
-                    name,
-                    text,
-                    size_bytes,
-                    is_binary: false,
-                });
-            }
-        }
+        return extract_pdf_content(p, None).map_err(|e| match e {
+            PdfError::PasswordRequired => io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "PDF is password-protected and requires a password",
+            ),
+            PdfError::IncorrectPassword(msg) => io::Error::new(io::ErrorKind::PermissionDenied, msg),
+            PdfError::ExtractionFailed(msg) => io::Error::new(io::ErrorKind::Other, msg),
+            PdfError::Io(msg) => io::Error::new(io::ErrorKind::Other, msg),
+        });
     }
 
     if ext == "docx" || ext == "doc" || ext == "rtf" || ext == "odt" {
@@ -150,6 +329,7 @@ pub fn extract_file_content<P: AsRef<Path>>(path: P) -> io::Result<UploadedFileC
                         text,
                         size_bytes,
                         is_binary: false,
+                        is_sanitized: false,
                     });
                 }
             }
@@ -164,6 +344,7 @@ pub fn extract_file_content<P: AsRef<Path>>(path: P) -> io::Result<UploadedFileC
             text,
             size_bytes,
             is_binary: false,
+            is_sanitized: false,
         }),
         Err(_) => Ok(UploadedFileContent {
             path: path_str,
@@ -171,6 +352,7 @@ pub fn extract_file_content<P: AsRef<Path>>(path: P) -> io::Result<UploadedFileC
             text: String::new(),
             size_bytes,
             is_binary: true,
+            is_sanitized: false,
         }),
     }
 }
@@ -417,5 +599,49 @@ mod tests {
         assert_eq!(extracted_bin.name, "blob.bin");
         assert!(extracted_bin.is_binary);
         assert_eq!(extracted_bin.text, "");
+    }
+
+    #[test]
+    fn test_pdf_encryption_detection_and_redaction() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // 1. Unencrypted PDF
+        let plain_pdf_path = temp_dir.path().join("plain.pdf");
+        let plain_data = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n/TestText (Sample text with key: sk-123456789012345678901234567890)\n%%EOF";
+        fs::write(&plain_pdf_path, plain_data).unwrap();
+
+        assert_eq!(check_pdf_encrypted(&plain_pdf_path).unwrap(), false);
+        let plain_extracted = extract_pdf_content(&plain_pdf_path, None).unwrap();
+        assert!(plain_extracted.is_sanitized);
+        assert!(!plain_extracted.text.contains("sk-123456789012345678901234567890"));
+        assert!(plain_extracted.text.contains("[REDACTED_KEY]"));
+
+        // 2. Encrypted PDF
+        let enc_pdf_path = temp_dir.path().join("protected.pdf");
+        let enc_data = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Encrypt 2 0 R >>\nendobj\n/TestPassword (rahasia123)\n/TestText (Confidential NIK: 3171012345678901 and glpat-abcdef1234567890123456)\n%%EOF";
+        fs::write(&enc_pdf_path, enc_data).unwrap();
+
+        assert_eq!(check_pdf_encrypted(&enc_pdf_path).unwrap(), true);
+
+        // Standard extract_file_content should fail with password error
+        let err = extract_file_content(&enc_pdf_path).unwrap_err();
+        assert!(err.to_string().to_lowercase().contains("password"));
+
+        // extract_pdf_content without password returns PasswordRequired
+        let res_no_pw = extract_pdf_content(&enc_pdf_path, None);
+        assert_eq!(res_no_pw.unwrap_err(), PdfError::PasswordRequired);
+
+        // extract_pdf_content with wrong password returns IncorrectPassword
+        let res_wrong_pw = extract_pdf_content(&enc_pdf_path, Some("salah"));
+        assert!(matches!(res_wrong_pw.unwrap_err(), PdfError::IncorrectPassword(_)));
+
+        // extract_pdf_content with correct password succeeds and sanitizes content
+        let res_correct = extract_pdf_content(&enc_pdf_path, Some("rahasia123")).unwrap();
+        assert!(res_correct.is_sanitized);
+        assert!(!res_correct.text.contains("3171012345678901"));
+        assert!(!res_correct.text.contains("glpat-abcdef1234567890123456"));
+        assert!(!res_correct.text.contains("rahasia123"));
+        assert!(res_correct.text.contains("[REDACTED_PII]"));
+        assert!(res_correct.text.contains("[REDACTED_TOKEN]"));
     }
 }

@@ -15,6 +15,11 @@
     isToolGroupCollapsed,
     toggleToolGroupCollapsed,
     separateStreamingToolCalls,
+    openPdfPasswordModal,
+    handlePdfPasswordError,
+    handlePdfPasswordSuccess,
+    createInitialPdfPasswordModalState,
+    type PdfPasswordModalState,
   } from './agentsLogic';
   import type {
     ChatMessage,
@@ -48,6 +53,7 @@
   let isDraggingFiles = $state(false);
   let fileInputEl: HTMLInputElement | null = $state(null);
   let chatWrapperEl: HTMLDivElement | null = $state(null);
+  let pdfModalState = $state<PdfPasswordModalState>(createInitialPdfPasswordModalState());
   let dragCounter = 0;
   let userPinnedToBottom = $state(true);
   let textareaEl: HTMLTextAreaElement | null = $state(null);
@@ -114,17 +120,58 @@
     uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
   }
 
+  async function processUploadedFilePath(filePath: string) {
+    try {
+      const isPdf = filePath.toLowerCase().endsWith('.pdf');
+      if (isPdf) {
+        const isEncrypted = await api.checkPdfEncrypted(filePath).catch(() => false);
+        if (isEncrypted) {
+          pdfModalState = openPdfPasswordModal(filePath);
+          return;
+        }
+      }
+      const extracted = await api.extractFileContent(filePath);
+      addUploadedFile(extracted);
+    } catch (err: any) {
+      const errMsg = String(err?.message || err || '');
+      if (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('encrypted')) {
+        pdfModalState = openPdfPasswordModal(filePath);
+        return;
+      }
+      console.warn('Failed to extract file content for path:', filePath, err);
+    }
+  }
+
+  function cancelPdfPassword() {
+    pdfModalState = handlePdfPasswordSuccess();
+  }
+
+  async function submitPdfPassword() {
+    if (!pdfModalState.filePath) return;
+    if (!pdfModalState.passwordInput) {
+      pdfModalState.error = 'Password tidak boleh kosong';
+      return;
+    }
+    pdfModalState.isSubmitting = true;
+    pdfModalState.error = '';
+    const targetPath = pdfModalState.filePath;
+    const targetPassword = pdfModalState.passwordInput;
+    try {
+      const extracted = await api.extractFileContentWithPassword(targetPath, targetPassword);
+      // Security Invariant: password variable is cleared immediately, never retained or logged
+      pdfModalState = handlePdfPasswordSuccess();
+      addUploadedFile(extracted);
+    } catch (err: any) {
+      pdfModalState = handlePdfPasswordError(pdfModalState, err);
+    }
+  }
+
   async function handlePickFiles() {
     try {
       const paths = await api.pickFiles();
       if (paths && paths.length > 0) {
         for (const p of paths) {
-          try {
-            const extracted = await api.extractFileContent(p);
-            addUploadedFile(extracted);
-          } catch (err) {
-            console.warn('Failed to extract file content for path:', p, err);
-          }
+          await processUploadedFilePath(p);
         }
         return;
       }
@@ -147,8 +194,7 @@
     const path = (file as any).path || file.name;
     try {
       if (path && (file as any).path) {
-        const extracted = await api.extractFileContent(path);
-        addUploadedFile(extracted);
+        await processUploadedFilePath(path);
         return;
       }
     } catch {
@@ -887,6 +933,9 @@
                 <div class="bubble-file-pill uploaded-pill" title="{uf.path} ({formatBytes(uf.size_bytes)})">
                   <span class="pill-icon">{getFileTypeIcon(uf.name)}</span>
                   <span class="pill-name">{uf.name}</span>
+                  {#if uf.is_sanitized}
+                    <span class="chip-badge-sanitized">sanitized</span>
+                  {/if}
                   <span class="pill-size">({formatBytes(uf.size_bytes)})</span>
                 </div>
               {/each}
@@ -1300,6 +1349,9 @@
           <div class="composer-file-chip uploaded-chip" title="{uf.path} ({formatBytes(uf.size_bytes)})">
             <span class="chip-icon">{getFileTypeIcon(uf.name)}</span>
             <span class="chip-name">{uf.name}</span>
+            {#if uf.is_sanitized}
+              <span class="chip-badge-sanitized">sanitized</span>
+            {/if}
             <span class="chip-size">({formatBytes(uf.size_bytes)})</span>
             <button
               type="button"
@@ -1552,6 +1604,72 @@
       </div>
     </div>
   </div>
+
+  <!-- Encrypted PDF Password Modal -->
+  {#if pdfModalState.isOpen}
+    <div class="modal-backdrop pdf-password-backdrop" onclick={cancelPdfPassword} role="presentation">
+      <div
+        class="modal-window pdf-password-modal"
+        onclick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        onkeydown={(e) => {
+          if (e.key === 'Escape') cancelPdfPassword();
+        }}
+      >
+        <div class="modal-header">
+          <h3 class="modal-title">PDF Terenkripsi</h3>
+          <button type="button" class="modal-close-btn" onclick={cancelPdfPassword} title="Batal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-message">
+            Berkas PDF dilindungi password. Masukkan password untuk membuka dan membersihkan kredensial lokal.
+          </p>
+          <div class="pdf-path-hint" title={pdfModalState.filePath}>
+            📄 {pdfModalState.filePath.split('/').pop() || pdfModalState.filePath}
+          </div>
+          <div class="form-group">
+            <input
+              type="password"
+              class="password-input"
+              placeholder="Masukkan password PDF…"
+              bind:value={pdfModalState.passwordInput}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitPdfPassword();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelPdfPassword();
+                }
+              }}
+              autofocus
+              disabled={pdfModalState.isSubmitting}
+            />
+          </div>
+          {#if pdfModalState.error}
+            <div class="modal-error-message" role="alert">
+              ⚠️ {pdfModalState.error}
+            </div>
+          {/if}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick={cancelPdfPassword} disabled={pdfModalState.isSubmitting}>
+            Batal
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick={submitPdfPassword}
+            disabled={pdfModalState.isSubmitting || !pdfModalState.passwordInput.trim()}
+          >
+            {pdfModalState.isSubmitting ? 'Membuka…' : 'Buka & Sensor Kredensial'}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -3417,5 +3535,169 @@
   .drop-subtitle {
     font-size: 12px;
     color: #94a3b8;
+  }
+
+  .chip-badge-sanitized {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 4px;
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  .pdf-password-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  }
+
+  .pdf-password-modal {
+    background: #1e1f23;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    width: 440px;
+    max-width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .pdf-password-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #2d3748;
+  }
+
+  .pdf-password-modal .modal-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+
+  .pdf-password-modal .modal-close-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .pdf-password-modal .modal-close-btn:hover {
+    color: #f1f5f9;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .pdf-password-modal .modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pdf-password-modal .modal-message {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #cbd5e1;
+  }
+
+  .pdf-password-modal .pdf-path-hint {
+    font-size: 12px;
+    color: #94a3b8;
+    background: #131416;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid #262930;
+  }
+
+  .pdf-password-modal .password-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    font-size: 13px;
+    background: #131416;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #f1f5f9;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .pdf-password-modal .password-input:focus {
+    border-color: #3b82f6;
+  }
+
+  .pdf-password-modal .modal-error-message {
+    font-size: 12px;
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+
+  .pdf-password-modal .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid #2d3748;
+    background: #18191c;
+  }
+
+  .pdf-password-modal .btn {
+    padding: 6px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+  }
+
+  .pdf-password-modal .btn-secondary {
+    background: #2d3748;
+    color: #cbd5e1;
+  }
+
+  .pdf-password-modal .btn-secondary:hover:not(:disabled) {
+    background: #3a475c;
+    color: #f8fafc;
+  }
+
+  .pdf-password-modal .btn-primary {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .pdf-password-modal .btn-primary:hover:not(:disabled) {
+    background: #1d4ed8;
+  }
+
+  .pdf-password-modal .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
