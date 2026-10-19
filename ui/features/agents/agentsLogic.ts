@@ -1646,7 +1646,10 @@ export function buildCleanPromptEnvelope(
   if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
     const fileBlocks = options.uploadedFiles.map((uf) => {
       if (uf.text && uf.text.trim()) {
-        return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path})]\n${uf.text.trim()}\n[/LAMPIRAN BERKAS]`;
+        const sanitizedNotice = uf.is_sanitized
+          ? '\n(Catatan sistem: Teks berkas ini sudah berhasil didekripsi & disanitasi secara lokal di memori. JANGAN gunakan tool read_file atau terminal untuk membaca berkas fisik tersebut di disk. Langsung analisis teks dokumen berikut:)'
+          : '\n(Catatan sistem: Teks berkas ini sudah diekstrak secara lokal. JANGAN gunakan tool read_file atau terminal untuk membaca berkas fisik, langsung gunakan teks dokumen berikut:)';
+        return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path})]${sanitizedNotice}\n${uf.text.trim()}\n[/LAMPIRAN BERKAS]`;
       } else {
         return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path}) (berkas biner / tanpa teks)]`;
       }
