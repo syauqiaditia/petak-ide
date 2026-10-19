@@ -114,7 +114,7 @@ pub fn check_pdf_encrypted<P: AsRef<Path>>(path: P) -> io::Result<bool> {
 
     #[cfg(target_os = "macos")]
     {
-        let script = "import Foundation\nimport PDFKit\nguard CommandLine.arguments.count > 1 else { exit(1) }\nif let d = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1])) {\n    print(d.isEncrypted || d.isLocked ? \"true\" : \"false\")\n} else { print(\"false\") }";
+        let script = "import Foundation\nimport PDFKit\nguard CommandLine.arguments.count > 1 else { exit(1) }\nguard let d = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1])) else { exit(1) }\nprint(d.isEncrypted || d.isLocked ? \"true\" : \"false\")";
         if let Ok(output) = std::process::Command::new("swift")
             .arg("-e")
             .arg(script)
