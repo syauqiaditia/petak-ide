@@ -44,8 +44,8 @@ pub use path::{
     rollback_paths, CommitSelectedResult,
 };
 pub use rebase::{
-    drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,
-    rebase_state, rebase_todo, reword, squash,
+    check_stale_index_lock, drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run,
+    rebase_run_with_op, rebase_state, rebase_todo, reword, squash,
 };
 pub use remote::{fetch, pull, push, remotes};
 pub use status::{parse_status, status};
