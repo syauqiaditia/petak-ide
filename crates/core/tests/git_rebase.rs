@@ -971,3 +971,138 @@ fn test_generate_no_data_loss_evidence_report() {
     fs::write(&report_file, doc).expect("write no-data-loss.md");
     println!("Report written successfully to: {}", report_file.display());
 }
+
+#[test]
+fn test_rebase_squash_contiguous_commits_success() {
+    let (repo, _shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let old_head = head_sha(&repo);
+    let old_tree = tree_hash(&repo, "HEAD");
+    assert_eq!(commit_count(&repo), 6);
+
+    let c3_sha = repo.git(&["rev-parse", "HEAD~3"]).trim().to_string();
+    let c4_sha = repo.git(&["rev-parse", "HEAD~2"]).trim().to_string();
+    let c5_sha = repo.git(&["rev-parse", "HEAD~1"]).trim().to_string();
+
+    // Squash contiguous commits c3, c4, c5
+    let res = squash(
+        &exec,
+        repo.path(),
+        &[&c3_sha, &c4_sha, &c5_sha],
+        "c3, c4, c5 squashed into one",
+    )
+    .unwrap();
+
+    assert!(res.ok);
+    assert_eq!(commit_count(&repo), 4); // 6 - 2 = 4 commits remaining
+
+    let new_head = head_sha(&repo);
+    assert_ne!(new_head, old_head);
+    let new_tree = tree_hash(&repo, "HEAD");
+    assert_eq!(old_tree, new_tree, "Tree must be IDENTICAL after squash");
+
+    // Verify commit message
+    let squashed_msg = repo.git(&["log", "-1", "--format=%s", "HEAD~1"]);
+    assert_eq!(squashed_msg.trim(), "c3, c4, c5 squashed into one");
+
+    // Verify petak-rebase temporary directory is cleaned up
+    let petak_rebase = repo.path().join(".git/petak-rebase");
+    assert!(!petak_rebase.exists(), "petak-rebase directory must be cleaned up");
+}
+
+#[test]
+fn test_rebase_squash_non_contiguous_rejected() {
+    let (repo, _shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let c2_sha = repo.git(&["rev-parse", "HEAD~4"]).trim().to_string();
+    let c4_sha = repo.git(&["rev-parse", "HEAD~2"]).trim().to_string();
+
+    // Non-contiguous commits: c2 and c4, skipping c3
+    let err = squash(
+        &exec,
+        repo.path(),
+        &[&c2_sha, &c4_sha],
+        "should fail non-contiguous",
+    )
+    .unwrap_err();
+
+    assert!(
+        err.message.contains("commits to squash must be strictly contiguous in history"),
+        "Error message should contain contiguous check failure, got: {}",
+        err.message
+    );
+    assert_eq!(commit_count(&repo), 6, "Commit count unchanged");
+}
+
+#[test]
+fn test_rebase_squash_conflict_reports_not_ok() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    repo.write_file("conflict.txt", "line original\n");
+    repo.commit("c1: initial");
+
+    repo.git(&["checkout", "-b", "feature"]);
+    repo.write_file("conflict.txt", "line branch feature\n");
+    repo.commit("c2: feature edit");
+    let feat_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    repo.git(&["checkout", "main"]);
+    repo.write_file("conflict.txt", "line branch main\n");
+    repo.commit("c3: main edit");
+    let main_sha = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    // Merge feature into main with ours strategy to keep both in history
+    repo.git(&["merge", "feature", "-m", "merge feature", "-s", "ours"]);
+
+    // In log --reverse: feat_sha and main_sha are contiguous commits from c1
+    // Squashing them replays main onto feature, which produces a conflict on conflict.txt
+    let res = squash(
+        &exec,
+        repo.path(),
+        &[&feat_sha, &main_sha],
+        "squash conflicting branches",
+    )
+    .unwrap();
+
+    assert!(!res.ok, "Squash producing conflict must report ok == false");
+    assert!(res.stopped_at.is_some(), "Must report stopped_at");
+    let stop = res.stopped_at.unwrap();
+    assert_eq!(stop.kind, StopKind::Conflict);
+
+    // Verify petak-rebase temporary directory is cleaned up even when stopped at conflict
+    let petak_rebase = repo.path().join(".git/petak-rebase");
+    assert!(!petak_rebase.exists(), "petak-rebase directory must be cleaned up on conflict stop");
+
+    // Abort rebase cleanly
+    rebase_abort(&exec, repo.path()).unwrap();
+}
+
+#[test]
+fn test_rebase_stale_index_lock_recovery() {
+    let (repo, _shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let c2_sha = repo.git(&["rev-parse", "HEAD~4"]).trim().to_string();
+    let c3_sha = repo.git(&["rev-parse", "HEAD~3"]).trim().to_string();
+
+    // Simulate stale .git/index.lock left by a crashed git process
+    let lock_path = repo.path().join(".git/index.lock");
+    fs::write(&lock_path, "stale lock").unwrap();
+    assert!(lock_path.exists());
+
+    // Squash should detect stale lock, remove it, and succeed
+    let res = squash(
+        &exec,
+        repo.path(),
+        &[&c2_sha, &c3_sha],
+        "c2 and c3 squashed after lock recovery",
+    )
+    .unwrap();
+
+    assert!(res.ok);
+    assert!(!lock_path.exists(), "stale index.lock must be removed");
+    assert_eq!(commit_count(&repo), 5);
+}

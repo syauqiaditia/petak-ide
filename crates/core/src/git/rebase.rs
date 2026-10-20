@@ -50,6 +50,59 @@ pub fn rebase_todo(exec: &dyn Exec, repo: &Path, base: &str) -> Result<Vec<Rebas
     Ok(items)
 }
 
+struct RebaseDirGuard<'a>(&'a Path);
+
+impl<'a> Drop for RebaseDirGuard<'a> {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(self.0);
+    }
+}
+
+fn is_lock_held_by_process(lock_path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        if let Ok(output) = std::process::Command::new("fuser").arg(lock_path).output() {
+            if output.status.success() && (!output.stdout.is_empty() || !output.stderr.is_empty()) {
+                return true;
+            }
+        }
+        if let Ok(output) = std::process::Command::new("lsof").arg(lock_path).output() {
+            if output.status.success() && !output.stdout.is_empty() {
+                return true;
+            }
+        }
+        false
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+pub fn check_stale_index_lock(repo: &Path) -> Result<(), GitError> {
+    let gdir = git_dir(repo);
+    let index_lock = gdir.join("index.lock");
+    if !index_lock.exists() {
+        return Ok(());
+    }
+
+    if is_lock_held_by_process(&index_lock) {
+        return Err(GitError {
+            exit_code: None,
+            message: "another git process is currently running; .git/index.lock is held".to_string(),
+        });
+    }
+
+    if let Err(e) = fs::remove_file(&index_lock) {
+        return Err(GitError {
+            exit_code: None,
+            message: format!("stale .git/index.lock found but could not be removed: {}", e),
+        });
+    }
+
+    Ok(())
+}
+
 pub fn rebase_run(exec: &dyn Exec, repo: &Path, plan: &RebasePlan) -> Result<OpResult, GitError> {
     rebase_run_with_op(exec, repo, plan, "rebase")
 }
@@ -60,6 +113,8 @@ pub fn rebase_run_with_op(
     plan: &RebasePlan,
     op_name: &str,
 ) -> Result<OpResult, GitError> {
+    check_stale_index_lock(repo)?;
+
     let backup_ref = if plan.backup {
         Some(backup_create(exec, repo, op_name)?)
     } else {
@@ -84,6 +139,7 @@ pub fn rebase_run_with_op(
         exit_code: None,
         message: format!("failed to create rebase work dir: {}", e),
     })?;
+    let _guard = RebaseDirGuard(&petak_rebase);
 
     let mut todo_content = String::new();
     for (idx, item) in plan.items.iter().enumerate() {
@@ -171,6 +227,7 @@ pub fn rebase_run_with_op(
 
     let rebase_merge = gdir.join("rebase-merge");
     if rebase_merge.is_dir() {
+        let _ = fs::remove_dir_all(&petak_rebase);
         let status = crate::git::status::status(exec, repo)?;
         let is_conflict = status.entries.iter().any(|e| e.conflicted);
         let stopped_sha = fs::read_to_string(rebase_merge.join("stopped-sha"))
@@ -229,12 +286,14 @@ pub fn rebase_run_with_op(
 }
 
 pub fn rebase_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitError> {
+    check_stale_index_lock(repo)?;
     let gdir = git_dir(repo);
     let envs = [("GIT_EDITOR", "true")];
     let res = git_raw_with_env(exec, repo, &["rebase", "--continue"], &envs, None)?;
 
     let rebase_merge = gdir.join("rebase-merge");
     if rebase_merge.is_dir() {
+        let _ = fs::remove_dir_all(gdir.join("petak-rebase"));
         let status = crate::git::status::status(exec, repo)?;
         let is_conflict = status.entries.iter().any(|e| e.conflicted);
         let stopped_sha = fs::read_to_string(rebase_merge.join("stopped-sha"))
@@ -263,6 +322,7 @@ pub fn rebase_continue(exec: &dyn Exec, repo: &Path) -> Result<OpResult, GitErro
     }
 
     if !res.status.success() {
+        let _ = fs::remove_dir_all(gdir.join("petak-rebase"));
         let stderr = String::from_utf8_lossy(&res.stderr).trim().to_string();
         return Err(GitError {
             exit_code: res.status.code(),
@@ -466,6 +526,7 @@ pub fn squash(
     shas: &[&str],
     message: &str,
 ) -> Result<OpResult, GitError> {
+    check_stale_index_lock(repo)?;
     if shas.len() < 2 {
         return Err(GitError {
             exit_code: None,
@@ -486,19 +547,32 @@ pub fn squash(
         .filter(|l| !l.is_empty())
         .collect();
 
-    let mut ordered = Vec::new();
-    for s in &all_shas {
-        if resolved_shas.contains(&s.to_string()) {
-            ordered.push(s.to_string());
+    let mut indices = Vec::new();
+    for s in &resolved_shas {
+        match all_shas.iter().position(|&x| x == s) {
+            Some(idx) => indices.push(idx),
+            None => {
+                return Err(GitError {
+                    exit_code: None,
+                    message: "some commits to squash were not found in current history".to_string(),
+                });
+            }
         }
     }
 
-    if ordered.len() != resolved_shas.len() {
+    let min_idx = *indices.iter().min().unwrap();
+    let max_idx = *indices.iter().max().unwrap();
+    if max_idx - min_idx + 1 != resolved_shas.len() {
         return Err(GitError {
             exit_code: None,
-            message: "some commits to squash were not found in current history".to_string(),
+            message: "commits to squash must be strictly contiguous in history".to_string(),
         });
     }
+
+    let ordered: Vec<String> = all_shas[min_idx..=max_idx]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     let oldest_sha = &ordered[0];
     let parent = git(exec, repo, &["rev-parse", &format!("{}^@", oldest_sha)])?;
