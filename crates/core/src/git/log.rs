@@ -226,6 +226,20 @@ pub fn get_pushed_shas(exec: &dyn Exec, repo: &Path) -> Result<HashSet<String>, 
     Ok(set)
 }
 
+/// Returns a set of all commit SHAs reachable from HEAD.
+pub fn get_head_ancestor_shas(exec: &dyn Exec, repo: &Path) -> Result<HashSet<String>, GitError> {
+    let output = match git(exec, repo, &["rev-list", "HEAD"]) {
+        Ok(out) => out,
+        Err(_) => return Ok(HashSet::new()),
+    };
+    let set: HashSet<String> = output
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    Ok(set)
+}
+
 #[derive(Debug, Clone)]
 pub struct RawCommit {
     pub sha: String,
@@ -393,9 +407,10 @@ pub fn log_with_state(
         GraphState::default()
     };
 
-    // Gather refs and pushed status
+    // Gather refs, pushed status, and HEAD ancestors
     let refs_map = get_refs_map(exec, repo)?;
     let pushed_shas = get_pushed_shas(exec, repo)?;
+    let head_shas = get_head_ancestor_shas(exec, repo).unwrap_or_default();
 
     // Build main git log command
     let mut args = vec![
@@ -477,6 +492,7 @@ pub fn log_with_state(
         let short_sha = rc.sha[..rc.sha.len().min(7)].to_string();
         let refs = refs_map.get(&rc.sha).cloned().unwrap_or_default();
         let pushed = pushed_shas.contains(&rc.sha);
+        let is_head_ancestor = head_shas.contains(&rc.sha);
 
         commit_tuples.push((rc.sha.clone(), rc.parents.clone()));
         commits.push(Commit {
@@ -489,6 +505,7 @@ pub fn log_with_state(
             subject: rc.subject,
             refs,
             pushed,
+            is_head_ancestor,
         });
     }
 

@@ -80,15 +80,22 @@
     isConsecutiveSelection(gitStore.selectedCommitShas, gitStore.logCommits)
   );
 
-  let canSquash = $derived(selectedCount >= 2 && isConsecutive && !hasMergeCommit);
-  let canReword = $derived(selectedCount === 1 && !hasMergeCommit);
+  let isOnCurrentBranch = $derived(
+    selectedCommits.length > 0 && selectedCommits.every((c) => c.isHeadAncestor !== false)
+  );
+
+  let canSquash = $derived(
+    selectedCount >= 2 && isConsecutive && !hasMergeCommit && isOnCurrentBranch
+  );
+  let canReword = $derived(selectedCount === 1 && !hasMergeCommit && isOnCurrentBranch);
   let canFixup = $derived(
     selectedCount === 1 &&
     !hasMergeCommit &&
-    gitStore.logCommits.findIndex((c) => c.sha === gitStore.selectedCommitSha) > 0
+    gitStore.logCommits.findIndex((c) => c.sha === gitStore.selectedCommitSha) > 0 &&
+    isOnCurrentBranch
   );
-  let canDrop = $derived(selectedCount >= 1 && !hasMergeCommit);
-  let canRebase = $derived(selectedCount === 1 && !hasMergeCommit);
+  let canDrop = $derived(selectedCount >= 1 && !hasMergeCommit && isOnCurrentBranch);
+  let canRebase = $derived(selectedCount === 1 && !hasMergeCommit && isOnCurrentBranch);
   let isHeadSelected = $derived(
     selectedCount === 1 &&
     !!gitStore.selectedCommit?.refs?.some((r) => r.kind === 'head')
@@ -685,7 +692,7 @@
         class="mi"
         disabled={!canSquash}
         onclick={openSquashModal}
-        title={!canSquash ? 'Select ≥ 2 contiguous non-merge commits' : 'Squash commits'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canSquash ? 'Select ≥ 2 contiguous non-merge commits' : 'Squash commits')}
       >
         <span>Squash Commits…</span>
         <span class="mi-shortcut">⌘⇧S</span>
@@ -695,7 +702,7 @@
         class="mi"
         disabled={!canReword}
         onclick={openRewordModal}
-        title={!canReword ? 'Select 1 non-merge commit' : 'Edit message'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canReword ? 'Select 1 non-merge commit' : 'Edit message')}
       >
         <span>Edit Commit Message…</span>
         <span class="mi-shortcut">F2</span>
@@ -705,7 +712,7 @@
         class="mi"
         disabled={!canFixup}
         onclick={handleFixup}
-        title={!canFixup ? 'Select 1 commit with a previous commit' : 'Fixup into previous commit'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canFixup ? 'Select 1 commit with a previous commit' : 'Fixup into previous commit')}
       >
         <span>Fixup into Previous</span>
       </button>
@@ -724,7 +731,7 @@
         class="mi danger"
         disabled={!canDrop}
         onclick={openDropModal}
-        title={!canDrop ? 'Select non-merge commit(s) to drop' : 'Drop commit(s)'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canDrop ? 'Select non-merge commit(s) to drop' : 'Drop commit(s)')}
       >
         <span>Drop Commit(s)…</span>
       </button>
@@ -735,7 +742,7 @@
         class="mi"
         disabled={!canRebase}
         onclick={openRebaseFromHere}
-        title={!canRebase ? 'Select 1 non-merge commit' : 'Interactive rebase'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canRebase ? 'Select 1 non-merge commit' : 'Interactive rebase')}
       >
         <span>Interactively Rebase from Here…</span>
       </button>

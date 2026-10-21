@@ -94,6 +94,7 @@ export interface GitCommit {
   subject: string;
   refs: GitRefLabel[];
   pushed: boolean;
+  isHeadAncestor?: boolean;
 }
 
 export type GitEdgeKind = 'straight' | 'mergeIn' | 'branchOut';
