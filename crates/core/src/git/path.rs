@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::exec::{git, git_with_stdin, Exec, GitError};
 use crate::git::diff::{diff_staged, parse_diff};
-use crate::git::log::{get_pushed_shas, get_refs_map, parse_log_output};
+use crate::git::log::{get_head_ancestor_shas, get_pushed_shas, get_refs_map, parse_log_output};
 use crate::git::model::{BlameLine, Commit, DiffFile};
 
 pub(crate) fn validate_ref_name(name: &str) -> Result<(), GitError> {
@@ -116,12 +116,14 @@ pub fn path_history(
     let raw_commits = parse_log_output(&raw_out);
     let refs_map = get_refs_map(exec, repo).unwrap_or_default();
     let pushed_shas = get_pushed_shas(exec, repo).unwrap_or_default();
+    let head_shas = get_head_ancestor_shas(exec, repo).unwrap_or_default();
 
     let mut commits = Vec::with_capacity(raw_commits.len());
     for rc in raw_commits {
         let short_sha = rc.sha[..rc.sha.len().min(7)].to_string();
         let refs = refs_map.get(&rc.sha).cloned().unwrap_or_default();
         let pushed = pushed_shas.contains(&rc.sha);
+        let is_head_ancestor = head_shas.contains(&rc.sha);
         commits.push(Commit {
             sha: rc.sha,
             short_sha,
@@ -132,6 +134,7 @@ pub fn path_history(
             subject: rc.subject,
             refs,
             pushed,
+            is_head_ancestor,
         });
     }
 

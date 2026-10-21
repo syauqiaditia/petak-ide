@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::exec::{git, git_raw_with_env, Exec, GitError};
+use crate::exec::{git, git_raw, git_raw_with_env, Exec, GitError};
 use crate::git::backup::{backup_create, git_dir};
 use crate::git::model::{
     OpResult, RebaseAction, RebaseItem, RebasePlan, RebaseState, RebaseStateKind, StopKind,
@@ -486,6 +486,11 @@ pub fn rebase_state(exec: &dyn Exec, repo: &Path) -> Result<RebaseState, GitErro
     })
 }
 
+pub fn is_ancestor_of_head(exec: &dyn Exec, repo: &Path, sha: &str) -> Result<bool, GitError> {
+    let res = git_raw(exec, repo, &["merge-base", "--is-ancestor", sha, "HEAD"], None)?;
+    Ok(res.status.code() == Some(0))
+}
+
 pub fn reword(
     exec: &dyn Exec,
     repo: &Path,
@@ -493,6 +498,15 @@ pub fn reword(
     message: &str,
 ) -> Result<OpResult, GitError> {
     let full_sha = git(exec, repo, &["rev-parse", sha])?.trim().to_string();
+    if !is_ancestor_of_head(exec, repo, &full_sha)? {
+        return Err(GitError {
+            exit_code: None,
+            message: format!(
+                "cannot rewrite commit: commit {} is not on current HEAD branch. Checkout the branch first.",
+                full_sha
+            ),
+        });
+    }
     let parent = git(exec, repo, &["rev-parse", &format!("{}^@", full_sha)])?;
     let has_parent = !parent.trim().is_empty();
     let base = if has_parent {
@@ -538,6 +552,18 @@ pub fn squash(
     for s in shas {
         let full = git(exec, repo, &["rev-parse", s])?.trim().to_string();
         resolved_shas.push(full);
+    }
+
+    for s in &resolved_shas {
+        if !is_ancestor_of_head(exec, repo, s)? {
+            return Err(GitError {
+                exit_code: None,
+                message: format!(
+                    "cannot rewrite commit: commit {} is not on current HEAD branch. Checkout the branch first.",
+                    s
+                ),
+            });
+        }
     }
 
     let log_shas_raw = git(exec, repo, &["log", "--reverse", "--format=%H", "HEAD"])?;
@@ -613,6 +639,15 @@ pub fn squash(
 
 pub fn fixup_into_previous(exec: &dyn Exec, repo: &Path, sha: &str) -> Result<OpResult, GitError> {
     let full_sha = git(exec, repo, &["rev-parse", sha])?.trim().to_string();
+    if !is_ancestor_of_head(exec, repo, &full_sha)? {
+        return Err(GitError {
+            exit_code: None,
+            message: format!(
+                "cannot rewrite commit: commit {} is not on current HEAD branch. Checkout the branch first.",
+                full_sha
+            ),
+        });
+    }
     let parent_out = git(exec, repo, &["rev-parse", &format!("{}^@", full_sha)])?;
     if parent_out.trim().is_empty() {
         return Err(GitError {
@@ -670,6 +705,18 @@ pub fn drop(
     for s in shas {
         let full = git(exec, repo, &["rev-parse", s])?.trim().to_string();
         resolved_shas.push(full);
+    }
+
+    for s in &resolved_shas {
+        if !is_ancestor_of_head(exec, repo, s)? {
+            return Err(GitError {
+                exit_code: None,
+                message: format!(
+                    "cannot rewrite commit: commit {} is not on current HEAD branch. Checkout the branch first.",
+                    s
+                ),
+            });
+        }
     }
 
     let log_shas_raw = git(exec, repo, &["log", "--reverse", "--format=%H", "HEAD"])?;

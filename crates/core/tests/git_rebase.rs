@@ -10,9 +10,9 @@ use common::gitrepo::TestRepo;
 use petak_core::exec::SystemExec;
 use petak_core::git::{
     backup_create, backup_delete, backup_list, backup_restore, branch_checkout, branch_create,
-    branch_delete, branch_rename, cherry_pick, drop, fixup_into_previous, rebase_abort, rebase_run,
-    rebase_state, rebase_todo, reset, revert, reword, squash, RebaseAction, RebasePlan,
-    RebaseStateKind, ResetMode, StopKind,
+    branch_delete, branch_rename, cherry_pick, drop, fixup_into_previous, get_head_ancestor_shas,
+    is_ancestor_of_head, log_with_state, rebase_abort, rebase_run, rebase_state, rebase_todo, reset,
+    revert, reword, squash, LogFilter, RebaseAction, RebasePlan, RebaseStateKind, ResetMode, StopKind,
 };
 
 fn setup_six_commit_repo() -> (TestRepo, Vec<String>) {
@@ -1105,4 +1105,98 @@ fn test_rebase_stale_index_lock_recovery() {
     assert!(res.ok);
     assert!(!lock_path.exists(), "stale index.lock must be removed");
     assert_eq!(commit_count(&repo), 5);
+}
+
+#[test]
+fn test_rebase_reword_non_head_ancestor_rejected() {
+    let (repo, _shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let feat_sha = repo.git(&["rev-parse", "feature"]).trim().to_string();
+
+    let res = reword(&exec, repo.path(), &feat_sha, "reword feature commit");
+    assert!(res.is_err(), "Reword of non-HEAD commit must fail");
+    let err = res.unwrap_err();
+    assert!(
+        err.message.contains("is not on current HEAD branch"),
+        "Error message must indicate commit is not on current HEAD branch, got: {}",
+        err.message
+    );
+}
+
+#[test]
+fn test_rebase_squash_non_head_ancestor_rejected() {
+    let (repo, shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let feat_sha = repo.git(&["rev-parse", "feature"]).trim().to_string();
+    let c6_sha = &shas[5];
+
+    let res = squash(&exec, repo.path(), &[&feat_sha, c6_sha], "squash commits");
+    assert!(res.is_err(), "Squash containing non-HEAD commit must fail");
+    let err = res.unwrap_err();
+    assert!(
+        err.message.contains("is not on current HEAD branch"),
+        "Error message must indicate commit is not on current HEAD branch, got: {}",
+        err.message
+    );
+}
+
+#[test]
+fn test_rebase_fixup_non_head_ancestor_rejected() {
+    let (repo, _shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let feat_sha = repo.git(&["rev-parse", "feature"]).trim().to_string();
+
+    let res = fixup_into_previous(&exec, repo.path(), &feat_sha);
+    assert!(res.is_err(), "Fixup of non-HEAD commit must fail");
+    let err = res.unwrap_err();
+    assert!(
+        err.message.contains("is not on current HEAD branch"),
+        "Error message must indicate commit is not on current HEAD branch, got: {}",
+        err.message
+    );
+}
+
+#[test]
+fn test_log_is_head_ancestor_flag() {
+    let (repo, _shas) = setup_six_commit_repo();
+    let exec = SystemExec;
+
+    let feat_sha = repo.git(&["rev-parse", "feature"]).trim().to_string();
+    let main_head = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+    let main_c1 = repo.git(&["rev-parse", "HEAD~5"]).trim().to_string();
+
+    let (page, _) = log_with_state(&exec, repo.path(), &LogFilter::default(), 0, 50, None).unwrap();
+
+    let feat_commit = page.commits.iter().find(|c| c.sha == feat_sha);
+    assert!(feat_commit.is_some(), "feature commit should be in log page");
+    assert!(
+        !feat_commit.unwrap().is_head_ancestor,
+        "feature commit must have is_head_ancestor == false"
+    );
+
+    let head_commit = page.commits.iter().find(|c| c.sha == main_head);
+    assert!(head_commit.is_some(), "main HEAD commit should be in log page");
+    assert!(
+        head_commit.unwrap().is_head_ancestor,
+        "main HEAD commit must have is_head_ancestor == true"
+    );
+
+    let c1_commit = page.commits.iter().find(|c| c.sha == main_c1);
+    assert!(c1_commit.is_some(), "main c1 commit should be in log page");
+    assert!(
+        c1_commit.unwrap().is_head_ancestor,
+        "main c1 commit must have is_head_ancestor == true"
+    );
+
+    // Also verify get_head_ancestor_shas and is_ancestor_of_head directly
+    let head_ancestors = get_head_ancestor_shas(&exec, repo.path()).unwrap();
+    assert!(head_ancestors.contains(&main_head));
+    assert!(head_ancestors.contains(&main_c1));
+    assert!(!head_ancestors.contains(&feat_sha));
+
+    assert!(is_ancestor_of_head(&exec, repo.path(), &main_c1).unwrap());
+    assert!(!is_ancestor_of_head(&exec, repo.path(), &feat_sha).unwrap());
 }
