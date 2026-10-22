@@ -28,8 +28,8 @@
       </div>
     {/if}
   {:else if panelStore.activeRightPanel === 'memory'}
-    <div class="right-memory-dock" style="width: 480px; display: flex; flex-direction: column; height: 100%; border-left: 1px solid #26282d; background: #121317; z-index: 5;">
-      <div style="height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #26282d; background: #16171b;">
+    <div class="right-memory-dock" style="width: 480px; display: flex; flex-direction: column; height: 100%; border-left: 1px solid var(--border-default, #393b40); background: var(--p-bg-surface, #26282b); z-index: 5;">
+      <div style="height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid var(--border-default, #393b40); background: var(--p-bg-surface, #26282b);">
         <div style="font-weight: 600; font-size: 12.5px; color: #d8d9dc; display: flex; align-items: center; gap: 6px;">
           <span>📓 Project Memory (Obsidian Vault)</span>
         </div>
@@ -63,8 +63,8 @@
   .agent-panel-slot {
     width: 390px;
     flex-shrink: 0;
-    background: #141518;
-    border-left: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-left: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -77,8 +77,8 @@
     height: 40px;
     flex-shrink: 0;
     padding: 0 12px;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -105,7 +105,7 @@
     transition: background 0.1s, color 0.1s;
   }
   .agent-close-btn:hover {
-    background: #23252b;
+    background: var(--p-bg-hover, #323539);
     color: #e6e7ea;
   }
 </style>

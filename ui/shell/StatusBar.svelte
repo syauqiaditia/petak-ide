@@ -311,8 +311,8 @@
     align-items: center;
     gap: 16px;
     padding: 0 14px;
-    background: #111215;
-    border-top: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     font-size: 12px;
     color: #8b8f98;
     user-select: none;
@@ -351,7 +351,7 @@
     transition: background 0.15s;
   }
   .lsp-indicator:hover {
-    background: #1e2025;
+    background: var(--p-bg-hover, #323539);
     color: #d8d9dc;
   }
   .lsp-indicator.is-ready {
@@ -512,7 +512,7 @@
     transition: background 0.1s;
   }
   .problems-badge-group:hover {
-    background: #1f2127;
+    background: var(--p-bg-hover, #323539);
   }
   .status-errors {
     display: flex;
@@ -544,7 +544,7 @@
     flex-grow: 1;
   }
   .vim-tag {
-    background: #23252b;
+    background: var(--p-bg-hover, #323539);
     color: #9cc3ff;
     padding: 1px 5px;
     border-radius: 3px;
@@ -563,7 +563,7 @@
     transition: background 0.15s;
   }
   .gitlab-indicator:hover {
-    background: #1e2025;
+    background: var(--p-bg-hover, #323539);
     color: #d8d9dc;
   }
   .gitlab-indicator.gitlab-warning {

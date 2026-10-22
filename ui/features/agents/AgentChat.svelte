@@ -1673,13 +1673,14 @@
 </div>
 
 <style>
+  .agent-chat,
   .agent-chat-wrapper {
     position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .chat-messages {
@@ -1689,6 +1690,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    background: var(--p-bg-workspace, #2b2d30);
     user-select: text !important;
     -webkit-user-select: text !important;
     cursor: text;
@@ -1910,8 +1912,8 @@
 
   .message-body :global(.chat-code-wrapper) {
     margin: 8px 0;
-    background: #0d0e12;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     overflow: hidden;
   }
@@ -2097,11 +2099,12 @@
     51%, 100% { opacity: 0; }
   }
 
+  .status-banner,
   .tool-group-accordion {
     margin-top: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
-    background: #111216;
+    background: var(--p-bg-hover, #323539);
     overflow: hidden;
   }
 
@@ -2143,8 +2146,8 @@
 
   .tool-group-content {
     padding: 6px 8px 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    background: #0d0e11;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .tool-streaming-container {
@@ -2161,9 +2164,10 @@
     gap: 6px;
   }
 
+  .tool-call-group,
   .tool-call-card {
-    background: #0f1013;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-hover, #323539);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 5px;
     padding: 6px 8px;
     font-size: 11px;
@@ -2197,14 +2201,15 @@
     margin-top: 4px;
   }
 
+  .prompt-textarea,
   .tool-output pre {
     margin: 0;
-    background: #090a0c;
+    background: var(--p-bg-workspace, #2b2d30);
     border-radius: 3px;
     padding: 4px 6px;
     font-family: monospace;
     font-size: 10px;
-    color: #94a3b8;
+    color: var(--text, #dbdee1);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;
@@ -2303,15 +2308,17 @@
   }
 
   /* Floating Context Composer */
+  .chat-composer,
   .agent-composer-container {
     position: relative;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    background: #121317;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
   }
 
+  .input-box,
   .composer-textarea-wrap {
     padding: 6px 8px 0;
   }
@@ -2320,7 +2327,7 @@
     width: 100%;
     background: transparent;
     border: none;
-    color: #e6edf3;
+    color: var(--text, #dbdee1);
     font-size: 12px;
     font-family: inherit;
     resize: none;
@@ -2334,13 +2341,14 @@
     color: #6e7681;
   }
 
+  .chat-subfooter,
   .composer-pills-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 5px 8px;
-    background: rgba(0, 0, 0, 0.22);
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     gap: 6px;
     min-height: 32px;
     overflow: hidden; /* overflow guard */
@@ -2539,8 +2547,8 @@
     border-radius: 6px;
     font-size: 12px;
     font-family: 'JetBrains Mono', monospace;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: #181a1f;
+    border: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-hover, #323539);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   }
 
@@ -2741,8 +2749,8 @@
     left: 0;
     width: 260px;
     max-height: 280px;
-    background: #181920;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
     z-index: 100;
@@ -2756,8 +2764,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 7px 10px;
-    background: #131418;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
 
   .picker-title {
@@ -2783,8 +2791,8 @@
   .skill-search-input {
     margin: 6px 8px;
     padding: 4px 8px;
-    background: #101114;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     color: #e2e8f0;
     font-size: 11px;
@@ -2811,7 +2819,7 @@
     padding: 5px 6px;
     border-radius: 4px;
     cursor: pointer;
-    background: #14151a;
+    background: var(--p-bg-hover, #323539);
     transition: background 0.1s;
   }
 
@@ -2847,8 +2855,8 @@
 
   .picker-footer {
     padding: 6px 10px;
-    background: #111216;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     text-align: center;
   }
 
@@ -3091,8 +3099,8 @@
     width: 100%;
     box-sizing: border-box;
     padding: 4px 7px;
-    background: #101114;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     color: #f1f2f4;
     font-size: 11px;
@@ -3116,15 +3124,15 @@
     display: flex;
     flex-direction: column;
     text-align: left;
-    background: #131418;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 4px 6px;
     cursor: pointer;
   }
 
   .context-file-item:hover {
-    background: #1e2027;
+    background: var(--p-bg-hover, #323539);
     border-color: #3b82f6;
   }
 
@@ -3144,7 +3152,7 @@
 
   .context-divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--border-default, #393b40);
     margin: 2px 0;
   }
 
@@ -3153,8 +3161,8 @@
     margin-top: 16px;
     width: 100%;
     max-width: 380px;
-    background: #14151a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     overflow: hidden;
   }
@@ -3249,8 +3257,8 @@
     left: 8px;
     right: 8px;
     max-width: 360px;
-    background: #16181f;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 7px;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
     z-index: 100;
@@ -3264,8 +3272,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 10px;
-    background: #121317;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
 
   .mention-popup-title {
@@ -3622,13 +3630,13 @@
   .pdf-password-modal .pdf-path-hint {
     font-size: 12px;
     color: #94a3b8;
-    background: #131416;
+    background: var(--p-bg-surface, #26282b);
     padding: 6px 10px;
     border-radius: 6px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    border: 1px solid #262930;
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .pdf-password-modal .password-input {
@@ -3636,8 +3644,8 @@
     box-sizing: border-box;
     padding: 8px 12px;
     font-size: 13px;
-    background: #131416;
-    border: 1px solid #334155;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     color: #f1f5f9;
     outline: none;
@@ -3663,8 +3671,8 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 12px 16px;
-    border-top: 1px solid #2d3748;
-    background: #18191c;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .pdf-password-modal .btn {
