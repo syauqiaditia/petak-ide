@@ -25,34 +25,34 @@ test('b26 UI 1: 4-layer depth tokens and .variant-a / .variant-b theme in index.
   const indexPath = path.resolve(projectRoot, 'index.html');
   const indexHtml = fs.readFileSync(indexPath, 'utf-8');
 
-  // Layer 0: Canvas Base (#0c0d10)
-  assert.ok(indexHtml.includes('--p-bg-base: #0c0d10'));
-  // Layer 1: Surface Panels (#121317)
-  assert.ok(indexHtml.includes('--p-bg-surface: #121317'));
-  // Layer 2: Work Surface (#15161b)
-  assert.ok(indexHtml.includes('--p-bg-workspace: #15161b'));
-  // Layer 3: Elevated / Popovers (#1c1e24)
-  assert.ok(indexHtml.includes('--p-bg-elevated: #1c1e24'));
+  // Layer 0: Canvas Base (#1e1f22)
+  assert.ok(indexHtml.includes('--p-bg-base: #1e1f22'));
+  // Layer 1: Surface Panels (#26282b)
+  assert.ok(indexHtml.includes('--p-bg-surface: #26282b'));
+  // Layer 2: Work Surface (#2b2d30)
+  assert.ok(indexHtml.includes('--p-bg-workspace: #2b2d30'));
+  // Layer 3: Elevated / Popovers (#35373c)
+  assert.ok(indexHtml.includes('--p-bg-elevated: #35373c'));
   // Hover & Active states
-  assert.ok(indexHtml.includes('--p-bg-hover: #22242c'));
-  assert.ok(indexHtml.includes('--p-bg-active: #2a2d36'));
+  assert.ok(indexHtml.includes('--p-bg-hover: #323539'));
+  assert.ok(indexHtml.includes('--p-bg-active: #383a40'));
 
   // Border refinement (anti jail-cell)
-  assert.ok(indexHtml.includes('--border-default: #1e2027'));
-  assert.ok(indexHtml.includes('--border-subtle: rgba(255, 255, 255, 0.06)'));
-  assert.ok(indexHtml.includes('--border-focus: rgba(59, 130, 246, 0.5)'));
+  assert.ok(indexHtml.includes('--border-default: #393b40'));
+  assert.ok(indexHtml.includes('--border-subtle: rgba(255, 255, 255, 0.08)'));
+  assert.ok(indexHtml.includes('--border-focus: rgba(53, 116, 240, 0.6)'));
 
   // Variant A & B classes
   assert.ok(indexHtml.includes('body.variant-a'));
   assert.ok(indexHtml.includes('body.variant-b'));
   assert.ok(indexHtml.includes('<body class="variant-a">'));
 
-  // Variant B tokens (Zed / Fleet Zen)
-  assert.ok(indexHtml.includes('--p-bg-base: #0a0b0d'));
-  assert.ok(indexHtml.includes('--p-bg-surface: #0f1013'));
-  assert.ok(indexHtml.includes('--p-bg-workspace: #141518'));
-  assert.ok(indexHtml.includes('--p-bg-elevated: #191a1e'));
-  assert.ok(indexHtml.includes('rgba(255, 255, 255, 0.035)'));
+  // Variant B tokens (Discord Dark)
+  assert.ok(indexHtml.includes('--p-bg-base: #1e1f22'));
+  assert.ok(indexHtml.includes('--p-bg-surface: #2b2d31'));
+  assert.ok(indexHtml.includes('--p-bg-workspace: #313338'));
+  assert.ok(indexHtml.includes('--p-bg-elevated: #383a40'));
+  assert.ok(indexHtml.includes('rgba(255, 255, 255, 0.08)'));
 });
 
 // =============================================================================

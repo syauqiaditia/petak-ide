@@ -887,28 +887,28 @@
 
 <style>
   :global(:root) {
-    --bg-app: var(--p-bg-base, #0c0d10);
-    --bg-card: var(--p-bg-surface, #121317);
-    --bg-card-hover: var(--p-bg-hover, #22242c);
-    --bg-elevated: var(--p-bg-elevated, #1c1e24);
-    --border-subtle: var(--border-subtle, rgba(255, 255, 255, 0.06));
-    --border: var(--border-default, #1e2027);
+    --bg-app: var(--p-bg-base, #1e1f22);
+    --bg-card: var(--p-bg-surface, #26282b);
+    --bg-card-hover: var(--p-bg-hover, #323539);
+    --bg-elevated: var(--p-bg-elevated, #35373c);
+    --border-subtle: var(--border-subtle, rgba(255, 255, 255, 0.08));
+    --border: var(--border-default, #393b40);
     --border-strong: #2f323c;
-    --text-main: var(--text, #d8d9dc);
-    --text-muted: var(--text-muted, #8b8f98);
+    --text-main: var(--text, #dbdee1);
+    --text-muted: var(--text-muted, #949ba4);
     --text-dim: #606470;
-    --accent: #6ea8ff;
+    --accent: #3574f0;
     --accent-hover: #5092f6;
-    --accent-bg: rgba(110, 168, 255, 0.12);
-    --accent-border: rgba(110, 168, 255, 0.25);
-    --success: #7fc98f;
-    --success-bg: rgba(127, 201, 143, 0.12);
-    --success-border: rgba(127, 201, 143, 0.25);
-    --warning: #e8b45a;
-    --warning-bg: rgba(232, 180, 90, 0.14);
-    --warning-border: rgba(232, 180, 90, 0.28);
-    --danger: #f07a74;
-    --danger-bg: rgba(240, 122, 116, 0.12);
+    --accent-bg: rgba(53, 116, 240, 0.12);
+    --accent-border: rgba(53, 116, 240, 0.25);
+    --success: #57c87c;
+    --success-bg: rgba(87, 200, 124, 0.12);
+    --success-border: rgba(87, 200, 124, 0.25);
+    --warning: #e0aa4e;
+    --warning-bg: rgba(224, 170, 78, 0.14);
+    --warning-border: rgba(224, 170, 78, 0.28);
+    --danger: #e5534b;
+    --danger-bg: rgba(229, 83, 75, 0.12);
     --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
   }
@@ -969,8 +969,8 @@
   .column-left {
     width: 370px;
     flex-shrink: 0;
-    background: var(--p-bg-base, #0c0d10);
-    border-right: 1px solid var(--border-default, #1e2027);
+    background: var(--p-bg-base, #1e1f22);
+    border-right: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
     padding: 28px 24px;
