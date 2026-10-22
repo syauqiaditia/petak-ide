@@ -265,8 +265,8 @@
     align-items: center;
     gap: 4px;
     padding-top: 8px;
-    background: #111215;
-    border-right: 1px solid #26282d;
+    background: var(--p-bg-base, #1e1f22);
+    border-right: 1px solid var(--border-default, #393b40);
     user-select: none;
     -webkit-user-select: none;
   }
@@ -281,10 +281,10 @@
   }
   .rail-btn:hover {
     color: #d8d9dc;
-    background: #1a1b1f;
+    background: var(--p-bg-hover, #323539);
   }
   .rail-btn.active {
-    background: #23252b;
+    background: var(--p-bg-active, #383a40);
     color: #e6e7ea;
   }
   .spacer {
@@ -310,8 +310,8 @@
     left: 54px;
     bottom: 50px;
     width: 230px;
-    background: #1c1d22;
-    border: 1px solid #26282d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
     padding: 6px 4px;
@@ -345,15 +345,15 @@
     box-sizing: border-box;
   }
   .tw-menu-btn:hover {
-    background: #262830;
+    background: var(--p-bg-hover, #323539);
     color: #ffffff;
   }
   .tw-shortcut-badge {
     width: 16px;
     height: 16px;
     border-radius: 3px;
-    background: #22242b;
-    border: 1px solid #2c2e36;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     color: #8b8f98;
     font-size: 10px;
     font-weight: 600;
@@ -374,7 +374,7 @@
   .tw-kbd {
     font-size: 10.5px;
     color: #6b707d;
-    background: #16171b;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 1px 5px;
     border-radius: 4px;
     font-family: inherit;
@@ -382,7 +382,7 @@
   }
   .tw-sep {
     height: 1px;
-    background: #26282d;
+    background: var(--border-default, #393b40);
     margin: 4px 6px;
   }
 </style>

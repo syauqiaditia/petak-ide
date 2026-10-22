@@ -107,8 +107,8 @@
     gap: 4px;
     padding-top: 8px;
     padding-bottom: 8px;
-    background: #111215;
-    border-left: 1px solid #26282d;
+    background: var(--p-bg-base, #1e1f22);
+    border-left: 1px solid var(--border-default, #393b40);
     user-select: none;
     -webkit-user-select: none;
     z-index: 10;
@@ -128,10 +128,10 @@
   }
   .right-rail-btn:hover {
     color: #d8d9dc;
-    background: #1a1b1f;
+    background: var(--p-bg-hover, #323539);
   }
   .right-rail-btn.active {
-    background: #23252b;
+    background: var(--p-bg-active, #383a40);
     color: #58a6ff;
   }
   .right-rail-indicator {

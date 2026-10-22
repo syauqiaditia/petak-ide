@@ -131,11 +131,11 @@
       fontSize: 13,
       lineHeight: 1.2,
       theme: {
-        background: '#141518',
+        background: '#2b2d30',
         foreground: '#d8d9dc',
         cursor: '#6ea8ff',
-        selectionBackground: '#1f2a3d',
-        black: '#141518',
+        selectionBackground: '#353b4b',
+        black: '#26282b',
         red: '#f07a74',
         green: '#7fc98f',
         yellow: '#e8b45a',
@@ -785,8 +785,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    border-top: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     user-select: none;
     -webkit-user-select: none;
     z-index: 5;
@@ -816,15 +816,15 @@
   }
   .term-search-toggle:hover, .term-search-toggle.active {
     opacity: 1;
-    background: #23252d;
+    background: var(--p-bg-hover, #323539);
   }
   .term-search-overlay {
     position: absolute;
     top: 38px;
     right: 16px;
     z-index: 50;
-    background: #18191e;
-    border: 1px solid #2d303a;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 4px 8px;
     display: flex;
@@ -833,8 +833,8 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
   .term-search-input {
-    background: #101114;
-    border: 1px solid #252830;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 3px 6px;
     font-size: 11px;
@@ -877,7 +877,7 @@
     cursor: pointer;
   }
   .term-nav-btn:hover {
-    background: #252830;
+    background: var(--p-bg-hover, #323539);
     color: #ffffff;
   }
   .term-close-btn {
@@ -904,8 +904,8 @@
     align-items: stretch;
     justify-content: space-between;
     padding: 0 8px 0 10px;
-    border-bottom: 1px solid #222428;
-    background: #111215;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .tabs-list {
@@ -936,7 +936,7 @@
   .panel-tab.active {
     color: #e6e7ea;
     border-bottom: 2px solid #6ea8ff;
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .tab-badge {
@@ -944,7 +944,7 @@
     font-weight: 600;
     padding: 1px 6px;
     border-radius: 9px;
-    background: #23252b;
+    background: var(--p-bg-hover, #323539);
     color: #8b8f98;
   }
 
@@ -961,7 +961,7 @@
   .tab-divider {
     width: 1px;
     height: 16px;
-    background: #26282d;
+    background: var(--border-default, #393b40);
     align-self: center;
     margin: 0 4px;
   }
@@ -979,7 +979,7 @@
   }
 
   .git-body {
-    background: #121317;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .git-dock-layout {
@@ -1041,7 +1041,7 @@
   .terminal-tab.active {
     color: #e6e7ea;
     border-bottom: 2px solid #6ea8ff;
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .tab-label {
@@ -1066,7 +1066,7 @@
 
   .tab-close-btn:hover {
     opacity: 1;
-    background: #23252b;
+    background: var(--p-bg-hover, #323539);
     color: #f07a74;
   }
 
@@ -1086,7 +1086,7 @@
 
   .add-tab-btn:hover {
     color: #d8d9dc;
-    background: #1f2a3d;
+    background: var(--p-bg-hover, #323539);
   }
 
   .header-actions {
@@ -1110,14 +1110,14 @@
   .close-panel-btn:hover,
   .toggle-maximize-btn:hover {
     color: #d8d9dc;
-    background: #23252b;
+    background: var(--p-bg-hover, #323539);
   }
 
   .panel-body {
     flex: 1;
     min-height: 0;
     position: relative;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
     padding: 4px 6px 4px 10px;
     user-select: text;
@@ -1135,14 +1135,14 @@
   }
 
   :global(.terminal-instance .xterm-viewport) {
-    background-color: #141518 !important;
+    background-color: var(--p-bg-workspace, #2b2d30) !important;
   }
 
   .usages-panel {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #d8d9dc;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -1150,7 +1150,8 @@
 
   .usages-header {
     padding: 6px 10px;
-    border-bottom: 1px solid #222428;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     font-size: 11px;
     color: #8b8f98;
   }
@@ -1183,7 +1184,7 @@
   }
 
   .usage-row:hover {
-    background: #1e2025;
+    background: var(--p-bg-hover, #323539);
   }
 
   .usage-file {

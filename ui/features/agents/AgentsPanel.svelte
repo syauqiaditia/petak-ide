@@ -515,8 +515,8 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #141518;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-left: 1px solid var(--border-default, #393b40);
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -540,8 +540,8 @@
   .panel-header {
     display: flex;
     flex-direction: column;
-    background: #121317;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
     box-sizing: border-box;
     width: 100%;
@@ -858,8 +858,8 @@
   }
 
   .sessions-dropdown {
-    background: #181920;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--p-bg-elevated, #35373c);
+    border-bottom: 1px solid var(--border-default, #393b40);
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
     max-height: 280px;
     display: flex;
@@ -872,8 +872,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: #14151a;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .sessions-title {
@@ -918,15 +918,15 @@
     align-items: center;
     justify-content: space-between;
     padding: 5px 7px;
-    background: #121318;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.1s;
   }
 
   .session-row:hover {
-    background: #1e2029;
+    background: var(--p-bg-hover, #323539);
     border-color: rgba(59, 130, 246, 0.3);
   }
 
@@ -1011,8 +1011,8 @@
   /* Subtabs Group */
   .agent-subtab-group {
     display: flex;
-    background: #18191f;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-base, #1e1f22);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 2px;
     gap: 1px;
@@ -1182,8 +1182,8 @@
     justify-content: space-between;
     height: 24px;
     padding: 0 10px;
-    background: #111215;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     font-size: 10px;
     font-family: monospace;
     flex-shrink: 0;

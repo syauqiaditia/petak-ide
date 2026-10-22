@@ -145,3 +145,70 @@ test('b50 Slate Grey 4: CodeMirror theme synchronization in themeDarcula.ts and 
   assert.ok(editorSource.includes("borderRight: '1px solid #393b40'"), 'petakTheme gutter divider must be 1px solid #393b40');
   assert.ok(editorSource.includes("borderTop: '1px solid #393b40'"), 'petakTheme vim panel borderTop must be 1px solid #393b40');
 });
+
+// =============================================================================
+// Suite 5: Zero Pitch Black pada Shell, Activity Rail, Menu & AI Panels
+// =============================================================================
+test('b50 Slate Grey 5: Shell components, Activity Rail, Menus & AI Panel free of hardcoded pitch black', () => {
+  const shellFiles = [
+    path.resolve(uiRoot, 'shell/Rail.svelte'),
+    path.resolve(uiRoot, 'shell/RightRail.svelte'),
+    path.resolve(uiRoot, 'shell/FileTree.svelte'),
+    path.resolve(uiRoot, 'shell/TitleBar.svelte'),
+    path.resolve(uiRoot, 'shell/RightDock.svelte'),
+    path.resolve(uiRoot, 'shell/StatusBar.svelte'),
+    path.resolve(uiRoot, 'features/agents/AgentsPanel.svelte'),
+    path.resolve(uiRoot, 'features/agents/AgentChat.svelte'),
+    path.resolve(uiRoot, 'features/terminal/TerminalPanel.svelte'),
+  ];
+
+  const pitchBlackTokens = [
+    '#111215',
+    '#141518',
+    '#0d0e12',
+    '#0d0e11',
+    '#0f1013',
+    '#090a0c',
+    '#121317',
+    '#16171a',
+  ];
+
+  for (const filePath of shellFiles) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const fileName = path.basename(filePath);
+    for (const token of pitchBlackTokens) {
+      assert.ok(
+        !content.includes(`background: ${token}`) &&
+        !content.includes(`background:${token}`) &&
+        !content.includes(`background-color: ${token}`) &&
+        !content.includes(`background-color:${token}`),
+        `${fileName} must not have background with pitch black token ${token}`
+      );
+    }
+  }
+
+  // Verify CSS variable token adoption on key selectors
+  const railContent = fs.readFileSync(path.resolve(uiRoot, 'shell/Rail.svelte'), 'utf-8');
+  assert.ok(railContent.includes('var(--p-bg-base, #1e1f22)'), 'Rail.svelte must use var(--p-bg-base, #1e1f22)');
+
+  const rightRailContent = fs.readFileSync(path.resolve(uiRoot, 'shell/RightRail.svelte'), 'utf-8');
+  assert.ok(rightRailContent.includes('var(--p-bg-base, #1e1f22)'), 'RightRail.svelte must use var(--p-bg-base, #1e1f22)');
+
+  const fileTreeContent = fs.readFileSync(path.resolve(uiRoot, 'shell/FileTree.svelte'), 'utf-8');
+  assert.ok(fileTreeContent.includes('var(--p-bg-surface, #26282b)'), 'FileTree.svelte must use var(--p-bg-surface, #26282b)');
+
+  const titleBarContent = fs.readFileSync(path.resolve(uiRoot, 'shell/TitleBar.svelte'), 'utf-8');
+  assert.ok(titleBarContent.includes('var(--p-bg-workspace, #2b2d30)'), 'TitleBar.svelte search-btn must use var(--p-bg-workspace, #2b2d30)');
+  assert.ok(titleBarContent.includes('var(--p-bg-elevated, #35373c)'), 'TitleBar.svelte popup menus must use var(--p-bg-elevated, #35373c)');
+
+  const agentChatContent = fs.readFileSync(path.resolve(uiRoot, 'features/agents/AgentChat.svelte'), 'utf-8');
+  assert.ok(agentChatContent.includes('var(--p-bg-workspace, #2b2d30)'), 'AgentChat.svelte messages must use var(--p-bg-workspace, #2b2d30)');
+  assert.ok(agentChatContent.includes('var(--p-bg-surface, #26282b)'), 'AgentChat.svelte composer must use var(--p-bg-surface, #26282b)');
+
+  const statusBarContent = fs.readFileSync(path.resolve(uiRoot, 'shell/StatusBar.svelte'), 'utf-8');
+  assert.ok(statusBarContent.includes('var(--p-bg-surface, #26282b)'), 'StatusBar.svelte must use var(--p-bg-surface, #26282b)');
+
+  const termPanelContent = fs.readFileSync(path.resolve(uiRoot, 'features/terminal/TerminalPanel.svelte'), 'utf-8');
+  assert.ok(termPanelContent.includes('var(--p-bg-surface, #26282b)'), 'TerminalPanel.svelte header must use var(--p-bg-surface, #26282b)');
+  assert.ok(termPanelContent.includes('var(--p-bg-workspace, #2b2d30)'), 'TerminalPanel.svelte body must use var(--p-bg-workspace, #2b2d30)');
+});
