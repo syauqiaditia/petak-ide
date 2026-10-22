@@ -497,8 +497,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    border-right: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-right: 1px solid var(--border-default, #393b40);
     height: 100%;
     overflow: hidden;
     user-select: none;
@@ -510,8 +510,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #26282d;
-    background: #18191d;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     flex-shrink: 0;
   }
   .header-title {
@@ -656,8 +656,8 @@
   }
   .empty-state {
     padding: 12px;
-    background: #18191d;
-    border: 1px dashed #282a30;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px dashed var(--border-default, #393b40);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -675,8 +675,8 @@
     gap: 6px;
   }
   .device-card {
-    background: #18191d;
-    border: 1px solid #282a30;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 8px 10px;
     display: flex;
@@ -686,7 +686,7 @@
     transition: border-color 0.15s, background 0.15s;
   }
   .device-card:hover {
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
     border-color: #383a42;
   }
   .device-card.selected {
@@ -761,7 +761,7 @@
   .offline-chip {
     font-size: 9.5px;
     color: #656972;
-    background: #1e2025;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 1px 5px;
     border-radius: 3px;
     flex-shrink: 0;

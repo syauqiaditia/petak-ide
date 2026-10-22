@@ -217,8 +217,8 @@
     width: 330px;
     flex-shrink: 0;
     height: 100%;
-    background: #141518;
-    border-right: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border-right: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -226,8 +226,8 @@
 
   .list-header {
     padding: 12px 14px 10px 14px;
-    border-bottom: 1px solid #26282d;
-    background: #111215;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     display: flex;
     flex-direction: column;
     gap: 10px;

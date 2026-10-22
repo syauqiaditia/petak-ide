@@ -9,14 +9,14 @@ export function drawCanvasMockApp(
   isInteracted = false
 ) {
   // 1. Background
-  ctx.fillStyle = '#141518';
+  ctx.fillStyle = '#2b2d30';
   ctx.fillRect(0, 0, width, height);
 
   const scale = width / 360;
 
   // 2. Mobile status bar (top)
   const barH = 26 * scale;
-  ctx.fillStyle = '#111215';
+  ctx.fillStyle = '#26282b';
   ctx.fillRect(0, 0, width, barH);
 
   ctx.fillStyle = '#8b8f98';

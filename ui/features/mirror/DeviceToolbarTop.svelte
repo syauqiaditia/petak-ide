@@ -105,8 +105,8 @@
     height: 40px;
     flex-shrink: 0;
     padding: 0 12px;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -178,8 +178,8 @@
     font-size: 10px;
     font-weight: 600;
     color: #8b8f98;
-    background: #1e2025;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     padding: 1px 6px;
     border-radius: 4px;
     display: flex;

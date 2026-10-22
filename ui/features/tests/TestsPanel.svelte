@@ -472,7 +472,7 @@
     display: flex;
     width: 100%;
     height: 100%;
-    background: #0f1013;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #e6e7ea;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overflow: hidden;
@@ -483,7 +483,7 @@
     width: 320px;
     min-width: 280px;
     max-width: 360px;
-    background: #14151a;
+    background: var(--p-bg-surface, #26282b);
     border-right: 1px solid rgba(255, 255, 255, 0.08);
     display: flex;
     flex-direction: column;
@@ -932,7 +932,7 @@
   }
 
   .step-selector {
-    background: #111317;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #a5b4fc;
     font-size: 11px;
     padding: 2px 6px;
@@ -997,7 +997,7 @@
     border-radius: 6px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     object-fit: contain;
-    background: #000;
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .screenshot-caption {
@@ -1128,7 +1128,7 @@
 
   .form-select,
   .form-input {
-    background: #121317;
+    background: var(--p-bg-workspace, #2b2d30);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #e6e7ea;
     border-radius: 6px;
@@ -1170,7 +1170,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    background: #131418;
+    background: var(--p-bg-surface, #26282b);
     padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid rgba(255, 255, 255, 0.05);

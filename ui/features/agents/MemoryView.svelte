@@ -251,7 +251,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #e6edf3;
     overflow: hidden;
     font-size: 12px;
@@ -264,8 +264,8 @@
     justify-content: space-between;
     gap: 8px;
     padding: 8px 10px;
-    background: #18191f;
-    border-bottom: 1px solid #282a33;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
 
@@ -350,15 +350,15 @@
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    background: #1c1e26;
-    border-bottom: 1px solid #282a33;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
 
   .new-file-input {
     flex: 1;
-    background: #121316;
-    border: 1px solid #30363d;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     color: #e6edf3;
     padding: 3px 8px;
@@ -414,8 +414,8 @@
   /* Left: Sidebar Files */
   .files-sidebar {
     width: 130px;
-    background: #141518;
-    border-right: 1px solid #282a33;
+    background: var(--p-bg-surface, #26282b);
+    border-right: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
@@ -519,7 +519,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: #101114;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
 
@@ -546,8 +546,8 @@
     justify-content: space-between;
     gap: 8px;
     padding: 6px 10px;
-    background: #16171d;
-    border-bottom: 1px solid #21242c;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
 
@@ -630,9 +630,9 @@
     width: 100%;
     height: 100%;
     resize: none;
-    background: #0d1117;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #c9d1d9;
-    border: 1px solid #21242c;
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 8px 10px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;

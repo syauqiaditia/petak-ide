@@ -158,8 +158,8 @@
   .files-sidebar {
     width: 250px;
     flex-shrink: 0;
-    background: #141518;
-    border-right: 1px solid #2c2e34;
+    background: var(--p-bg-surface, #26282b);
+    border-right: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -274,7 +274,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: #16171a;
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .no-file-selected {

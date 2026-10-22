@@ -265,7 +265,7 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
   .toolbar {
@@ -278,8 +278,8 @@
     justify-content: space-between;
     gap: 6px 12px;
     padding: 4px 10px;
-    border-bottom: 1px solid #222428;
-    background: #141518;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
   .status-indicator {
     display: flex;
@@ -358,9 +358,9 @@
     gap: 4px;
   }
   .restart-action-btn {
-    background: #1e2025;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #c4c7cf;
-    border: 1px solid #2c2e35;
+    border: 1px solid var(--border-default, #393b40);
   }
   .restart-action-btn:hover {
     background: #262930;
@@ -391,9 +391,9 @@
     background: #4a2629;
   }
   .pause-toggle-btn {
-    background: #1c1d22;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #8b8f98;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
   }
   .pause-toggle-btn.is-paused {
     background: #3b2a1a;
@@ -416,7 +416,7 @@
   }
   .clear-btn:hover {
     color: #d8d9dc;
-    background: #1e2025;
+    background: var(--p-bg-hover, #323539);
   }
   .search-bar {
     height: 30px;
@@ -424,15 +424,15 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #111215;
-    border-bottom: 1px solid #1f2127;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
   .search-input-group {
     display: flex;
     align-items: center;
-    background: #16181d;
-    border: 1px solid #282b35;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 1px 4px;
   }
@@ -497,7 +497,7 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     line-height: 20px;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
   }
   .empty-output {
     color: #666a73;

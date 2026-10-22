@@ -507,8 +507,8 @@
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    background: #1c1d22;
-    border: 1px solid #26282d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 12px;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
     overflow: hidden;
@@ -523,8 +523,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    background: #16171a;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
 
   .header-title {
@@ -565,8 +565,8 @@
     width: 260px;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #26282d;
-    background: #141518;
+    border-right: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .pane-toolbar {
@@ -575,8 +575,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 10px;
-    border-bottom: 1px solid #26282d;
-    background: #18191d;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .btn-group {
@@ -662,7 +662,7 @@
   }
 
   .config-item:hover {
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
   }
 
   .config-item.selected {
@@ -717,7 +717,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px 24px;
-    background: #18191d;
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .form-container {
@@ -742,8 +742,8 @@
     height: 32px;
     padding: 0 10px;
     border-radius: 6px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     color: #e6e7ea;
     font-size: 12.5px;
     font-family: inherit;
@@ -832,8 +832,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    background: #141518;
-    border-top: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
   }
 
   .footer-left {

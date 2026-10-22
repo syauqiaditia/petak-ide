@@ -93,8 +93,8 @@
   .device-toolbar-bottom {
     height: 40px;
     flex-shrink: 0;
-    background: #141518;
-    border-top: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-around;

@@ -92,7 +92,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #16171a;
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .mr-detail-wrapper {
@@ -101,7 +101,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: #16171a;
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .no-mr-selected {

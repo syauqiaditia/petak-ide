@@ -153,14 +153,14 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: #121316;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #e0e2e8;
     overflow-y: auto;
   }
   .picker-header {
     padding: 16px;
-    border-bottom: 1px solid #202227;
-    background: #16171b;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -208,19 +208,19 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 14px;
-    background: #18191d;
-    border: 1px solid #252830;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     transition: all 0.15s ease;
   }
   .device-card:hover:not(.disabled) {
     border-color: #3b5998;
-    background: #1c1e24;
+    background: var(--p-bg-hover, #323539);
   }
   .device-card.disabled {
     opacity: 0.55;
-    background: #151619;
-    border-color: #202227;
+    background: var(--p-bg-surface, #26282b);
+    border-color: var(--border-default, #393b40);
   }
   .card-left {
     display: flex;
