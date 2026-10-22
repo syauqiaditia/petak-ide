@@ -729,8 +729,8 @@
     font-size: 11px;
     font-weight: 500;
     color: #8b8f98;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     user-select: none;
   }
 
@@ -782,9 +782,9 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 14px 0 58px;
-    background: #1e2025;
-    border-top: 1px solid #282a30;
-    border-bottom: 1px solid #282a30;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
+    border-bottom: 1px solid var(--border-default, #393b40);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     color: #7a7e85;
@@ -949,8 +949,8 @@
   .filler {
     background: repeating-linear-gradient(
       135deg,
-      #18191c 0 6px,
-      #1c1d20 6px 12px
+      var(--p-bg-surface, #26282b) 0 6px,
+      var(--p-bg-workspace, #2b2d30) 6px 12px
     );
   }
 

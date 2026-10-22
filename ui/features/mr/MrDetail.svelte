@@ -387,13 +387,13 @@ ${filesSummary}`;
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: #16171a;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
 
   .detail-header {
-    background: #141518;
-    border-bottom: 1px solid #2c2e34;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     padding: 16px 20px 0 20px;
     flex-shrink: 0;
   }
@@ -567,8 +567,8 @@ ${filesSummary}`;
     gap: 12px;
     padding: 10px 14px;
     border-radius: 8px;
-    background: #1c1d22;
-    border: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .commit-avatar {
@@ -609,8 +609,8 @@ ${filesSummary}`;
     display: flex;
     align-items: center;
     gap: 6px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     padding: 3px 8px;
     border-radius: 6px;
   }

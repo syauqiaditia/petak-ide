@@ -290,8 +290,8 @@
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    background: #1c1d22;
-    border: 1px solid #26282d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 12px;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
     overflow: hidden;
@@ -306,8 +306,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
-    background: #16171a;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
 
   .header-left {
@@ -344,7 +344,7 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    background: #18191d;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .error-banner {
@@ -357,8 +357,8 @@
   }
 
   .section-box {
-    background: #141518;
-    border: 1px solid #26282d;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     padding: 12px 14px;
   }
@@ -397,8 +397,8 @@
     height: 32px;
     padding: 0 8px;
     border-radius: 6px;
-    background: #1c1d22;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .branch-icon {
@@ -454,8 +454,8 @@
     height: 34px;
     padding: 0 10px;
     border-radius: 6px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     color: #e6e7ea;
     font-size: 13px;
     font-family: inherit;
@@ -476,10 +476,10 @@
   .desc-tabs {
     display: flex;
     gap: 4px;
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
     padding: 2px;
     border-radius: 6px;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .tab-btn {
@@ -503,8 +503,8 @@
     display: flex;
     flex-direction: column;
     border-radius: 6px;
-    border: 1px solid #2c2e34;
-    background: #141518;
+    border: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
 
@@ -552,8 +552,8 @@
   .preview-area {
     padding: 12px;
     border-radius: 6px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     min-height: 120px;
     max-height: 200px;
     overflow-y: auto;
@@ -575,8 +575,8 @@
     height: 34px;
     padding: 0 8px;
     border-radius: 6px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .input-with-avatar .text-input {
@@ -597,8 +597,8 @@
     gap: 8px;
     padding: 10px 12px;
     border-radius: 6px;
-    background: #141518;
-    border: 1px solid #26282d;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .checkbox-row {
@@ -621,8 +621,8 @@
     justify-content: flex-end;
     gap: 10px;
     padding: 0 16px;
-    background: #16171a;
-    border-top: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
   }
 
   .btn-cancel {

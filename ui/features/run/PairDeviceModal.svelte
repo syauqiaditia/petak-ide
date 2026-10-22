@@ -521,8 +521,8 @@
   .modal-box {
     width: 480px;
     max-width: 90vw;
-    background: #18191d;
-    border: 1px solid #26282e;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
     display: flex;
@@ -538,8 +538,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #26282e;
-    background: #1c1d22;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .header-title-wrap {
@@ -578,8 +578,8 @@
 
   .modal-tabs {
     display: flex;
-    background: #141518;
-    border-bottom: 1px solid #26282e;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     padding: 4px 16px 0;
     gap: 8px;
   }
@@ -612,7 +612,7 @@
     flex-direction: column;
     gap: 14px;
     font-size: 13px;
-    background: #18191d;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .error-banner {
@@ -666,8 +666,8 @@
 
   .qr-meta-card {
     width: 100%;
-    background: #141518;
-    border: 1px solid #26282e;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 10px 12px;
     display: flex;
@@ -691,10 +691,10 @@
     color: #cfe0ff;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    background: #1c1d22;
+    background: var(--p-bg-surface, #26282b);
     padding: 2px 6px;
     border-radius: 4px;
-    border: 1px solid #26282e;
+    border: 1px solid var(--border-default, #393b40);
   }
 
   .qr-status-indicator {
@@ -803,8 +803,8 @@
 
   .input-field {
     height: 32px;
-    background: #121316;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 0 10px;
     color: #d8d9dc;
@@ -917,8 +917,8 @@
   .modal-footer {
     height: 50px;
     padding: 0 16px;
-    background: #141518;
-    border-top: 1px solid #26282e;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: flex-end;

@@ -240,9 +240,9 @@
   }
 
   .discussion-header {
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
     padding: 8px 12px;
-    border-bottom: 1px solid #26282d;
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -361,8 +361,8 @@
 
   /* Reply Box */
   .reply-box {
-    background: #141518;
-    border-top: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     padding: 10px 14px;
     display: flex;
     flex-direction: column;
@@ -440,7 +440,7 @@
   }
 
   :global(.mr-code-block) {
-    background: #111215;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 8px 12px;
     border-radius: 4px;
     overflow-x: auto;
@@ -449,7 +449,7 @@
   }
 
   :global(.mr-inline-code) {
-    background: #111215;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 2px 4px;
     border-radius: 3px;
     font-family: monospace;

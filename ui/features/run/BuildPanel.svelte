@@ -127,7 +127,7 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
   .toolbar {
@@ -137,8 +137,8 @@
     align-items: center;
     gap: 10px;
     padding: 0 12px;
-    border-bottom: 1px solid #222428;
-    background: #141518;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
   .status-summary {
     display: flex;
@@ -162,8 +162,8 @@
     flex-grow: 1;
   }
   .build-search {
-    background: #101114;
-    border: 1px solid #252830;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 3px 8px;
     font-size: 11px;
@@ -203,7 +203,7 @@
   }
   .clear-btn:hover {
     color: #d8d9dc;
-    background: #1e2025;
+    background: var(--p-bg-hover, #323539);
   }
   .errors-list {
     flex: 1;

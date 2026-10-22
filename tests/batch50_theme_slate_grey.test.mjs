@@ -212,3 +212,127 @@ test('b50 Slate Grey 5: Shell components, Activity Rail, Menus & AI Panel free o
   assert.ok(termPanelContent.includes('var(--p-bg-surface, #26282b)'), 'TerminalPanel.svelte header must use var(--p-bg-surface, #26282b)');
   assert.ok(termPanelContent.includes('var(--p-bg-workspace, #2b2d30)'), 'TerminalPanel.svelte body must use var(--p-bg-workspace, #2b2d30)');
 });
+
+// =============================================================================
+// Suite 6: Zero Pitch Black pada Seluruh Panel Fitur (Slate Grey)
+// =============================================================================
+test('b50 Slate Grey 6: Feature panels free of hardcoded pitch black', () => {
+  const featureFiles = [
+    // 1. Changes (Commit Panel & Stash)
+    path.resolve(uiRoot, 'features/git/CommitPanel.svelte'),
+    path.resolve(uiRoot, 'features/git/StashView.svelte'),
+    // 2. Git
+    path.resolve(uiRoot, 'features/git/GitView.svelte'),
+    path.resolve(uiRoot, 'features/git/LogView.svelte'),
+    path.resolve(uiRoot, 'features/git/BranchPanel.svelte'),
+    path.resolve(uiRoot, 'features/git/CommitDetail.svelte'),
+    path.resolve(uiRoot, 'features/git/DiffView.svelte'),
+    // 3. Run Panel & Run Config
+    path.resolve(uiRoot, 'features/run/RunPanel.svelte'),
+    path.resolve(uiRoot, 'features/run/RunConfigDialog.svelte'),
+    // 4. Build Panel
+    path.resolve(uiRoot, 'features/run/BuildPanel.svelte'),
+    // 5. Logcat Panel
+    path.resolve(uiRoot, 'features/run/LogcatPanel.svelte'),
+    // 6. Problems Panel
+    path.resolve(uiRoot, 'features/problems/ProblemsPanel.svelte'),
+    // 7. Toolchains Panel
+    path.resolve(uiRoot, 'features/toolchain/ToolchainsPanel.svelte'),
+    // 8. Merge / MR & Three-Way Merge
+    path.resolve(uiRoot, 'features/mr/MrView.svelte'),
+    path.resolve(uiRoot, 'features/mr/MrList.svelte'),
+    path.resolve(uiRoot, 'features/mr/MrDetail.svelte'),
+    path.resolve(uiRoot, 'features/mr/MrFiles.svelte'),
+    path.resolve(uiRoot, 'features/mr/MrThread.svelte'),
+    path.resolve(uiRoot, 'features/mr/MrMergeBar.svelte'),
+    path.resolve(uiRoot, 'features/mr/MrCreateModal.svelte'),
+    path.resolve(uiRoot, 'features/git/ThreeWayMergeModal.svelte'),
+    path.resolve(uiRoot, 'features/git/ConflictView.svelte'),
+    path.resolve(uiRoot, 'features/git/RebaseBranchModal.svelte'),
+    path.resolve(uiRoot, 'features/git/RebaseDialog.svelte'),
+    // 9. Automation & Tests Panel
+    path.resolve(uiRoot, 'features/tests/TestsPanel.svelte'),
+    // 10. Devices Panel & Pair Device Modal
+    path.resolve(uiRoot, 'features/run/DevicesPanel.svelte'),
+    path.resolve(uiRoot, 'features/run/PairDeviceModal.svelte'),
+    // 11. Device Mirror
+    path.resolve(uiRoot, 'features/mirror/DeviceMirrorPanel.svelte'),
+    path.resolve(uiRoot, 'features/mirror/DeviceStage.svelte'),
+    path.resolve(uiRoot, 'features/mirror/DeviceToolbarTop.svelte'),
+    path.resolve(uiRoot, 'features/mirror/DeviceToolbarBottom.svelte'),
+    path.resolve(uiRoot, 'features/mirror/DevicePickerView.svelte'),
+    // 12. Project Memory (Obsidian Vault Panel)
+    path.resolve(uiRoot, 'features/agents/MemoryView.svelte'),
+  ];
+
+  const pitchBlackTokens = [
+    '#141518',
+    '#111215',
+    '#16171a',
+    '#1c1d22',
+    '#121316',
+    '#18191d',
+    '#0d1117',
+    '#0f1013',
+    '#0c0d10',
+    '#121317',
+    '#18191c',
+    '#151619',
+    '#131417',
+    '#1e2025',
+    '#101114',
+    '#18191e',
+    '#1a1c22',
+    '#17181c',
+    '#14151a',
+    '#111317',
+    '#18191f',
+    '#131418',
+  ];
+
+  for (const filePath of featureFiles) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const fileName = path.basename(filePath);
+    for (const token of pitchBlackTokens) {
+      assert.ok(
+        !content.includes(`background: ${token}`) &&
+        !content.includes(`background:${token}`) &&
+        !content.includes(`background-color: ${token}`) &&
+        !content.includes(`background-color:${token}`),
+        `${fileName} must not have background with pitch black token ${token}`
+      );
+    }
+  }
+
+  // Verify CSS variable token adoption in key feature panels
+  const commitPanelContent = fs.readFileSync(path.resolve(uiRoot, 'features/git/CommitPanel.svelte'), 'utf-8');
+  assert.ok(commitPanelContent.includes('var(--p-bg-surface, #26282b)'), 'CommitPanel.svelte must use var(--p-bg-surface, #26282b)');
+  assert.ok(commitPanelContent.includes('var(--p-bg-workspace, #2b2d30)'), 'CommitPanel.svelte must use var(--p-bg-workspace, #2b2d30)');
+
+  const logViewContent = fs.readFileSync(path.resolve(uiRoot, 'features/git/LogView.svelte'), 'utf-8');
+  assert.ok(logViewContent.includes('var(--p-bg-surface, #26282b)'), 'LogView.svelte must use var(--p-bg-surface, #26282b)');
+  assert.ok(logViewContent.includes('var(--p-bg-workspace, #2b2d30)'), 'LogView.svelte must use var(--p-bg-workspace, #2b2d30)');
+
+  const runPanelContent = fs.readFileSync(path.resolve(uiRoot, 'features/run/RunPanel.svelte'), 'utf-8');
+  assert.ok(runPanelContent.includes('var(--p-bg-surface, #26282b)'), 'RunPanel.svelte must use var(--p-bg-surface, #26282b)');
+  assert.ok(runPanelContent.includes('var(--p-bg-workspace, #2b2d30)'), 'RunPanel.svelte must use var(--p-bg-workspace, #2b2d30)');
+
+  const problemsContent = fs.readFileSync(path.resolve(uiRoot, 'features/problems/ProblemsPanel.svelte'), 'utf-8');
+  assert.ok(problemsContent.includes('var(--p-bg-surface, #26282b)'), 'ProblemsPanel.svelte must use var(--p-bg-surface, #26282b)');
+
+  const toolchainsContent = fs.readFileSync(path.resolve(uiRoot, 'features/toolchain/ToolchainsPanel.svelte'), 'utf-8');
+  assert.ok(toolchainsContent.includes('var(--p-bg-surface, #26282b)'), 'ToolchainsPanel.svelte must use var(--p-bg-surface, #26282b)');
+
+  const mrViewContent = fs.readFileSync(path.resolve(uiRoot, 'features/mr/MrView.svelte'), 'utf-8');
+  assert.ok(mrViewContent.includes('var(--p-bg-workspace, #2b2d30)'), 'MrView.svelte must use var(--p-bg-workspace, #2b2d30)');
+
+  const testsPanelContent = fs.readFileSync(path.resolve(uiRoot, 'features/tests/TestsPanel.svelte'), 'utf-8');
+  assert.ok(testsPanelContent.includes('var(--p-bg-surface, #26282b)'), 'TestsPanel.svelte must use var(--p-bg-surface, #26282b)');
+
+  const mirrorPanelContent = fs.readFileSync(path.resolve(uiRoot, 'features/mirror/DeviceMirrorPanel.svelte'), 'utf-8');
+  assert.ok(mirrorPanelContent.includes('var(--p-bg-surface, #26282b)'), 'DeviceMirrorPanel.svelte must use var(--p-bg-surface, #26282b)');
+
+  const memoryViewContent = fs.readFileSync(path.resolve(uiRoot, 'features/agents/MemoryView.svelte'), 'utf-8');
+  assert.ok(memoryViewContent.includes('var(--p-bg-surface, #26282b)'), 'MemoryView.svelte must use var(--p-bg-surface, #26282b)');
+  assert.ok(memoryViewContent.includes('var(--p-bg-workspace, #2b2d30)'), 'MemoryView.svelte must use var(--p-bg-workspace, #2b2d30)');
+});

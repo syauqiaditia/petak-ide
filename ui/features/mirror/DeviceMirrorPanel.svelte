@@ -101,8 +101,8 @@
   .device-mirror-panel {
     height: 100%;
     flex-shrink: 0;
-    background: #141518;
-    border-left: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-left: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
     position: relative;

@@ -173,8 +173,8 @@
 <style>
   .mr-merge-bar {
     height: 56px;
-    background: #141518;
-    border-top: 1px solid #2c2e34;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -370,7 +370,7 @@
   }
 
   .summary-line code {
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 2px 6px;
     border-radius: 3px;
     color: #79c0ff;
@@ -378,8 +378,8 @@
   }
 
   .sha-card {
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 10px 14px;
   }
@@ -434,8 +434,8 @@
 
   .modal-footer {
     padding: 12px 18px;
-    background: #18191c;
-    border-top: 1px solid #2c2e34;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     justify-content: flex-end;
     gap: 10px;

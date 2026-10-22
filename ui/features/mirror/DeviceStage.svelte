@@ -102,7 +102,7 @@
   .device-stage {
     flex: 1;
     min-height: 0;
-    background: #16171a;
+    background: var(--p-bg-workspace, #2b2d30);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -115,8 +115,8 @@
     margin-top: 8px;
     font-size: 10px;
     color: #8b8f98;
-    background: #141518;
-    border: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     padding: 3px 10px;
     border-radius: 6px;
     user-select: none;
@@ -124,8 +124,8 @@
     pointer-events: none;
   }
   .phone-bezel {
-    background: #111215;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 28px;
     padding: 10px 8px;
     display: flex;

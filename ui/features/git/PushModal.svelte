@@ -136,8 +136,8 @@
   .push-modal {
     width: 460px;
     max-width: 90vw;
-    background: #1c1d22;
-    border: 1px solid #34363d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
     display: flex;
@@ -201,8 +201,8 @@
     width: 100%;
     box-sizing: border-box;
     height: 32px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 0 10px;
     color: #d8d9dc;
@@ -236,8 +236,8 @@
   .push-modal-footer {
     height: 52px;
     padding: 0 18px;
-    background: #18191d;
-    border-top: 1px solid #2a2c32;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: flex-end;

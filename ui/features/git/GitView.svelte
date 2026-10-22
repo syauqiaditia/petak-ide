@@ -301,7 +301,7 @@
     flex-direction: column;
     height: 100%;
     min-width: 0;
-    background: #16171a;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
 
@@ -430,8 +430,8 @@
     width: 90vw;
     max-width: 1200px;
     height: 85vh;
-    background: #141518;
-    border: 1px solid #34363d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
     display: flex;
@@ -445,8 +445,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #111215;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
 
