@@ -724,8 +724,8 @@
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    background: var(--p-bg-surface, #121317);
-    border-bottom: 1px solid var(--border-default, #1e2027);
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     user-select: none;
     -webkit-user-select: none;
     min-width: 0;

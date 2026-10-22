@@ -2,13 +2,13 @@ import { EditorView } from '@codemirror/view';
 
 /**
  * Android Studio Dark Theme (Darcula / New UI).
- * Colors: slate gray #1e1f22, gutter #1e1f22, line #2b2d30, selection #214283.
+ * Colors: slate gray canvas #2b2d30, gutter #26282b, border #393b40, selection #353b4b (legacy: #1e1f22, #214283).
  */
 export const darculaTheme = EditorView.theme(
   {
     '&': {
-      color: '#bcbec4',
-      backgroundColor: '#1e1f22',
+      color: '#dbdee1',
+      backgroundColor: '#2b2d30',
       height: '100%',
       fontSize: '13px',
       fontFamily: "'JetBrains Mono', monospace",
@@ -19,23 +19,23 @@ export const darculaTheme = EditorView.theme(
       lineHeight: '22px',
     },
     '.cm-content': {
-      caretColor: '#ced0d6',
+      caretColor: '#3574f0',
       padding: '6px 0',
     },
     '&.cm-focused .cm-cursor': {
-      borderLeftColor: '#ced0d6',
+      borderLeftColor: '#3574f0',
       borderLeftWidth: '2px',
     },
     '&.cm-focused .cm-selectionBackground, ::selection': {
-      backgroundColor: '#2e5788 !important',
+      backgroundColor: '#353b4b !important',
     },
     '.cm-selectionBackground': {
-      backgroundColor: '#264f78 !important',
+      backgroundColor: '#353b4b !important',
     },
     '.cm-gutters': {
-      backgroundColor: '#1e1f22',
-      color: '#4e5157',
-      borderRight: '1px solid #2b2d30',
+      backgroundColor: '#26282b',
+      color: '#949ba4',
+      borderRight: '1px solid #393b40',
       paddingRight: '8px',
     },
     '.cm-gutterElement': {
@@ -45,7 +45,7 @@ export const darculaTheme = EditorView.theme(
       backgroundColor: 'rgba(255, 255, 255, 0.04) !important',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: '#2b2d30 !important',
+      backgroundColor: '#323539 !important',
       color: '#a8adbd',
       fontWeight: '500',
     },
@@ -61,15 +61,15 @@ export const darculaTheme = EditorView.theme(
       zIndex: '5',
     },
     '.cm-vim-panel': {
-      backgroundColor: '#1e1f22',
-      color: '#dfe1e5',
+      backgroundColor: '#26282b',
+      color: '#dbdee1',
       padding: '2px 8px',
       fontFamily: "'JetBrains Mono', monospace",
       fontSize: '12px',
-      borderTop: '1px solid #2b2d30',
+      borderTop: '1px solid #393b40',
     },
     '.cm-vim-panel input': {
-      color: '#dfe1e5',
+      color: '#dbdee1',
       backgroundColor: 'transparent',
     },
     '.cm-flash-line': {

@@ -1150,7 +1150,7 @@
 
                 <!-- Form Tambah Bot Baru (Manual) -->
                 {#if isAddBotFormOpen}
-                  <div class="add-bot-form-box" style="margin-bottom: 16px; padding: 14px; background: var(--p-bg-surface, #121317); border: 1px solid var(--border-focus, #3b82f6); border-radius: var(--radius-md, 6px);">
+                  <div class="add-bot-form-box" style="margin-bottom: 16px; padding: 14px; background: var(--p-bg-surface, #26282b); border: 1px solid var(--border-focus, #3574f0); border-radius: var(--radius-md, 6px);">
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
                       <span>➕ Konfigurasi Bot Baru</span>
                     </div>
@@ -1508,7 +1508,7 @@
 
                 <!-- Form Tambah/Edit Skill -->
                 {#if isSkillFormOpen}
-                  <div class="add-bot-form-box" style="margin-bottom: 16px; padding: 14px; background: var(--p-bg-surface, #121317); border: 1px solid var(--border-focus, #3b82f6); border-radius: var(--radius-md, 6px);">
+                  <div class="add-bot-form-box" style="margin-bottom: 16px; padding: 14px; background: var(--p-bg-surface, #26282b); border: 1px solid var(--border-focus, #3574f0); border-radius: var(--radius-md, 6px);">
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between;">
                       <span>{skillFormIsEditing ? '✏️ Edit Skill' : '➕ Tambah Skill Baru'}</span>
                       {#if skillFormIsEditing && (skillFormName === 'ponytail' || skillFormName === 'caveman')}
@@ -1830,7 +1830,7 @@
                     </div>
                     <p class="variant-desc">
                       {isId
-                        ? '4-Layer Depth Tokens standar (--p-bg-base: #0c0d10), border-subtle rgba(255, 255, 255, 0.06), kontras tajam untuk efisiensi visual developer.'
+                        ? '4-Layer Depth Tokens standar (--p-bg-base: #1e1f22), border-subtle rgba(255, 255, 255, 0.08), kontras tajam untuk efisiensi visual developer.'
                         : 'Standard 4-layer depth tokens, subtle borders, high contrast for fast navigation.'}
                     </p>
                     <div class="variant-preview preview-a">
@@ -1858,7 +1858,7 @@
                     </div>
                     <p class="variant-desc">
                       {isId
-                        ? 'Kanvas lebih gelap (Layer 0 #0a0b0d, Layer 1 #0f1013), border-subtle ultra-halus (rgba(255, 255, 255, 0.035)), minim distraksi visual.'
+                        ? 'Kanvas Discord Dark (Layer 0 #1e1f22, Layer 1 #2b2d31), border-subtle ultra-halus (rgba(255, 255, 255, 0.08)), minim distraksi visual.'
                         : 'Darker canvas, ultra-subtle borders, minimal visual noise for deep coding.'}
                     </p>
                     <div class="variant-preview preview-b">
@@ -1895,7 +1895,7 @@
     max-width: 980px;
     height: 720px;
     max-height: 94vh;
-    background: #121317;
+    background: var(--p-bg-surface, #26282b);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
@@ -1906,7 +1906,7 @@
 
   .settings-window-header {
     height: 48px;
-    background: #0d0e11;
+    background: var(--p-bg-base, #1e1f22);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     align-items: center;
@@ -1929,7 +1929,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #15161b;
+    background: var(--p-bg-elevated, #35373c);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
     padding: 4px 10px;
@@ -1973,7 +1973,7 @@
   /* Left Categories Sidebar (200px, Raycast Style) */
   .settings-cat-sidebar {
     width: 210px;
-    background: #0c0d10;
+    background: var(--p-bg-base, #1e1f22);
     border-right: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     flex-direction: column;
@@ -2033,7 +2033,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px 24px;
-    background: #121317;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .settings-section {
@@ -2073,7 +2073,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 14px;
-    background: #15161b;
+    background: var(--p-bg-workspace, #2b2d30);
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
     gap: 12px;
@@ -2209,7 +2209,7 @@
   .keymap-table th {
     text-align: left;
     padding: 8px 12px;
-    background: #15161b;
+    background: var(--p-bg-workspace, #2b2d30);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     color: #8b949e;
     font-weight: 600;
@@ -2343,7 +2343,7 @@
   }
 
   .settings-group-box {
-    background: #15161b;
+    background: var(--p-bg-workspace, #2b2d30);
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
     padding: 12px 14px;
@@ -2673,7 +2673,7 @@
   }
 
   .variant-card {
-    background: #15161b;
+    background: var(--p-bg-workspace, #2b2d30);
     border: 2px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
     padding: 14px;
@@ -2686,12 +2686,12 @@
 
   .variant-card:hover {
     border-color: rgba(255, 255, 255, 0.16);
-    background: #181920;
+    background: var(--p-bg-hover, #323539);
   }
 
   .variant-card.active {
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.06);
+    border-color: var(--accent, #3574f0);
+    background: rgba(53, 116, 240, 0.08);
   }
 
   .variant-card-header {
@@ -2715,7 +2715,7 @@
   }
 
   .variant-badge.active {
-    background: #3b82f6;
+    background: var(--accent, #3574f0);
     color: #ffffff;
     font-weight: 600;
   }
@@ -2737,8 +2737,8 @@
 
   .preview-a .swatch-layer-0 {
     flex: 1;
-    background: #0c0d10;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: #1e1f22;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     padding: 6px;
     display: flex;
@@ -2746,8 +2746,8 @@
 
   .preview-a .swatch-layer-1 {
     flex: 1;
-    background: #121317;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: #26282b;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     padding: 6px;
     display: flex;
@@ -2755,14 +2755,14 @@
 
   .preview-a .swatch-layer-2 {
     flex: 1;
-    background: #15161b;
+    background: #2b2d30;
     border-radius: 3px;
   }
 
   .preview-b .swatch-layer-0 {
     flex: 1;
-    background: #0a0b0d;
-    border: 1px solid rgba(255, 255, 255, 0.035);
+    background: #1e1f22;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     padding: 6px;
     display: flex;
@@ -2770,8 +2770,8 @@
 
   .preview-b .swatch-layer-1 {
     flex: 1;
-    background: #0f1013;
-    border: 1px solid rgba(255, 255, 255, 0.035);
+    background: #2b2d31;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     padding: 6px;
     display: flex;
@@ -2779,7 +2779,7 @@
 
   .preview-b .swatch-layer-2 {
     flex: 1;
-    background: #141518;
+    background: #313338;
     border-radius: 3px;
   }
 
