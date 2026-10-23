@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak IDE — Slate Grey Developer Theme Showcase</title>
+  <style>
+    /* ==========================================================================
+       PETAK SLATE GREY THEME SYSTEM (Android Studio vs Discord vs Pitch Black)
+       ========================================================================== */
+
+    /* Default: ANDROID STUDIO SLATE (JetBrains Darcula / New UI) */
+    :root, body.theme-android-studio {
+      --theme-name: "Android Studio Slate (New UI)";
+      --theme-badge: "JetBrains Darcula Modern";
+      
+      /* Surfaces & Canvases */
+      --p-bg-activity-rail: #1e1f22;
+      --p-bg-sidebar: #26282b;
+      --p-bg-editor: #2b2d30;
+      --p-bg-titlebar: #26282b;
+      --p-bg-bottom-dock: #26282b;
+      --p-bg-agent-dock: #26282b;
+      --p-bg-statusbar: #26282b;
+      --p-bg-card: #35373c;
+      --p-bg-elevated: #35373c;
+      --p-bg-hover: rgba(255, 255, 255, 0.06);
+      --p-bg-active-item: #323539;
+      --p-bg-line-highlight: #323539;
+      --p-bg-tab-active: #2b2d30;
+      --p-bg-tab-inactive: #26282b;
+
+      /* Borders & Dividers (1px soft solid) */
+      --p-border: #393b40;
+      --p-border-subtle: #323438;
+      --p-border-active-tab: #3574f0;
+
+      /* Typography */
+      --p-text-main: #dbdee1;
+      --p-text-muted: #949ba4;
+      --p-text-dim: #6c707e;
+      --p-text-bright: #ffffff;
+
+      /* Accents (JetBrains Blue) */
+      --p-accent: #3574f0;
+      --p-accent-hover: #4882f5;
+      --p-accent-subtle: rgba(53, 116, 240, 0.15);
+      --p-accent-text: #ffffff;
+
+      /* Status Colors */
+      --p-success: #57c87c;
+      --p-success-subtle: rgba(87, 200, 124, 0.14);
+      --p-warning: #e0aa4e;
+      --p-danger: #e5534b;
+      --p-info: #56a8f5;
+
+      /* Syntax Highlighting (Darcula warm palette) */
+      --syn-keyword: #cf8e6d;
+      --syn-type: #56a8f5;
+      --syn-func: #57b6ca;
+      --syn-string: #6aab73;
+      --syn-number: #2aacb8;
+      --syn-comment: #7a7e85;
+      --syn-var: #c9cbd0;
+      --syn-param: #dfaa78;
+      --syn-annotation: #b3ae60;
+
+      /* Ergonomics Indicators */
+      --p-contrast-ratio: "10.8 : 1 (WCAG AAA)";
+      --p-comfort-score: "98% (Sangat Teduh)";
+      --p-strain-level: "Low Eye Fatigue";
+    }
+
+    /* Mode 2: DISCORD DARK */
+    body.theme-discord {
+      --theme-name: "Discord Dark Theme";
+      --theme-badge: "Discord Relaxed Slate";
+
+      /* Surfaces & Canvases */
+      --p-bg-activity-rail: #1e1f22;
+      --p-bg-sidebar: #2b2d31;
+      --p-bg-editor: #313338;
+      --p-bg-titlebar: #2b2d31;
+      --p-bg-bottom-dock: #2b2d31;
+      --p-bg-agent-dock: #2b2d31;
+      --p-bg-statusbar: #232428;
+      --p-bg-card: #383a40;
+      --p-bg-elevated: #383a40;
+      --p-bg-hover: rgba(255, 255, 255, 0.07);
+      --p-bg-active-item: #35373c;
+      --p-bg-line-highlight: #35373c;
+      --p-bg-tab-active: #313338;
+      --p-bg-tab-inactive: #2b2d31;
+
+      /* Borders & Dividers */
+      --p-border: #393b40;
+      --p-border-subtle: #313338;
+      --p-border-active-tab: #5865f2;
+
+      /* Typography */
+      --p-text-main: #dbdee1;
+      --p-text-muted: #949ba4;
+      --p-text-dim: #6c707e;
+      --p-text-bright: #ffffff;
+
+      /* Accents (Discord Blurple) */
+      --p-accent: #5865f2;
+      --p-accent-hover: #4752c4;
+      --p-accent-subtle: rgba(88, 101, 242, 0.16);
+      --p-accent-text: #ffffff;
+
+      /* Status Colors */
+      --p-success: #57f287;
+      --p-success-subtle: rgba(87, 242, 135, 0.14);
+      --p-warning: #fee75c;
+      --p-danger: #ed4245;
+      --p-info: #5865f2;
+
+      /* Syntax Highlighting */
+      --syn-keyword: #f47067;
+      --syn-type: #79c0ff;
+      --syn-func: #d2a8ff;
+      --syn-string: #7ee787;
+      --syn-number: #79c0ff;
+      --syn-comment: #8b949e;
+      --syn-var: #dbdee1;
+      --syn-param: #ffa657;
+      --syn-annotation: #d2a8ff;
+
+      /* Ergonomics Indicators */
+      --p-contrast-ratio: "9.2 : 1 (WCAG AAA)";
+      --p-comfort-score: "96% (Teduh & Santai)";
+      --p-strain-level: "Minimal Fatigue";
+    }
+
+    /* Mode 3: PITCH BLACK (Comparator / Eye Strain Baseline) */
+    body.theme-pitch-black {
+      --theme-name: "Pitch Black (Baseline Kontras Menusuk)";
+      --theme-badge: "Harsh High-Contrast";
+
+      /* Surfaces & Canvases */
+      --p-bg-activity-rail: #050608;
+      --p-bg-sidebar: #0a0b0e;
+      --p-bg-editor: #000000;
+      --p-bg-titlebar: #0a0b0e;
+      --p-bg-bottom-dock: #0a0b0e;
+      --p-bg-agent-dock: #0a0b0e;
+      --p-bg-statusbar: #050608;
+      --p-bg-card: #14161c;
+      --p-bg-elevated: #14161c;
+      --p-bg-hover: rgba(255, 255, 255, 0.08);
+      --p-bg-active-item: #1c1e24;
+      --p-bg-line-highlight: #121418;
+      --p-bg-tab-active: #000000;
+      --p-bg-tab-inactive: #0a0b0e;
+
+      /* Borders & Dividers */
+      --p-border: #1e2027;
+      --p-border-subtle: #16181f;
+      --p-border-active-tab: #6ea8ff;
+
+      /* Typography */
+      --p-text-main: #ffffff;
+      --p-text-muted: #797d86;
+      --p-text-dim: #4b4e57;
+      --p-text-bright: #ffffff;
+
+      /* Accents */
+      --p-accent: #6ea8ff;
+      --p-accent-hover: #89b8ff;
+      --p-accent-subtle: rgba(110, 168, 255, 0.15);
+      --p-accent-text: #000000;
+
+      /* Status Colors */
+      --p-success: #5eead4;
+      --p-success-subtle: rgba(94, 234, 212, 0.14);
+      --p-warning: #fcd34d;
+      --p-danger: #f87171;
+      --p-info: #6ea8ff;
+
+      /* Syntax Highlighting */
+      --syn-keyword: #ff7b72;
+      --syn-type: #79c0ff;
+      --syn-func: #d2a8ff;
+      --syn-string: #a5d6ff;
+      --syn-number: #79c0ff;
+      --syn-comment: #6e7681;
+      --syn-var: #ffffff;
+      --syn-param: #ffa657;
+      --syn-annotation: #d2a8ff;
+
+      /* Ergonomics Indicators */
+      --p-contrast-ratio: "21.0 : 1 (Harsh Glare)";
+      --p-comfort-score: "42% (Tinggi Resiko Silau)";
+      --p-strain-level: "Severe Eye Strain (>2 Jam)";
+    }
+
+    /* ==========================================================================
+       GLOBAL LAYOUT & RESET
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--p-bg-editor);
+      color: var(--p-text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12.5px;
+      user-select: none;
+      -webkit-user-select: none;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .font-code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, Consolas, monospace;
+    }
+
+    .icon {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      display: inline-block;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    /* ==========================================================================
+       TOP SHOWCASE CONTROL BANNER
+       ========================================================================== */
+    .top-banner {
+      height: 38px;
+      background: #1e1f22;
+      border-bottom: 1px solid var(--p-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+
+    .banner-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-tag {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+      font-size: 12.5px;
+      color: #ffffff;
+      letter-spacing: 0.2px;
+    }
+
+    .brand-badge {
+      background: var(--p-accent-subtle);
+      color: var(--p-accent);
+      border: 1px solid var(--p-accent);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .theme-selector {
+      display: flex;
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid var(--p-border);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 3px;
+    }
+
+    .theme-btn {
+      background: transparent;
+      border: none;
+      color: var(--p-text-muted);
+      padding: 4px 11px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .theme-btn:hover {
+      color: var(--p-text-main);
+      background: var(--p-bg-hover);
+    }
+
+    .theme-btn.active {
+      background: var(--p-accent);
+      color: var(--p-accent-text);
+      font-weight: 600;
+    }
+
+    .theme-btn .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .banner-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .metric-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--p-bg-card);
+      border: 1px solid var(--p-border);
+      padding: 3px 9px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--p-text-muted);
+    }
+
+    .metric-chip strong {
+      color: var(--p-text-main);
+      font-weight: 600;
+    }
+
+    .metric-chip.comfort-chip strong {
+      color: var(--p-success);
+    }
+
+    /* ==========================================================================
+       PETAK IDE TITLEBAR & RUN BAR
+       ========================================================================== */
+    .ide-titlebar {
+      height: 38px;
+      background: var(--p-bg-titlebar);
+      border-bottom: 1px solid var(--p-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      flex-shrink: 0;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .wc-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+    }
+    .wc-close { background: #ec6a5e; }
+    .wc-min { background: #f4bf4f; }
+    .wc-max { background: #61c554; }
+
+    .project-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      color: var(--p-text-muted);
+    }
+
+    .project-breadcrumb .name {
+      color: var(--p-text-main);
+      font-weight: 600;
+    }
+
+    .branch-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--p-bg-hover);
+      border: 1px solid var(--p-border);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--p-text-main);
+    }
+
+    .titlebar-center {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .omnibar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--p-bg-editor);
+      border: 1px solid var(--p-border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      width: 320px;
+      color: var(--p-text-muted);
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+
+    .omnibar:hover {
+      border-color: var(--p-accent);
+      color: var(--p-text-main);
+    }
+
+    .omnibar .kbd {
+      background: var(--p-bg-sidebar);
+      border: 1px solid var(--p-border);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+      margin-left: auto;
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .run-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--p-success-subtle);
+      border: 1px solid var(--p-success);
+      color: var(--p-success);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .run-pill:hover {
+      background: rgba(87, 200, 124, 0.22);
+    }
+
+    .hot-reload-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--p-accent-subtle);
+      border: 1px solid var(--p-accent);
+      color: var(--p-accent);
+      padding: 4px 9px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .hot-reload-pill:hover {
+      background: rgba(53, 116, 240, 0.25);
+    }
+
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--p-text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover {
+      background: var(--p-bg-hover);
+      color: var(--p-text-main);
+    }
+
+    .icon-btn.active {
+      background: var(--p-bg-active-item);
+      color: var(--p-accent);
+      border-color: var(--p-border);
+    }
+
+    /* ==========================================================================
+       MAIN DOCKING WORKSPACE (FULL EDGE-TO-EDGE, 0px FLOATING GAP)
+       ========================================================================== */
+    .ide-workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* 1. Activity Rail (Extreme Left, 44px) */
+    .activity-rail {
+      width: 44px;
+      background: var(--p-bg-activity-rail);
+      border-right: 1px solid var(--p-border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 0;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+
+    .rail-top, .rail-bottom {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      align-items: center;
+    }
+
+    .rail-bottom {
+      margin-top: auto;
+    }
+
+    .rail-icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--p-text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.12s ease;
+    }
+
+    .rail-icon-btn:hover {
+      color: var(--p-text-main);
+      background: var(--p-bg-hover);
+    }
+
+    .rail-icon-btn.active {
+      color: var(--p-accent);
+      background: var(--p-bg-active-item);
+    }
+
+    .rail-icon-btn.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 3px;
+      background: var(--p-accent);
+      border-radius: 0 2px 2px 0;
+    }
+
+    .rail-badge {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: var(--p-accent);
+      color: #ffffff;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 8px;
+      line-height: 1;
+    }
+
+    /* 2. Tool Window Sidebar (250px) */
+    .tool-sidebar {
+      width: 250px;
+      background: var(--p-bg-sidebar);
+      border-right: 1px solid var(--p-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      height: 34px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--p-border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--p-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .sidebar-switcher {
+      display: flex;
+      gap: 2px;
+      padding: 4px 8px;
+      background: var(--p-bg-activity-rail);
+      border-bottom: 1px solid var(--p-border);
+    }
+
+    .sidebar-subtab {
+      flex: 1;
+      padding: 4px 8px;
+      border: none;
+      background: transparent;
+      color: var(--p-text-muted);
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .sidebar-subtab.active {
+      background: var(--p-bg-sidebar);
+      color: var(--p-text-main);
+      font-weight: 600;
+    }
+
+    .tree-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--p-text-muted);
+      cursor: pointer;
+      line-height: 1.4;
+    }
+
+    .tree-item:hover {
+      background: var(--p-bg-hover);
+      color: var(--p-text-main);
+    }
+
+    .tree-item.active {
+      background: var(--p-bg-active-item);
+      color: var(--p-text-bright);
+      font-weight: 500;
+    }
+
+    .tree-item.folder {
+      font-weight: 600;
+      color: var(--p-text-main);
+    }
+
+    .tree-indent-1 { padding-left: 20px; }
+    .tree-indent-2 { padding-left: 32px; }
+    .tree-indent-3 { padding-left: 44px; }
+    .tree-indent-4 { padding-left: 56px; }
+
+    .file-badge-git {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .badge-mod { color: #56a8f5; }
+    .badge-new { color: #57c87c; }
+
+    /* 3. Center Workspace (Editor + Bottom Dock) */
+    .center-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Editor Tab Bar */
+    .editor-tabbar {
+      height: 34px;
+      background: var(--p-bg-tab-inactive);
+      border-bottom: 1px solid var(--p-border);
+      display: flex;
+      align-items: flex-end;
+      padding-left: 4px;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .editor-tab {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 12px;
+      font-size: 12px;
+      color: var(--p-text-muted);
+      background: var(--p-bg-tab-inactive);
+      border-right: 1px solid var(--p-border);
+      border-top: 2px solid transparent;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .editor-tab:hover {
+      color: var(--p-text-main);
+      background: var(--p-bg-hover);
+    }
+
+    .editor-tab.active {
+      background: var(--p-bg-tab-active);
+      color: var(--p-text-bright);
+      font-weight: 500;
+      border-top: 2px solid var(--p-border-active-tab);
+    }
+
+    .tab-close {
+      opacity: 0.6;
+      border-radius: 3px;
+      padding: 2px;
+    }
+    .tab-close:hover {
+      opacity: 1;
+      background: var(--p-bg-hover);
+    }
+
+    /* Editor Breadcrumb */
+    .editor-breadcrumb-bar {
+      height: 24px;
+      background: var(--p-bg-editor);
+      border-bottom: 1px solid var(--p-border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 11px;
+      color: var(--p-text-dim);
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .editor-breadcrumb-bar span {
+      color: var(--p-text-muted);
+    }
+    .editor-breadcrumb-bar span.current {
+      color: var(--p-text-main);
+      font-weight: 500;
+    }
+
+    /* Editor Main Area (Gutter + Code) */
+    .editor-canvas {
+      flex: 1;
+      background: var(--p-bg-editor);
+      display: flex;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      position: relative;
+    }
+
+    .editor-gutter {
+      width: 48px;
+      padding: 8px 0;
+      color: var(--p-text-dim);
+      text-align: right;
+      user-select: none;
+      flex-shrink: 0;
+      background: var(--p-bg-editor);
+      border-right: 1px solid var(--p-border-subtle);
+    }
+
+    .gutter-line {
+      padding: 0 10px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .gutter-line.active {
+      color: var(--p-text-main);
+      font-weight: 600;
+    }
+
+    .diff-indicator {
+      width: 3px;
+      height: 100%;
+      background: transparent;
+      border-radius: 1px;
+    }
+    .diff-indicator.add { background: var(--p-success); }
+    .diff-indicator.mod { background: var(--p-info); }
+
+    .editor-code {
+      flex: 1;
+      padding: 8px 14px;
+      color: var(--p-text-main);
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .code-line {
+      height: 20px;
+      display: flex;
+      align-items: center;
+    }
+
+    .code-line.highlight {
+      background: var(--p-bg-line-highlight);
+      margin: 0 -14px;
+      padding: 0 14px;
+    }
+
+    /* Syntax Tokens */
+    .syn-k { color: var(--syn-keyword); font-weight: 500; }
+    .syn-t { color: var(--syn-type); }
+    .syn-f { color: var(--syn-func); }
+    .syn-s { color: var(--syn-string); }
+    .syn-n { color: var(--syn-number); }
+    .syn-c { color: var(--syn-comment); font-style: italic; }
+    .syn-v { color: var(--syn-var); }
+    .syn-p { color: var(--syn-param); }
+    .syn-a { color: var(--syn-annotation); }
+
+    /* Floating Comfort Badge in Editor */
+    .editor-comfort-badge {
+      position: absolute;
+      top: 10px;
+      right: 18px;
+      background: var(--p-bg-card);
+      border: 1px solid var(--p-border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      z-index: 10;
+    }
+
+    /* 4. Bottom Dock (Terminal & Run, 190px) */
+    .bottom-dock {
+      height: 190px;
+      background: var(--p-bg-bottom-dock);
+      border-top: 1px solid var(--p-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .bottom-dock-tabs {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--p-border);
+      padding: 0 10px;
+      background: var(--p-bg-bottom-dock);
+    }
+
+    .dock-tab-group {
+      display: flex;
+      gap: 4px;
+    }
+
+    .dock-tab {
+      padding: 4px 10px;
+      border: none;
+      background: transparent;
+      color: var(--p-text-muted);
+      font-size: 11.5px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dock-tab:hover {
+      color: var(--p-text-main);
+      background: var(--p-bg-hover);
+    }
+
+    .dock-tab.active {
+      color: var(--p-text-main);
+      background: var(--p-bg-active-item);
+      font-weight: 600;
+    }
+
+    .dock-content {
+      flex: 1;
+      padding: 8px 14px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .term-line {
+      display: flex;
+      gap: 8px;
+    }
+    .term-prompt { color: var(--p-accent); font-weight: 600; }
+    .term-path { color: var(--p-info); }
+    .term-success { color: var(--p-success); }
+    .term-muted { color: var(--p-text-dim); }
+
+    /* 5. Right Dock: Hermes AI Agent (310px) */
+    .agent-dock {
+      width: 310px;
+      background: var(--p-bg-agent-dock);
+      border-left: 1px solid var(--p-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .agent-header {
+      height: 34px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--p-border);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--p-text-main);
+    }
+
+    .agent-bot-chips {
+      display: flex;
+      gap: 4px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--p-border-subtle);
+      background: var(--p-bg-activity-rail);
+    }
+
+    .bot-chip {
+      flex: 1;
+      padding: 4px;
+      font-size: 11px;
+      text-align: center;
+      border: 1px solid var(--p-border);
+      border-radius: 4px;
+      background: var(--p-bg-card);
+      color: var(--p-text-muted);
+      cursor: pointer;
+    }
+
+    .bot-chip.active {
+      border-color: var(--p-accent);
+      background: var(--p-accent-subtle);
+      color: var(--p-accent);
+      font-weight: 600;
+    }
+
+    .agent-chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-bubble {
+      background: var(--p-bg-card);
+      border: 1px solid var(--p-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .chat-bubble.user {
+      background: var(--p-accent-subtle);
+      border-color: var(--p-accent);
+    }
+
+    .bubble-author {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--p-accent);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .token-table {
+      width: 100%;
+      margin-top: 8px;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .token-table td {
+      padding: 3px 6px;
+      border-bottom: 1px solid var(--p-border-subtle);
+    }
+
+    .color-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      display: inline-block;
+      vertical-align: middle;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      margin-right: 4px;
+    }
+
+    /* 6. Status Bar (Bottom 26px) */
+    .ide-statusbar {
+      height: 26px;
+      background: var(--p-bg-statusbar);
+      border-top: 1px solid var(--p-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--p-text-muted);
+      flex-shrink: 0;
+    }
+
+    .sb-left, .sb-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .sb-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+
+    .sb-item:hover {
+      color: var(--p-text-main);
+    }
+
+    /* Toast Notification */
+    .petak-toast {
+      position: fixed;
+      bottom: 38px;
+      right: 20px;
+      background: #1e1f22;
+      border: 1px solid var(--p-accent);
+      color: #ffffff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: none;
+      align-items: center;
+      gap: 8px;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body class="theme-android-studio">
+
+  <!-- ========================================================================
+       TOP BANNER: THEME COMPARATOR SWITCHER & ERGONOMICS COMFORT METRICS
+       ======================================================================== -->
+  <div class="top-banner">
+    <div class="banner-left">
+      <div class="brand-tag">
+        <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+        <span>PETAK IDE</span>
+      </div>
+      <span class="brand-badge" id="mode-badge">Android Studio Slate</span>
+
+      <!-- Theme Mode Switcher -->
+      <div class="theme-selector">
+        <button class="theme-btn active" id="btn-theme-as" onclick="setTheme('android-studio')">
+          <span class="dot" style="background: #3574f0;"></span>
+          <span>Android Studio Slate</span>
+        </button>
+        <button class="theme-btn" id="btn-theme-discord" onclick="setTheme('discord')">
+          <span class="dot" style="background: #5865f2;"></span>
+          <span>Discord Dark</span>
+        </button>
+        <button class="theme-btn" id="btn-theme-black" onclick="setTheme('pitch-black')">
+          <span class="dot" style="background: #ffffff;"></span>
+          <span>Pitch Black (Silau)</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="banner-right">
+      <div class="metric-chip">
+        <span>Canvas:</span>
+        <strong id="metric-canvas" class="font-code">#2b2d30</strong>
+      </div>
+      <div class="metric-chip">
+        <span>Contrast:</span>
+        <strong id="metric-contrast">10.8 : 1</strong>
+      </div>
+      <div class="metric-chip comfort-chip">
+        <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-success);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+        <strong id="metric-verdict">Sangat Teduh (Low Fatigue)</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       PETAK IDE TITLEBAR & QUICK ACTIONS
+       ======================================================================== -->
+  <div class="ide-titlebar">
+    <div class="titlebar-left">
+      <div class="window-controls">
+        <div class="wc-dot wc-close"></div>
+        <div class="wc-dot wc-min"></div>
+        <div class="wc-dot wc-max"></div>
+      </div>
+      <div class="project-breadcrumb">
+        <span class="name">jatim-ist-mb-flutter</span>
+        <span>›</span>
+        <span>lib</span>
+        <span>›</span>
+        <span>quick_transfer_card.dart</span>
+      </div>
+      <div class="branch-pill">
+        <svg class="icon" viewBox="0 0 24 24" style="width: 12px; height: 12px;"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+        <span>main</span>
+      </div>
+    </div>
+
+    <div class="titlebar-center">
+      <div class="omnibar" onclick="showToast('Search Anywhere (⌘O)')">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <span>Search symbols, files, actions…</span>
+        <span class="kbd">⌘O</span>
+      </div>
+    </div>
+
+    <div class="titlebar-right">
+      <button class="run-pill" onclick="showToast('Building & Launching Flutter dev flavor on Pixel 8 Pro…')">
+        <svg class="icon" viewBox="0 0 24 24" style="width: 13px; height: 13px; fill: currentColor;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        <span>Run Dev</span>
+      </button>
+      <button class="hot-reload-pill" onclick="showToast('⚡ Hot Reloaded in 184ms')">
+        <svg class="icon" viewBox="0 0 24 24" style="width: 13px; height: 13px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span>Hot Reload</span>
+      </button>
+      <button class="icon-btn active" title="Toggle AI Agent Dock" onclick="toggleAgentDock()">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MAIN IDE WORKSPACE (FULL EDGE-TO-EDGE FLUSH DOCKING)
+       ======================================================================== -->
+  <div class="ide-workspace">
+
+    <!-- 1. Activity Rail -->
+    <div class="activity-rail">
+      <div class="rail-top">
+        <button class="rail-icon-btn active" title="Project Explorer">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        </button>
+        <button class="rail-icon-btn" title="Git Source Control">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><line x1="6" y1="9" x2="6" y2="21"></line></svg>
+          <span class="rail-badge">2</span>
+        </button>
+        <button class="rail-icon-btn" title="Find in Files">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
+        <button class="rail-icon-btn" title="Run & Debug">
+          <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-icon-btn" title="Hermes Bot Team" onclick="toggleAgentDock()">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        </button>
+        <button class="rail-icon-btn" title="IDE Settings">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2. Tool Window Sidebar -->
+    <div class="tool-sidebar">
+      <div class="sidebar-header">
+        <span>Project Explorer</span>
+        <svg class="icon" viewBox="0 0 24 24" style="cursor: pointer;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+
+      <div class="sidebar-switcher">
+        <button class="sidebar-subtab active">Files</button>
+        <button class="sidebar-subtab">Git Changes (2)</button>
+      </div>
+
+      <div class="tree-scroll">
+        <div class="tree-item folder">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span>lib</span>
+        </div>
+        <div class="tree-item folder tree-indent-1">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span>core</span>
+        </div>
+        <div class="tree-item folder tree-indent-2">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span>services</span>
+        </div>
+        <div class="tree-item tree-indent-3">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-info);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>app_screen_privacy_service.dart</span>
+        </div>
+        <div class="tree-item folder tree-indent-1">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span>features</span>
+        </div>
+        <div class="tree-item folder tree-indent-2">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span>quick_transfer</span>
+        </div>
+        <div class="tree-item folder tree-indent-3">
+          <svg class="icon" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <span>presentation</span>
+        </div>
+        <div class="tree-item tree-indent-4 active">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-info);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>quick_transfer_card.dart</span>
+          <span class="file-badge-git badge-mod">M</span>
+        </div>
+        <div class="tree-item tree-indent-1">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-info);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>main_dev.dart</span>
+          <span class="file-badge-git badge-mod">M</span>
+        </div>
+        <div class="tree-item">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-warning);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>pubspec.yaml</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Center Workspace (Editor + Bottom Dock) -->
+    <div class="center-workspace">
+
+      <!-- Editor Tab Bar -->
+      <div class="editor-tabbar">
+        <div class="editor-tab active">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-info); width: 13px; height: 13px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>quick_transfer_card.dart</span>
+          <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--p-accent); margin-left: 2px;"></span>
+          <span class="tab-close">✕</span>
+        </div>
+        <div class="editor-tab">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-info); width: 13px; height: 13px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>app_screen_privacy_service.dart</span>
+          <span class="tab-close">✕</span>
+        </div>
+        <div class="editor-tab">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-info); width: 13px; height: 13px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>main_dev.dart</span>
+          <span class="tab-close">✕</span>
+        </div>
+      </div>
+
+      <!-- Editor Breadcrumb -->
+      <div class="editor-breadcrumb-bar font-code">
+        <span>features</span>
+        <span>›</span>
+        <span>quick_transfer</span>
+        <span>›</span>
+        <span>presentation</span>
+        <span>›</span>
+        <span>quick_transfer_card.dart</span>
+        <span>›</span>
+        <span class="current">QuickTransferCard</span>
+      </div>
+
+      <!-- Code Canvas -->
+      <div class="editor-canvas font-code">
+        <!-- Floating Comfort Indicator -->
+        <div class="editor-comfort-badge">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--p-success); display: inline-block;"></span>
+          <span id="badge-theme-name" style="font-weight: 600;">Android Studio Slate</span>
+          <span style="color: var(--p-text-dim);">•</span>
+          <span id="badge-contrast" style="color: var(--p-text-muted);">10.8:1 WCAG AAA</span>
+        </div>
+
+        <div class="editor-gutter">
+          <div class="gutter-line">1</div>
+          <div class="gutter-line">2</div>
+          <div class="gutter-line">3</div>
+          <div class="gutter-line">4</div>
+          <div class="gutter-line">5</div>
+          <div class="gutter-line">6</div>
+          <div class="gutter-line">7</div>
+          <div class="gutter-line">8</div>
+          <div class="gutter-line">9</div>
+          <div class="gutter-line">10</div>
+          <div class="gutter-line active">11 <div class="diff-indicator mod"></div></div>
+          <div class="gutter-line">12</div>
+          <div class="gutter-line">13</div>
+          <div class="gutter-line">14</div>
+          <div class="gutter-line">15</div>
+          <div class="gutter-line">16</div>
+          <div class="gutter-line">17</div>
+          <div class="gutter-line">18</div>
+          <div class="gutter-line">19</div>
+          <div class="gutter-line">20</div>
+          <div class="gutter-line">21</div>
+          <div class="gutter-line">22</div>
+          <div class="gutter-line">23</div>
+          <div class="gutter-line">24</div>
+        </div>
+
+        <div class="editor-code">
+<div class="code-line"><span class="syn-k">import</span> <span class="syn-s">'package:flutter/material.dart'</span>;</div>
+<div class="code-line"><span class="syn-k">import</span> <span class="syn-s">'package:jatim_mobile/core/services/app_screen_privacy_service.dart'</span>;</div>
+<div class="code-line"><span class="syn-k">import</span> <span class="syn-s">'package:jatim_mobile/design_system/components/i_button.dart'</span>;</div>
+<div class="code-line"><span class="syn-k">import</span> <span class="syn-s">'package:jatim_mobile/design_system/extensions/context_ext.dart'</span>;</div>
+<div class="code-line"></div>
+<div class="code-line"><span class="syn-c">/// QuickTransferCard: Komponen transfer cepat Bank Jatim JConnect</span></div>
+<div class="code-line"><span class="syn-c">/// Dilengkapi proteksi screenshot via AppScreenPrivacyService</span></div>
+<div class="code-line"><span class="syn-k">class</span> <span class="syn-t">QuickTransferCard</span> <span class="syn-k">extends</span> <span class="syn-t">StatelessWidget</span> {</div>
+<div class="code-line">  <span class="syn-k">const</span> <span class="syn-t">QuickTransferCard</span>({<span class="syn-k">super</span>.<span class="syn-p">key</span>, <span class="syn-k">required</span> <span class="syn-k">this</span>.<span class="syn-v">accountNumber</span>});</div>
+<div class="code-line">  <span class="syn-k">final</span> <span class="syn-t">String</span> <span class="syn-v">accountNumber</span>;</div>
+<div class="code-line"></div>
+<div class="code-line highlight">  <span class="syn-a">@override</span></div>
+<div class="code-line">  <span class="syn-t">Widget</span> <span class="syn-f">build</span>(<span class="syn-t">BuildContext</span> <span class="syn-p">context</span>) {</div>
+<div class="code-line">    <span class="syn-k">return</span> <span class="syn-t">Container</span>(</div>
+<div class="code-line">      <span class="syn-p">padding</span>: <span class="syn-p">context</span>.<span class="syn-v">padding16</span>,</div>
+<div class="code-line">      <span class="syn-p">decoration</span>: <span class="syn-t">BoxDecoration</span>(</div>
+<div class="code-line">        <span class="syn-p">color</span>: <span class="syn-p">context</span>.<span class="syn-v">palette</span>.<span class="syn-v">surfaceElevated</span>,</div>
+<div class="code-line">        <span class="syn-p">borderRadius</span>: <span class="syn-t">BorderRadius</span>.<span class="syn-f">circular</span>(<span class="syn-n">12.0</span>),</div>
+<div class="code-line">        <span class="syn-p">border</span>: <span class="syn-t">Border</span>.<span class="syn-f">all</span>(<span class="syn-p">color</span>: <span class="syn-p">context</span>.<span class="syn-v">palette</span>.<span class="syn-v">borderSubtle</span>, <span class="syn-p">width</span>: <span class="syn-n">1.0</span>),</div>
+<div class="code-line">      ),</div>
+<div class="code-line">      <span class="syn-p">child</span>: <span class="syn-t">Column</span>(</div>
+<div class="code-line">        <span class="syn-p">crossAxisAlignment</span>: <span class="syn-t">CrossAxisAlignment</span>.<span class="syn-v">start</span>,</div>
+<div class="code-line">        <span class="syn-p">children</span>: [</div>
+<div class="code-line">          <span class="syn-t">Text</span>(<span class="syn-s">'Transfer Instan'</span>.<span class="syn-f">tr</span>(), <span class="syn-p">style</span>: <span class="syn-p">context</span>.<span class="syn-v">textStyle</span>.<span class="syn-v">h4</span>),</div>
+<div class="code-line">          <span class="syn-t">SizedBox</span>(<span class="syn-p">height</span>: <span class="syn-n">8.0</span>),</div>
+        </div>
+      </div>
+
+      <!-- 4. Bottom Dock: Terminal & Logs -->
+      <div class="bottom-dock">
+        <div class="bottom-dock-tabs">
+          <div class="dock-tab-group">
+            <button class="dock-tab active">
+              <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+              <span>Terminal</span>
+            </button>
+            <button class="dock-tab">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <span>Run (Flutter Dev)</span>
+            </button>
+            <button class="dock-tab">
+              <svg class="icon" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+              <span>Git Log</span>
+            </button>
+            <button class="dock-tab">
+              <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+              <span>Problems (0)</span>
+            </button>
+          </div>
+          <div style="font-size: 11px; color: var(--p-text-dim);">
+            <span>Session: Pixel 8 Pro (Android 14)</span>
+          </div>
+        </div>
+
+        <div class="dock-content font-code">
+          <div class="term-line">
+            <span class="term-prompt">uqi@uqiflutter1</span>:<span class="term-path">~/uqi-projects/petak-p4m</span>$ flutter run -d "Pixel 8 Pro" --flavor dev
+          </div>
+          <div class="term-line term-muted">
+            Launching lib/main_dev.dart on Pixel 8 Pro in debug mode...
+          </div>
+          <div class="term-line term-muted">
+            Running Gradle task 'assembleDevDebug'... [1.4s]
+          </div>
+          <div class="term-line">
+            <span class="term-success">✓ Built build/app/outputs/flutter-apk/app-dev-debug.apk (42.4MB)</span>
+          </div>
+          <div class="term-line">
+            <span class="term-path">I/flutter (28412):</span> [JConnect] Initializing AppScreenPrivacyService: <span class="term-success">ACTIVE (Secured)</span>
+          </div>
+          <div class="term-line">
+            <span class="term-path">I/flutter (28412):</span> [JConnect] QuickTransferCard rendered in 14ms (60 FPS locked, 0 jank)
+          </div>
+          <div class="term-line">
+            <span class="term-success">⚡ Flutter Hot Reloaded in 184ms.</span> Press "r" to reload, "R" to restart.
+          </div>
+          <div class="term-line">
+            <span class="term-prompt">uqi@uqiflutter1</span>:<span class="term-path">~/uqi-projects/petak-p4m</span>$ <span style="display: inline-block; width: 7px; height: 13px; background: var(--p-accent); vertical-align: middle;"></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 5. Right Dock: Hermes AI Agent Panel -->
+    <div class="agent-dock" id="agent-dock">
+      <div class="agent-header">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-accent);"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+          <span>Hermes AI Pair</span>
+        </div>
+        <span style="font-size: 10px; color: var(--p-success); font-weight: 600;">● ONLINE</span>
+      </div>
+
+      <div class="agent-bot-chips">
+        <button class="bot-chip active">@designer</button>
+        <button class="bot-chip">@reviewer</button>
+        <button class="bot-chip">@orchestrator</button>
+      </div>
+
+      <div class="agent-chat">
+        <!-- User Request -->
+        <div class="chat-bubble user">
+          <div class="bubble-author">
+            <span>UQi</span>
+            <span style="color: var(--p-text-dim); font-weight: 400;">02:30</span>
+          </div>
+          <div>"mending buat temanya mirip android studio atau mirip warna discord ini yang warnanya abu abu bukan hitam"</div>
+        </div>
+
+        <!-- Designer Handoff -->
+        <div class="chat-bubble">
+          <div class="bubble-author">
+            <span>@designer</span>
+            <span style="color: var(--p-text-dim); font-weight: 400;">Just now</span>
+          </div>
+          <div>
+            Siap UQi! Permintaan dieksekusi: <strong>Zero Pitch Black</strong>. Semua hitam legam pekat (#000000 / #0c0d10) dihapus dan diganti palet <strong>Slate Grey</strong> yang empuk di mata untuk koding seharian.
+          </div>
+          
+          <table class="token-table font-code">
+            <tr>
+              <td>Editor Canvas</td>
+              <td><span class="color-swatch" id="swatch-editor" style="background: #2b2d30;"></span><strong id="tok-editor">#2b2d30</strong></td>
+            </tr>
+            <tr>
+              <td>Sidebar / Rail</td>
+              <td><span class="color-swatch" id="swatch-sidebar" style="background: #26282b;"></span><strong id="tok-sidebar">#26282b</strong></td>
+            </tr>
+            <tr>
+              <td>Activity Rail</td>
+              <td><span class="color-swatch" id="swatch-rail" style="background: #1e1f22;"></span><strong id="tok-rail">#1e1f22</strong></td>
+            </tr>
+            <tr>
+              <td>Borders (1px)</td>
+              <td><span class="color-swatch" id="swatch-border" style="background: #393b40;"></span><strong id="tok-border">#393b40</strong></td>
+            </tr>
+            <tr>
+              <td>Text Main</td>
+              <td><span class="color-swatch" id="swatch-text" style="background: #dbdee1;"></span><strong id="tok-text">#dbdee1</strong></td>
+            </tr>
+            <tr>
+              <td>Accent</td>
+              <td><span class="color-swatch" id="swatch-accent" style="background: #3574f0;"></span><strong id="tok-accent">#3574f0</strong></td>
+            </tr>
+          </table>
+
+          <div style="margin-top: 10px; font-size: 11px; color: var(--p-text-muted);">
+            ✓ Full edge-to-edge flush docking (0px gap)<br>
+            ✓ WCAG AAA Contrast 10.8:1 tanpa silau
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================
+       STATUS BAR (BOTTOM 26px)
+       ======================================================================== -->
+  <div class="ide-statusbar">
+    <div class="sb-left">
+      <div class="sb-item">
+        <svg class="icon" viewBox="0 0 24 24" style="width: 12px; height: 12px;"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+        <span>wt/theme-slate-grey</span>
+      </div>
+      <div class="sb-item">
+        <span style="color: var(--p-success);">✓ 0 errors, 0 warnings</span>
+      </div>
+    </div>
+
+    <div class="sb-right">
+      <div class="sb-item font-code">
+        <span>Dart 3.4.0</span>
+      </div>
+      <div class="sb-item">
+        <span>UTF-8</span>
+      </div>
+      <div class="sb-item">
+        <span>Spaces: 2</span>
+      </div>
+      <div class="sb-item">
+        <span style="color: var(--p-info);">Pixel 8 Pro (Dev Mode)</span>
+      </div>
+      <div class="sb-item">
+        <strong id="sb-comfort" style="color: var(--p-success);">Comfort: 98%</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="petak-toast" id="toast">
+    <svg class="icon" viewBox="0 0 24 24" style="color: var(--p-accent);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+    <span id="toast-msg">Notification</span>
+  </div>
+
+  <!-- ========================================================================
+       INTERACTIVE LOGIC: SWITCH MODES & UPDATE LIVE DATA
+       ======================================================================== -->
+  <script>
+    const themeData = {
+      'android-studio': {
+        class: 'theme-android-studio',
+        badge: 'Android Studio Slate',
+        canvasHex: '#2b2d30',
+        sidebarHex: '#26282b',
+        railHex: '#1e1f22',
+        borderHex: '#393b40',
+        textHex: '#dbdee1',
+        accentHex: '#3574f0',
+        contrast: '10.8 : 1 (WCAG AAA)',
+        verdict: 'Sangat Teduh (Low Fatigue)',
+        comfort: 'Comfort: 98%',
+        comfortColor: '#57c87c'
+      },
+      'discord': {
+        class: 'theme-discord',
+        badge: 'Discord Dark',
+        canvasHex: '#313338',
+        sidebarHex: '#2b2d31',
+        railHex: '#1e1f22',
+        borderHex: '#393b40',
+        textHex: '#dbdee1',
+        accentHex: '#5865f2',
+        contrast: '9.2 : 1 (WCAG AAA)',
+        verdict: 'Teduh & Santai (Minimal Fatigue)',
+        comfort: 'Comfort: 96%',
+        comfortColor: '#57f287'
+      },
+      'pitch-black': {
+        class: 'theme-pitch-black',
+        badge: 'Pitch Black (Harsh Glare)',
+        canvasHex: '#000000',
+        sidebarHex: '#0a0b0e',
+        railHex: '#050608',
+        borderHex: '#1e2027',
+        textHex: '#ffffff',
+        accentHex: '#6ea8ff',
+        contrast: '21.0 : 1 (Harsh Glare)',
+        verdict: 'Kontras Menusuk (High Strain)',
+        comfort: 'Comfort: 42%',
+        comfortColor: '#e5534b'
+      }
+    };
+
+    function setTheme(modeKey) {
+      const data = themeData[modeKey];
+      if (!data) return;
+
+      // Update body class
+      document.body.className = data.class;
+
+      // Update switcher button states
+      document.getElementById('btn-theme-as').classList.toggle('active', modeKey === 'android-studio');
+      document.getElementById('btn-theme-discord').classList.toggle('active', modeKey === 'discord');
+      document.getElementById('btn-theme-black').classList.toggle('active', modeKey === 'pitch-black');
+
+      // Update banner metrics
+      document.getElementById('mode-badge').textContent = data.badge;
+      document.getElementById('metric-canvas').textContent = data.canvasHex;
+      document.getElementById('metric-contrast').textContent = data.contrast;
+      const verdictEl = document.getElementById('metric-verdict');
+      verdictEl.textContent = data.verdict;
+      verdictEl.style.color = data.comfortColor;
+
+      // Update editor badge
+      document.getElementById('badge-theme-name').textContent = data.badge;
+      document.getElementById('badge-contrast').textContent = data.contrast;
+
+      // Update token table in agent chat
+      document.getElementById('tok-editor').textContent = data.canvasHex;
+      document.getElementById('swatch-editor').style.background = data.canvasHex;
+      document.getElementById('tok-sidebar').textContent = data.sidebarHex;
+      document.getElementById('swatch-sidebar').style.background = data.sidebarHex;
+      document.getElementById('tok-rail').textContent = data.railHex;
+      document.getElementById('swatch-rail').style.background = data.railHex;
+      document.getElementById('tok-border').textContent = data.borderHex;
+      document.getElementById('swatch-border').style.background = data.borderHex;
+      document.getElementById('tok-text').textContent = data.textHex;
+      document.getElementById('swatch-text').style.background = data.textHex;
+      document.getElementById('tok-accent').textContent = data.accentHex;
+      document.getElementById('swatch-accent').style.background = data.accentHex;
+
+      // Update statusbar comfort score
+      const sbEl = document.getElementById('sb-comfort');
+      sbEl.textContent = data.comfort;
+      sbEl.style.color = data.comfortColor;
+
+      showToast('Switched theme to ' + data.badge);
+    }
+
+    function toggleAgentDock() {
+      const dock = document.getElementById('agent-dock');
+      if (dock.style.display === 'none') {
+        dock.style.display = 'flex';
+        showToast('Hermes AI Dock: Opened');
+      } else {
+        dock.style.display = 'none';
+        showToast('Hermes AI Dock: Closed');
+      }
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-msg');
+      text.textContent = msg;
+      toast.style.display = 'flex';
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.style.display = 'none';
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
