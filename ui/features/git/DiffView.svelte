@@ -946,12 +946,11 @@
     color: #ffffff;
   }
 
-  .filler {
-    background: repeating-linear-gradient(
-      135deg,
-      var(--p-bg-surface, #26282b) 0 6px,
-      var(--p-bg-workspace, #2b2d30) 6px 12px
-    );
+  .filler,
+  .empty {
+    background: transparent;
+    height: 21px;
+    line-height: 21px;
   }
 
   /* Unified styles */

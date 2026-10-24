@@ -714,6 +714,31 @@
     isCenterDiffActive = false;
   }
 
+  async function handleShowVcsDiff(targetPath?: string) {
+    const p = targetPath || vcsTrackerStore.filePath || tabsManager.activePath || currentSwappedPath || filePath;
+    if (!p) return;
+    const relPath = gitStore.root && p.startsWith(gitStore.root)
+      ? p.slice(gitStore.root.length).replace(/^\/+/, '')
+      : p;
+    await gitStore.selectFile(relPath, 'worktree');
+    const fileName = relPath.split('/').pop() || relPath;
+    gitStore.openCenterDiff({
+      diffFile: gitStore.currentDiffFile,
+      filePath: relPath,
+      leftLabel: 'Index (Staged)',
+      rightLabel: 'Working Tree',
+      sourceKind: 'worktree',
+      title: `${fileName} (Worktree)`,
+    });
+    isCenterDiffActive = true;
+  }
+
+  $effect(() => {
+    vcsTrackerStore.onShowDiff = (p) => {
+      handleShowVcsDiff(p || undefined);
+    };
+  });
+
   export function gotoLine(line: number, col: number = 1, options?: { center?: boolean }) {
     if (!view) return;
     const doc = view.state.doc;
@@ -1457,7 +1482,7 @@
     />
 
     <NavUsagesPopup gotoLineFn={gotoLine} />
-    <VcsDiffPopup getView={() => view} />
+    <VcsDiffPopup getView={() => view} onShowDiff={handleShowVcsDiff} />
 
     {#if renameStore.visible}
       <div
@@ -1627,7 +1652,24 @@
     background-color: #3882f6 !important;
   }
   :global(.cm-vcs-deleted) {
+    top: -3px !important;
+    bottom: auto !important;
+    left: 0px !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-top: 3px solid transparent !important;
+    border-bottom: 3px solid transparent !important;
+    border-left: 5px solid #f07a74 !important;
     background-color: #f07a74 !important;
+    background-color: transparent !important;
+    border-radius: 0 !important;
+    z-index: 3 !important;
+  }
+  :global(.cm-vcs-deleted:hover) {
+    width: 0 !important;
+    height: 0 !important;
+    border-left-width: 6px !important;
+    filter: brightness(1.25);
   }
   :global(.cm-inline-blame) {
     color: #6e7681 !important;

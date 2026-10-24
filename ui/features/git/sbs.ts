@@ -1,7 +1,7 @@
 import type { GitDiffLine, GitHunk, GitDiffFile } from './types.ts';
 import { computeWordDiff, type WordToken } from './wordDiff.ts';
 
-export type SbsCellKind = 'context' | 'del' | 'add' | 'filler';
+export type SbsCellKind = 'context' | 'del' | 'add' | 'filler' | 'empty';
 
 export interface SbsCell {
   kind: SbsCellKind;
