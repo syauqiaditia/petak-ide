@@ -256,7 +256,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #d8d9dc;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -270,8 +270,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    background: #111215;
-    border-bottom: 1px solid #1f2127;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
   .filter-pills {
@@ -279,8 +279,8 @@
     gap: 4px;
   }
   .pill-btn {
-    background: #18191e;
-    border: 1px solid #262932;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     color: #8b8f98;
     padding: 2px 7px;
     border-radius: 4px;
@@ -436,7 +436,7 @@
     user-select: none;
   }
   .problem-row:hover {
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
   }
   .severity-icon {
     display: flex;
@@ -476,8 +476,8 @@
     gap: 6px;
   }
   .problem-loc-badge {
-    background: #1a1c22;
-    border: 1px solid #282a32;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 3px;
     padding: 1px 5px;
     font-size: 10.5px;

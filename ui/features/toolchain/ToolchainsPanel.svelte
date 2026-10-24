@@ -279,18 +279,18 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #121316;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #e6e7ea;
     overflow-y: auto;
   }
   .panel-header {
     height: 44px;
     padding: 0 16px;
-    border-bottom: 1px solid #22242a;
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #17181c;
+    background: var(--p-bg-surface, #26282b);
     flex-shrink: 0;
   }
   .header-title {
@@ -389,8 +389,8 @@
     gap: 12px;
   }
   .lsp-card {
-    background: #18191d;
-    border: 1px solid #25272e;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     padding: 12px;
     display: flex;
@@ -469,8 +469,8 @@
     color: #ffffff;
   }
   .tools-table {
-    background: #18191d;
-    border: 1px solid #25272e;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     display: flex;
     flex-direction: column;

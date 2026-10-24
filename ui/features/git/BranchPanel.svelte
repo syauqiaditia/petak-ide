@@ -934,8 +934,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    border-right: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-right: 1px solid var(--border-default, #393b40);
     user-select: none;
     height: 100%;
     overflow: hidden;
@@ -946,8 +946,8 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #121317;
-    border-bottom: 1px solid #1e2027;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     min-height: 34px;
     box-sizing: border-box;
     flex-shrink: 0;
@@ -1011,8 +1011,8 @@
     height: 24px;
     padding: 0 8px;
     border-radius: 4px;
-    border: 1px solid #2d3039;
-    background: #1a1c22;
+    border: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     color: #b9bcc3;
     font-size: 11.5px;
     cursor: pointer;
@@ -1161,7 +1161,7 @@
   }
 
   .tree-folder-row:hover {
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
     color: #ffffff;
   }
 
@@ -1205,7 +1205,7 @@
   }
 
   .branch-item:hover {
-    background: #1e2025;
+    background: var(--p-bg-hover, #323539);
     color: #ffffff;
   }
 
@@ -1383,8 +1383,8 @@
 
   .bp-modal {
     width: 380px;
-    background: #18191e;
-    border: 1px solid #34363d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
     overflow: hidden;
@@ -1430,8 +1430,8 @@
   }
 
   .autostash-box {
-    background: #131418;
-    border: 1px solid #282a31;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 10px;
     display: flex;
@@ -1469,8 +1469,8 @@
   .bp-input {
     width: 100%;
     height: 28px;
-    background: #121316;
-    border: 1px solid #2e3037;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 5px;
     padding: 0 8px;
     color: #e6e7ea;

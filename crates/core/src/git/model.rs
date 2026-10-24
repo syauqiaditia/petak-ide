@@ -118,6 +118,8 @@ pub struct Commit {
     pub subject: String,
     pub refs: Vec<RefLabel>,
     pub pushed: bool,
+    #[serde(default)]
+    pub is_head_ancestor: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

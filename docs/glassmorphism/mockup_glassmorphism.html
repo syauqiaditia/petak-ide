@@ -1,0 +1,1846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petak IDE — Vibrant & Workable Glassmorphism Showcase</title>
+  <style>
+    /* ==========================================================================
+       PETAK DESIGN TOKENS (Standard Dark vs Vibrant Glassmorphism)
+       ========================================================================== */
+    :root, body.theme-standard {
+      --p-theme-mode: "Standard Dark";
+      --p-bg-base: #0c0d10;
+      --p-bg-surface: #121317;
+      --p-bg-workspace: #15161b;
+      --p-bg-elevated: #1c1e24;
+      --p-bg-hover: #22242c;
+      --p-bg-active: #2a2d36;
+
+      --p-border-default: #1e2027;
+      --p-border-subtle: rgba(255, 255, 255, 0.06);
+      --p-border-specular: transparent;
+      --p-border-specular-top: #1e2027;
+      --p-border-focus: rgba(110, 168, 255, 0.5);
+
+      --p-text-main: #d8d9dc;
+      --p-text-muted: #8b8f98;
+      --p-text-dim: #60646c;
+      --p-text-bright: #ffffff;
+
+      --p-accent: #6ea8ff;
+      --p-accent-hover: #82b5ff;
+      --p-accent-subtle: rgba(110, 168, 255, 0.12);
+      --p-accent-glow: none;
+
+      --p-success: #7fc98f;
+      --p-success-bg: rgba(127, 201, 143, 0.14);
+      --p-warning: #e8b45a;
+      --p-danger: #f07a74;
+      --p-purple: #b388ff;
+
+      --p-titlebar-bg: #0c0d10;
+      --p-rail-bg: #121317;
+      --p-dock-left-bg: #121317;
+      --p-editor-canvas-bg: #15161b;
+      --p-bottom-dock-bg: #121317;
+      --p-agent-dock-bg: #141518;
+      --p-modal-bg: #181a20;
+
+      --p-glass-blur-sm: none;
+      --p-glass-blur-md: none;
+      --p-glass-blur-lg: none;
+      --p-glass-saturate: 100%;
+
+      --p-island-gap: 0px;
+      --p-island-radius: 0px;
+      --p-island-padding: 0px;
+      --p-island-shadow: none;
+      --p-island-sheen: none;
+
+      --p-active-tab-bg: #15161b;
+      --p-active-tab-border: #1e2027;
+      --p-active-tab-glow: none;
+
+      --p-run-btn-bg: rgba(127, 201, 143, 0.14);
+      --p-run-btn-border: rgba(127, 201, 143, 0.35);
+      --p-run-btn-glow: none;
+
+      --p-ambient-mesh: none;
+    }
+
+    /* ==========================================================================
+       VIBRANT & WORKABLE GLASSMORPHISM MODE (REVISED)
+       ========================================================================== */
+    body.theme-glassmorphism {
+      --p-theme-mode: "Vibrant & Workable Glassmorphism";
+      --p-bg-base: #06070c;
+      --p-bg-surface: rgba(18, 24, 38, 0.60);
+      --p-bg-workspace: rgba(11, 14, 24, 0.80);
+      --p-bg-elevated: rgba(26, 32, 50, 0.70);
+      --p-bg-hover: rgba(255, 255, 255, 0.10);
+      --p-bg-active: rgba(110, 168, 255, 0.22);
+
+      --p-border-default: rgba(255, 255, 255, 0.16);
+      --p-border-subtle: rgba(255, 255, 255, 0.08);
+      --p-border-specular: rgba(255, 255, 255, 0.16);
+      --p-border-specular-top: rgba(255, 255, 255, 0.35);
+      --p-border-focus: rgba(110, 168, 255, 0.85);
+
+      --p-text-main: #e6e9f0;
+      --p-text-muted: #9aa2b2;
+      --p-text-dim: #6c7486;
+      --p-text-bright: #ffffff;
+
+      --p-accent: #6ea8ff;
+      --p-accent-hover: #8fc0ff;
+      --p-accent-subtle: rgba(110, 168, 255, 0.18);
+      --p-accent-glow: 0 0 16px rgba(110, 168, 255, 0.45);
+
+      --p-success: #5eead4;
+      --p-success-bg: rgba(94, 234, 212, 0.18);
+      --p-warning: #fcd34d;
+      --p-danger: #f87171;
+      --p-purple: #c084fc;
+
+      /* Frosted Acrylic Sheen Panels */
+      --p-titlebar-bg: rgba(18, 24, 38, 0.58);
+      --p-rail-bg: rgba(16, 20, 32, 0.62);
+      --p-dock-left-bg: rgba(18, 24, 38, 0.60);
+      --p-editor-canvas-bg: rgba(11, 14, 24, 0.80);
+      --p-bottom-dock-bg: rgba(16, 21, 33, 0.65);
+      --p-agent-dock-bg: rgba(20, 26, 42, 0.62);
+      --p-modal-bg: rgba(22, 28, 46, 0.85);
+
+      --p-glass-blur-sm: blur(16px);
+      --p-glass-blur-md: blur(24px);
+      --p-glass-blur-lg: blur(32px);
+      --p-glass-saturate: saturate(200%);
+
+      /* Floating Island Metrics */
+      --p-island-gap: 9px;
+      --p-island-radius: 13px;
+      --p-island-padding: 9px;
+      --p-island-shadow: 0 16px 36px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+      --p-island-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.01) 100%);
+
+      /* Glass Tab Tokens */
+      --p-active-tab-bg: rgba(255, 255, 255, 0.14);
+      --p-active-tab-border: rgba(255, 255, 255, 0.25);
+      --p-active-tab-glow: 0 4px 16px rgba(110, 168, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+
+      /* Glowing Glass Run Pill */
+      --p-run-btn-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.35) 0%, rgba(14, 165, 233, 0.25) 100%);
+      --p-run-btn-border: rgba(52, 211, 153, 0.55);
+      --p-run-btn-glow: 0 0 16px rgba(52, 211, 153, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+
+      /* Deep Vibrant Mesh Aurora Background */
+      --p-ambient-mesh: 
+        radial-gradient(circle at 12% 16%, rgba(14, 165, 233, 0.50) 0%, transparent 40%),
+        radial-gradient(circle at 88% 18%, rgba(139, 92, 246, 0.55) 0%, transparent 44%),
+        radial-gradient(circle at 50% 86%, rgba(236, 72, 153, 0.35) 0%, transparent 42%),
+        radial-gradient(circle at 74% 54%, rgba(99, 102, 241, 0.42) 0%, transparent 46%),
+        radial-gradient(circle at 26% 72%, rgba(20, 184, 166, 0.32) 0%, transparent 45%);
+    }
+
+    /* Ambient Mesh Variations */
+    body.ambient-aurora {
+      --p-ambient-mesh: 
+        radial-gradient(circle at 12% 16%, rgba(14, 165, 233, 0.50) 0%, transparent 40%),
+        radial-gradient(circle at 88% 18%, rgba(139, 92, 246, 0.55) 0%, transparent 44%),
+        radial-gradient(circle at 50% 86%, rgba(236, 72, 153, 0.35) 0%, transparent 42%),
+        radial-gradient(circle at 74% 54%, rgba(99, 102, 241, 0.42) 0%, transparent 46%),
+        radial-gradient(circle at 26% 72%, rgba(20, 184, 166, 0.32) 0%, transparent 45%);
+    }
+    body.ambient-sunset {
+      --p-ambient-mesh: 
+        radial-gradient(circle at 15% 20%, rgba(244, 63, 94, 0.50) 0%, transparent 44%),
+        radial-gradient(circle at 85% 22%, rgba(249, 115, 22, 0.45) 0%, transparent 45%),
+        radial-gradient(circle at 50% 80%, rgba(168, 85, 247, 0.48) 0%, transparent 48%),
+        radial-gradient(circle at 70% 50%, rgba(236, 72, 153, 0.40) 0%, transparent 50%);
+    }
+    body.ambient-off {
+      --p-ambient-mesh: none;
+    }
+
+    /* Specular Switch */
+    body.specular-off {
+      --p-border-specular-top: var(--p-border-default) !important;
+      --p-island-sheen: none !important;
+      --p-active-tab-glow: none !important;
+      --p-run-btn-glow: none !important;
+    }
+
+    /* ==========================================================================
+       GLOBAL RESET & SHELL
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--p-bg-base);
+      background-image: var(--p-ambient-mesh);
+      background-attachment: fixed;
+      background-size: 100% 100%;
+      color: var(--p-text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 12.5px;
+      user-select: none;
+      -webkit-user-select: none;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.25s ease;
+    }
+
+    .font-code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, Consolas, monospace;
+    }
+
+    .icon {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      display: inline-block;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    /* ==========================================================================
+       TOP CONTROL BANNER (Showcase Switcher)
+       ========================================================================== */
+    .showcase-banner {
+      height: 38px;
+      background: rgba(10, 12, 18, 0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 999;
+      flex-shrink: 0;
+    }
+    .banner-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .banner-badge {
+      background: rgba(14, 165, 233, 0.18);
+      color: #38bdf8;
+      border: 1px solid rgba(14, 165, 233, 0.35);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .banner-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .banner-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .segmented-switch {
+      display: flex;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .switch-btn {
+      background: transparent;
+      border: none;
+      color: var(--p-text-muted);
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .switch-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .switch-btn.active {
+      background: var(--p-accent);
+      color: #06070c;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(110, 168, 255, 0.45);
+    }
+
+    .banner-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--p-border-default);
+      color: var(--p-text-main);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .banner-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .banner-btn.active {
+      background: var(--p-accent-subtle);
+      border-color: var(--p-accent);
+      color: var(--p-accent);
+      font-weight: 600;
+    }
+
+    /* ==========================================================================
+       PETAK WORKSPACE SHELL (FLOATING ISLAND ARCHITECTURE)
+       ========================================================================== */
+    #petak-app {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+      padding: var(--p-island-padding);
+      gap: var(--p-island-gap);
+      transition: padding 0.2s ease, gap 0.2s ease;
+    }
+
+    /* --------------------------------------------------------------------------
+       1. TOP TITLEBAR (Floating Cockpit Island)
+       -------------------------------------------------------------------------- */
+    .titlebar {
+      height: 42px;
+      background-color: var(--p-titlebar-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid var(--p-border-specular-top);
+      border-radius: var(--p-island-radius);
+      box-shadow: var(--p-island-shadow);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 50;
+      transition: all 0.2s ease;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 7px;
+      margin-right: 4px;
+    }
+    .wc-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      box-shadow: 0 0 1px rgba(0,0,0,0.5);
+    }
+    .wc-close { background: #ff5f56; }
+    .wc-min   { background: #ffbd2e; }
+    .wc-max   { background: #27c93f; }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.2px;
+    }
+    .brand-logo-grid {
+      display: grid;
+      grid-template-columns: 6px 6px;
+      gap: 2px;
+    }
+    .logo-cell {
+      width: 6px;
+      height: 6px;
+      background: var(--p-accent);
+      border-radius: 1.5px;
+    }
+    .logo-cell.glow {
+      box-shadow: 0 0 8px var(--p-accent);
+    }
+    .logo-cell.dim {
+      opacity: 0.35;
+    }
+
+    /* Glass Chips & Cockpit Pills */
+    .cockpit-pill {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-top: 1px solid rgba(255, 255, 255, 0.30);
+      border-radius: 7px;
+      padding: 4px 10px;
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--p-text-main);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 2px 6px rgba(0, 0, 0, 0.25);
+      transition: all 0.15s ease;
+    }
+    .cockpit-pill:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.28);
+    }
+    .cockpit-pill.branch {
+      background: rgba(110, 168, 255, 0.12);
+      border-color: rgba(110, 168, 255, 0.35);
+      color: var(--p-accent);
+      font-weight: 600;
+    }
+    .cockpit-pill.branch:hover {
+      background: rgba(110, 168, 255, 0.20);
+      box-shadow: 0 0 12px rgba(110, 168, 255, 0.35);
+    }
+
+    .titlebar-center {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 auto;
+    }
+    .device-picker {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 7px;
+      padding: 4px 10px;
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--p-text-main);
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .device-picker:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    /* Glowing Glass Run Pill */
+    .run-btn-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .action-btn {
+      height: 29px;
+      padding: 0 10px;
+      border-radius: 6px;
+      border: 1px solid var(--p-border-default);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--p-text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+    .action-btn.run {
+      background: var(--p-run-btn-bg);
+      border: 1px solid var(--p-run-btn-border);
+      color: #5eead4;
+      font-weight: 700;
+      box-shadow: var(--p-run-btn-glow);
+      border-radius: 14px;
+      padding: 0 13px;
+    }
+    .action-btn.run:hover {
+      filter: brightness(1.15);
+      box-shadow: 0 0 20px rgba(52, 211, 153, 0.60);
+    }
+    .action-btn.reload {
+      color: var(--p-warning);
+    }
+
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .specular-indicator {
+      font-size: 10px;
+      color: var(--p-text-dim);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    /* --------------------------------------------------------------------------
+       MAIN BODY (FLOATING ISLANDS ROW)
+       -------------------------------------------------------------------------- */
+    .main-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+      gap: var(--p-island-gap);
+      transition: gap 0.2s ease;
+    }
+
+    /* Floating Activity Rail */
+    .activity-rail {
+      width: 48px;
+      background-color: var(--p-rail-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid var(--p-border-specular-top);
+      border-radius: var(--p-island-radius);
+      box-shadow: var(--p-island-shadow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+      gap: 7px;
+      flex-shrink: 0;
+      z-index: 40;
+      transition: all 0.2s ease;
+    }
+    .rail-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--p-text-muted);
+      cursor: pointer;
+      position: relative;
+      background: transparent;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .rail-btn:hover {
+      background: rgba(255, 255, 255, 0.10);
+      color: #ffffff;
+    }
+    .rail-btn.active {
+      background: rgba(110, 168, 255, 0.18);
+      border-color: rgba(110, 168, 255, 0.35);
+      color: var(--p-accent);
+      box-shadow: 0 0 14px rgba(110, 168, 255, 0.30);
+    }
+    .rail-btn.active::before {
+      content: '';
+      position: absolute;
+      left: -5px;
+      top: 9px;
+      width: 3px;
+      height: 18px;
+      background: var(--p-accent);
+      border-radius: 0 2px 2px 0;
+      box-shadow: 0 0 8px var(--p-accent);
+    }
+    .rail-badge {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      background: var(--p-accent);
+      color: #06070c;
+      font-size: 9px;
+      font-weight: 800;
+      border-radius: 6px;
+      padding: 0 4px;
+      line-height: 14px;
+    }
+    .rail-spacer { flex: 1; }
+
+    /* --------------------------------------------------------------------------
+       2. LEFT TOOL WINDOW (Floating FileTree & Git Island)
+       -------------------------------------------------------------------------- */
+    .left-dock {
+      width: 270px;
+      background-color: var(--p-dock-left-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid var(--p-border-specular-top);
+      border-radius: var(--p-island-radius);
+      box-shadow: var(--p-island-shadow);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+      z-index: 30;
+      transition: all 0.2s ease;
+    }
+
+    .left-dock-header {
+      height: 38px;
+      padding: 0 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .dock-title-switch {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .dock-tab-link {
+      color: var(--p-text-muted);
+      cursor: pointer;
+      padding-bottom: 2px;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .dock-tab-link:hover {
+      color: #ffffff;
+    }
+    .dock-tab-link.active {
+      color: #ffffff;
+      border-bottom-color: var(--p-accent);
+    }
+
+    .tree-scroll-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 6px;
+    }
+    .tree-node {
+      height: 24px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: var(--p-text-main);
+      font-size: 12px;
+      transition: all 0.12s ease;
+    }
+    .tree-node:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+    }
+    .tree-node.active {
+      background: rgba(110, 168, 255, 0.18);
+      border: 1px solid rgba(110, 168, 255, 0.35);
+      color: var(--p-accent);
+      font-weight: 500;
+    }
+    .tree-indent-1 { padding-left: 20px; }
+    .tree-indent-2 { padding-left: 32px; }
+    .tree-indent-3 { padding-left: 44px; }
+
+    .node-icon-folder { color: #82b5ff; }
+    .node-icon-dart   { color: #5eead4; }
+    .node-icon-yaml   { color: #fcd34d; }
+
+    /* --------------------------------------------------------------------------
+       3. CENTER WORKSPACE (Editor Island + Bottom Dock Island)
+       -------------------------------------------------------------------------- */
+    .center-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      gap: var(--p-island-gap);
+      transition: gap 0.2s ease;
+    }
+
+    /* Floating Editor Island (Dark Glass Core) */
+    .editor-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      background-color: var(--p-editor-canvas-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-lg) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-lg) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid var(--p-border-specular-top);
+      border-radius: var(--p-island-radius);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      transition: all 0.2s ease;
+    }
+
+    /* Glass Tabs Bar */
+    .editor-tabs-bar {
+      height: 38px;
+      background: rgba(0, 0, 0, 0.20);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      display: flex;
+      align-items: flex-end;
+      padding: 0 8px;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .editor-tab {
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 8px 8px 0 0;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid transparent;
+      border-bottom: none;
+      color: var(--p-text-muted);
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+    .editor-tab:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .editor-tab.active {
+      background: var(--p-active-tab-bg);
+      border: 1px solid var(--p-active-tab-border);
+      border-bottom: 2px solid #6ea8ff;
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: var(--p-active-tab-glow);
+    }
+    .tab-close {
+      opacity: 0.5;
+      font-size: 11px;
+      border-radius: 3px;
+      padding: 1px 3px;
+    }
+    .tab-close:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Breadcrumbs Bar */
+    .editor-breadcrumbs {
+      height: 26px;
+      background: rgba(0, 0, 0, 0.15);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--p-text-dim);
+      flex-shrink: 0;
+    }
+    .breadcrumb-active {
+      color: var(--p-text-main);
+      font-weight: 500;
+    }
+
+    /* Editor Canvas Area */
+    .editor-canvas {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+      position: relative;
+    }
+
+    .wcag-protection-badge {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      background: rgba(14, 165, 233, 0.20);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-top: 1px solid rgba(255, 255, 255, 0.40);
+      color: #38bdf8;
+      font-size: 10.5px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 10;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 4px 16px rgba(14, 165, 233, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.30);
+      pointer-events: none;
+    }
+
+    .code-gutter {
+      width: 48px;
+      padding: 12px 8px 12px 0;
+      text-align: right;
+      color: #555d6e;
+      font-size: 12px;
+      line-height: 20px;
+      user-select: none;
+      border-right: 1px solid rgba(255, 255, 255, 0.07);
+      background: rgba(0, 0, 0, 0.20);
+      flex-shrink: 0;
+    }
+    .gutter-active {
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .code-lines-container {
+      flex: 1;
+      padding: 12px 18px;
+      overflow-y: auto;
+      font-size: 12.5px;
+      line-height: 20px;
+      color: #f0f3f8;
+      white-space: pre;
+    }
+
+    .code-line {
+      display: block;
+      height: 20px;
+    }
+    .code-line.active-line {
+      background: rgba(255, 255, 255, 0.06);
+      margin: 0 -18px;
+      padding: 0 18px;
+      border-left: 2px solid var(--p-accent);
+    }
+
+    /* Dart High Contrast Syntax Tokens */
+    .kw { color: #ff7b72; font-weight: 600; }
+    .type { color: #ffa657; font-weight: 600; }
+    .fn { color: #d2a8ff; font-weight: 500; }
+    .str { color: #a5d6ff; }
+    .prop { color: #79c0ff; }
+    .cmt { color: #8b9bb4; font-style: italic; }
+    .num { color: #79c0ff; }
+    .ann { color: #7ee787; font-weight: 500; }
+
+    /* --------------------------------------------------------------------------
+       4. BOTTOM DOCK (Floating Terminal / Logs Island)
+       -------------------------------------------------------------------------- */
+    .bottom-dock {
+      height: 200px;
+      background-color: var(--p-bottom-dock-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid var(--p-border-specular-top);
+      border-radius: var(--p-island-radius);
+      box-shadow: var(--p-island-shadow);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 25;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .bottom-dock-header {
+      height: 34px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      background: rgba(255, 255, 255, 0.03);
+      flex-shrink: 0;
+    }
+    .dock-tabs-list {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .bottom-dock-tab {
+      height: 26px;
+      padding: 0 9px;
+      border-radius: 5px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--p-text-muted);
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .bottom-dock-tab:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .bottom-dock-tab.active {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+    .tab-badge {
+      font-size: 9.5px;
+      padding: 1px 5px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.10);
+      color: var(--p-text-muted);
+    }
+    .bottom-dock-tab.active .tab-badge {
+      background: var(--p-accent-subtle);
+      color: var(--p-accent);
+    }
+
+    .dock-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dock-tool-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--p-text-muted);
+      cursor: pointer;
+    }
+    .dock-tool-icon:hover {
+      background: rgba(255, 255, 255, 0.10);
+      color: #ffffff;
+    }
+
+    .terminal-content {
+      flex: 1;
+      padding: 10px 16px;
+      overflow-y: auto;
+      font-size: 11.5px;
+      line-height: 18px;
+      color: #e6edf3;
+      background: rgba(10, 13, 22, 0.70);
+    }
+    .term-prompt { color: var(--p-accent); font-weight: 600; }
+    .term-success { color: var(--p-success); font-weight: 600; }
+    .term-warning { color: var(--p-warning); }
+    .term-info    { color: #79c0ff; }
+    .term-muted   { color: #8b949e; }
+
+    /* --------------------------------------------------------------------------
+       5. RIGHT AI AGENTS DOCK (Floating Agent Island)
+       -------------------------------------------------------------------------- */
+    .agent-dock {
+      width: 380px;
+      background-color: var(--p-agent-dock-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-md) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid var(--p-border-specular-top);
+      border-radius: var(--p-island-radius);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.50), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 35;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .agent-header {
+      height: 44px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .agent-profile-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      padding: 3px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .agent-profile-pill:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .profile-role-tag {
+      font-size: 10px;
+      color: var(--p-warning);
+      background: rgba(232, 180, 90, 0.18);
+      border: 1px solid rgba(232, 180, 90, 0.35);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .agent-team-grid {
+      display: flex;
+      gap: 5px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.18);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      overflow-x: auto;
+    }
+    .team-chip {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      color: var(--p-text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+    }
+    .team-chip:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+    }
+    .team-chip.active {
+      background: rgba(110, 168, 255, 0.22);
+      border-color: rgba(110, 168, 255, 0.45);
+      color: var(--p-accent);
+      font-weight: 600;
+      box-shadow: 0 0 12px rgba(110, 168, 255, 0.35);
+    }
+
+    .agent-chat-feed {
+      flex: 1;
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-bubble {
+      max-width: 92%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 17px;
+    }
+    .chat-bubble.user {
+      align-self: flex-end;
+      background: rgba(110, 168, 255, 0.18);
+      border: 1px solid rgba(110, 168, 255, 0.35);
+      border-top: 1px solid rgba(255, 255, 255, 0.30);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+    .chat-bubble.agent {
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-top: 1px solid rgba(255, 255, 255, 0.30);
+      color: var(--p-text-main);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30);
+    }
+    .chat-author {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--p-accent);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .chat-code-block {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 5px;
+      padding: 6px 8px;
+      margin: 6px 0 2px 0;
+      font-size: 11px;
+      color: #5eead4;
+    }
+
+    .agent-input-container {
+      padding: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.10);
+      background: rgba(10, 13, 22, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .agent-input-box {
+      width: 100%;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 7px;
+      padding: 8px 10px;
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 12px;
+      resize: none;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+    .agent-input-box:focus {
+      border-color: var(--p-accent);
+      box-shadow: 0 0 12px rgba(110, 168, 255, 0.40);
+      background: rgba(255, 255, 255, 0.09);
+    }
+    .input-actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .model-selector-pill {
+      font-size: 11px;
+      color: var(--p-text-muted);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 3px 8px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .send-agent-btn {
+      background: var(--p-accent);
+      color: #06070c;
+      border: none;
+      padding: 4px 13px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 10px rgba(110, 168, 255, 0.45);
+    }
+    .send-agent-btn:hover {
+      background: var(--p-accent-hover);
+      box-shadow: 0 0 16px rgba(110, 168, 255, 0.60);
+    }
+
+    /* --------------------------------------------------------------------------
+       6. STATUS BAR (Floating Footer Island)
+       -------------------------------------------------------------------------- */
+    .statusbar {
+      height: 26px;
+      background-color: var(--p-titlebar-bg);
+      background-image: var(--p-island-sheen);
+      backdrop-filter: var(--p-glass-blur-sm) var(--p-glass-saturate);
+      -webkit-backdrop-filter: var(--p-glass-blur-sm) var(--p-glass-saturate);
+      border: 1px solid var(--p-border-default);
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 11px;
+      color: var(--p-text-muted);
+      flex-shrink: 0;
+      z-index: 50;
+      transition: all 0.2s ease;
+    }
+    .status-left, .status-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .status-item:hover { color: #ffffff; }
+
+    #petak-toast {
+      position: fixed;
+      bottom: 40px;
+      right: 24px;
+      background: rgba(18, 24, 38, 0.95);
+      border: 1px solid rgba(110, 168, 255, 0.50);
+      border-top: 1px solid rgba(255, 255, 255, 0.40);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.60);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #ffffff;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body class="theme-glassmorphism ambient-aurora">
+
+  <!-- TOP SHOWCASE BANNER -->
+  <div class="showcase-banner">
+    <div class="banner-brand">
+      <span class="banner-badge">REVISION 2</span>
+      <span class="banner-title">
+        <span>Petak IDE</span>
+        <span style="opacity: 0.4;">/</span>
+        <span style="color: var(--p-accent);">Vibrant Glassmorphism</span>
+      </span>
+    </div>
+
+    <div class="banner-controls">
+      <!-- Theme Switcher -->
+      <span style="color: var(--p-text-dim); font-size: 11px;">Theme Mode:</span>
+      <div class="segmented-switch">
+        <button class="switch-btn" id="btn-mode-standard" onclick="setTheme('standard')">
+          Standard Dark
+        </button>
+        <button class="switch-btn active" id="btn-mode-glass" onclick="setTheme('glassmorphism')">
+          ✨ Vibrant Glass
+        </button>
+      </div>
+
+      <!-- Ambient Mesh Switcher -->
+      <span style="color: var(--p-text-dim); font-size: 11px; margin-left: 6px;">Aurora Glow:</span>
+      <button class="banner-btn active" id="btn-amb-aurora" onclick="setAmbient('aurora')">Cosmic Aurora</button>
+      <button class="banner-btn" id="btn-amb-sunset" onclick="setAmbient('sunset')">Sunset Nebula</button>
+      <button class="banner-btn" id="btn-amb-off" onclick="setAmbient('off')">Off</button>
+
+      <!-- Specular Highlight Toggle -->
+      <button class="banner-btn active" id="btn-specular" onclick="toggleSpecular()" title="Toggle Specular Sheen & Top Edge">
+        Specular: ON
+      </button>
+
+      <!-- Panel Toggle -->
+      <button class="banner-btn" onclick="toggleAgentPanel()" title="Toggle Right AI Agent Dock">
+        🤖 AI Agent
+      </button>
+    </div>
+  </div>
+
+  <!-- PETAK FLOATING ISLAND WORKSPACE SHELL -->
+  <div id="petak-app">
+
+    <!-- 1. TOP TITLEBAR (Floating Cockpit Island) -->
+    <div class="titlebar">
+      <!-- Mac Window Controls -->
+      <div class="window-controls">
+        <div class="wc-dot wc-close" title="Close"></div>
+        <div class="wc-dot wc-min" title="Minimize"></div>
+        <div class="wc-dot wc-max" title="Maximize"></div>
+      </div>
+
+      <!-- Brand Logo -->
+      <div class="brand-group">
+        <div class="brand-logo-grid">
+          <div class="logo-cell glow"></div>
+          <div class="logo-cell dim"></div>
+          <div class="logo-cell dim"></div>
+          <div class="logo-cell glow"></div>
+        </div>
+        <span>Petak</span>
+      </div>
+
+      <!-- Project Capsule -->
+      <div class="cockpit-pill" title="Current Workspace Project">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"></path></svg>
+        <span>jconnect-flutter</span>
+        <svg class="icon" style="width: 11px; height: 11px; opacity: 0.6;" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+
+      <!-- Current Git Branch Capsule -->
+      <div class="cockpit-pill branch" title="Active Branch: feat/glassmorphism (Ahead 1 commit)">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"></path></svg>
+        <span>feat/glassmorphism</span>
+        <span style="font-size: 10px; opacity: 0.85; margin-left: 2px;">↑1</span>
+      </div>
+
+      <!-- Center Run / Device Controls -->
+      <div class="titlebar-center">
+        <div class="device-picker" title="Target Run Device">
+          <svg class="icon" style="color: var(--p-success);" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+          <span>Pixel 8 Pro (Dev Flavor)</span>
+          <svg class="icon" style="width: 10px; height: 10px; opacity: 0.6;" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+
+        <div class="run-btn-group">
+          <button class="action-btn run" onclick="triggerRun()" title="Run Flutter App (⇧F10)">
+            <svg class="icon" viewBox="0 0 24 24" style="stroke: none; fill: currentColor;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>Run</span>
+          </button>
+          <button class="action-btn reload" onclick="triggerHotReload()" title="Flutter Hot Reload (⌘\)">
+            <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Titlebar Status -->
+      <div class="titlebar-right">
+        <div class="specular-indicator">
+          <span>Tauri 2.2</span>
+          <span>•</span>
+          <span>Svelte 5</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN BODY: FLOATING ISLANDS -->
+    <div class="main-body">
+
+      <!-- Left Activity Rail (Floating Island) -->
+      <div class="activity-rail">
+        <button class="rail-btn active" id="rail-files-btn" onclick="switchLeftDock('files')" title="Project Files (⌘1)">
+          <svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"></path></svg>
+        </button>
+
+        <button class="rail-btn" id="rail-git-btn" onclick="switchLeftDock('git')" title="Git Changes (⌘K)">
+          <svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"></path></svg>
+          <span class="rail-badge">2</span>
+        </button>
+
+        <button class="rail-btn" onclick="toast('Running Unit & Widget Tests…')" title="Run & Tests (⌘6)">
+          <svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </button>
+
+        <button class="rail-btn" onclick="toast('Merge Requests: 0 open')" title="Merge Requests (⌘5)">
+          <svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"></path></svg>
+        </button>
+
+        <div class="rail-spacer"></div>
+
+        <button class="rail-btn" onclick="toggleThemeModal()" title="Settings">
+          <svg class="icon" style="width: 18px; height: 18px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+      </div>
+
+      <!-- 2. LEFT TOOL WINDOW (Floating FileTree & Git Island) -->
+      <div class="left-dock" id="left-dock">
+        <div class="left-dock-header">
+          <div class="dock-title-switch">
+            <span class="dock-tab-link active" id="dock-link-files" onclick="switchLeftDock('files')">PROJECT</span>
+            <span class="dock-tab-link" id="dock-link-git" onclick="switchLeftDock('git')">CHANGES (2)</span>
+          </div>
+          <div style="display: flex; gap: 4px;">
+            <svg class="icon dock-tool-icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <svg class="icon dock-tool-icon" style="width: 13px; height: 13px;" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </div>
+        </div>
+
+        <!-- Files View -->
+        <div class="tree-scroll-area" id="tree-files-view">
+          <div class="tree-node">
+            <svg class="icon node-icon-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span style="font-weight: 600;">jconnect-flutter</span>
+          </div>
+          <div class="tree-node tree-indent-1">
+            <svg class="icon node-icon-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span>lib</span>
+          </div>
+          <div class="tree-node tree-indent-2">
+            <svg class="icon node-icon-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span>features</span>
+          </div>
+          <div class="tree-node tree-indent-3 active" onclick="toast('Opened quick_transfer_card.dart')">
+            <svg class="icon node-icon-dart" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>quick_transfer_card.dart</span>
+          </div>
+          <div class="tree-node tree-indent-3" onclick="toast('Opened account_balance_bloc.dart')">
+            <svg class="icon node-icon-dart" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span>account_balance_bloc.dart</span>
+          </div>
+          <div class="tree-node tree-indent-2">
+            <svg class="icon node-icon-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            <span>design_system</span>
+          </div>
+          <div class="tree-node tree-indent-1">
+            <svg class="icon node-icon-yaml" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span>pubspec.yaml</span>
+          </div>
+          <div class="tree-node tree-indent-1">
+            <svg class="icon node-icon-yaml" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            <span>analysis_options.yaml</span>
+          </div>
+        </div>
+
+        <!-- Git Changes View -->
+        <div class="tree-scroll-area" id="tree-git-view" style="display: none; padding: 10px;">
+          <div style="font-size: 11px; font-weight: 600; color: var(--p-text-muted); margin-bottom: 6px;">STAGED CHANGES (1)</div>
+          <div class="tree-node" style="color: var(--p-success);">
+            <span style="font-weight: 700; font-size: 10px;">M</span>
+            <span>quick_transfer_card.dart</span>
+          </div>
+          <div style="font-size: 11px; font-weight: 600; color: var(--p-text-muted); margin: 12px 0 6px 0;">UNSTAGED (1)</div>
+          <div class="tree-node" style="color: var(--p-warning);">
+            <span style="font-weight: 700; font-size: 10px;">M</span>
+            <span>account_balance_bloc.dart</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. CENTER WORKSPACE (Editor Island & Bottom Dock Island) -->
+      <div class="center-workspace">
+
+        <!-- FLOATING EDITOR ISLAND -->
+        <div class="editor-container">
+          <!-- Glass Tabs Bar -->
+          <div class="editor-tabs-bar">
+            <div class="editor-tab active" id="tab-transfer">
+              <svg class="icon node-icon-dart" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              <span>quick_transfer_card.dart</span>
+              <span class="tab-close">✕</span>
+            </div>
+            <div class="editor-tab" onclick="toast('Switch tab to account_balance_bloc.dart')">
+              <svg class="icon node-icon-dart" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              <span>account_balance_bloc.dart</span>
+              <span class="tab-close">✕</span>
+            </div>
+            <div class="editor-tab" onclick="toast('Switch tab to pubspec.yaml')">
+              <svg class="icon node-icon-yaml" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>pubspec.yaml</span>
+              <span class="tab-close">✕</span>
+            </div>
+          </div>
+
+          <!-- Glass Breadcrumbs -->
+          <div class="editor-breadcrumbs">
+            <span>jconnect-flutter</span>
+            <span>›</span>
+            <span>lib</span>
+            <span>›</span>
+            <span>features</span>
+            <span>›</span>
+            <span>transfer</span>
+            <span>›</span>
+            <span class="breadcrumb-active">quick_transfer_card.dart</span>
+          </div>
+
+          <!-- Code Canvas (Floating Dark Glass) -->
+          <div class="editor-canvas font-code">
+            <div class="wcag-protection-badge">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              <span>Floating Dark Glass • WCAG AAA (9.4:1)</span>
+            </div>
+
+            <div class="code-gutter">
+              <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div>
+              <div class="gutter-active">11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div>
+              <div>21</div><div>22</div><div>23</div><div>24</div><div>25</div>
+            </div>
+
+            <div class="code-lines-container">
+<span class="code-line"><span class="kw">import</span> <span class="str">'package:flutter/material.dart'</span>;</span>
+<span class="code-line"><span class="kw">import</span> <span class="str">'package:jconnect/design_system/components/i_button.dart'</span>;</span>
+<span class="code-line"><span class="kw">import</span> <span class="str">'package:jconnect/core/security/app_screen_privacy_service.dart'</span>;</span>
+<span class="code-line"><br></span>
+<span class="code-line"><span class="cmt">/// QuickTransferCard: Bank Jatim JConnect Production Component</span></span>
+<span class="code-line"><span class="cmt">/// Floating Glassmorphic canvas with deep aurora refractions</span></span>
+<span class="code-line"><span class="kw">class</span> <span class="type">QuickTransferCard</span> <span class="kw">extends</span> <span class="type">StatelessWidget</span> {</span>
+<span class="code-line">  <span class="kw">const</span> <span class="type">QuickTransferCard</span>({<span class="kw">super</span>.<span class="prop">key</span>, <span class="kw">required</span> <span class="kw">this</span>.<span class="prop">accountNumber</span>});</span>
+<span class="code-line">  <span class="kw">final</span> <span class="type">String</span> <span class="prop">accountNumber</span>;</span>
+<span class="code-line"><br></span>
+<span class="code-line active-line">  <span class="ann">@override</span></span>
+<span class="code-line">  <span class="type">Widget</span> <span class="fn">build</span>(<span class="type">BuildContext</span> <span class="prop">context</span>) {</span>
+<span class="code-line">    <span class="cmt">// Privacy guard aktif untuk layar rekening sensitif</span></span>
+<span class="code-line">    <span class="type">AppScreenPrivacyService</span>.<span class="fn">protectSensitiveContent</span>();</span>
+<span class="code-line"><br></span>
+<span class="code-line">    <span class="kw">return</span> <span class="type">Container</span>(</span>
+<span class="code-line">      <span class="prop">padding</span>: <span class="prop">context</span>.<span class="fn">padding16</span>,</span>
+<span class="code-line">      <span class="prop">decoration</span>: <span class="type">BoxDecoration</span>(</span>
+<span class="code-line">        <span class="prop">color</span>: <span class="type">Theme</span>.<span class="fn">of</span>(<span class="prop">context</span>).<span class="prop">cardColor</span>,</span>
+<span class="code-line">        <span class="prop">borderRadius</span>: <span class="type">BorderRadius</span>.<span class="fn">circular</span>(<span class="num">14</span>),</span>
+<span class="code-line">        <span class="prop">border</span>: <span class="type">Border</span>.<span class="fn">all</span>(<span class="prop">color</span>: <span class="type">Colors</span>.<span class="prop">white24</span>, <span class="prop">width</span>: <span class="num">1.0</span>),</span>
+<span class="code-line">      ),</span>
+<span class="code-line">      <span class="prop">child</span>: <span class="type">IButton</span>(</span>
+<span class="code-line">        <span class="prop">label</span>: <span class="str">'Kirim Saldo Cepat'</span>,</span>
+<span class="code-line">        <span class="prop">onPressed</span>: () => <span class="fn">_handleTransfer</span>(<span class="prop">context</span>),</span>
+<span class="code-line">      ),</span>
+<span class="code-line">    );</span>
+<span class="code-line">  }</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. BOTTOM DOCK (Floating Terminal / Logs Island) -->
+        <div class="bottom-dock" id="bottom-dock">
+          <div class="bottom-dock-header">
+            <div class="dock-tabs-list">
+              <button class="bottom-dock-tab active" id="btab-term" onclick="switchBottomTab('terminal')">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                <span>Terminal</span>
+              </button>
+              <button class="bottom-dock-tab" id="btab-run" onclick="switchBottomTab('run')">
+                <svg class="icon" viewBox="0 0 24 24" style="stroke: none; fill: currentColor;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Run (Pixel 8)</span>
+              </button>
+              <button class="bottom-dock-tab" id="btab-logcat" onclick="switchBottomTab('logcat')">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"></rect><path d="M11 18h2"></path></svg>
+                <span>Logcat</span>
+              </button>
+              <button class="bottom-dock-tab" id="btab-problems" onclick="switchBottomTab('problems')">
+                <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span>Problems</span>
+                <span class="tab-badge">0</span>
+              </button>
+            </div>
+
+            <div class="dock-header-actions">
+              <svg class="icon dock-tool-icon" viewBox="0 0 24 24" onclick="toast('Clear Terminal Console')"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <svg class="icon dock-tool-icon" viewBox="0 0 24 24" onclick="toggleBottomDock()"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+          </div>
+
+          <div class="terminal-content font-code" id="terminal-body">
+            <div><span class="term-prompt">uqi@uqiflutter1</span>:<span class="term-info">~/uqi-projects/petak-p4m</span>$ flutter run -d "Pixel 8 Pro" --flavor dev</div>
+            <div class="term-muted">Launching lib/main_dev.dart on Pixel 8 Pro in debug mode...</div>
+            <div class="term-muted">Running Gradle task 'assembleDevDebug'... (1.8s)</div>
+            <div><span class="term-success">✓ Built build/app/outputs/flutter-apk/app-dev-debug.apk</span> (42.4MB)</div>
+            <div><span class="term-info">I/flutter (28412):</span> [JConnect] Initializing AppScreenPrivacyService: <span class="term-success">ACTIVE</span></div>
+            <div><span class="term-info">I/flutter (28412):</span> [JConnect] QuickTransferCard rendered in 14ms (60 FPS locked)</div>
+            <div><span class="term-success">🔥 Flutter run key commands:</span> Press <span class="term-warning">"r"</span> for hot reload, <span class="term-warning">"R"</span> for hot restart.</div>
+            <div><span class="term-prompt">uqi@uqiflutter1</span>:<span class="term-info">~/uqi-projects/petak-p4m</span>$ <span style="display: inline-block; width: 7px; height: 13px; background: var(--p-accent); vertical-align: middle;"></span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 5. RIGHT AI AGENTS DOCK (Floating Agent Island) -->
+      <div class="agent-dock" id="agent-dock">
+        <div class="agent-header">
+          <div class="agent-profile-pill" onclick="toast('Switch Hermes Bot Persona')">
+            <span>🎨</span>
+            <span>Designer</span>
+            <span class="profile-role-tag">UI/UX System</span>
+            <svg class="icon" style="width: 10px; height: 10px; opacity: 0.6;" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+
+          <div style="display: flex; gap: 4px;">
+            <svg class="icon dock-tool-icon" viewBox="0 0 24 24" onclick="toast('Reset Chat Context')"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+            <svg class="icon dock-tool-icon" viewBox="0 0 24 24" onclick="toggleAgentPanel()"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </div>
+        </div>
+
+        <!-- Team Quick Switcher Bar -->
+        <div class="agent-team-grid">
+          <div class="team-chip" onclick="switchAgent('manager')">👑 Manager</div>
+          <div class="team-chip" onclick="switchAgent('techlead')">🧠 Techlead</div>
+          <div class="team-chip" onclick="switchAgent('senior')">⚡ Senior</div>
+          <div class="team-chip" onclick="switchAgent('reviewer')">🔍 Reviewer</div>
+          <div class="team-chip active" onclick="switchAgent('designer')">🎨 Designer</div>
+        </div>
+
+        <!-- Chat Conversation Stream -->
+        <div class="agent-chat-feed">
+          <div class="chat-bubble user">
+            <div class="chat-author">UQi (Lead)</div>
+            Mana glassmorphicnya, ga kerasa malah seperti vscode. Bikin yang seketika terlihat kacanya, floating islands, backdrop blur dramatis, specular sheen tebal, dan ambient aurora hidup!
+          </div>
+
+          <div class="chat-bubble agent">
+            <div class="chat-author">
+              <span>🎨 Designer</span>
+              <span style="font-size: 9.5px; opacity: 0.6;">Just now</span>
+            </div>
+            Siap UQi! Desain direvisi total ke <b>Vibrant & Workable Glassmorphism</b>:
+            <br><br>
+            1. <b>Dynamic Mesh Aurora</b>: Deep Electric Violet, Sapphire Cyan, dan Sunset Coral berpendar di Layer 0.
+            <br><br>
+            2. <b>Floating Island Architecture</b>: Celah 9px antar panel mengekspos refraksi aurora di belakangnya.
+            <br><br>
+            3. <b>Floating Dark Glass Canvas</b>: `rgba(11, 14, 24, 0.80)` + `blur(32px)` + `saturate(200%)` — pendaran aurora tembus halus tanpa merusak kontras sintaks teks.
+            <br><br>
+            4. <b>Specular Sheen 0.35</b>: Milled glass top highlight tebal ala macOS Sonoma & Apple visionOS.
+            <div class="chat-code-block font-code">
+              border-top: 1px solid rgba(255,255,255,0.35);<br>
+              backdrop-filter: blur(28px) saturate(200%);
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Prompt Input -->
+        <div class="agent-input-container">
+          <textarea class="agent-input-box" placeholder="Ask Hermes Agent to review code or inspect design… (Enter to send)"></textarea>
+          <div class="input-actions-bar">
+            <div class="model-selector-pill">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+              <span>ag/gemini-3.8-flash-high</span>
+            </div>
+            <button class="send-agent-btn" onclick="toast('Prompt submitted to Hermes Agent!')">
+              <span>Send</span>
+              <svg class="icon" style="width: 12px; height: 12px;" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 6. STATUS BAR (Floating Footer Island) -->
+    <div class="statusbar">
+      <div class="status-left">
+        <div class="status-item">
+          <svg class="icon" style="color: var(--p-accent);" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"></path></svg>
+          <span>feat/glassmorphism*</span>
+        </div>
+        <div class="status-item">
+          <span style="color: var(--p-success);">●</span>
+          <span>Dart Analysis: 0 issues</span>
+        </div>
+      </div>
+
+      <div class="status-right">
+        <div class="status-item">
+          <span>Ln 11, Col 4</span>
+        </div>
+        <div class="status-item">
+          <span>UTF-8</span>
+        </div>
+        <div class="status-item">
+          <span>Dart 3.5.3</span>
+        </div>
+        <div class="status-item" style="color: var(--p-accent); font-weight: 600;">
+          <span>Petak Vibrant Glass v0.11.0</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast Element -->
+  <div id="petak-toast">
+    <svg class="icon" style="color: var(--p-accent);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+    <span id="toast-text">Action executed</span>
+  </div>
+
+  <!-- Vanilla JS Interactive Controls -->
+  <script>
+    function setTheme(mode) {
+      const body = document.body;
+      const btnStandard = document.getElementById('btn-mode-standard');
+      const btnGlass = document.getElementById('btn-mode-glass');
+
+      if (mode === 'standard') {
+        body.classList.remove('theme-glassmorphism');
+        body.classList.add('theme-standard');
+        btnStandard.classList.add('active');
+        btnGlass.classList.remove('active');
+        toast('Switched to Standard Dark Theme (Flat VS Code)');
+      } else {
+        body.classList.remove('theme-standard');
+        body.classList.add('theme-glassmorphism');
+        btnGlass.classList.add('active');
+        btnStandard.classList.remove('active');
+        toast('Switched to Vibrant & Workable Glassmorphism ✨');
+      }
+    }
+
+    function setAmbient(type) {
+      const body = document.body;
+      body.classList.remove('ambient-aurora', 'ambient-sunset', 'ambient-off');
+      document.querySelectorAll('#btn-amb-aurora, #btn-amb-sunset, #btn-amb-off').forEach(b => b.classList.remove('active'));
+
+      if (type === 'sunset') {
+        body.classList.add('ambient-sunset');
+        document.getElementById('btn-amb-sunset').classList.add('active');
+        toast('Aurora Glow: Sunset Nebula');
+      } else if (type === 'off') {
+        body.classList.add('ambient-off');
+        document.getElementById('btn-amb-off').classList.add('active');
+        toast('Aurora Glow: Disabled');
+      } else {
+        body.classList.add('ambient-aurora');
+        document.getElementById('btn-amb-aurora').classList.add('active');
+        toast('Aurora Glow: Cosmic Aurora (Cyan + Violet + Coral)');
+      }
+    }
+
+    function toggleSpecular() {
+      const body = document.body;
+      const btn = document.getElementById('btn-specular');
+      const isOn = !body.classList.contains('specular-off');
+
+      if (isOn) {
+        body.classList.add('specular-off');
+        btn.classList.remove('active');
+        btn.textContent = 'Specular: OFF';
+        toast('Specular Sheen: Disabled');
+      } else {
+        body.classList.remove('specular-off');
+        btn.classList.add('active');
+        btn.textContent = 'Specular: ON';
+        toast('Specular Sheen: Enabled (0.35 Milled Edge)');
+      }
+    }
+
+    function switchLeftDock(view) {
+      const filesView = document.getElementById('tree-files-view');
+      const gitView = document.getElementById('tree-git-view');
+      const linkFiles = document.getElementById('dock-link-files');
+      const linkGit = document.getElementById('dock-link-git');
+      const railFiles = document.getElementById('rail-files-btn');
+      const railGit = document.getElementById('rail-git-btn');
+
+      if (view === 'git') {
+        filesView.style.display = 'none';
+        gitView.style.display = 'block';
+        linkFiles.classList.remove('active');
+        linkGit.classList.add('active');
+        railFiles.classList.remove('active');
+        railGit.classList.add('active');
+        toast('Left Dock: Git Changes (2 files modified)');
+      } else {
+        filesView.style.display = 'block';
+        gitView.style.display = 'none';
+        linkFiles.classList.add('active');
+        linkGit.classList.remove('active');
+        railFiles.classList.add('active');
+        railGit.classList.remove('active');
+        toast('Left Dock: Project Files');
+      }
+    }
+
+    function switchBottomTab(tab) {
+      document.querySelectorAll('.bottom-dock-tab').forEach(t => t.classList.remove('active'));
+      const activeBtn = document.getElementById('btab-' + tab);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const term = document.getElementById('terminal-body');
+      if (tab === 'terminal') {
+        term.innerHTML = `
+          <div><span class="term-prompt">uqi@uqiflutter1</span>:<span class="term-info">~/uqi-projects/petak-p4m</span>$ flutter run -d "Pixel 8 Pro" --flavor dev</div>
+          <div class="term-muted">Launching lib/main_dev.dart on Pixel 8 Pro in debug mode...</div>
+          <div class="term-muted">Running Gradle task 'assembleDevDebug'... (1.8s)</div>
+          <div><span class="term-success">✓ Built build/app/outputs/flutter-apk/app-dev-debug.apk</span> (42.4MB)</div>
+          <div><span class="term-info">I/flutter (28412):</span> [JConnect] Initializing AppScreenPrivacyService: <span class="term-success">ACTIVE</span></div>
+          <div><span class="term-info">I/flutter (28412):</span> [JConnect] QuickTransferCard rendered in 14ms (60 FPS locked)</div>
+          <div><span class="term-success">🔥 Flutter run key commands:</span> Press <span class="term-warning">"r"</span> for hot reload.</div>
+          <div><span class="term-prompt">uqi@uqiflutter1</span>:<span class="term-info">~/uqi-projects/petak-p4m</span>$ <span style="display: inline-block; width: 7px; height: 13px; background: var(--p-accent); vertical-align: middle;"></span></div>
+        `;
+      } else if (tab === 'run') {
+        term.innerHTML = `
+          <div><span class="term-success">[Run Session]</span> Target: Pixel 8 Pro • Dart VM Observatory: http://127.0.0.1:51412/</div>
+          <div><span class="term-info">[Flutter Engine]</span> Frame budget 16.6ms • Average build time: 3.2ms (Zero frame drops)</div>
+          <div><span class="term-info">[Petak Monitor]</span> GPU Memory: 82MB • Heap: 48MB</div>
+        `;
+      } else if (tab === 'logcat') {
+        term.innerHTML = `
+          <div><span class="term-muted">10-22 10:14:02.112 28412 28430 D JConnect/Security:</span> FortiToken tunnel verified (ppp0)</div>
+          <div><span class="term-muted">10-22 10:14:02.340 28412 28412 D JConnect/Auth:</span> Biometric auth prompt ready</div>
+          <div><span class="term-muted">10-22 10:14:03.011 28412 28412 I JConnect/UI:</span> QuickTransferCard attached to tree</div>
+        `;
+      } else if (tab === 'problems') {
+        term.innerHTML = `
+          <div style="color: var(--p-success); padding: 8px 0;">✓ No diagnostics or syntax problems found in workspace.</div>
+        `;
+      }
+      toast('Switched bottom panel to ' + tab.toUpperCase());
+    }
+
+    function toggleAgentPanel() {
+      const agent = document.getElementById('agent-dock');
+      if (agent.style.display === 'none') {
+        agent.style.display = 'flex';
+        toast('Right AI Agent Dock: Opened');
+      } else {
+        agent.style.display = 'none';
+        toast('Right AI Agent Dock: Closed');
+      }
+    }
+
+    function toggleBottomDock() {
+      const dock = document.getElementById('bottom-dock');
+      if (dock.style.height === '34px') {
+        dock.style.height = '200px';
+        toast('Bottom Dock: Restored');
+      } else {
+        dock.style.height = '34px';
+        toast('Bottom Dock: Collapsed');
+      }
+    }
+
+    function switchAgent(role) {
+      document.querySelectorAll('.team-chip').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      toast('Switched Hermes Bot persona to @' + role);
+    }
+
+    function triggerRun() {
+      toast('Building & Running Flutter app on Pixel 8 Pro…');
+    }
+
+    function triggerHotReload() {
+      toast('⚡ Flutter Hot Reloaded in 312ms');
+    }
+
+    function toggleThemeModal() {
+      toast('Settings: Press ⌘, to configure Petak IDE');
+    }
+
+    let toastTimer;
+    function toast(msg) {
+      const t = document.getElementById('petak-toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = msg;
+      t.style.display = 'flex';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        t.style.display = 'none';
+      }, 2400);
+    }
+  </script>
+</body>
+</html>

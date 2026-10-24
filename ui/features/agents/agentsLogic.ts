@@ -1646,7 +1646,10 @@ export function buildCleanPromptEnvelope(
   if (options?.uploadedFiles && options.uploadedFiles.length > 0) {
     const fileBlocks = options.uploadedFiles.map((uf) => {
       if (uf.text && uf.text.trim()) {
-        return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path})]\n${uf.text.trim()}\n[/LAMPIRAN BERKAS]`;
+        const sanitizedNotice = uf.is_sanitized
+          ? '\n(Catatan sistem: Teks berkas ini sudah berhasil didekripsi & disanitasi secara lokal di memori. JANGAN gunakan tool read_file atau terminal untuk membaca berkas fisik tersebut di disk. Langsung analisis teks dokumen berikut:)'
+          : '\n(Catatan sistem: Teks berkas ini sudah diekstrak secara lokal. JANGAN gunakan tool read_file atau terminal untuk membaca berkas fisik, langsung gunakan teks dokumen berikut:)';
+        return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path})]${sanitizedNotice}\n${uf.text.trim()}\n[/LAMPIRAN BERKAS]`;
       } else {
         return `[LAMPIRAN BERKAS: ${uf.name} (${uf.path}) (berkas biner / tanpa teks)]`;
       }
@@ -2054,6 +2057,50 @@ export function sanitizeSessions(
   }
 
   return result;
+}
+
+export interface PdfPasswordModalState {
+  isOpen: boolean;
+  filePath: string;
+  passwordInput: string;
+  error: string;
+  isSubmitting: boolean;
+}
+
+export function createInitialPdfPasswordModalState(): PdfPasswordModalState {
+  return {
+    isOpen: false,
+    filePath: '',
+    passwordInput: '',
+    error: '',
+    isSubmitting: false,
+  };
+}
+
+export function openPdfPasswordModal(filePath: string): PdfPasswordModalState {
+  return {
+    isOpen: true,
+    filePath,
+    passwordInput: '',
+    error: '',
+    isSubmitting: false,
+  };
+}
+
+export function handlePdfPasswordError(state: PdfPasswordModalState, err: any): PdfPasswordModalState {
+  const msg = String(err?.message || err || 'Password salah atau gagal membuka PDF');
+  const errorText = msg.toLowerCase().includes('password') || msg.toLowerCase().includes('incorrect')
+    ? 'Password salah. Silakan coba lagi.'
+    : msg;
+  return {
+    ...state,
+    error: errorText,
+    isSubmitting: false,
+  };
+}
+
+export function handlePdfPasswordSuccess(): PdfPasswordModalState {
+  return createInitialPdfPasswordModalState();
 }
 
 

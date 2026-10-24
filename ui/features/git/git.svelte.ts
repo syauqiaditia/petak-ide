@@ -939,7 +939,14 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitSquash(this.root, shas, message);
-      if (res.stashConflict) {
+      if (!res.ok) {
+        this.showToast('Rebase stopped due to conflicts / stopped at commit', { type: 'warning' });
+        await this.loadOpState();
+        await this.loadConflicts();
+        if (this.conflicts.length > 0 || this.opState?.kind === 'rebase') {
+          this.activeSubTab = 'conflict';
+        }
+      } else if (res.stashConflict) {
         this.showToast(
           'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
           { type: 'warning' }
@@ -962,7 +969,10 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitReword(this.root, sha, message);
-      if (res.stashConflict) {
+      if (!res.ok) {
+        this.showToast('Rebase stopped due to conflicts / stopped at commit', { type: 'warning' });
+        await this.loadOpState();
+      } else if (res.stashConflict) {
         this.showToast(
           'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
           { type: 'warning' }
@@ -985,7 +995,10 @@ class GitStore {
     if (!this.root) throw new Error('No repository open');
     try {
       const res = await api.gitFixup(this.root, sha);
-      if (res.stashConflict) {
+      if (!res.ok) {
+        this.showToast('Rebase stopped due to conflicts / stopped at commit', { type: 'warning' });
+        await this.loadOpState();
+      } else if (res.stashConflict) {
         this.showToast(
           'Rebase done, but your local changes conflicted when restored — see Conflicts / git stash list',
           { type: 'warning' }

@@ -446,11 +446,11 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    background: #1c1d22;
+    background: var(--p-bg-elevated, #35373c);
     color: #d8d9dc;
     font-family: 'Geist', system-ui, sans-serif;
     font-size: 13px;
-    border: 1px solid #34363d;
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
@@ -671,8 +671,8 @@
     margin: 14px;
     padding: 12px;
     border-radius: 9px;
-    background: #17181c;
-    border: 1px solid #2a2c32;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     font-size: 12px;
     line-height: 19px;
     color: #9a9ea6;
@@ -685,7 +685,7 @@
     flex-direction: column;
     padding: 14px;
     gap: 10px;
-    background: #17181c;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .editor-header {
@@ -725,8 +725,8 @@
   .msg-textarea {
     flex-grow: 1;
     resize: none;
-    background: #141518;
-    border: 1px solid #3a4f75;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     padding: 12px;
     color: #d8d9dc;
@@ -757,8 +757,8 @@
     align-items: center;
     gap: 8px;
     padding: 0 20px;
-    border-top: 1px solid #2a2c32;
-    background: #18191d;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .backup-checkbox {

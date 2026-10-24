@@ -401,7 +401,7 @@
     flex: 1;
     height: 100%;
     min-height: 0;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #d8d9dc;
     user-select: none;
     -webkit-user-select: none;
@@ -411,10 +411,10 @@
   .stash-sidebar {
     width: 290px;
     flex-shrink: 0;
-    border-right: 1px solid #23252a;
+    border-right: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
-    background: #111215;
+    background: var(--p-bg-surface, #26282b);
   }
   .sidebar-header {
     height: 38px;
@@ -422,8 +422,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #23252a;
-    background: #17181c;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
   .header-title {
     display: flex;
@@ -541,8 +541,8 @@
   }
   .detail-header-bar {
     padding: 8px 16px;
-    background: #17181c;
-    border-bottom: 1px solid #23252a;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -630,10 +630,10 @@
   /* Foldering Files Pane */
   .stash-files-pane {
     width: 320px;
-    border-right: 1px solid #23252a;
+    border-right: 1px solid var(--border-default, #393b40);
     display: flex;
     flex-direction: column;
-    background: #131417;
+    background: var(--p-bg-surface, #26282b);
     flex-shrink: 0;
   }
   .pane-title-bar {
@@ -642,8 +642,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #202227;
-    background: #16171b;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     font-size: 11px;
     font-weight: 600;
     color: #a0a4ad;
@@ -679,7 +679,7 @@
     transition: background 0.1s ease;
   }
   .folder-group-row:hover {
-    background: #1a1c22;
+    background: var(--p-bg-hover, #323539);
     color: #e2e8f0;
   }
   .folder-chevron {
@@ -704,7 +704,7 @@
   .folder-count {
     font-size: 10px;
     color: #64748b;
-    background: #1e2025;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 1px 5px;
     border-radius: 8px;
   }
@@ -724,7 +724,7 @@
     margin-bottom: 1px;
   }
   .file-row:hover {
-    background: #1a1c22;
+    background: var(--p-bg-hover, #323539);
   }
   .file-row.selected {
     background: #1e2a40;
@@ -782,7 +782,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #101114;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
   }
   .diff-loading-state,

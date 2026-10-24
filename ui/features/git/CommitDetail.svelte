@@ -236,8 +236,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    border-left: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-left: 1px solid var(--border-default, #393b40);
     height: 100%;
     overflow-y: auto;
     font-size: 13px;
@@ -248,7 +248,7 @@
   .commit-detail.collapsed {
     width: 28px;
     overflow: hidden;
-    background: #111215;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .expand-strip-btn {
@@ -268,7 +268,7 @@
 
   .expand-strip-btn:hover {
     color: #e6e7ea;
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
   }
 
   .expand-arrow {
@@ -288,8 +288,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #18191e;
-    border-bottom: 1px solid #222428;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
 
@@ -410,8 +410,8 @@
     padding: 2px 6px;
     font-size: 11px;
     border-radius: 4px;
-    border: 1px solid #2c2e34;
-    background: #1c1d22;
+    border: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-workspace, #2b2d30);
     color: #b9bcc3;
     cursor: pointer;
   }
@@ -428,8 +428,8 @@
   }
 
   .parent-link {
-    background: #1a1c22;
-    border: 1px solid #282a30;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 1px 6px;
     font-size: 11px;
@@ -512,7 +512,7 @@
   }
 
   .file-row:hover {
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
   }
 
   .status-letter {

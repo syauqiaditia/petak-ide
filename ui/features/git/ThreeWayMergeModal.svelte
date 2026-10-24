@@ -726,8 +726,8 @@
   /* Top Window Title Bar */
   .dialog-top-bar {
     height: 38px;
-    background: #141518;
-    border-bottom: 1px solid #2b2d30;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -915,9 +915,9 @@
   }
 
   .pane-center {
-    background: #18191c;
-    border-left: 1px solid #2b2d30;
-    border-right: 1px solid #2b2d30;
+    background: var(--p-bg-workspace, #2b2d30);
+    border-left: 1px solid var(--border-default, #393b40);
+    border-right: 1px solid var(--border-default, #393b40);
   }
 
   .pane-right {
@@ -1162,8 +1162,8 @@
   /* Bottom Bar */
   .dialog-bottom-bar {
     height: 48px;
-    background: #141518;
-    border-top: 1px solid #2b2d30;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;

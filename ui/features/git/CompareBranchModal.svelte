@@ -270,8 +270,8 @@
     width: 90vw;
     max-width: 1200px;
     height: 85vh;
-    background: #141518;
-    border: 1px solid #2a2d36;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     display: flex;
     flex-direction: column;
@@ -281,8 +281,8 @@
   .compare-header {
     height: 44px;
     padding: 0 16px;
-    background: #191b20;
-    border-bottom: 1px solid #242730;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -411,8 +411,8 @@
     color: #f07a74;
   }
   .filter-input {
-    background: #111215;
-    border: 1px solid #24262e;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 5px 8px;
     font-size: 11px;
@@ -439,11 +439,11 @@
     padding: 6px 12px;
     font-size: 11.5px;
     cursor: pointer;
-    border-bottom: 1px solid #1a1c22;
+    border-bottom: 1px solid var(--border-default, #393b40);
     transition: background 0.1s;
   }
   .file-item:hover {
-    background: #1d1f25;
+    background: var(--p-bg-hover, #323539);
   }
   .file-item.selected {
     background: #232733;
@@ -479,13 +479,13 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #121316;
+    background: var(--p-bg-workspace, #2b2d30);
   }
   .diff-pane-header {
     height: 38px;
     padding: 0 14px;
-    border-bottom: 1px solid #22252d;
-    background: #16171b;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     display: flex;
     align-items: center;
     justify-content: space-between;

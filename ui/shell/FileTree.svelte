@@ -1609,8 +1609,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #141518;
-    border-right: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-right: 1px solid var(--border-default, #393b40);
     user-select: none;
     -webkit-user-select: none;
     overflow: hidden;
@@ -1645,7 +1645,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 10px 0 14px;
-    border-bottom: 1px solid #1c1d22;
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
   .header-title {
@@ -1674,7 +1674,7 @@
   }
   .icon-btn:hover {
     color: #d8d9dc;
-    background: #1f2026;
+    background: var(--p-bg-hover, #323539);
   }
   .root-folder {
     display: flex;
@@ -1684,7 +1684,7 @@
     font-size: 13px;
     font-weight: 500;
     color: #e6e7ea;
-    border-bottom: 1px solid #1c1d22;
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
   .caret {
     color: #8b8f98;
@@ -1716,7 +1716,7 @@
     box-sizing: border-box;
   }
   .item:hover {
-    background: #1b1c21;
+    background: var(--p-bg-hover, #323539);
     color: #e6e7ea;
   }
   .item.selected {
@@ -1818,14 +1818,14 @@
     flex-direction: column;
     padding: 6px 8px;
     border-radius: 5px;
-    background: #18191d;
-    border: 1px solid #22242a;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     cursor: pointer;
     text-align: left;
     transition: background 0.15s;
   }
   .recent-item:hover {
-    background: #202227;
+    background: var(--p-bg-hover, #323539);
   }
   .recent-name {
     font-size: 12px;
@@ -1848,7 +1848,7 @@
     flex: 1;
   }
   .rename-input {
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     border: 1px solid #6ea8ff;
     border-radius: 4px;
     color: #d8d9dc;

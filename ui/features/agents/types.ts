@@ -106,6 +106,7 @@ export interface UploadedFileContent {
   text: string;
   size_bytes: number;
   is_binary: boolean;
+  is_sanitized?: boolean;
 }
 
 export interface ToolCallData {

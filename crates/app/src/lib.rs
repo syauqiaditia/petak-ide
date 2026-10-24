@@ -151,6 +151,8 @@ pub fn run() {
             commands::pick_folder,
             commands::pick_files,
             commands::extract_file_content,
+            commands::check_pdf_encrypted,
+            commands::extract_file_content_with_password,
             commands::git_branch,
             commands::git_status,
             commands::git_diff,

@@ -232,6 +232,31 @@ pub async fn extract_file_content(path: String) -> Result<petak_core::fs::Upload
     .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn check_pdf_encrypted(path: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        petak_core::fs::check_pdf_encrypted(&path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn extract_file_content_with_password(
+    path: String,
+    password: Option<String>,
+) -> Result<petak_core::fs::UploadedFileContent, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if path.to_lowercase().ends_with(".pdf") {
+            petak_core::fs::extract_pdf_content(&path, password.as_deref()).map_err(|e| e.to_string())
+        } else {
+            petak_core::fs::extract_file_content(&path).map_err(|e| e.to_string())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 
 #[tauri::command]
 pub async fn index_build(

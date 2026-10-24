@@ -1084,8 +1084,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: #18191c;
-    border-right: 1px solid #2b2d30;
+    background: var(--p-bg-surface, #26282b);
+    border-right: 1px solid var(--border-default, #393b40);
     height: 100%;
     overflow: hidden;
     user-select: none;
@@ -1096,15 +1096,15 @@
   .panel-header-tabs {
     height: 38px;
     padding: 4px 10px;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     flex-shrink: 0;
   }
   .tab-segments {
     display: flex;
-    background: #1c1d22;
+    background: var(--p-bg-workspace, #2b2d30);
     padding: 2px;
     border-radius: 6px;
     border: 1px solid #282a30;
@@ -1155,7 +1155,7 @@
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
-    background: #151619;
+    background: var(--p-bg-workspace, #2b2d30);
   }
   .stash-toolbar {
     height: 32px;
@@ -1163,8 +1163,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #18191c;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.5px;
@@ -1473,8 +1473,8 @@
     display: flex;
     align-items: center;
     padding: 0 12px;
-    background: #18191c;
-    border-bottom: 1px solid #2b2d30;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     flex-shrink: 0;
   }
   .select-all-label {
@@ -1547,8 +1547,8 @@
   .file-context-menu {
     position: fixed;
     width: 180px;
-    background: #1e2025;
-    border: 1px solid #34363d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
     z-index: 99999;
@@ -1594,7 +1594,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 12px;
-    background: #16171a;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .group-header-left {
@@ -1725,8 +1725,8 @@
 
   /* Commit Box */
   .commit-box {
-    border-top: 1px solid #2b2d30;
-    background: #18191c;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -1943,8 +1943,8 @@
     bottom: calc(100% + 4px);
     right: 0;
     width: 210px;
-    background: #1c1d22;
-    border: 1px solid #2d3139;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     padding: 4px;

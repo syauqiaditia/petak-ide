@@ -254,7 +254,7 @@
     flex: 1;
     height: 100%;
     min-height: 0;
-    background: #131418;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #d8d9dc;
     user-select: none;
     -webkit-user-select: none;
@@ -349,7 +349,7 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: #111215;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow-y: auto;
   }
 
@@ -525,8 +525,8 @@
   .conflicts-bottom-bar {
     height: 48px;
     padding: 0 16px;
-    background: #141518;
-    border-top: 1px solid #23262e;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;

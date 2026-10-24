@@ -203,8 +203,8 @@
   .rebase-modal-window {
     width: 480px;
     max-width: calc(100vw - 32px);
-    background: #181a1f;
-    border: 1px solid #282c35;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
     display: flex;
@@ -215,8 +215,8 @@
   .modal-header {
     height: 42px;
     padding: 0 16px;
-    background: #141518;
-    border-bottom: 1px solid #232730;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -288,9 +288,9 @@
   }
 
   .branch-picker-box {
-    border: 1px solid #262a33;
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
-    background: #111215;
+    background: var(--p-bg-workspace, #2b2d30);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -301,8 +301,8 @@
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border-bottom: 1px solid #20242c;
-    background: #14161a;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
   }
 
   .search-icon {
@@ -396,8 +396,8 @@
   .modal-footer {
     height: 48px;
     padding: 0 16px;
-    background: #141518;
-    border-top: 1px solid #232730;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: flex-end;

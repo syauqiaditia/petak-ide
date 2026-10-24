@@ -80,15 +80,22 @@
     isConsecutiveSelection(gitStore.selectedCommitShas, gitStore.logCommits)
   );
 
-  let canSquash = $derived(selectedCount >= 2 && isConsecutive && !hasMergeCommit);
-  let canReword = $derived(selectedCount === 1 && !hasMergeCommit);
+  let isOnCurrentBranch = $derived(
+    selectedCommits.length > 0 && selectedCommits.every((c) => c.isHeadAncestor !== false)
+  );
+
+  let canSquash = $derived(
+    selectedCount >= 2 && isConsecutive && !hasMergeCommit && isOnCurrentBranch
+  );
+  let canReword = $derived(selectedCount === 1 && !hasMergeCommit && isOnCurrentBranch);
   let canFixup = $derived(
     selectedCount === 1 &&
     !hasMergeCommit &&
-    gitStore.logCommits.findIndex((c) => c.sha === gitStore.selectedCommitSha) > 0
+    gitStore.logCommits.findIndex((c) => c.sha === gitStore.selectedCommitSha) > 0 &&
+    isOnCurrentBranch
   );
-  let canDrop = $derived(selectedCount >= 1 && !hasMergeCommit);
-  let canRebase = $derived(selectedCount === 1 && !hasMergeCommit);
+  let canDrop = $derived(selectedCount >= 1 && !hasMergeCommit && isOnCurrentBranch);
+  let canRebase = $derived(selectedCount === 1 && !hasMergeCommit && isOnCurrentBranch);
   let isHeadSelected = $derived(
     selectedCount === 1 &&
     !!gitStore.selectedCommit?.refs?.some((r) => r.kind === 'head')
@@ -685,7 +692,7 @@
         class="mi"
         disabled={!canSquash}
         onclick={openSquashModal}
-        title={!canSquash ? 'Select ≥ 2 contiguous non-merge commits' : 'Squash commits'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canSquash ? 'Select ≥ 2 contiguous non-merge commits' : 'Squash commits')}
       >
         <span>Squash Commits…</span>
         <span class="mi-shortcut">⌘⇧S</span>
@@ -695,7 +702,7 @@
         class="mi"
         disabled={!canReword}
         onclick={openRewordModal}
-        title={!canReword ? 'Select 1 non-merge commit' : 'Edit message'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canReword ? 'Select 1 non-merge commit' : 'Edit message')}
       >
         <span>Edit Commit Message…</span>
         <span class="mi-shortcut">F2</span>
@@ -705,7 +712,7 @@
         class="mi"
         disabled={!canFixup}
         onclick={handleFixup}
-        title={!canFixup ? 'Select 1 commit with a previous commit' : 'Fixup into previous commit'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canFixup ? 'Select 1 commit with a previous commit' : 'Fixup into previous commit')}
       >
         <span>Fixup into Previous</span>
       </button>
@@ -724,7 +731,7 @@
         class="mi danger"
         disabled={!canDrop}
         onclick={openDropModal}
-        title={!canDrop ? 'Select non-merge commit(s) to drop' : 'Drop commit(s)'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canDrop ? 'Select non-merge commit(s) to drop' : 'Drop commit(s)')}
       >
         <span>Drop Commit(s)…</span>
       </button>
@@ -735,7 +742,7 @@
         class="mi"
         disabled={!canRebase}
         onclick={openRebaseFromHere}
-        title={!canRebase ? 'Select 1 non-merge commit' : 'Interactive rebase'}
+        title={!isOnCurrentBranch ? 'Commit bukan di branch aktif. Checkout branch ini dulu untuk mengubah riwayat.' : (!canRebase ? 'Select 1 non-merge commit' : 'Interactive rebase')}
       >
         <span>Interactively Rebase from Here…</span>
       </button>
@@ -1047,8 +1054,8 @@
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    border-bottom: 1px solid #26282d;
-    background: #141518;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     user-select: none;
     overflow-x: auto;
     scrollbar-width: none;
@@ -1064,10 +1071,10 @@
     align-items: center;
     gap: 6px;
     padding: 0 8px;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     color: #8b8f98;
-    background: #18191d;
+    background: var(--p-bg-workspace, #2b2d30);
     flex-shrink: 1;
   }
 
@@ -1167,8 +1174,8 @@
     width: 100%;
     height: 28px;
     padding: 0 8px;
-    background: #18191d;
-    border: 1px solid #34363d;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 5px;
     color: #d8d9dc;
     font-size: 12px;
@@ -1261,7 +1268,7 @@
   }
 
   .log-row:hover {
-    background: #1c1d22;
+    background: var(--p-bg-hover, #323539);
   }
 
   .log-row.selected {
@@ -1469,8 +1476,8 @@
   .action-modal {
     width: 480px;
     max-width: 90vw;
-    background: #1c1d22;
-    border: 1px solid #34363d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
     display: flex;
@@ -1549,8 +1556,8 @@
   .modal-textarea {
     width: 100%;
     box-sizing: border-box;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 10px;
     color: #d8d9dc;
@@ -1568,8 +1575,8 @@
     width: 100%;
     box-sizing: border-box;
     height: 32px;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 0 10px;
     color: #d8d9dc;
@@ -1600,8 +1607,8 @@
   .action-modal-footer {
     height: 52px;
     padding: 0 18px;
-    background: #18191d;
-    border-top: 1px solid #2a2c32;
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     display: flex;
     align-items: center;
     justify-content: flex-end;

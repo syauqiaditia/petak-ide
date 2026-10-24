@@ -220,8 +220,8 @@
   .stash-modal {
     width: 520px;
     max-height: 480px;
-    background: #18191c;
-    border: 1px solid #2a2d34;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 10px;
     display: flex;
     flex-direction: column;
@@ -289,8 +289,8 @@
   }
   .text-input {
     width: 100%;
-    background: #121316;
-    border: 1px solid #282a32;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     padding: 8px 10px;
     font-size: 12px;
@@ -370,8 +370,8 @@
     color: #656974;
   }
   .stash-card {
-    background: #1c1d22;
-    border: 1px solid #262830;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     padding: 10px 12px;
     display: flex;

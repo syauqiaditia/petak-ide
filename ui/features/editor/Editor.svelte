@@ -173,8 +173,8 @@
   const petakTheme = EditorView.theme(
     {
       '&': {
-        color: '#bcbec4',
-        backgroundColor: '#1a1b1f',
+        color: '#dbdee1',
+        backgroundColor: '#2b2d30',
         height: '100%',
         fontSize: '13px',
         fontFamily: "'JetBrains Mono', monospace",
@@ -185,18 +185,18 @@
         lineHeight: '22px',
       },
       '.cm-content': {
-        caretColor: '#6ea8ff',
+        caretColor: '#3574f0',
         padding: '6px 0',
       },
       '&.cm-focused .cm-cursor': {
-        borderLeftColor: '#6ea8ff',
+        borderLeftColor: '#3574f0',
         borderLeftWidth: '2px',
       },
       '&.cm-focused .cm-selectionBackground, ::selection': {
-        backgroundColor: '#214283 !important',
+        backgroundColor: '#353b4b !important',
       },
       '.cm-selectionBackground': {
-        backgroundColor: '#214283 !important',
+        backgroundColor: '#353b4b !important',
       },
       '.cm-search-match': {
         backgroundColor: '#2d5e38',
@@ -209,31 +209,31 @@
         zIndex: '2',
       },
       '.cm-gutters': {
-        backgroundColor: '#1a1b1f',
-        color: '#5b5f68',
-        borderRight: '1px solid #26282d',
+        backgroundColor: '#26282b',
+        color: '#949ba4',
+        borderRight: '1px solid #393b40',
         paddingRight: '8px',
       },
       '.cm-gutterElement': {
         paddingLeft: '12px',
       },
       '.cm-activeLine': {
-        backgroundColor: '#23252b44',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
       },
       '.cm-activeLineGutter': {
-        backgroundColor: '#23252b44',
+        backgroundColor: '#323539',
         color: '#b9bcc3',
       },
       '.cm-vim-panel': {
-        backgroundColor: '#141518',
-        color: '#d8d9dc',
+        backgroundColor: '#26282b',
+        color: '#dbdee1',
         padding: '2px 8px',
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: '12px',
-        borderTop: '1px solid #26282d',
+        borderTop: '1px solid #393b40',
       },
       '.cm-vim-panel input': {
-        color: '#d8d9dc',
+        color: '#dbdee1',
         backgroundColor: 'transparent',
       },
       '.cm-flash-line': {
@@ -1800,8 +1800,8 @@
   }
 
   :global(.cm-blame-gutter) {
-    background-color: #17181c !important;
-    border-right: 1px solid #26282d !important;
+    background-color: var(--p-bg-surface, #26282b) !important;
+    border-right: 1px solid var(--border-default, #393b40) !important;
     color: #8b8f98 !important;
   }
   :global(.cm-blame-cell) {
@@ -1828,7 +1828,7 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
-    background: #1a1b1f;
+    background: var(--p-bg-workspace, #2b2d30);
     position: relative;
     overflow: hidden;
   }
@@ -1850,7 +1850,7 @@
     min-height: 0;
     min-width: 0;
     overflow: hidden;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
   }
   .center-diff-header {
     height: 36px;
@@ -1933,8 +1933,8 @@
     flex-shrink: 0;
     display: flex;
     align-items: stretch;
-    background: #141518;
-    border-bottom: 1px solid #26282d;
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
     overflow-x: auto;
     overflow-y: hidden;
   }
@@ -1946,7 +1946,7 @@
     align-items: center;
     gap: 8px;
     padding: 0 12px;
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
     color: #8b8f98;
     border-top: 2px solid transparent;
     font-size: 13px;
@@ -1954,16 +1954,16 @@
     cursor: pointer;
     user-select: none;
     transition: background 0.1s, color 0.1s;
-    border-right: 1px solid #1c1d22;
+    border-right: 1px solid var(--border-default, #393b40);
     white-space: nowrap;
   }
   .tab:hover {
-    background: #1c1d22;
-    color: #d8d9dc;
+    background: var(--p-bg-hover, #323539);
+    color: #dbdee1;
   }
   .tab.active {
-    background: #23252b;
-    border-top: 2px solid #6ea8ff;
+    background: var(--p-bg-workspace, #2b2d30);
+    border-top: 2px solid var(--accent, #3574f0);
     color: #e6e7ea;
   }
   .tab-title {
@@ -2129,8 +2129,8 @@
     font-weight: 500;
   }
   .rename-input {
-    background: #141518;
-    border: 1px solid #6ea8ff;
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--accent, #3574f0);
     border-radius: 4px;
     color: #e6efff;
     padding: 4px 8px;
@@ -2142,11 +2142,11 @@
     display: flex;
     gap: 12px;
     font-size: 10px;
-    color: #8b8f98;
+    color: #8b949e;
   }
   .rename-hints kbd {
-    background: #16171a;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     padding: 1px 4px;
     border-radius: 3px;
     color: #b9bcc3;

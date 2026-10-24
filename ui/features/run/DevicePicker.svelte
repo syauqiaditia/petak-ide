@@ -410,8 +410,8 @@
     top: calc(100% + 4px);
     right: 0;
     width: 290px;
-    background: #1e2025;
-    border: 1px solid #34363d;
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
     padding: 6px 0;

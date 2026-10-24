@@ -22,8 +22,8 @@ pub use diff::{
 };
 pub use graph::layout;
 pub use log::{
-    branches, get_pushed_shas, get_refs_map, log, log_with_state, parse_branches_output,
-    parse_log_output, parse_tracking,
+    branches, get_head_ancestor_shas, get_pushed_shas, get_refs_map, log, log_with_state,
+    parse_branches_output, parse_log_output, parse_tracking,
 };
 pub use model::{
     BackupRef, BlameLine, BranchInfo, BranchList, Choice, Commit, CommitFile, ConflictBlock, ConflictChoice,
@@ -44,8 +44,8 @@ pub use path::{
     rollback_paths, CommitSelectedResult,
 };
 pub use rebase::{
-    drop, fixup_into_previous, rebase_abort, rebase_continue, rebase_run, rebase_run_with_op,
-    rebase_state, rebase_todo, reword, squash,
+    check_stale_index_lock, drop, fixup_into_previous, is_ancestor_of_head, rebase_abort,
+    rebase_continue, rebase_run, rebase_run_with_op, rebase_state, rebase_todo, reword, squash,
 };
 pub use remote::{fetch, pull, push, remotes};
 pub use status::{parse_status, status};

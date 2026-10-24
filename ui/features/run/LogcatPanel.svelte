@@ -340,7 +340,7 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #e6e7ea;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -357,8 +357,8 @@
     justify-content: space-between;
     gap: 8px 14px;
     padding: 4px 12px;
-    border-bottom: 1px solid #222428;
-    background: #17181c;
+    border-bottom: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
@@ -376,10 +376,10 @@
     gap: 5px;
     font-size: 11px;
     color: #8b8f98;
-    background: #1e2025;
+    background: var(--p-bg-surface, #26282b);
     padding: 3px 8px;
     border-radius: 4px;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     max-width: 180px;
     overflow: hidden;
     white-space: nowrap;
@@ -405,9 +405,9 @@
     height: 24px;
     padding: 0 8px;
     border-radius: 4px;
-    background: #1e2025;
+    background: var(--p-bg-surface, #26282b);
     color: #8b8f98;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
     cursor: pointer;
@@ -436,9 +436,9 @@
     height: 24px;
     padding: 0 6px;
     border-radius: 4px;
-    background: #1e2025;
+    background: var(--p-bg-surface, #26282b);
     color: #b9bcc3;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     font-size: 11px;
     cursor: pointer;
     outline: none;
@@ -452,9 +452,9 @@
     height: 24px;
     padding: 0 8px;
     border-radius: 4px;
-    background: #141518;
+    background: var(--p-bg-workspace, #2b2d30);
     color: #e6e7ea;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
     outline: none;
@@ -472,8 +472,8 @@
   .search-input-wrapper {
     display: flex;
     align-items: center;
-    background: #141518;
-    border: 1px solid #2c2e34;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 0 4px;
     height: 24px;
@@ -561,9 +561,9 @@
     height: 24px;
     padding: 0 9px;
     border-radius: 4px;
-    background: #1e2025;
+    background: var(--p-bg-surface, #26282b);
     color: #b9bcc3;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     font-size: 11px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -571,7 +571,7 @@
 
   .action-btn:hover {
     color: #e6e7ea;
-    background: #262930;
+    background: var(--p-bg-hover, #323539);
     border-color: #3f424b;
   }
 
@@ -588,9 +588,9 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    background: #1e2025;
+    background: var(--p-bg-surface, #26282b);
     color: #6e7380;
-    border: 1px solid #2c2e34;
+    border: 1px solid var(--border-default, #393b40);
     cursor: pointer;
     transition: all 0.15s ease;
   }

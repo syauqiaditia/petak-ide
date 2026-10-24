@@ -15,6 +15,11 @@
     isToolGroupCollapsed,
     toggleToolGroupCollapsed,
     separateStreamingToolCalls,
+    openPdfPasswordModal,
+    handlePdfPasswordError,
+    handlePdfPasswordSuccess,
+    createInitialPdfPasswordModalState,
+    type PdfPasswordModalState,
   } from './agentsLogic';
   import type {
     ChatMessage,
@@ -48,6 +53,7 @@
   let isDraggingFiles = $state(false);
   let fileInputEl: HTMLInputElement | null = $state(null);
   let chatWrapperEl: HTMLDivElement | null = $state(null);
+  let pdfModalState = $state<PdfPasswordModalState>(createInitialPdfPasswordModalState());
   let dragCounter = 0;
   let userPinnedToBottom = $state(true);
   let textareaEl: HTMLTextAreaElement | null = $state(null);
@@ -114,17 +120,58 @@
     uploadedFiles = uploadedFiles.filter((_, i) => i !== index);
   }
 
+  async function processUploadedFilePath(filePath: string) {
+    try {
+      const isPdf = filePath.toLowerCase().endsWith('.pdf');
+      if (isPdf) {
+        const isEncrypted = await api.checkPdfEncrypted(filePath).catch(() => false);
+        if (isEncrypted) {
+          pdfModalState = openPdfPasswordModal(filePath);
+          return;
+        }
+      }
+      const extracted = await api.extractFileContent(filePath);
+      addUploadedFile(extracted);
+    } catch (err: any) {
+      const errMsg = String(err?.message || err || '');
+      if (errMsg.toLowerCase().includes('password') || errMsg.toLowerCase().includes('encrypted')) {
+        pdfModalState = openPdfPasswordModal(filePath);
+        return;
+      }
+      console.warn('Failed to extract file content for path:', filePath, err);
+    }
+  }
+
+  function cancelPdfPassword() {
+    pdfModalState = handlePdfPasswordSuccess();
+  }
+
+  async function submitPdfPassword() {
+    if (!pdfModalState.filePath) return;
+    if (!pdfModalState.passwordInput) {
+      pdfModalState.error = 'Password tidak boleh kosong';
+      return;
+    }
+    pdfModalState.isSubmitting = true;
+    pdfModalState.error = '';
+    const targetPath = pdfModalState.filePath;
+    const targetPassword = pdfModalState.passwordInput;
+    try {
+      const extracted = await api.extractFileContentWithPassword(targetPath, targetPassword);
+      // Security Invariant: password variable is cleared immediately, never retained or logged
+      pdfModalState = handlePdfPasswordSuccess();
+      addUploadedFile(extracted);
+    } catch (err: any) {
+      pdfModalState = handlePdfPasswordError(pdfModalState, err);
+    }
+  }
+
   async function handlePickFiles() {
     try {
       const paths = await api.pickFiles();
       if (paths && paths.length > 0) {
         for (const p of paths) {
-          try {
-            const extracted = await api.extractFileContent(p);
-            addUploadedFile(extracted);
-          } catch (err) {
-            console.warn('Failed to extract file content for path:', p, err);
-          }
+          await processUploadedFilePath(p);
         }
         return;
       }
@@ -147,8 +194,7 @@
     const path = (file as any).path || file.name;
     try {
       if (path && (file as any).path) {
-        const extracted = await api.extractFileContent(path);
-        addUploadedFile(extracted);
+        await processUploadedFilePath(path);
         return;
       }
     } catch {
@@ -887,6 +933,9 @@
                 <div class="bubble-file-pill uploaded-pill" title="{uf.path} ({formatBytes(uf.size_bytes)})">
                   <span class="pill-icon">{getFileTypeIcon(uf.name)}</span>
                   <span class="pill-name">{uf.name}</span>
+                  {#if uf.is_sanitized}
+                    <span class="chip-badge-sanitized">sanitized</span>
+                  {/if}
                   <span class="pill-size">({formatBytes(uf.size_bytes)})</span>
                 </div>
               {/each}
@@ -1300,6 +1349,9 @@
           <div class="composer-file-chip uploaded-chip" title="{uf.path} ({formatBytes(uf.size_bytes)})">
             <span class="chip-icon">{getFileTypeIcon(uf.name)}</span>
             <span class="chip-name">{uf.name}</span>
+            {#if uf.is_sanitized}
+              <span class="chip-badge-sanitized">sanitized</span>
+            {/if}
             <span class="chip-size">({formatBytes(uf.size_bytes)})</span>
             <button
               type="button"
@@ -1552,16 +1604,83 @@
       </div>
     </div>
   </div>
+
+  <!-- Encrypted PDF Password Modal -->
+  {#if pdfModalState.isOpen}
+    <div class="modal-backdrop pdf-password-backdrop" onclick={cancelPdfPassword} role="presentation">
+      <div
+        class="modal-window pdf-password-modal"
+        onclick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        onkeydown={(e) => {
+          if (e.key === 'Escape') cancelPdfPassword();
+        }}
+      >
+        <div class="modal-header">
+          <h3 class="modal-title">PDF Terenkripsi</h3>
+          <button type="button" class="modal-close-btn" onclick={cancelPdfPassword} title="Batal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-message">
+            Berkas PDF dilindungi password. Masukkan password untuk membuka dan membersihkan kredensial lokal.
+          </p>
+          <div class="pdf-path-hint" title={pdfModalState.filePath}>
+            📄 {pdfModalState.filePath.split('/').pop() || pdfModalState.filePath}
+          </div>
+          <div class="form-group">
+            <input
+              type="password"
+              class="password-input"
+              placeholder="Masukkan password PDF…"
+              bind:value={pdfModalState.passwordInput}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submitPdfPassword();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelPdfPassword();
+                }
+              }}
+              autofocus
+              disabled={pdfModalState.isSubmitting}
+            />
+          </div>
+          {#if pdfModalState.error}
+            <div class="modal-error-message" role="alert">
+              ⚠️ {pdfModalState.error}
+            </div>
+          {/if}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick={cancelPdfPassword} disabled={pdfModalState.isSubmitting}>
+            Batal
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick={submitPdfPassword}
+            disabled={pdfModalState.isSubmitting || !pdfModalState.passwordInput.trim()}
+          >
+            {pdfModalState.isSubmitting ? 'Membuka…' : 'Buka & Sensor Kredensial'}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
+  .agent-chat,
   .agent-chat-wrapper {
     position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    background: #141518;
+    background: var(--p-bg-surface, #26282b);
   }
 
   .chat-messages {
@@ -1571,6 +1690,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    background: var(--p-bg-workspace, #2b2d30);
     user-select: text !important;
     -webkit-user-select: text !important;
     cursor: text;
@@ -1792,8 +1912,8 @@
 
   .message-body :global(.chat-code-wrapper) {
     margin: 8px 0;
-    background: #0d0e12;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
     overflow: hidden;
   }
@@ -1979,11 +2099,12 @@
     51%, 100% { opacity: 0; }
   }
 
+  .status-banner,
   .tool-group-accordion {
     margin-top: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 6px;
-    background: #111216;
+    background: var(--p-bg-hover, #323539);
     overflow: hidden;
   }
 
@@ -2025,8 +2146,8 @@
 
   .tool-group-content {
     padding: 6px 8px 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    background: #0d0e11;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-workspace, #2b2d30);
   }
 
   .tool-streaming-container {
@@ -2043,9 +2164,10 @@
     gap: 6px;
   }
 
+  .tool-call-group,
   .tool-call-card {
-    background: #0f1013;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-hover, #323539);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 5px;
     padding: 6px 8px;
     font-size: 11px;
@@ -2079,14 +2201,15 @@
     margin-top: 4px;
   }
 
+  .prompt-textarea,
   .tool-output pre {
     margin: 0;
-    background: #090a0c;
+    background: var(--p-bg-workspace, #2b2d30);
     border-radius: 3px;
     padding: 4px 6px;
     font-family: monospace;
     font-size: 10px;
-    color: #94a3b8;
+    color: var(--text, #dbdee1);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;
@@ -2185,15 +2308,17 @@
   }
 
   /* Floating Context Composer */
+  .chat-composer,
   .agent-composer-container {
     position: relative;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    background: #121317;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
   }
 
+  .input-box,
   .composer-textarea-wrap {
     padding: 6px 8px 0;
   }
@@ -2202,7 +2327,7 @@
     width: 100%;
     background: transparent;
     border: none;
-    color: #e6edf3;
+    color: var(--text, #dbdee1);
     font-size: 12px;
     font-family: inherit;
     resize: none;
@@ -2216,13 +2341,14 @@
     color: #6e7681;
   }
 
+  .chat-subfooter,
   .composer-pills-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 5px 8px;
-    background: rgba(0, 0, 0, 0.22);
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     gap: 6px;
     min-height: 32px;
     overflow: hidden; /* overflow guard */
@@ -2421,8 +2547,8 @@
     border-radius: 6px;
     font-size: 12px;
     font-family: 'JetBrains Mono', monospace;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: #181a1f;
+    border: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-hover, #323539);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   }
 
@@ -2623,8 +2749,8 @@
     left: 0;
     width: 260px;
     max-height: 280px;
-    background: #181920;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
     z-index: 100;
@@ -2638,8 +2764,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 7px 10px;
-    background: #131418;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
 
   .picker-title {
@@ -2665,8 +2791,8 @@
   .skill-search-input {
     margin: 6px 8px;
     padding: 4px 8px;
-    background: #101114;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     color: #e2e8f0;
     font-size: 11px;
@@ -2693,7 +2819,7 @@
     padding: 5px 6px;
     border-radius: 4px;
     cursor: pointer;
-    background: #14151a;
+    background: var(--p-bg-hover, #323539);
     transition: background 0.1s;
   }
 
@@ -2729,8 +2855,8 @@
 
   .picker-footer {
     padding: 6px 10px;
-    background: #111216;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-top: 1px solid var(--border-default, #393b40);
     text-align: center;
   }
 
@@ -2973,8 +3099,8 @@
     width: 100%;
     box-sizing: border-box;
     padding: 4px 7px;
-    background: #101114;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     color: #f1f2f4;
     font-size: 11px;
@@ -2998,15 +3124,15 @@
     display: flex;
     flex-direction: column;
     text-align: left;
-    background: #131418;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 4px;
     padding: 4px 6px;
     cursor: pointer;
   }
 
   .context-file-item:hover {
-    background: #1e2027;
+    background: var(--p-bg-hover, #323539);
     border-color: #3b82f6;
   }
 
@@ -3026,7 +3152,7 @@
 
   .context-divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--border-default, #393b40);
     margin: 2px 0;
   }
 
@@ -3035,8 +3161,8 @@
     margin-top: 16px;
     width: 100%;
     max-width: 380px;
-    background: #14151a;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--p-bg-surface, #26282b);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 8px;
     overflow: hidden;
   }
@@ -3131,8 +3257,8 @@
     left: 8px;
     right: 8px;
     max-width: 360px;
-    background: #16181f;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--p-bg-elevated, #35373c);
+    border: 1px solid var(--border-default, #393b40);
     border-radius: 7px;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
     z-index: 100;
@@ -3146,8 +3272,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 10px;
-    background: #121317;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--p-bg-surface, #26282b);
+    border-bottom: 1px solid var(--border-default, #393b40);
   }
 
   .mention-popup-title {
@@ -3417,5 +3543,169 @@
   .drop-subtitle {
     font-size: 12px;
     color: #94a3b8;
+  }
+
+  .chip-badge-sanitized {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 4px;
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  .pdf-password-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  }
+
+  .pdf-password-modal {
+    background: #1e1f23;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    width: 440px;
+    max-width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .pdf-password-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #2d3748;
+  }
+
+  .pdf-password-modal .modal-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+
+  .pdf-password-modal .modal-close-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .pdf-password-modal .modal-close-btn:hover {
+    color: #f1f5f9;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .pdf-password-modal .modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pdf-password-modal .modal-message {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #cbd5e1;
+  }
+
+  .pdf-password-modal .pdf-path-hint {
+    font-size: 12px;
+    color: #94a3b8;
+    background: var(--p-bg-surface, #26282b);
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid var(--border-default, #393b40);
+  }
+
+  .pdf-password-modal .password-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    font-size: 13px;
+    background: var(--p-bg-workspace, #2b2d30);
+    border: 1px solid var(--border-default, #393b40);
+    border-radius: 6px;
+    color: #f1f5f9;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .pdf-password-modal .password-input:focus {
+    border-color: #3b82f6;
+  }
+
+  .pdf-password-modal .modal-error-message {
+    font-size: 12px;
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+
+  .pdf-password-modal .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-default, #393b40);
+    background: var(--p-bg-surface, #26282b);
+  }
+
+  .pdf-password-modal .btn {
+    padding: 6px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+  }
+
+  .pdf-password-modal .btn-secondary {
+    background: #2d3748;
+    color: #cbd5e1;
+  }
+
+  .pdf-password-modal .btn-secondary:hover:not(:disabled) {
+    background: #3a475c;
+    color: #f8fafc;
+  }
+
+  .pdf-password-modal .btn-primary {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .pdf-password-modal .btn-primary:hover:not(:disabled) {
+    background: #1d4ed8;
+  }
+
+  .pdf-password-modal .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
