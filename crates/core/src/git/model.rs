@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub use crate::git::diff::{CompareBranchResult, CompareFileEntry};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FileState {
