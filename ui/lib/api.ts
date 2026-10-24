@@ -1416,8 +1416,8 @@ export const api = {
     if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
       return Promise.resolve({
         updateAvailable: false,
-        currentVersion: '0.11.0',
-        latestVersion: '0.11.0',
+        currentVersion: '0.12.0',
+        latestVersion: '0.12.0',
         releaseNotes: '',
         releaseUrl: 'https://github.com/syauqiaditia/petak-ide',
       });
