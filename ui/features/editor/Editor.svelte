@@ -84,6 +84,12 @@
   import { vcsTrackerStore } from './vcsTracker.svelte';
   import VcsDiffPopup from './VcsDiffPopup.svelte';
   import { createIndentGuidesExtension } from './indentGuides';
+  import {
+    createClosingLabelsExtension,
+    setClosingLabelsEffect,
+    setClosingLabelsEnabledEffect,
+  } from './closingLabels';
+  import { convertLspClosingLabels } from './closingLabelsLogic';
   import NavUsagesPopup from './NavUsagesPopup.svelte';
   import ImagePreview from './ImagePreview.svelte';
   import { isImageFile } from './imageUtils';
@@ -119,6 +125,7 @@
   let currentSwappedPath: string | null = null;
   let unlistenDiagnostics: UnlistenFn | null = null;
   let unlistenApplyEdit: UnlistenFn | null = null;
+  let unlistenClosingLabels: UnlistenFn | null = null;
   let onScrollHandler: (() => void) | null = null;
 
   let findReplaceOpen = $state(false);
@@ -286,12 +293,22 @@
   let blameMenuItems = $state<MenuItem[]>([]);
   const blameCompartment = new Compartment();
   const vimCompartment = new Compartment();
+  const closingLabelsCompartment = new Compartment();
 
   $effect(() => {
     const isVim = editorSettings.vimMode;
     if (view) {
       view.dispatch({
         effects: vimCompartment.reconfigure(isVim ? vim() : []),
+      });
+    }
+  });
+
+  $effect(() => {
+    const enabled = editorSettings.closingLabels;
+    if (view) {
+      view.dispatch({
+        effects: setClosingLabelsEnabledEffect.of(enabled),
       });
     }
   });
@@ -613,12 +630,14 @@
       currentHunks = [];
     }
     const initialVcsMap = initialVcsBase !== null ? computeVcsLineChanges(initialVcsBase, content) : undefined;
+    const isDart = filename.endsWith('.dart');
     return EditorState.create({
       doc: content,
       extensions: [
         createEditorKeymapExtension(),
         EditorState.allowMultipleSelections.of(true),
         vimCompartment.of(editorSettings.vimMode ? vim() : []),
+        closingLabelsCompartment.of(isDart ? createClosingLabelsExtension() : []),
         blameCompartment.of([]),
         createBreakpointExtension(() => currentSwappedPath, initialBps),
         lineNumbers(),
@@ -1148,6 +1167,17 @@
       unlistenApplyEdit = unlisten;
     });
 
+    api.onLspClosingLabels((payload) => {
+      if (view && currentSwappedPath && payload.path === currentSwappedPath) {
+        const converted = convertLspClosingLabels(payload.labels);
+        view.dispatch({
+          effects: setClosingLabelsEffect.of(converted),
+        });
+      }
+    }).then((unlisten) => {
+      unlistenClosingLabels = unlisten;
+    });
+
     view.focus();
 
     requestAnimationFrame(() => {
@@ -1171,6 +1201,10 @@
     if (unlistenApplyEdit) {
       unlistenApplyEdit();
       unlistenApplyEdit = null;
+    }
+    if (unlistenClosingLabels) {
+      unlistenClosingLabels();
+      unlistenClosingLabels = null;
     }
     if (view) {
       if (onScrollHandler) {
