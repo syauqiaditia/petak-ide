@@ -9,6 +9,8 @@ class EditorSettingsStore {
   vimMode = $state<boolean>(logicSettings.vimMode);
   codeFolding = $state<boolean>(logicSettings.codeFolding);
   closingLabels = $state<boolean>(logicSettings.closingLabels);
+  autoPubGetOnSave = $state<boolean>(logicSettings.autoPubGetOnSave);
+  colorPreview = $state<boolean>(logicSettings.colorPreview);
 
   constructor() {
     logicSettings.onChange((enabled) => {
@@ -22,6 +24,12 @@ class EditorSettingsStore {
     });
     logicSettings.onClosingLabelsChange((enabled) => {
       this.closingLabels = enabled;
+    });
+    logicSettings.onAutoPubGetOnSaveChange((enabled) => {
+      this.autoPubGetOnSave = enabled;
+    });
+    logicSettings.onColorPreviewChange((enabled) => {
+      this.colorPreview = enabled;
     });
   }
 
@@ -63,6 +71,26 @@ class EditorSettingsStore {
   toggleClosingLabels() {
     logicSettings.toggleClosingLabels();
     this.closingLabels = logicSettings.closingLabels;
+  }
+
+  setAutoPubGetOnSave(enabled: boolean) {
+    logicSettings.setAutoPubGetOnSave(enabled);
+    this.autoPubGetOnSave = logicSettings.autoPubGetOnSave;
+  }
+
+  setColorPreview(enabled: boolean) {
+    logicSettings.setColorPreview(enabled);
+    this.colorPreview = logicSettings.colorPreview;
+  }
+
+  toggleAutoPubGetOnSave() {
+    logicSettings.toggleAutoPubGetOnSave();
+    this.autoPubGetOnSave = logicSettings.autoPubGetOnSave;
+  }
+
+  toggleColorPreview() {
+    logicSettings.toggleColorPreview();
+    this.colorPreview = logicSettings.colorPreview;
   }
 }
 

@@ -811,6 +811,32 @@
 
               <div class="setting-item-row">
                 <div class="setting-meta">
+                  <span class="setting-label">Auto Pub Get on Save</span>
+                  <span class="setting-hint">{isId ? 'Jalankan flutter pub get otomatis saat menyimpan pubspec.yaml' : 'Automatically run flutter pub get when saving pubspec.yaml'}</span>
+                </div>
+                <input
+                  type="checkbox"
+                  class="toggle-checkbox"
+                  checked={editorSettings.autoPubGetOnSave}
+                  onchange={() => editorSettings.toggleAutoPubGetOnSave()}
+                />
+              </div>
+
+              <div class="setting-item-row">
+                <div class="setting-meta">
+                  <span class="setting-label">Color Preview</span>
+                  <span class="setting-hint">{isId ? 'Tampilkan swatch warna dan ikon preview inline di kode Flutter' : 'Show inline color swatches and icon previews in Flutter code'}</span>
+                </div>
+                <input
+                  type="checkbox"
+                  class="toggle-checkbox"
+                  checked={editorSettings.colorPreview}
+                  onchange={() => editorSettings.toggleColorPreview()}
+                />
+              </div>
+
+              <div class="setting-item-row">
+                <div class="setting-meta">
                   <span class="setting-label">Vim Mode</span>
                   <span class="setting-hint">{isId ? 'Pintasan navigasi modal Vim (H, J, K, L, normal/insert/visual)' : 'Modal Vim keybindings for navigation and editing'}</span>
                 </div>

@@ -335,6 +335,7 @@ pub fn run() {
             commands::setting_set,
             commands::editor_ghost_text_get,
             commands::editor_ghost_text_set,
+            commands::flutter_pub_action,
             // Batch 4
             commands::avd_wipe,
             commands::avd_delete,

@@ -604,3 +604,48 @@ pub fn editor_ghost_text_set(app: tauri::AppHandle, enabled: bool) -> Result<(),
 }
 
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PubActionResult {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[tauri::command]
+pub async fn flutter_pub_action(
+    root: String,
+    action: String,
+) -> Result<PubActionResult, String> {
+    let act = action.trim().to_lowercase();
+    if act != "get" && act != "upgrade" && act != "outdated" {
+        return Err(format!("Invalid pub action '{}'. Must be 'get', 'upgrade', or 'outdated'", action));
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let root_path = std::path::PathBuf::from(&root);
+        let flutter_bin = petak_core::toolchain::resolve_flutter(Some(&root_path))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "flutter".to_string());
+
+        let mut cmd = std::process::Command::new(flutter_bin);
+        cmd.arg("pub").arg(&act);
+        cmd.current_dir(&root_path);
+        petak_core::toolchain::apply_env_for_root(&mut cmd, Some(&root_path));
+
+        let output = cmd.output().map_err(|e| format!("Failed to execute flutter pub {}: {}", act, e))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        Ok(PubActionResult {
+            exit_code,
+            stdout,
+            stderr,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+
+
