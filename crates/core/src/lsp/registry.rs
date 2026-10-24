@@ -759,6 +759,7 @@ impl Registry {
 
         if lang == Lang::Dart {
             config.initialization_options = Some(serde_json::json!({
+                "closingLabels": true,
                 "completeFunctionCalls": true,
                 "suggestFromUnimportedLibraries": true
             }));

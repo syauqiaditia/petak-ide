@@ -798,6 +798,19 @@
 
               <div class="setting-item-row">
                 <div class="setting-meta">
+                  <span class="setting-label">Closing Labels</span>
+                  <span class="setting-hint">{isId ? 'Tampilkan label penutup widget Flutter (// Widget) di ujung kurung tutup' : 'Show Flutter closing labels (// Widget) at closing brackets'}</span>
+                </div>
+                <input
+                  type="checkbox"
+                  class="toggle-checkbox"
+                  checked={editorSettings.closingLabels}
+                  onchange={() => editorSettings.toggleClosingLabels()}
+                />
+              </div>
+
+              <div class="setting-item-row">
+                <div class="setting-meta">
                   <span class="setting-label">Vim Mode</span>
                   <span class="setting-hint">{isId ? 'Pintasan navigasi modal Vim (H, J, K, L, normal/insert/visual)' : 'Modal Vim keybindings for navigation and editing'}</span>
                 </div>

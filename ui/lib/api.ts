@@ -187,6 +187,17 @@ export interface LspDiagnosticsPayload {
   diagnostics: LspDiagnostic[];
 }
 
+export interface LspClosingLabelsPayload {
+  path: string;
+  labels: Array<{
+    label: string;
+    range: {
+      start?: { line: number; character?: number };
+      end: { line: number; character?: number };
+    };
+  }>;
+}
+
 export interface LspTextEdit {
   range: LspRange;
   newText: string;
@@ -1091,6 +1102,10 @@ export const api = {
 
   onLspDiagnostics(cb: (payload: LspDiagnosticsPayload) => void): Promise<UnlistenFn> {
     return listen<LspDiagnosticsPayload>('lsp-diagnostics', (event) => cb(event.payload));
+  },
+
+  onLspClosingLabels(cb: (payload: LspClosingLabelsPayload) => void): Promise<UnlistenFn> {
+    return listen<LspClosingLabelsPayload>('lsp-closing-labels', (event) => cb(event.payload));
   },
 
   onLspStatus(cb: (payload: LspStatusPayload) => void): Promise<UnlistenFn> {

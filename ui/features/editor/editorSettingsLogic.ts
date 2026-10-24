@@ -7,10 +7,12 @@ export class EditorSettings {
   ghostText: boolean = true;
   vimMode: boolean = false;
   codeFolding: boolean = true;
+  closingLabels: boolean = true;
   theme: string = 'darcula';
   private listeners: Set<(enabled: boolean) => void> = new Set();
   private vimListeners: Set<(enabled: boolean) => void> = new Set();
   private foldListeners: Set<(enabled: boolean) => void> = new Set();
+  private closingLabelsListeners: Set<(enabled: boolean) => void> = new Set();
   private themeListeners: Set<(theme: string) => void> = new Set();
 
   constructor(initialGhostText: boolean = true) {
@@ -33,6 +35,11 @@ export class EditorSettings {
     return () => this.foldListeners.delete(listener);
   }
 
+  onClosingLabelsChange(listener: (enabled: boolean) => void): () => void {
+    this.closingLabelsListeners.add(listener);
+    return () => this.closingLabelsListeners.delete(listener);
+  }
+
   onThemeChange(listener: (theme: string) => void): () => void {
     this.themeListeners.add(listener);
     return () => this.themeListeners.delete(listener);
@@ -52,6 +59,10 @@ export class EditorSettings {
         const foldVal = localStorage.getItem('editor.codeFolding');
         if (foldVal !== null) {
           this.codeFolding = foldVal !== 'false';
+        }
+        const closingLabelsVal = localStorage.getItem('editor.closingLabels');
+        if (closingLabelsVal !== null) {
+          this.closingLabels = closingLabelsVal !== 'false';
         }
         const themeVal = localStorage.getItem('editor.theme');
         if (themeVal !== null) {
@@ -117,6 +128,24 @@ export class EditorSettings {
     }
   }
 
+  setClosingLabels(enabled: boolean): void {
+    this.closingLabels = enabled;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('editor.closingLabels', String(enabled));
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.closingLabelsListeners) {
+      try {
+        listener(enabled);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   setTheme(theme: string): void {
     this.theme = theme;
     if (typeof localStorage !== 'undefined') {
@@ -138,6 +167,21 @@ export class EditorSettings {
   toggleGhostText(): boolean {
     this.setGhostText(!this.ghostText);
     return this.ghostText;
+  }
+
+  toggleVimMode(): boolean {
+    this.setVimMode(!this.vimMode);
+    return this.vimMode;
+  }
+
+  toggleCodeFolding(): boolean {
+    this.setCodeFolding(!this.codeFolding);
+    return this.codeFolding;
+  }
+
+  toggleClosingLabels(): boolean {
+    this.setClosingLabels(!this.closingLabels);
+    return this.closingLabels;
   }
 }
 
