@@ -484,7 +484,7 @@
   }
   .row-action-btn.accept-theirs:hover {
     background: #f59e0b;
-    color: #000000;
+    color: var(--p-bg-base, #1e1f22);
   }
 
   .row-action-btn.merge-primary {
