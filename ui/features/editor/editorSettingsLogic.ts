@@ -8,11 +8,15 @@ export class EditorSettings {
   vimMode: boolean = false;
   codeFolding: boolean = true;
   closingLabels: boolean = true;
+  autoPubGetOnSave: boolean = true;
+  colorPreview: boolean = true;
   theme: string = 'darcula';
   private listeners: Set<(enabled: boolean) => void> = new Set();
   private vimListeners: Set<(enabled: boolean) => void> = new Set();
   private foldListeners: Set<(enabled: boolean) => void> = new Set();
   private closingLabelsListeners: Set<(enabled: boolean) => void> = new Set();
+  private autoPubGetListeners: Set<(enabled: boolean) => void> = new Set();
+  private colorPreviewListeners: Set<(enabled: boolean) => void> = new Set();
   private themeListeners: Set<(theme: string) => void> = new Set();
 
   constructor(initialGhostText: boolean = true) {
@@ -40,6 +44,16 @@ export class EditorSettings {
     return () => this.closingLabelsListeners.delete(listener);
   }
 
+  onAutoPubGetOnSaveChange(listener: (enabled: boolean) => void): () => void {
+    this.autoPubGetListeners.add(listener);
+    return () => this.autoPubGetListeners.delete(listener);
+  }
+
+  onColorPreviewChange(listener: (enabled: boolean) => void): () => void {
+    this.colorPreviewListeners.add(listener);
+    return () => this.colorPreviewListeners.delete(listener);
+  }
+
   onThemeChange(listener: (theme: string) => void): () => void {
     this.themeListeners.add(listener);
     return () => this.themeListeners.delete(listener);
@@ -63,6 +77,14 @@ export class EditorSettings {
         const closingLabelsVal = localStorage.getItem('editor.closingLabels');
         if (closingLabelsVal !== null) {
           this.closingLabels = closingLabelsVal !== 'false';
+        }
+        const autoPubGetVal = localStorage.getItem('editor.autoPubGetOnSave');
+        if (autoPubGetVal !== null) {
+          this.autoPubGetOnSave = autoPubGetVal !== 'false';
+        }
+        const colorPreviewVal = localStorage.getItem('editor.colorPreview');
+        if (colorPreviewVal !== null) {
+          this.colorPreview = colorPreviewVal !== 'false';
         }
         const themeVal = localStorage.getItem('editor.theme');
         if (themeVal !== null) {
@@ -146,6 +168,42 @@ export class EditorSettings {
     }
   }
 
+  setAutoPubGetOnSave(enabled: boolean): void {
+    this.autoPubGetOnSave = enabled;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('editor.autoPubGetOnSave', String(enabled));
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.autoPubGetListeners) {
+      try {
+        listener(enabled);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  setColorPreview(enabled: boolean): void {
+    this.colorPreview = enabled;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('editor.colorPreview', String(enabled));
+      } catch {
+        // ignore
+      }
+    }
+    for (const listener of this.colorPreviewListeners) {
+      try {
+        listener(enabled);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   setTheme(theme: string): void {
     this.theme = theme;
     if (typeof localStorage !== 'undefined') {
@@ -182,6 +240,16 @@ export class EditorSettings {
   toggleClosingLabels(): boolean {
     this.setClosingLabels(!this.closingLabels);
     return this.closingLabels;
+  }
+
+  toggleAutoPubGetOnSave(): boolean {
+    this.setAutoPubGetOnSave(!this.autoPubGetOnSave);
+    return this.autoPubGetOnSave;
+  }
+
+  toggleColorPreview(): boolean {
+    this.setColorPreview(!this.colorPreview);
+    return this.colorPreview;
   }
 }
 

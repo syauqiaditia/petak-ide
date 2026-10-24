@@ -90,9 +90,24 @@
     setClosingLabelsEnabledEffect,
   } from './closingLabels';
   import { convertLspClosingLabels } from './closingLabelsLogic';
+  import {
+    createColorPreviewExtension,
+    setColorPreviewEnabledEffect,
+  } from './colorPreview';
+  import {
+    createIconPreviewExtension,
+    setIconPreviewEnabledEffect,
+  } from './iconPreview';
+  import PubspecActionBar from './PubspecActionBar.svelte';
   import NavUsagesPopup from './NavUsagesPopup.svelte';
   import ImagePreview from './ImagePreview.svelte';
   import { isImageFile } from './imageUtils';
+
+  function isPubspecFile(path?: string): boolean {
+    if (!path) return false;
+    const p = path.toLowerCase().replace(/\\/g, '/');
+    return p.endsWith('/pubspec.yaml') || p.endsWith('/pubspec.yml') || p === 'pubspec.yaml' || p === 'pubspec.yml';
+  }
 
   let {
     folderPath = '',
@@ -309,6 +324,18 @@
     if (view) {
       view.dispatch({
         effects: setClosingLabelsEnabledEffect.of(enabled),
+      });
+    }
+  });
+
+  $effect(() => {
+    const enabled = editorSettings.colorPreview;
+    if (view) {
+      view.dispatch({
+        effects: [
+          setColorPreviewEnabledEffect.of(enabled),
+          setIconPreviewEnabledEffect.of(enabled),
+        ],
       });
     }
   });
@@ -638,6 +665,7 @@
         EditorState.allowMultipleSelections.of(true),
         vimCompartment.of(editorSettings.vimMode ? vim() : []),
         closingLabelsCompartment.of(isDart ? createClosingLabelsExtension() : []),
+        ...(isDart ? [...createColorPreviewExtension(), ...createIconPreviewExtension()] : []),
         blameCompartment.of([]),
         createBreakpointExtension(() => currentSwappedPath, initialBps),
         lineNumbers(),
@@ -829,6 +857,21 @@
       onTabSaveProp?.(active.path, currentText);
       onStatusChange?.(`Saved ${active.name}`);
       refreshTabVcsBase(active);
+
+      if (isPubspecFile(active.path) && editorSettings.autoPubGetOnSave) {
+        const root = folderPath || (active.path.includes('/') ? active.path.substring(0, active.path.lastIndexOf('/')) : '.');
+        onStatusChange?.('Running flutter pub get...');
+        api.flutterPubAction(root, 'get').then((res) => {
+          if (res.exit_code === 0) {
+            onStatusChange?.('flutter pub get completed');
+          } else {
+            const errDetail = res.stderr.trim() || res.stdout.trim() || `Exit code ${res.exit_code}`;
+            onStatusChange?.(`flutter pub get failed: ${errDetail.slice(0, 80)}`);
+          }
+        }).catch((err) => {
+          onStatusChange?.(`flutter pub get error: ${err?.message || String(err)}`);
+        });
+      }
     } catch (e) {
       console.error('Failed to save file:', active.path, e);
       onStatusChange?.(`Error saving ${active.name}`);
@@ -1470,6 +1513,14 @@
         <span>No file open</span>
       {/if}
     </div>
+
+    {#if isPubspecFile(tabsManager.activeTab?.path)}
+      <PubspecActionBar
+        filePath={tabsManager.activeTab?.path}
+        projectRoot={folderPath}
+        {onStatusChange}
+      />
+    {/if}
 
     <!-- External conflict bar if file changed on disk while dirty -->
     {#if tabsManager.activeTab?.externalConflict}

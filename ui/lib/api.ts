@@ -114,6 +114,12 @@ export interface FormatResult {
   tool: string;
 }
 
+export interface PubActionResult {
+  exit_code: number;
+  stdout: string;
+  stderr: string;
+}
+
 export interface EmulatorStatusEvent {
   id: string;
   state: 'stopped' | 'booting' | 'running' | 'failed';
@@ -1261,6 +1267,9 @@ export const api = {
   }): Promise<FormatResult> {
     return invoke<FormatResult>('format_document', params);
   },
+
+  flutterPubAction: (root: string, action: 'get' | 'upgrade' | 'outdated'): Promise<PubActionResult> =>
+    invoke<PubActionResult>('flutter_pub_action', { root, action }),
 
   onEmulatorStatus(callback: (event: EmulatorStatusEvent) => void): Promise<UnlistenFn> {
     return listen<EmulatorStatusEvent>('emulator-status', (e) => callback(e.payload));
