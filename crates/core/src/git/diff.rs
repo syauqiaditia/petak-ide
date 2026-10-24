@@ -1,8 +1,10 @@
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::exec::{git, git_raw, Exec, GitError};
-use crate::git::model::{CommitFile, DiffFile, DiffLine, DiffLineKind, FileState, Hunk};
+use crate::git::log::{get_head_ancestor_shas, get_pushed_shas, get_refs_map, parse_log_output};
+use crate::git::model::{Commit, CommitFile, DiffFile, DiffLine, DiffLineKind, FileState, Hunk, RefLabel};
 
 pub fn diff_worktree(
     exec: &dyn Exec,
@@ -137,6 +139,8 @@ pub fn commit_files(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompareBranchResult {
+    pub incoming_commits: Vec<Commit>,
+    pub outgoing_commits: Vec<Commit>,
     pub files: Vec<CompareFileEntry>,
     pub total_added: u32,
     pub total_removed: u32,
@@ -155,6 +159,7 @@ pub struct CompareFileEntry {
 }
 
 /// Compares two branches using `git diff --name-status -M` and `git diff --numstat -M <base>...<target> [-- <path>]`.
+/// Also retrieves incoming (`<base>..<target>`) and outgoing (`<target>..<base>`) commits.
 pub fn compare_branch(
     exec: &dyn Exec,
     repo: &Path,
@@ -187,7 +192,80 @@ pub fn compare_branch(
     }
     let numstat_out = git(exec, repo, &numstat_args)?;
 
-    Ok(parse_compare_branch_output(&name_status_out, &numstat_out))
+    let refs_map = get_refs_map(exec, repo).unwrap_or_default();
+    let pushed_shas = get_pushed_shas(exec, repo).unwrap_or_default();
+    let head_shas = get_head_ancestor_shas(exec, repo).unwrap_or_default();
+
+    let incoming_commits = get_commits_in_range(exec, repo, base, target, path, &refs_map, &pushed_shas, &head_shas)?;
+    let outgoing_commits = get_commits_in_range(exec, repo, target, base, path, &refs_map, &pushed_shas, &head_shas)?;
+
+    let mut result = parse_compare_branch_output(&name_status_out, &numstat_out);
+    result.incoming_commits = incoming_commits;
+    result.outgoing_commits = outgoing_commits;
+
+    Ok(result)
+}
+
+fn get_commits_in_range(
+    exec: &dyn Exec,
+    repo: &Path,
+    from: &str,
+    to: &str,
+    path: Option<&str>,
+    refs_map: &HashMap<String, Vec<RefLabel>>,
+    pushed_shas: &HashSet<String>,
+    head_shas: &HashSet<String>,
+) -> Result<Vec<Commit>, GitError> {
+    let range = format!("{}..{}", from, to);
+    let mut args = vec![
+        "log",
+        "--author-date-order",
+        "--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%s%x1e",
+        &range,
+    ];
+    if let Some(p) = path {
+        let p_trimmed = p.trim();
+        if !p_trimmed.is_empty() && p_trimmed != "." {
+            args.push("--");
+            args.push(p_trimmed);
+        }
+    }
+
+    let raw_out = match git(exec, repo, &args) {
+        Ok(out) => out,
+        Err(e) => {
+            if e.message.contains("does not have any commits yet")
+                || e.message.contains("fatal: your current branch")
+                || e.message.contains("unknown revision")
+            {
+                return Ok(Vec::new());
+            }
+            return Err(e);
+        }
+    };
+
+    let raw_commits = parse_log_output(&raw_out);
+    let mut commits = Vec::with_capacity(raw_commits.len());
+    for rc in raw_commits {
+        let short_sha = rc.sha[..rc.sha.len().min(7)].to_string();
+        let refs = refs_map.get(&rc.sha).cloned().unwrap_or_default();
+        let pushed = pushed_shas.contains(&rc.sha);
+        let is_head_ancestor = head_shas.contains(&rc.sha);
+        commits.push(Commit {
+            sha: rc.sha,
+            short_sha,
+            parents: rc.parents,
+            author_name: rc.author_name,
+            author_email: rc.author_email,
+            author_time: rc.author_time,
+            subject: rc.subject,
+            refs,
+            pushed,
+            is_head_ancestor,
+        });
+    }
+
+    Ok(commits)
 }
 
 pub fn parse_compare_branch_output(name_status_raw: &str, numstat_raw: &str) -> CompareBranchResult {
@@ -276,6 +354,8 @@ pub fn parse_compare_branch_output(name_status_raw: &str, numstat_raw: &str) -> 
     }
 
     CompareBranchResult {
+        incoming_commits: Vec::new(),
+        outgoing_commits: Vec::new(),
         files,
         total_added,
         total_removed,

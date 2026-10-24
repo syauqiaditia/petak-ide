@@ -11,3 +11,7 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[profile.test]
+debug = 0
+

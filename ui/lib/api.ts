@@ -365,6 +365,8 @@ export interface GitCompareFile {
 }
 
 export interface GitCompareResult {
+  incomingCommits: GitCommit[];
+  outgoingCommits: GitCommit[];
   files: GitCompareFile[];
   totalAdded: number;
   totalRemoved: number;
@@ -1581,7 +1583,7 @@ export const api = {
       return await invoke<GitCompareResult>('git_compare_branch', { root, base, target, path: path ?? null });
     } catch (e: any) {
       console.warn('git_compare_branch fallback:', e);
-      return { files: [], totalAdded: 0, totalRemoved: 0 };
+      return { incomingCommits: [], outgoingCommits: [], files: [], totalAdded: 0, totalRemoved: 0 };
     }
   },
 

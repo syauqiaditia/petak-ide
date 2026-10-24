@@ -118,6 +118,11 @@ fn test_compare_branch_multiple_files_rename_delete_binary_and_path_filter() {
     assert!(result.total_added > 0);
     assert!(result.total_removed > 0);
 
+    // Check incoming and outgoing commits
+    assert_eq!(result.incoming_commits.len(), 1);
+    assert_eq!(result.incoming_commits[0].subject, "feature changes");
+    assert_eq!(result.outgoing_commits.len(), 0);
+
     // Test path filtering: only return files inside "folder"
     let folder_res = compare_branch(&exec, repo.path(), "main", "feature", Some("folder")).unwrap();
     assert_eq!(folder_res.files.len(), 1);
@@ -128,4 +133,33 @@ fn test_compare_branch_multiple_files_rename_delete_binary_and_path_filter() {
     assert_eq!(file_diffs.len(), 1);
     assert_eq!(file_diffs[0].path(), "file_mod.txt");
     assert!(!file_diffs[0].hunks.is_empty());
+
+    // Switch back to main and create an outgoing commit (main ahead of feature)
+    git(&exec, repo.path(), &["checkout", "main"]).unwrap();
+    repo.write_file("main_only.txt", "main branch content\n");
+    git(&exec, repo.path(), &["add", "main_only.txt"]).unwrap();
+    git(&exec, repo.path(), &["commit", "-m", "main branch exclusive commit"]).unwrap();
+
+    // Now compare main (base) with feature (target)
+    let diverged_res = compare_branch(&exec, repo.path(), "main", "feature", None).unwrap();
+    assert_eq!(diverged_res.incoming_commits.len(), 1);
+    assert_eq!(diverged_res.incoming_commits[0].subject, "feature changes");
+    assert_eq!(diverged_res.outgoing_commits.len(), 1);
+    assert_eq!(diverged_res.outgoing_commits[0].subject, "main branch exclusive commit");
+}
+
+#[test]
+fn test_compare_branch_command_injection_protection() {
+    let repo = TestRepo::new();
+    let exec = SystemExec;
+
+    // Test illegal branch names starting with dashes or options
+    let err1 = compare_branch(&exec, repo.path(), "--upload-pack=calc", "main", None);
+    assert!(err1.is_err());
+
+    let err2 = compare_branch(&exec, repo.path(), "main", "-oProxyCommand=calc", None);
+    assert!(err2.is_err());
+
+    let err3 = compare_branch(&exec, repo.path(), "", "main", None);
+    assert!(err3.is_err());
 }
