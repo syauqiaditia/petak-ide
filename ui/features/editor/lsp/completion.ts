@@ -170,9 +170,8 @@ export function createLspCompletionSource(getPath: () => string | null): Complet
             }
             applyTextEditsToView(view, item.additionalTextEdits!);
           };
-        } else if (item.insertTextFormat === 2 && (item.insertText || (item.textEdit && (item.textEdit as any).newText))) {
-          const template = item.insertText || (item.textEdit as any).newText || item.label;
-          completion.apply = snippet(template);
+        } else if (item.insertTextFormat === 2) {
+          completion.apply = snippet(mainInsert);
         } else if (item.textEdit && (item.textEdit as any).newText) {
           completion.apply = (item.textEdit as any).newText;
         } else if (item.insertText) {

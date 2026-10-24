@@ -700,6 +700,12 @@
     return view;
   }
 
+  export function triggerIntentions() {
+    if (view && currentSwappedPath) {
+      triggerCodeActions(view, currentSwappedPath);
+    }
+  }
+
   export function focus() {
     view?.focus();
   }

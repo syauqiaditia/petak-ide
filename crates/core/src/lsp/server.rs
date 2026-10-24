@@ -34,6 +34,7 @@ pub struct ServerConfig {
     pub env: Vec<(String, String)>,
     pub init_timeout: Option<Duration>,
     pub stderr_log_path: Option<std::path::PathBuf>,
+    pub initialization_options: Option<serde_json::Value>,
 }
 
 impl ServerConfig {
@@ -45,6 +46,7 @@ impl ServerConfig {
             env: Vec::new(),
             init_timeout: None,
             stderr_log_path: None,
+            initialization_options: None,
         }
     }
 }
@@ -247,9 +249,10 @@ impl Server {
 
         // Initialize handshake
         let init_timeout = config.init_timeout.unwrap_or(Duration::from_secs(60));
+        let init_params = build_initialize_params(config);
         let init_result = match server.request_with_timeout(
             "initialize",
-            &client_capabilities(&config.root_uri),
+            &init_params,
             init_timeout,
         ) {
             Ok(res) => res,
@@ -386,6 +389,15 @@ impl Drop for Server {
     }
 }
 
+/// Build the initialize request params from server config.
+pub fn build_initialize_params(config: &ServerConfig) -> Value {
+    let mut params = client_capabilities(&config.root_uri);
+    if let Some(ref opts) = config.initialization_options {
+        params["initializationOptions"] = opts.clone();
+    }
+    params
+}
+
 /// Build the client capabilities JSON for the initialize request.
 fn client_capabilities(root_uri: &str) -> Value {
     let name = root_uri
@@ -477,6 +489,24 @@ mod tests {
         let caps = client_capabilities("file:///workspace");
         assert_eq!(
             caps["capabilities"]["textDocument"]["completion"]["contextSupport"],
+            true
+        );
+    }
+
+    #[test]
+    fn test_initialize_with_options() {
+        let mut config = ServerConfig::new("dart", vec![], "file:///workspace");
+        config.initialization_options = Some(serde_json::json!({
+            "completeFunctionCalls": true,
+            "suggestFromUnimportedLibraries": true,
+        }));
+        let params = build_initialize_params(&config);
+        assert_eq!(
+            params["initializationOptions"]["completeFunctionCalls"],
+            true
+        );
+        assert_eq!(
+            params["initializationOptions"]["suggestFromUnimportedLibraries"],
             true
         );
     }
