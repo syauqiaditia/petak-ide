@@ -29,6 +29,109 @@ export const LEVEL_BG: Partial<Record<LogLevel, string>> = {
   F: '#381c1e',
 };
 
+export const TAG_PALETTE: readonly string[] = [
+  '#4ec9b0', // teal
+  '#e8b45a', // amber
+  '#b180d7', // violet
+  '#4fc1ff', // cyan
+  '#56a8f5', // sky
+  '#f08d49', // coral
+  '#7fc98f', // mint
+  '#e57373', // rose
+];
+
+export function getTagColor(tag: string): string {
+  if (!tag || typeof tag !== 'string' || !tag.trim()) {
+    return '#8b8f98';
+  }
+  const str = tag.trim();
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % TAG_PALETTE.length;
+  return TAG_PALETTE[idx];
+}
+
+export interface ParsedLogcatDsl {
+  tags: string[];          // tag:... (inclusive)
+  excludeTags: string[];   // -tag:... (exclude)
+  minLevel?: LogLevel;     // level:...
+  packageMine?: boolean;   // package:mine or app:mine
+  textTerms: string[];     // free text words
+}
+
+export function parseLogcatFilter(query: string): ParsedLogcatDsl {
+  const dsl: ParsedLogcatDsl = {
+    tags: [],
+    excludeTags: [],
+    textTerms: [],
+  };
+
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return dsl;
+  }
+
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+
+  for (const token of tokens) {
+    const lower = token.toLowerCase();
+
+    if (lower === 'package:mine' || lower === 'app:mine') {
+      dsl.packageMine = true;
+    } else if (lower.startsWith('-tag:')) {
+      const val = token.slice(5).trim().replace(/^["']|["']$/g, '');
+      if (val) {
+        dsl.excludeTags.push(val);
+      }
+    } else if (lower.startsWith('tag:')) {
+      const val = token.slice(4).trim().replace(/^["']|["']$/g, '');
+      if (val) {
+        dsl.tags.push(val);
+      }
+    } else if (lower.startsWith('level:')) {
+      const val = lower.slice(6).trim();
+      let normalized: LogLevel | undefined;
+      switch (val) {
+        case 'v':
+        case 'verbose':
+          normalized = 'V';
+          break;
+        case 'd':
+        case 'debug':
+          normalized = 'D';
+          break;
+        case 'i':
+        case 'info':
+          normalized = 'I';
+          break;
+        case 'w':
+        case 'warn':
+        case 'warning':
+          normalized = 'W';
+          break;
+        case 'e':
+        case 'error':
+          normalized = 'E';
+          break;
+        case 'f':
+        case 'fatal':
+          normalized = 'F';
+          break;
+      }
+      if (normalized) {
+        dsl.minLevel = normalized;
+      } else {
+        dsl.textTerms.push(token);
+      }
+    } else {
+      dsl.textTerms.push(token);
+    }
+  }
+
+  return dsl;
+}
+
 export interface StackLink {
   file: string;
   line: number;
@@ -175,6 +278,8 @@ export interface LogcatFilter {
   appPid: number | null;
   caseSensitive?: boolean;
   isRegex?: boolean;
+  dsl?: ParsedLogcatDsl;
+  includeNativeLogs?: boolean;
 }
 
 export function defaultLogcatFilter(): LogcatFilter {
@@ -186,18 +291,32 @@ export function defaultLogcatFilter(): LogcatFilter {
     appPid: null,
     caseSensitive: false,
     isRegex: false,
+    includeNativeLogs: true,
   };
 }
 
 export function matchesFilter(line: LogItem, filter: LogcatFilter): boolean {
-  if (LEVEL_WEIGHT[line.level] < LEVEL_WEIGHT[filter.minLevel]) {
+  const dsl = filter.dsl ?? (filter.isRegex ? undefined : parseLogcatFilter(filter.search));
+
+  const effectiveMinLevel = dsl?.minLevel ?? filter.minLevel;
+  if (LEVEL_WEIGHT[line.level] < LEVEL_WEIGHT[effectiveMinLevel]) {
     return false;
   }
-  if (filter.packageMine && filter.appPid !== null) {
+
+  const effectivePackageMine = dsl?.packageMine ?? filter.packageMine;
+  if (effectivePackageMine && filter.appPid !== null) {
     if (line.pid !== filter.appPid) {
       return false;
     }
   }
+
+  if (filter.includeNativeLogs === false) {
+    const isFlutter = /^(flutter|dart)/i.test(line.tag);
+    if (!isFlutter) {
+      return false;
+    }
+  }
+
   if (filter.tag) {
     const t = filter.tag.trim();
     if (t) {
@@ -215,92 +334,77 @@ export function matchesFilter(line: LogItem, filter: LogcatFilter): boolean {
       }
     }
   }
-  if (filter.search) {
+
+  if (dsl && dsl.tags.length > 0) {
+    const matchTag = dsl.tags.some((tag) =>
+      line.tag.toLowerCase().includes(tag.toLowerCase())
+    );
+    if (!matchTag) return false;
+  }
+
+  if (dsl && dsl.excludeTags.length > 0) {
+    const isExcluded = dsl.excludeTags.some((tag) =>
+      line.tag.toLowerCase().includes(tag.toLowerCase())
+    );
+    if (isExcluded) return false;
+  }
+
+  if (filter.search && filter.isRegex) {
     const q = filter.search.trim();
     if (q) {
-      if (filter.isRegex) {
-        try {
-          const re = new RegExp(q, filter.caseSensitive ? '' : 'i');
-          if (!re.test(line.msg) && !re.test(line.tag)) return false;
-        } catch {
-          if (!line.msg.toLowerCase().includes(q.toLowerCase()) && !line.tag.toLowerCase().includes(q.toLowerCase())) return false;
+      try {
+        const re = new RegExp(q, filter.caseSensitive ? '' : 'i');
+        if (!re.test(line.msg) && !re.test(line.tag)) return false;
+      } catch {
+        if (!line.msg.toLowerCase().includes(q.toLowerCase()) && !line.tag.toLowerCase().includes(q.toLowerCase())) return false;
+      }
+    }
+    return true;
+  }
+
+  if (dsl && dsl.textTerms.length > 0) {
+    for (const term of dsl.textTerms) {
+      if (filter.caseSensitive) {
+        if (!line.msg.includes(term) && !line.tag.includes(term)) {
+          return false;
         }
-      } else if (filter.caseSensitive) {
-        if (!line.msg.includes(q) && !line.tag.includes(q)) return false;
       } else {
-        const qLower = q.toLowerCase();
-        if (!line.msg.toLowerCase().includes(qLower) && !line.tag.toLowerCase().includes(qLower)) return false;
+        const termLower = term.toLowerCase();
+        if (!line.msg.toLowerCase().includes(termLower) && !line.tag.toLowerCase().includes(termLower)) {
+          return false;
+        }
       }
     }
   }
+
   return true;
 }
 
 export function filterLogLines(lines: LogItem[], filter: LogcatFilter): LogItem[] {
+  const dsl = filter.dsl ?? (filter.isRegex ? undefined : parseLogcatFilter(filter.search));
+
   const isDefault =
     filter.minLevel === 'V' &&
     !filter.tag.trim() &&
     !filter.search.trim() &&
-    (!filter.packageMine || filter.appPid === null);
+    (!filter.packageMine || filter.appPid === null) &&
+    !dsl?.tags?.length &&
+    !dsl?.excludeTags?.length &&
+    !dsl?.textTerms?.length &&
+    dsl?.minLevel === undefined &&
+    dsl?.packageMine === undefined &&
+    filter.includeNativeLogs !== false;
 
   if (isDefault) {
     return lines;
   }
 
-  const rawTag = filter.tag.trim();
-  const rawSearch = filter.search.trim();
-  const minWeight = LEVEL_WEIGHT[filter.minLevel];
-  const filterPid = filter.packageMine ? filter.appPid : null;
-  const isCase = Boolean(filter.caseSensitive);
-  const isRegex = Boolean(filter.isRegex);
-
-  let searchRe: RegExp | null = null;
-  if (rawSearch && isRegex) {
-    try {
-      searchRe = new RegExp(rawSearch, isCase ? '' : 'i');
-    } catch {
-      searchRe = null;
-    }
-  }
-
-  let tagRe: RegExp | null = null;
-  if (rawTag && isRegex) {
-    try {
-      tagRe = new RegExp(rawTag, isCase ? '' : 'i');
-    } catch {
-      tagRe = null;
-    }
-  }
-
-  const searchTarget = isCase ? rawSearch : rawSearch.toLowerCase();
-  const tagTarget = isCase ? rawTag : rawTag.toLowerCase();
-
+  const effectiveFilter = dsl ? { ...filter, dsl } : filter;
   const result: LogItem[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
-    if (LEVEL_WEIGHT[l.level] < minWeight) continue;
-    if (filterPid !== null && l.pid !== filterPid) continue;
-
-    if (rawTag) {
-      if (tagRe) {
-        if (!tagRe.test(l.tag)) continue;
-      } else {
-        const tStr = isCase ? l.tag : l.tag.toLowerCase();
-        if (!tStr.includes(tagTarget)) continue;
-      }
+    if (matchesFilter(lines[i], effectiveFilter)) {
+      result.push(lines[i]);
     }
-
-    if (rawSearch) {
-      if (searchRe) {
-        if (!searchRe.test(l.msg) && !searchRe.test(l.tag)) continue;
-      } else {
-        const mStr = isCase ? l.msg : l.msg.toLowerCase();
-        const tStr = isCase ? l.tag : l.tag.toLowerCase();
-        if (!mStr.includes(searchTarget) && !tStr.includes(searchTarget)) continue;
-      }
-    }
-
-    result.push(l);
   }
   return result;
 }

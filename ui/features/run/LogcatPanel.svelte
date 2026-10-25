@@ -5,6 +5,7 @@
   import {
     LEVEL_COLORS,
     LEVEL_BG,
+    getTagColor,
     parseStackLinks,
     splitLogMessageWithLinks,
     type LogLevel,
@@ -144,6 +145,16 @@
         package:mine
       </button>
 
+      <!-- Toggle Include Native Logs -->
+      <button
+        class="toggle-btn"
+        class:active={logcatStore.includeNativeLogs}
+        onclick={() => logcatStore.toggleIncludeNativeLogs()}
+        title="Include native Android platform logs"
+      >
+        Include Native Logs
+      </button>
+
       <!-- Auto scroll button -->
       <button
         class="icon-action-btn"
@@ -212,7 +223,7 @@
         <input
           type="text"
           class="text-filter search-filter"
-          placeholder="Search logs..."
+          placeholder="Filter (e.g. tag:Flutter level:warn -tag:ViewRoot)"
           bind:value={searchInput}
           oninput={handleSearchInput}
           title="Filter by text (debounce 100ms)"
@@ -296,7 +307,13 @@
               </span>
 
               <!-- Tag -->
-              <span class="col-tag" title={line.tag}>{line.tag}</span>
+              <span
+                class="col-tag"
+                style:color={getTagColor(line.tag)}
+                title={line.tag}
+              >
+                {line.tag}
+              </span>
 
               <!-- Message with clickable stack links -->
               <span class="col-msg">
@@ -483,7 +500,8 @@
     border: none;
     background: transparent;
     padding: 0 4px;
-    width: 130px;
+    min-width: 170px;
+    width: 220px;
     height: 22px;
   }
 
