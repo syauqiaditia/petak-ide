@@ -345,7 +345,23 @@ export const vcsGutterTheme = EditorView.theme({
     backgroundColor: '#3882f6 !important',
   },
   '.cm-vcs-deleted': {
-    backgroundColor: '#f07a74 !important',
+    top: '-3px !important',
+    bottom: 'auto !important',
+    left: '0px !important',
+    width: '0 !important',
+    height: '0 !important',
+    borderTop: '3px solid transparent !important',
+    borderBottom: '3px solid transparent !important',
+    borderLeft: '5px solid #f07a74 !important',
+    backgroundColor: 'transparent !important',
+    borderRadius: '0 !important',
+    zIndex: '3 !important',
+  },
+  '.cm-vcs-deleted:hover': {
+    width: '0 !important',
+    height: '0 !important',
+    borderLeftWidth: '6px !important',
+    filter: 'brightness(1.25)',
   },
 });
 

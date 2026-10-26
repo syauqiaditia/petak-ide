@@ -76,6 +76,23 @@ pub fn run() {
                                     }),
                                 );
                             }
+                        } else if method == "dart/textDocument/publishClosingLabels" {
+                            if let Some(uri_val) = params.get("uri").and_then(|u| u.as_str()) {
+                                let path = petak_core::lsp::registry::uri_to_path(uri_val)
+                                    .map(|p| p.to_string_lossy().to_string())
+                                    .unwrap_or_else(|| uri_val.to_string());
+                                let labels = params
+                                    .get("labels")
+                                    .cloned()
+                                    .unwrap_or(serde_json::json!([]));
+                                let _ = app_handle_for_events.emit(
+                                    "lsp-closing-labels",
+                                    serde_json::json!({
+                                        "path": path,
+                                        "labels": labels,
+                                    }),
+                                );
+                            }
                         }
                     }
                     petak_core::lsp::ServerEvent::Status { state, reason } => {
@@ -318,6 +335,7 @@ pub fn run() {
             commands::setting_set,
             commands::editor_ghost_text_get,
             commands::editor_ghost_text_set,
+            commands::flutter_pub_action,
             // Batch 4
             commands::avd_wipe,
             commands::avd_delete,

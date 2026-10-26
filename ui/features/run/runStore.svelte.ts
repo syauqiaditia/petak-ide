@@ -121,6 +121,7 @@ class RunStore {
 
   // Settings & In-flight indicators
   hotReloadOnSave = $state<boolean>(false);
+  includeNativeLogs = $state<boolean>(true);
   isStarting = $state<boolean>(false);
   isReloading = $state<boolean>(false);
   isSyncing = $state<boolean>(false);
@@ -131,6 +132,7 @@ class RunStore {
   private unlistenDeviceReady: UnlistenFn | null = null;
   private unlistenGradleDaemon: UnlistenFn | null = null;
   private unlistenEmulatorStatus: UnlistenFn | null = null;
+  private unlistenLogcatBatch: UnlistenFn | null = null;
   private initialized = false;
   private isWatchingDevices = false;
   private initPromise: Promise<void> | null = null;
@@ -235,6 +237,23 @@ class RunStore {
           });
         } catch (e) {
           console.warn('[runStore] Failed to listen to emulator-status:', e);
+        }
+
+        try {
+          this.unlistenLogcatBatch = await api.onLogcatBatch((batch) => {
+            if (!this.includeNativeLogs || this.state !== 'running' || !this.pid) return;
+            const appPid = this.pid;
+            const nativeLines = batch.filter((item) => item.pid === appPid);
+            if (nativeLines.length === 0) return;
+            const newOutputItems: OutputItem[] = nativeLines.map((item) => ({
+              id: Date.now() + Math.random(),
+              stream: item.level === 'E' || item.level === 'F' ? 'stderr' : 'stdout',
+              line: `[native] ${item.tag}: ${item.msg}`,
+            }));
+            this.outputLines = [...this.outputLines, ...newOutputItems];
+          });
+        } catch (e) {
+          console.warn('[runStore] Failed to listen to logcat-batch for native logs:', e);
         }
       }
     })();
@@ -808,6 +827,14 @@ class RunStore {
     this.hotReloadOnSave = val;
   }
 
+  setIncludeNativeLogs(val: boolean) {
+    this.includeNativeLogs = val;
+  }
+
+  toggleIncludeNativeLogs() {
+    this.includeNativeLogs = !this.includeNativeLogs;
+  }
+
   destroy() {
     api.logcatStop().catch(() => {});
     if (this.unlistenRunEvent) {
@@ -829,6 +856,10 @@ class RunStore {
     if (this.unlistenEmulatorStatus) {
       this.unlistenEmulatorStatus();
       this.unlistenEmulatorStatus = null;
+    }
+    if (this.unlistenLogcatBatch) {
+      this.unlistenLogcatBatch();
+      this.unlistenLogcatBatch = null;
     }
     this.initialized = false;
     this.isWatchingDevices = false;

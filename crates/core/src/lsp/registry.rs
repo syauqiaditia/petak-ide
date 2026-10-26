@@ -757,6 +757,14 @@ impl Registry {
         let root_uri = path_to_uri(root);
         let mut config = ServerConfig::new(cmd, args, root_uri);
 
+        if lang == Lang::Dart {
+            config.initialization_options = Some(serde_json::json!({
+                "closingLabels": true,
+                "completeFunctionCalls": true,
+                "suggestFromUnimportedLibraries": true
+            }));
+        }
+
         if lang == Lang::Kotlin {
             config.init_timeout = Some(std::time::Duration::from_secs(180));
             config.stderr_log_path = Some(crate::toolchain::kotlin_ls_log_path());

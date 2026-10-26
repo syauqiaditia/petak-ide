@@ -102,6 +102,15 @@
         <span>Reload on save</span>
       </label>
 
+      <label class="setting-toggle" title="Include native Android logs for application PID in console">
+        <input
+          type="checkbox"
+          checked={runStore.includeNativeLogs}
+          onchange={(e) => runStore.setIncludeNativeLogs((e.target as HTMLInputElement).checked)}
+        />
+        <span>Include Native Logs</span>
+      </label>
+
       {#if runStore.devtoolsUri}
         <button
           class="devtools-btn"

@@ -12,7 +12,7 @@
   import { diagnosticsStore } from './features/editor/lsp/diagnostics.svelte';
   import type { EditorView } from '@codemirror/view';
   import { preloadAllLanguages, treeSitterPlugin } from './features/editor/ts/highlight';
-  import { registerKeymap, showIntentions, type SearchMode } from './features/search/keymap';
+  import { registerKeymap, type SearchMode } from './features/search/keymap';
   import { applyWorkspaceEdit } from './features/editor/lsp/applyEdit';
   import { gitStore } from './features/git/git.svelte.ts';
   import { runStore } from './features/run/runStore.svelte';
@@ -592,8 +592,7 @@
       closePalette: () => closePalette(),
       isPaletteOpen: () => paletteOpen,
       showIntentions: () => {
-        showIntentions();
-        statusText = 'Alt-Enter / Quick Actions (Phase 2)';
+        editorComponent?.triggerIntentions?.();
       },
       toggleTerminal: () => toggleTerminal(),
       onTreeNew: () => {

@@ -15,6 +15,7 @@ import {
 import {
   completionStatus,
   selectedCompletion,
+  hasNextSnippetField,
 } from '@codemirror/autocomplete';
 import type { SuggestItem } from '../../lib/api.ts';
 import { editorSettings } from './editorSettingsLogic.ts';
@@ -244,36 +245,23 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
           return;
         }
 
-        // 1. If autocomplete popup is active, ghost = selected item
+        // 1. If autocomplete popup is active or inside snippet, do not render duplicate ghost text.
+        // Clear any active ghost text and cancel pending suggest timers.
         const status = completionStatus(view.state);
-        if (status === 'active') {
-          const selected = selectedCompletion(view.state);
-          if (selected) {
-            if (this.timer) {
-              clearTimeout(this.timer);
-              this.timer = null;
-            }
-            this.requestId++; // cancel pending suggest requests
-
-            const head = view.state.selection.main.head;
-            const line = view.state.doc.lineAt(head);
-            const textBefore = line.text.slice(0, head - line.from);
-            const match = textBefore.match(/[\w$]+$/);
-            const prefix = match ? match[0] : '';
-
-            const ghost = computeGhostFromCompletion(prefix, selected.label);
-            const current = getActiveGhostText(view.state);
-            if (current?.text !== ghost || current?.from !== head) {
-              queueMicrotask(() => {
-                if (!this.destroyed && completionStatus(view.state) === 'active') {
-                  view.dispatch({
-                    effects: [setGhostTextEffect.of(ghost ? { text: ghost, from: head } : null)],
-                  });
-                }
-              });
-            }
-            return;
+        if (status === 'active' || hasNextSnippetField(view.state)) {
+          if (this.timer) {
+            clearTimeout(this.timer);
+            this.timer = null;
           }
+          this.requestId++;
+          if (getActiveGhostText(view.state)) {
+            queueMicrotask(() => {
+              if (!this.destroyed) {
+                view.dispatch({ effects: [clearGhostTextEffect.of()] });
+              }
+            });
+          }
+          return;
         }
 
         // 2. Autocomplete popup is not active. Debounce suggest_query.
@@ -302,7 +290,7 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
           // Check stale conditions (Step 5)
           if (this.requestId !== reqId || this.destroyed) return;
           if (view.state.selection.main.head !== head) return;
-          if (completionStatus(view.state) === 'active') return;
+          if (completionStatus(view.state) === 'active' || hasNextSnippetField(view.state)) return;
           const isEnabledNow = options.isEnabled ? options.isEnabled() : editorSettings.ghostText;
           if (!isEnabledNow) return;
 
@@ -315,7 +303,7 @@ export function createGhostTextViewPlugin(options: GhostTextOptions = {}) {
 
             if (this.requestId !== reqId || this.destroyed) return;
             if (view.state.selection.main.head !== head) return;
-            if (completionStatus(view.state) === 'active') return;
+            if (completionStatus(view.state) === 'active' || hasNextSnippetField(view.state)) return;
             const isStillEnabled = options.isEnabled ? options.isEnabled() : editorSettings.ghostText;
             if (!isStillEnabled) return;
 

@@ -21,7 +21,7 @@ export interface KeymapCallbacks {
 }
 
 export function showIntentions() {
-  console.debug('[Petak] Alt-Enter / showIntentions called (Phase 2 stub)');
+  // Intentions trigger
 }
 
 export interface DoubleShiftOptions {
@@ -89,14 +89,13 @@ export function registerKeymap(callbacks: KeymapCallbacks): () => void {
   function onKeyDown(e: KeyboardEvent) {
     shiftDetector.handleKeyDown(e);
 
-    // Alt-Enter (Option-Enter on macOS): Quick fix / intentions stub
-    if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
+    // Alt-Enter (Option-Enter on macOS): Quick fix / intentions
+    if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.key === 'Enter' || e.code === 'Enter')) {
       if (callbacks.showIntentions) {
+        e.preventDefault();
+        e.stopPropagation();
         callbacks.showIntentions();
-      } else {
-        showIntentions();
+        return;
       }
       return;
     }

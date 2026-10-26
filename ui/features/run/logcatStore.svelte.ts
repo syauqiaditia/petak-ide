@@ -3,6 +3,7 @@ import {
   type LogItem,
   type LogcatFilter,
   type LogLevel,
+  parseLogcatFilter,
   filterLogLines,
   LogcatRingBuffer,
 } from './logcat';
@@ -17,6 +18,7 @@ class LogcatStore {
   tagFilter = $state<string>('');
   searchQuery = $state<string>('');
   packageMine = $state<boolean>(false);
+  includeNativeLogs = $state<boolean>(true);
   caseSensitive = $state<boolean>(false);
   isRegex = $state<boolean>(false);
 
@@ -32,6 +34,7 @@ class LogcatStore {
   private unlistenBatch: UnlistenFn | null = null;
   private rafId: number | null = null;
   private debounceTimer: any = null;
+  private lastAppPid: number | null = null;
 
   constructor() {
     this.initListener();
@@ -44,6 +47,15 @@ class LogcatStore {
       });
     } catch (e) {
       console.warn('[logcatStore] Failed to listen to logcat-batch:', e);
+    }
+  }
+
+  checkAppPidSync() {
+    if (runStore.pid !== null && runStore.pid !== this.lastAppPid) {
+      this.packageMine = true;
+      this.lastAppPid = runStore.pid;
+    } else if (runStore.pid === null && this.lastAppPid !== null) {
+      this.lastAppPid = null;
     }
   }
 
@@ -75,15 +87,34 @@ class LogcatStore {
   }
 
   get currentFilter(): LogcatFilter {
+    this.checkAppPidSync();
+    const dsl = this.isRegex ? undefined : parseLogcatFilter(this.searchQuery);
     return {
-      minLevel: this.minLevel,
+      minLevel: dsl?.minLevel ?? this.minLevel,
       tag: this.tagFilter,
       search: this.searchQuery,
-      packageMine: this.packageMine,
+      packageMine: dsl?.packageMine ?? this.packageMine,
       appPid: runStore.pid,
       caseSensitive: this.caseSensitive,
       isRegex: this.isRegex,
+      dsl,
+      includeNativeLogs: this.includeNativeLogs,
     };
+  }
+
+  setIncludeNativeLogs(val: boolean) {
+    this.includeNativeLogs = val;
+    this.scheduleRafUpdate();
+  }
+
+  toggleIncludeNativeLogs() {
+    this.includeNativeLogs = !this.includeNativeLogs;
+    this.scheduleRafUpdate();
+  }
+
+  setPackageMine(val: boolean) {
+    this.packageMine = val;
+    this.scheduleRafUpdate();
   }
 
   setCaseSensitive(val: boolean) {

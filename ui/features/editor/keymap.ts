@@ -145,21 +145,21 @@ export function createEditorKeyBindings(): KeyBinding[] {
           return true;
         }
 
-        // 2. Accept inline ghost diff if present
-        if (acceptGhostDiff(view)) {
-          return true;
-        }
-
-        // 3. Accept inline ghost text if present
-        if (acceptGhostText(view)) {
-          return true;
-        }
-
-        // 3. Advance to next snippet tabstop if active
+        // 2. Advance to next snippet tabstop if active
         if (hasNextSnippetField(view.state)) {
           if (nextSnippetField(view)) {
             return true;
           }
+        }
+
+        // 3. Accept inline ghost diff if present
+        if (acceptGhostDiff(view)) {
+          return true;
+        }
+
+        // 4. Accept inline ghost text if present
+        if (acceptGhostText(view)) {
+          return true;
         }
 
         // 4. In Vim normal/visual mode, let Vim handle Tab (jumplist)

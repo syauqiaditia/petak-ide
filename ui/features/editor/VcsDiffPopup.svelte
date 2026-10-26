@@ -1,11 +1,14 @@
 <script lang="ts">
   import type { EditorView } from '@codemirror/view';
   import { vcsTrackerStore } from './vcsTracker.svelte';
+  import { gitStore } from '../git/git.svelte.ts';
 
   let {
     getView,
+    onShowDiff,
   }: {
     getView: () => EditorView | null;
+    onShowDiff?: (filePath?: string) => void;
   } = $props();
 
   let copied = $state(false);
@@ -27,6 +30,30 @@
     const view = getView();
     if (view) {
       vcsTrackerStore.rollback(view);
+    }
+  }
+
+  async function handleShowDiff() {
+    const targetPath = vcsTrackerStore.filePath;
+    vcsTrackerStore.close();
+    if (onShowDiff) {
+      onShowDiff(targetPath || undefined);
+    } else if (vcsTrackerStore.onShowDiff) {
+      vcsTrackerStore.onShowDiff(targetPath);
+    } else if (targetPath) {
+      const relPath = gitStore.root && targetPath.startsWith(gitStore.root)
+        ? targetPath.slice(gitStore.root.length).replace(/^\/+/, '')
+        : targetPath;
+      await gitStore.selectFile(relPath, 'worktree');
+      const fileName = relPath.split('/').pop() || relPath;
+      gitStore.openCenterDiff({
+        diffFile: gitStore.currentDiffFile,
+        filePath: relPath,
+        leftLabel: 'Index (Staged)',
+        rightLabel: 'Working Tree',
+        sourceKind: 'worktree',
+        title: `${fileName} (Worktree)`,
+      });
     }
   }
 
@@ -131,6 +158,19 @@
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
           </svg>
           <span class="btn-text">Rollback</span>
+        </button>
+
+        <button
+          class="tool-btn"
+          onclick={handleShowDiff}
+          title="Show Diff in Center Editor"
+          aria-label="Show Diff"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="12" y1="3" x2="12" y2="21"></line>
+          </svg>
+          <span class="btn-text">Show Diff</span>
         </button>
 
         <button

@@ -19,6 +19,7 @@ import type {
 } from '../features/mr/types.ts';
 export type { CreateMrParams };
 import type {
+  ChatMessage,
   SlotSummary,
   SlotConfig,
   PromptResponse,
@@ -114,6 +115,12 @@ export interface FormatResult {
   tool: string;
 }
 
+export interface PubActionResult {
+  exit_code: number;
+  stdout: string;
+  stderr: string;
+}
+
 export interface EmulatorStatusEvent {
   id: string;
   state: 'stopped' | 'booting' | 'running' | 'failed';
@@ -185,6 +192,17 @@ export interface LspDiagnostic {
 export interface LspDiagnosticsPayload {
   path: string;
   diagnostics: LspDiagnostic[];
+}
+
+export interface LspClosingLabelsPayload {
+  path: string;
+  labels: Array<{
+    label: string;
+    range: {
+      start?: { line: number; character?: number };
+      end: { line: number; character?: number };
+    };
+  }>;
 }
 
 export interface LspTextEdit {
@@ -365,6 +383,8 @@ export interface GitCompareFile {
 }
 
 export interface GitCompareResult {
+  incomingCommits: GitCommit[];
+  outgoingCommits: GitCommit[];
   files: GitCompareFile[];
   totalAdded: number;
   totalRemoved: number;
@@ -1091,6 +1111,10 @@ export const api = {
     return listen<LspDiagnosticsPayload>('lsp-diagnostics', (event) => cb(event.payload));
   },
 
+  onLspClosingLabels(cb: (payload: LspClosingLabelsPayload) => void): Promise<UnlistenFn> {
+    return listen<LspClosingLabelsPayload>('lsp-closing-labels', (event) => cb(event.payload));
+  },
+
   onLspStatus(cb: (payload: LspStatusPayload) => void): Promise<UnlistenFn> {
     return listen<LspStatusPayload>('lsp-status', (event) => cb(event.payload));
   },
@@ -1244,6 +1268,9 @@ export const api = {
   }): Promise<FormatResult> {
     return invoke<FormatResult>('format_document', params);
   },
+
+  flutterPubAction: (root: string, action: 'get' | 'upgrade' | 'outdated'): Promise<PubActionResult> =>
+    invoke<PubActionResult>('flutter_pub_action', { root, action }),
 
   onEmulatorStatus(callback: (event: EmulatorStatusEvent) => void): Promise<UnlistenFn> {
     return listen<EmulatorStatusEvent>('emulator-status', (e) => callback(e.payload));
@@ -1581,7 +1608,7 @@ export const api = {
       return await invoke<GitCompareResult>('git_compare_branch', { root, base, target, path: path ?? null });
     } catch (e: any) {
       console.warn('git_compare_branch fallback:', e);
-      return { files: [], totalAdded: 0, totalRemoved: 0 };
+      return { incomingCommits: [], outgoingCommits: [], files: [], totalAdded: 0, totalRemoved: 0 };
     }
   },
 
@@ -2151,15 +2178,25 @@ export const api = {
     return invoke<SlotSummary>('agent_start', { slotId });
   },
 
-  async agentPrompt(slotId: string, prompt: string): Promise<PromptResponse> {
-    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+  async agentPrompt(
+    slotId: string,
+    prompt: string,
+    sessionId?: string,
+    history?: ChatMessage[]
+  ): Promise<PromptResponse> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
       return {
-        sessionId: `demo-${slotId}`,
+        sessionId: sessionId || `demo-${slotId}`,
         message: `[DEMO] Agent responded to: "${prompt}"`,
         stopReason: 'end_turn',
       };
     }
-    return invoke<PromptResponse>('agent_prompt', { slotId, prompt });
+    return invoke<PromptResponse>('agent_prompt', {
+      slotId,
+      prompt,
+      sessionId: sessionId ?? null,
+      history: history ?? null,
+    });
   },
 
   async agentCancel(slotId: string): Promise<void> {

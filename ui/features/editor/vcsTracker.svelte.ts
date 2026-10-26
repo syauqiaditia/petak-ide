@@ -57,6 +57,17 @@ export class VcsTrackerStore {
   coords = $state<{ left: number; top: number }>({ left: 0, top: 0 });
   filePath = $state<string | null>(null);
   currentLine = $state<number>(1);
+  onShowDiff?: (filePath: string | null) => void;
+
+  showDiff(callback?: (filePath: string | null) => void) {
+    const target = this.filePath;
+    this.close();
+    if (callback) {
+      callback(target);
+    } else if (this.onShowDiff) {
+      this.onShowDiff(target);
+    }
+  }
 
   openForLine(lineNum: number, view: EditorView, hunks: VcsHunk[], filePath?: string) {
     if (!hunks || hunks.length === 0) {
