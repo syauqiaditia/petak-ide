@@ -697,23 +697,11 @@ impl AcpClient {
         })
     }
 
-    pub fn session_new(
-        &self,
-        cwd: &str,
-        mcp_servers: &[serde_json::Value],
-        timeout: Duration,
-    ) -> Result<AcpSessionNewResult, AcpError> {
-        let params = serde_json::json!({
-            "cwd": cwd,
-            "mcpServers": mcp_servers
-        });
-
-        let res = self.send_request("session/new", params, timeout)?;
-
+    fn parse_session_result(res: &serde_json::Value, method: &str) -> Result<AcpSessionNewResult, AcpError> {
         let session_id = res
             .get("sessionId")
             .and_then(|s| s.as_str())
-            .ok_or_else(|| AcpError::Json("missing sessionId in session/new response".to_string()))?
+            .ok_or_else(|| AcpError::Json(format!("missing sessionId in {method} response")))?
             .to_string();
 
         let models = res.get("models").map(|m| {
@@ -785,6 +773,38 @@ impl AcpClient {
             models,
             modes,
         })
+    }
+
+    pub fn session_new(
+        &self,
+        cwd: &str,
+        mcp_servers: &[serde_json::Value],
+        timeout: Duration,
+    ) -> Result<AcpSessionNewResult, AcpError> {
+        let params = serde_json::json!({
+            "cwd": cwd,
+            "mcpServers": mcp_servers
+        });
+
+        let res = self.send_request("session/new", params, timeout)?;
+        Self::parse_session_result(&res, "session/new")
+    }
+
+    pub fn session_load(
+        &self,
+        session_id: &str,
+        cwd: &str,
+        mcp_servers: &[serde_json::Value],
+        timeout: Duration,
+    ) -> Result<AcpSessionNewResult, AcpError> {
+        let params = serde_json::json!({
+            "sessionId": session_id,
+            "cwd": cwd,
+            "mcpServers": mcp_servers
+        });
+
+        let res = self.send_request("session/load", params, timeout)?;
+        Self::parse_session_result(&res, "session/load")
     }
 
     pub fn session_prompt_with_watchdog(

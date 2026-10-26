@@ -187,6 +187,10 @@ impl<T> RingBuffer<T> {
         self.items.is_empty()
     }
 
+    pub fn clear(&mut self) {
+        self.items.clear();
+    }
+
     pub fn last_mut(&mut self) -> Option<&mut T> {
         self.items.back_mut()
     }
@@ -1056,17 +1060,48 @@ impl SlotManager {
 
         Ok((client, sess_res.session_id, caps))
     }
+}
 
+pub fn format_history_envelope(history: &[ChatMessage], current_text: &str) -> String {
+    let mut lines = Vec::new();
+    for msg in history {
+        let trimmed = msg.content.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let role_label = match msg.role.to_lowercase().as_str() {
+            "user" => "User",
+            "agent" | "assistant" => "Agent",
+            "system" => "System",
+            _ => &msg.role,
+        };
+        lines.push(format!("{role_label}: {trimmed}"));
+    }
+
+    if lines.is_empty() {
+        return current_text.to_string();
+    }
+
+    format!(
+        "[Prior Conversation History]\n{}\n[End Prior Conversation History]\n\n{}",
+        lines.join("\n"),
+        current_text
+    )
+}
+
+impl SlotManager {
     pub fn prompt_slot_with_watchdog(
         &self,
         slot_id: &str,
         text: &str,
+        session_id: Option<&str>,
+        history: Option<&[ChatMessage]>,
         idle_timeout: Duration,
     ) -> Result<PromptResponse, String> {
         // Lazy spawn: ensure slot is started and ready
         self.start_slot(slot_id)?;
 
-        let (client, session_id) = {
+        let (client, current_session_id, caps_load_session, is_history_empty, cwd_str, mcp_servers) = {
             let mut slots = self.slots.write().unwrap();
             let slot = slots
                 .get_mut(slot_id)
@@ -1081,20 +1116,6 @@ impl SlotManager {
             slot.status = SlotStatus::Busy;
             slot.last_activity = Instant::now();
 
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
-
-            slot.history.push(ChatMessage {
-                id: format!("usr_{}", now),
-                timestamp: now,
-                role: "user".to_string(),
-                content: text.to_string(),
-                stop_reason: None,
-                metadata: None,
-            });
-
             self.emit(SlotEvent::StatusChanged {
                 slot_id: slot_id.to_string(),
                 status: SlotStatus::Busy,
@@ -1105,15 +1126,100 @@ impl SlotManager {
                 .as_ref()
                 .cloned()
                 .ok_or_else(|| "Client process missing".to_string())?;
-            let session_id = slot
-                .session_id
-                .clone()
-                .ok_or_else(|| "Session ID missing".to_string())?;
+            let current_session_id = slot.session_id.clone();
+            let caps_load_session = slot.capabilities.load_session;
+            let is_history_empty = slot.history.is_empty();
 
-            (client, session_id)
+            let proj_root = self.project_root.lock().unwrap().clone();
+            let cwd_str = proj_root
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| slot.config.cwd.clone());
+            let mcp_servers = super::mcp::load_mcp_config(proj_root.as_deref())
+                .map(|cfg| super::mcp::active_acp_servers(&cfg))
+                .unwrap_or_default();
+
+            (client, current_session_id, caps_load_session, is_history_empty, cwd_str, mcp_servers)
         };
 
-        let prompt_result = client.session_prompt_with_watchdog(&session_id, text, idle_timeout);
+        let session_differs = match (&current_session_id, session_id) {
+            (Some(curr), Some(target)) => curr != target,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+
+        let mut session_load_ok = false;
+        let mut final_session_id = current_session_id.clone().unwrap_or_default();
+
+        if let Some(target_session) = session_id {
+            if session_differs && caps_load_session {
+                match client.session_load(target_session, &cwd_str, &mcp_servers, Duration::from_secs(15)) {
+                    Ok(sess_res) => {
+                        final_session_id = sess_res.session_id;
+                        session_load_ok = true;
+                        let mut slots = self.slots.write().unwrap();
+                        if let Some(slot) = slots.get_mut(slot_id) {
+                            slot.session_id = Some(final_session_id.clone());
+                            if let Some(models) = sess_res.models {
+                                slot.capabilities.supports_set_model = true;
+                                slot.capabilities.current_model = models.current_model_id;
+                                slot.capabilities.available_models = models.available_models;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        session_load_ok = false;
+                    }
+                }
+            }
+        }
+
+        let should_fallback_replay = !session_load_ok && (
+            (session_id.is_some() && session_differs) ||
+            is_history_empty ||
+            !caps_load_session
+        );
+
+        let prompt_to_send = if should_fallback_replay {
+            if let Some(hist) = history {
+                format_history_envelope(hist, text)
+            } else {
+                text.to_string()
+            }
+        } else {
+            text.to_string()
+        };
+
+        // Sync slot.history and record user message
+        {
+            let mut slots = self.slots.write().unwrap();
+            if let Some(slot) = slots.get_mut(slot_id) {
+                if let Some(hist) = history {
+                    if session_differs || slot.history.is_empty() || slot.history.len() < hist.len() {
+                        slot.history.clear();
+                        for msg in hist {
+                            slot.history.push(msg.clone());
+                        }
+                    }
+                }
+
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                slot.history.push(ChatMessage {
+                    id: format!("usr_{}", now),
+                    timestamp: now,
+                    role: "user".to_string(),
+                    content: text.to_string(),
+                    stop_reason: None,
+                    metadata: None,
+                });
+            }
+        }
+
+        let prompt_result = client.session_prompt_with_watchdog(&final_session_id, &prompt_to_send, idle_timeout);
 
         let mut slots = self.slots.write().unwrap();
         let slot = match slots.get_mut(slot_id) {
@@ -1176,7 +1282,7 @@ impl SlotManager {
 
                 self.emit(SlotEvent::Update {
                     slot_id: slot_id.to_string(),
-                    session_id: session_id.clone(),
+                    session_id: final_session_id.clone(),
                     update: serde_json::json!({
                         "sessionUpdate": "agent_message_chunk",
                         "content": {
@@ -1201,8 +1307,18 @@ impl SlotManager {
         }
     }
 
+    pub fn prompt_slot_session(
+        &self,
+        slot_id: &str,
+        text: &str,
+        session_id: Option<&str>,
+        history: Option<&[ChatMessage]>,
+    ) -> Result<PromptResponse, String> {
+        self.prompt_slot_with_watchdog(slot_id, text, session_id, history, Duration::from_secs(300))
+    }
+
     pub fn prompt_slot(&self, slot_id: &str, text: &str) -> Result<PromptResponse, String> {
-        self.prompt_slot_with_watchdog(slot_id, text, Duration::from_secs(300))
+        self.prompt_slot_session(slot_id, text, None, None)
     }
 
     pub fn cancel_slot(&self, slot_id: &str) -> Result<(), String> {

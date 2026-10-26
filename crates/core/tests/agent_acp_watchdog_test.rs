@@ -47,7 +47,7 @@ fn test_activity_watchdog_resets_timer_on_continuous_stream_chunks() {
     // Because activity arrives every 100ms (< 400ms), watchdog resets on every chunk and completes.
     let start = Instant::now();
     let prompt_res = manager
-        .prompt_slot_with_watchdog("slot-stream", "slow prompt test", Duration::from_millis(400))
+        .prompt_slot_with_watchdog("slot-stream", "slow prompt test", None, None, Duration::from_millis(400))
         .expect("Prompt should succeed because continuous stream chunks reset idle timer");
 
     let elapsed = start.elapsed();
@@ -75,6 +75,8 @@ fn test_watchdog_fires_timeout_when_zero_activity_exceeds_idle_duration() {
     let res = manager.prompt_slot_with_watchdog(
         "slot-stuck",
         "stuck prompt test",
+        None,
+        None,
         Duration::from_millis(200),
     );
 
@@ -166,6 +168,8 @@ fn test_self_healing_error_return_keeps_slot_alive_and_transitions_back_to_ready
     let res = manager.prompt_slot_with_watchdog(
         "slot-heal",
         "stuck command test",
+        None,
+        None,
         Duration::from_millis(200),
     );
 
