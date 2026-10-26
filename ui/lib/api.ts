@@ -19,6 +19,7 @@ import type {
 } from '../features/mr/types.ts';
 export type { CreateMrParams };
 import type {
+  ChatMessage,
   SlotSummary,
   SlotConfig,
   PromptResponse,
@@ -2177,15 +2178,25 @@ export const api = {
     return invoke<SlotSummary>('agent_start', { slotId });
   },
 
-  async agentPrompt(slotId: string, prompt: string): Promise<PromptResponse> {
-    if (typeof window !== 'undefined' && !(window as any).__TAURI_INTERNALS__) {
+  async agentPrompt(
+    slotId: string,
+    prompt: string,
+    sessionId?: string,
+    history?: ChatMessage[]
+  ): Promise<PromptResponse> {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
       return {
-        sessionId: `demo-${slotId}`,
+        sessionId: sessionId || `demo-${slotId}`,
         message: `[DEMO] Agent responded to: "${prompt}"`,
         stopReason: 'end_turn',
       };
     }
-    return invoke<PromptResponse>('agent_prompt', { slotId, prompt });
+    return invoke<PromptResponse>('agent_prompt', {
+      slotId,
+      prompt,
+      sessionId: sessionId ?? null,
+      history: history ?? null,
+    });
   },
 
   async agentCancel(slotId: string): Promise<void> {

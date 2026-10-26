@@ -1,6 +1,6 @@
 use petak_core::agent::{
-    get_all_role_scopes, HermesDetectionResult, LlmQuotaReport, McpConfig, McpTestResult,
-    MemoryItem, MemorySnippet, PendingPermissionRequest, PromptResponse, Proposal,
+    get_all_role_scopes, ChatMessage, HermesDetectionResult, LlmQuotaReport, McpConfig,
+    McpTestResult, MemoryItem, MemorySnippet, PendingPermissionRequest, PromptResponse, Proposal,
     PrunedContextResult, RoleScopeInfo, SelfHealPhase, SelfHealResult, SelfHealStatus, Skill,
     SkillSummary, SlotConfig, SlotManager, SlotSummary, SupportedEngineInfo, TeamConfig,
     UsageReport, WorktreeInfo,
@@ -55,11 +55,20 @@ pub async fn agent_prompt(
     state: tauri::State<'_, AgentState>,
     slot_id: String,
     prompt: String,
+    session_id: Option<String>,
+    history: Option<Vec<ChatMessage>>,
 ) -> Result<PromptResponse, String> {
     let manager = Arc::clone(&state.manager);
-    tauri::async_runtime::spawn_blocking(move || manager.prompt_slot(&slot_id, &prompt))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.prompt_slot_session(
+            &slot_id,
+            &prompt,
+            session_id.as_deref(),
+            history.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

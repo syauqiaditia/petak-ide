@@ -57,7 +57,7 @@ rl.on('line', (line) => {
           version: '1.0.0',
         },
         agentCapabilities: {
-          loadSession: true,
+          loadSession: !process.argv.includes('--no-load-session'),
           promptCapabilities: {
             image: false,
           },
@@ -76,8 +76,18 @@ rl.on('line', (line) => {
         ],
       },
     });
-  } else if (msg.method === 'session/new') {
-    const sessionId = 'fake-session-' + Math.floor(Math.random() * 1000000);
+  } else if (msg.method === 'session/new' || msg.method === 'session/load') {
+    if (msg.method === 'session/load' && (process.argv.includes('--no-load-session') || msg.params?.sessionId === 'fail-load-session')) {
+      send({
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32601, message: 'Method not supported: session/load' },
+      });
+      return;
+    }
+    const sessionId = (msg.method === 'session/load' && msg.params?.sessionId)
+      ? String(msg.params.sessionId)
+      : ('fake-session-' + Math.floor(Math.random() * 1000000));
     activeSessions.set(sessionId, { cwd: msg.params?.cwd || '' });
     send({
       jsonrpc: '2.0',

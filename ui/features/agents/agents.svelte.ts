@@ -627,6 +627,7 @@ class AgentsStore {
     };
 
     const targetSession = this.getOrCreateSession(currentSessionId, slotId);
+    const priorHistory = [...targetSession.messages];
     targetSession.messages = [...targetSession.messages, userMsg];
     targetSession.updatedAt = Date.now();
     if (targetSession.messages.filter((m) => m.role === 'user').length === 1 && rawPrompt.trim()) {
@@ -652,7 +653,7 @@ class AgentsStore {
     this.isAwaitingPrompt = true;
 
     try {
-      const response = await api.agentPrompt(slotId, formattedPrompt);
+      const response = await api.agentPrompt(slotId, formattedPrompt, currentSessionId, priorHistory);
       const target = this.sessions[currentSessionId];
       if (target) {
         const cleanContent = target.streamingContent || response.message || 'Aksi selesai.';
@@ -1219,6 +1220,10 @@ class AgentsStore {
     this.isHistoryOpen = false;
     this.persistSessions();
     this.persistActiveChatHistory();
+  }
+
+  selectSession(sessionId: string) {
+    this.loadSession(sessionId);
   }
 
   deleteSession(sessionId: string) {
